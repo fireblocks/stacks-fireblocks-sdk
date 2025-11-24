@@ -11,7 +11,6 @@ export class SdkManager {
 
   constructor(baseConfig: FireblocksConfig, poolConfig?: Partial<PoolConfig>) {
     this.baseConfig = baseConfig;
-
     // Set default pool config values
     this.poolConfig = {
       maxPoolSize: poolConfig?.maxPoolSize || 100,

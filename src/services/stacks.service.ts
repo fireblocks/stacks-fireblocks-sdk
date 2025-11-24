@@ -43,7 +43,7 @@ export class StacksService {
     this.network = testnet ? "testnet" : "mainnet";
   }
 
-  public formatAddress = (pubKey: string, testnet?: boolean): string => {
+  public formatAddress = (pubKey: string): string => {
     try {
       if (!pubKey || typeof pubKey !== "string") {
         throw new Error("Public key must be a non-empty string");
@@ -53,7 +53,7 @@ export class StacksService {
         throw new Error("Invalid compressed secp256k1 public key hex format");
       }
 
-      const isTestnet = testnet || false;
+      const isTestnet = this.network === "testnet";
       const address = publicKeyToAddress(
         pubKey,
         isTestnet ? "testnet" : "mainnet"
@@ -96,10 +96,9 @@ export class StacksService {
   public getFtDecimals = async (
     senderAddress: string,
     contractAddress: string,
-    contractName: string,
-    network: StacksNetwork
+    contractName: string
   ): Promise<number> => {
-    const thisNetwork = network;
+    const network = this.network;
     const res = await fetchCallReadOnlyFunction({
       contractName,
       contractAddress,
@@ -326,19 +325,3 @@ export class StacksService {
     }
   };
 }
-
-const main = async () => {
-  const service = new StacksService(true);
-  // const balance = await service.getNativeBalance(
-  //   "ST165Y0B1TQF66R01HPNNFZ2XQ8T8SJ78NGV6ES7"
-  // );
-  // console.log("Balance:", balance);
-  const history = await service.getTransactionHistory(
-    "ST26DZD794NGXGY96XS172CV4DH6DDTY3HXKQT121",
-    10,
-    0
-  );
-  console.log("Transaction History:", history);
-};
-
-main();

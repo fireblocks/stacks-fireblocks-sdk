@@ -6,6 +6,7 @@ import dotenv from "dotenv";
 import { ApiServiceConfig } from "./pool/types";
 import router from "./api/router";
 import { swaggerUi, specs } from "./utils/swagger";
+import { getApiService } from "./api/api_service_singleton";
 
 // Load environment variables
 dotenv.config();
@@ -46,7 +47,7 @@ if (apiServiceConfig.apiSecret === "") {
 }
 
 // Initialize API service
-const apiService = new ApiService(apiServiceConfig);
+const apiService = getApiService();
 
 // Apply routes
 app.use("/api", router);
@@ -54,5 +55,5 @@ app.use("/api", router);
 // Start the server
 const PORT = process.env.PORT || 3000;
 const server = app.listen(PORT, () => {
-  console.log(`Movement-Fireblocks SDK API server running on port ${PORT}`);
+  console.log(`Stacks-Fireblocks SDK API server running on port ${PORT}`);
 });

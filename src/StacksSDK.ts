@@ -40,6 +40,7 @@ export class StacksSDK {
   private address: string | undefined;
   private publicKey: string | undefined;
   private chachedTransactions: Transaction[] = [];
+  private testnet: boolean = false;
 
   private constructor(
     vaultAccountId: string | number,
@@ -55,7 +56,8 @@ export class StacksSDK {
         );
       }
       this.fireblocksService = new FireblocksService(fireblocksConfig);
-      this.chainService = new StacksService();
+      this.testnet = fireblocksConfig?.testnet || false;
+      this.chainService = new StacksService(this.testnet);
     } catch (error) {
       throw new Error(
         `Failed to initialize services: ${formatErrorMessage(error)}`

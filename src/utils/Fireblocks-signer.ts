@@ -67,7 +67,7 @@ export class FireblocksSigner {
     content: any,
     vaultAccountId: string,
     txNote?: string,
-    testnet?: boolean
+    testnet: boolean = false
   ): Promise<any> => {
     //@ts-ignore
 

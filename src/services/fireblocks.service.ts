@@ -20,8 +20,10 @@ const basePath = process.env.FIREBLOCKS_BASE_PATH || BasePath.US;
 export class FireblocksService {
   private readonly fireblocksSDK: Fireblocks;
   private readonly fireblocksSigner: FireblocksSigner;
+  private testnet: boolean = false;
 
-  constructor(fireblocksConfig?: FireblocksConfig) {
+  constructor(fireblocksConfig?: FireblocksConfig, testnet: boolean = false) {
+    this.testnet = testnet;
     var privateKey: string;
     if (fireblocksConfig && fireblocksConfig.apiSecret) {
       privateKey =
@@ -74,7 +76,8 @@ export class FireblocksService {
     try {
       const publicKey = await getPublicKeyForDerivationPath(
         this.fireblocksSDK,
-        vaultID.toString()
+        vaultID.toString(),
+        this.testnet
       );
 
       return publicKey;
@@ -106,7 +109,8 @@ export class FireblocksService {
       const signature = await this.fireblocksSigner.rawSign(
         content,
         vaultAccountId,
-        txNote || ""
+        txNote || "",
+        this.testnet
       );
       return signature;
     } catch (error) {

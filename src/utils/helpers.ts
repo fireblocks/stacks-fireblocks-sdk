@@ -45,6 +45,7 @@ export function validateAddress(addr: string, testnet: boolean): boolean {
 
 /** Compressed secp256k1 pubkey: 33 bytes hex, prefix 02/03 */
 export function isCompressedSecp256k1PubKeyHex(hex: string): boolean {
+  console.log("Checking key:", hex);
   return /^(02|03)[0-9a-fA-F]{64}$/.test(hex);
 }
 

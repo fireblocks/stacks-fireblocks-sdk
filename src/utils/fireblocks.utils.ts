@@ -57,7 +57,7 @@ export const getPublicKeyForDerivationPath = async (
     }, ${vaultAccountId}, ${derivationPath.change}, ${
       derivationPath.addressIndex
     }]`,
-    algorithm: SignedMessageAlgorithmEnum.EddsaEd25519,
+    algorithm: SignedMessageAlgorithmEnum.EcdsaSecp256K1,
   };
   try {
     const response = await fireblocksSDK.vaults.getPublicKeyInfo(requestParams);

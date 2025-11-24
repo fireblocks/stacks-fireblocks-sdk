@@ -14,6 +14,7 @@ export class ApiService {
       apiSecret: config.apiSecret,
       basePath: (config.basePath as BasePath) || BasePath.US,
       vaultAccountId: "", // Will be overridden per request
+      testnet: !!config.testnet,
     };
 
     this.sdkManager = new SdkManager(baseConfig, config.poolConfig);
