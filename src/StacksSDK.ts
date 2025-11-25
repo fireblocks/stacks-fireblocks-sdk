@@ -4,7 +4,7 @@
  * This SDK allows you to:
  * - Retrieve Stacks account address and public key associated with a Fireblocks vault account.
  * - Query balances and transaction history for the Stacks account.
- * - Create TA transactions using Fireblocks raw signing.
+ * - Create transactions using Fireblocks raw signing.
  *
  * Usage:
  * ```typescript
@@ -26,11 +26,10 @@ import {
   GetNativeBalanceResponse,
   Transaction,
 } from "./services/types";
-import { stacks_info, pagination_defaults } from "./utils/constants";
+import { pagination_defaults } from "./utils/constants";
 import { formatErrorMessage } from "./utils/errorHandling";
 import { validateApiCredentials } from "./utils/fireblocks.utils";
 import { concatSignature, microToStx, stxToMicro } from "./utils/helpers";
-import e from "express";
 import { createMessageSignature } from "@stacks/transactions/dist/wire/create";
 
 export class StacksSDK {
@@ -214,8 +213,7 @@ export class StacksSDK {
     amount: number,
     inMicro: boolean = false,
     grossTransaction: boolean = false,
-    note?: string,
-    testnet?: boolean
+    note?: string
   ): Promise<CreateTransactionResponse> => {
     if (!this.address || !this.publicKey || !this.vaultAccountId) {
       throw new Error("Address, Public Key or Vault ID are not set");

@@ -68,7 +68,7 @@ export class StacksService {
     }
   };
 
-  public getNativeBalance = async (address: string): Promise<number> => {
+  public makeBalanceCalls = async (address: string): Promise<any> => {
     try {
       const response = await this.axiosClient.get(
         `${this.stackBaseUrl}/extended/v1/address/${address}/balances`
@@ -77,9 +77,38 @@ export class StacksService {
       if (!response || !response.data || response.status !== 200) {
         throw new Error(`HTTP ${response.status}`);
       }
+      return response;
+    } catch (error) {
+      console.error(
+        `Error calling Stacks balances endpoint: ${formatErrorMessage(error)}`
+      );
+    }
+  };
+
+  public getNativeBalance = async (address: string): Promise<number> => {
+    try {
+      const response = await this.makeBalanceCalls(address);
       const balance =
         Number(response.data.stx.balance) / 10 ** stacks_info.stxDecimals;
       return balance;
+    } catch (error) {
+      console.error(
+        "getNativeBalance : Error fetching native balance:",
+        formatErrorMessage(error)
+      );
+      throw new Error(
+        `Failed to fetch native balance for address ${address}: ${formatErrorMessage(
+          error
+        )}`
+      );
+    }
+  };
+
+  public getFTBalance = async (address: string): Promise<any> => {
+    try {
+      const response = await this.makeBalanceCalls(address);
+      const ftObject = response.data.fungible_tokens;
+      return ftObject;
     } catch (error) {
       console.error(
         "getNativeBalance : Error fetching native balance:",
@@ -323,3 +352,13 @@ export class StacksService {
     }
   };
 }
+
+async function main() {
+  const service = new StacksService(true);
+  const ftBalance = await service.getFTBalance(
+    "ST26DZD794NGXGY96XS172CV4DH6DDTY3HXKQT121"
+  );
+  console.log(ftBalance);
+}
+
+main();
