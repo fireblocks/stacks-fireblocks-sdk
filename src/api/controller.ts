@@ -100,7 +100,7 @@ export const getTransactionHistory: Handler = async (req, res, next) => {
 export const createTransaction: Handler = async (req, res, next) => {
   try {
     const { vaultId } = req.params;
-    const { recipientAddress, amount, inStroops, grossTransaction, note } =
+    const { recipientAddress, amount, inMicro, grossTransaction, note } =
       req.body;
     if (!recipientAddress || !amount) {
       res.status(400).json({
@@ -114,7 +114,7 @@ export const createTransaction: Handler = async (req, res, next) => {
       {
         recipientAddress,
         amount,
-        inStroops,
+        inMicro,
         grossTransaction,
         note,
       }

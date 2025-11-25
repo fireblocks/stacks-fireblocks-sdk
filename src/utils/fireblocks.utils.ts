@@ -58,6 +58,7 @@ export const getPublicKeyForDerivationPath = async (
       derivationPath.addressIndex
     }]`,
     algorithm: SignedMessageAlgorithmEnum.EcdsaSecp256K1,
+    compressed: true,
   };
   try {
     const response = await fireblocksSDK.vaults.getPublicKeyInfo(requestParams);

@@ -27,7 +27,7 @@ const router = Router();
  * /{vaultId}/address:
  *   get:
  *     summary: Get on-chain account address
- *     description: Retrieves the Stacks account address for the given vault ID.
+ *     description: Retrieves the blockchain address for the given vault ID.
  *     parameters:
  *       - $ref: '#/components/parameters/vaultId'
  *     responses:
@@ -99,8 +99,8 @@ router.get("/:vaultId/balance", validateVaultId, controller.getBalance);
  * @openapi
  * /{vaultId}/transactions:
  *   get:
- *     summary: Get Stacks transaction history
- *     description: Retrieves transaction history for the vault’s associated Stacks account with optional pagination and filtering.
+ *     summary: Get transaction history
+ *     description: Retrieves transaction history for the vault’s associated blockchain account with optional pagination.
  *     parameters:
  *       - in: path
  *         name: vaultId
@@ -111,12 +111,6 @@ router.get("/:vaultId/balance", validateVaultId, controller.getBalance);
  *             - type: integer
  *         description: Fireblocks vault account ID.
  *       - in: query
- *         name: apiKey
- *         required: true
- *         schema:
- *           type: string
- *         description: TaoStats API key for authentication.
- *       - in: query
  *         name: getCachedTransactions
  *         required: false
  *         schema:
@@ -124,13 +118,24 @@ router.get("/:vaultId/balance", validateVaultId, controller.getBalance);
  *           default: true
  *         description: Whether to return cached transactions (true) or fetch new ones (false).
  *       - in: query
- *         name: queryParams
+ *         name: limit
  *         required: false
  *         schema:
- *           type: json
- *           example: { "page": 1, "limit": 20, from: "0xadress1", to: "0xadress2" }
- *         default: {}
- *         description: Parameters for pagination and filtering (page, limit, network, address, from, to, transaction_hash, extrinsic_id, order....).
+ *           type: number
+ *         description: Limit the number of transactions returned.
+ *       - in: query
+ *         name: after
+ *         required: false
+ *         schema:
+ *           type: number
+ *         description: Pagination token returned with every transaction (use to fetch transactions after that token).
+ *       - in: query
+ *         name: order
+ *         required: false
+ *         schema:
+ *           type: string
+ *           enum: [ASC, DESC]
+ *         description: Order of transactions by date, either ascending (ASC) or descending (DESC).
  *     responses:
  *       '200':
  *         description: Transaction history fetched successfully.
@@ -151,8 +156,8 @@ router.get(
  * @openapi
  * /{vaultId}/transfer:
  *   post:
- *     summary: Create native coin transfer
- *     description: Initiates transfer of native Stacks coin from vault to recipient.
+ *     summary: Create native coin (STX) transfer
+ *     description: Initiates transfer of native STX coin from vault to recipient.
  *     parameters:
  *       - $ref: '#/components/parameters/vaultId'
  *     requestBody:
@@ -172,7 +177,7 @@ router.get(
  *               inMicro:
  *                 type: boolean
  *                 example: false
- *                 description: Whether the amount is in micro (smallest unit) or in STX
+ *                 description: Whether the amount is in Micro (smallest unit) or in STX
  *               grossTransaction:
  *                 type: boolean
  *                 example: false
@@ -180,9 +185,6 @@ router.get(
  *               note:
  *                 type: string
  *                 example: 'Payment for services'
- *               testnet:
- *                 type: boolean
- *                 example: true
  *     responses:
  *       200:
  *         description: Transaction created successfully

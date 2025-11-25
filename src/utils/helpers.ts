@@ -45,16 +45,20 @@ export function validateAddress(addr: string, testnet: boolean): boolean {
 
 /** Compressed secp256k1 pubkey: 33 bytes hex, prefix 02/03 */
 export function isCompressedSecp256k1PubKeyHex(hex: string): boolean {
-  console.log("Checking key:", hex);
   return /^(02|03)[0-9a-fA-F]{64}$/.test(hex);
 }
 
-export function stxToMicro(stx: number): number {
-  return Math.floor(stx * 10 ** stacks_info.stxDecimals);
+// amount is in STX → convert to uSTX bigint
+export function stxToMicro(amountStx: number | string): bigint {
+  const s = String(amountStx);
+  const [w = "0", fRaw = ""] = s.split(".");
+  const f = (fRaw + "000000").slice(0, stacks_info.stxDecimals); // 6 decimals
+  return BigInt(w) * BigInt(10 ** stacks_info.stxDecimals) + BigInt(f);
 }
 
-export function microToStx(micro: number): number {
-  return micro / 10 ** stacks_info.stxDecimals;
+export function microToStx(micro: bigint | number): number {
+  const microBigInt = typeof micro === "bigint" ? micro : BigInt(micro);
+  return Number(microBigInt) / 10 ** stacks_info.stxDecimals;
 }
 
 export function concatSignature(fullSig: string, v: number): string {

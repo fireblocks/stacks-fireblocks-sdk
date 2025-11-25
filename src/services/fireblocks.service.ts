@@ -22,8 +22,8 @@ export class FireblocksService {
   private readonly fireblocksSigner: FireblocksSigner;
   private testnet: boolean = false;
 
-  constructor(fireblocksConfig?: FireblocksConfig, testnet: boolean = false) {
-    this.testnet = testnet;
+  constructor(fireblocksConfig?: FireblocksConfig) {
+    this.testnet = fireblocksConfig?.testnet || false;
     var privateKey: string;
     if (fireblocksConfig && fireblocksConfig.apiSecret) {
       privateKey =
@@ -101,7 +101,7 @@ export class FireblocksService {
    **/
 
   public signTransaction = async (
-    content: any,
+    content: string,
     vaultAccountId: string,
     txNote?: string
   ): Promise<any> => {
@@ -114,12 +114,9 @@ export class FireblocksService {
       );
       return signature;
     } catch (error) {
-      console.error(
-        "Error in signAndSendTransaction:",
-        formatErrorMessage(error)
-      );
+      console.error("Error in signTransaction:", formatErrorMessage(error));
       throw new Error(
-        `Failed to sign and send transaction: ${formatErrorMessage(error)}`
+        `Failed to sign transaction: ${formatErrorMessage(error)}`
       );
     }
   };

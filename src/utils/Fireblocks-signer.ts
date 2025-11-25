@@ -9,6 +9,7 @@ import {
   SignedMessageAlgorithmEnum,
 } from "@fireblocks/ts-sdk";
 import { derivationPath } from "./constants";
+import { formatErrorMessage } from "./errorHandling";
 
 export class FireblocksSigner {
   constructor(public fireblocks: Fireblocks) {}
@@ -36,7 +37,7 @@ export class FireblocksSigner {
       let tx: TransactionResponse = response.data;
       let messageToConsole: string = `Transaction ${tx.id} is currently at status - ${tx.status}`;
 
-      // console.log(messageToConsole);
+      console.log(messageToConsole);
       while (tx.status !== TransactionStateEnum.Completed) {
         await new Promise((resolve) => setTimeout(resolve, 3000));
 
@@ -52,7 +53,7 @@ export class FireblocksSigner {
               `Signing request failed/blocked/cancelled: Transaction: ${tx.id} status is ${tx.status}`
             );
           default:
-            // console.log(messageToConsole);
+            console.log(messageToConsole);
             break;
         }
       }
@@ -64,40 +65,43 @@ export class FireblocksSigner {
   };
 
   rawSign = async (
-    content: any,
+    content: string,
     vaultAccountId: string,
     txNote?: string,
     testnet: boolean = false
   ): Promise<any> => {
     //@ts-ignore
-
-    const hexContent = Buffer.from(content).toString("hex");
-
-    const transactionPayload = this.createTransactionPayload();
-
-    if (txNote) {
-      transactionPayload.note = txNote;
-    }
-
-    (transactionPayload.extraParameters as any).rawMessageData = {
-      messages: [
-        {
-          content: hexContent,
-          derivationPath: [
-            derivationPath.purpose,
-            testnet
-              ? derivationPath.coinTypeTestnet
-              : derivationPath.coinTypeMainnet,
-            vaultAccountId,
-            derivationPath.change,
-            derivationPath.addressIndex,
-          ],
-        },
-      ],
-      algorithm: SignedMessageAlgorithmEnum.EcdsaSecp256K1,
-    };
-
     try {
+      if (typeof content !== "string") {
+        throw new Error("Content for raw signing must be a hex string");
+      }
+
+      const hexContent = content.startsWith("0x") ? content.slice(2) : content;
+
+      const transactionPayload = this.createTransactionPayload();
+
+      if (txNote) {
+        transactionPayload.note = txNote;
+      }
+
+      (transactionPayload.extraParameters as any).rawMessageData = {
+        messages: [
+          {
+            content: hexContent,
+            derivationPath: [
+              derivationPath.purpose,
+              testnet
+                ? derivationPath.coinTypeTestnet
+                : derivationPath.coinTypeMainnet,
+              vaultAccountId,
+              derivationPath.change,
+              derivationPath.addressIndex,
+            ],
+          },
+        ],
+        algorithm: SignedMessageAlgorithmEnum.EcdsaSecp256K1,
+      };
+
       const transactionResponse =
         await this.fireblocks.transactions.createTransaction({
           transactionRequest: transactionPayload,
@@ -114,7 +118,8 @@ export class FireblocksSigner {
 
       return signature;
     } catch (error) {
-      console.error(error);
+      console.log(`Caught error in rawSign: ${error}`);
+      throw new Error(`Error in rawSign: ${formatErrorMessage(error)}`);
     }
   };
 }

@@ -130,7 +130,7 @@ export class StacksService {
   public buildUnsignedTransaction = async (
     senderPublicKey: string,
     recipient: string,
-    amount: number
+    amount: bigint
   ): Promise<StacksTransactionWire> => {
     try {
       if (!validateAddress(recipient, this.network === "testnet")) {
@@ -141,11 +141,9 @@ export class StacksService {
         throw new Error("Invalid compressed secp256k1 public key hex format");
       }
 
-      let amountBigInt = BigInt(amount);
-
       const unsignedTx = await makeUnsignedSTXTokenTransfer({
         recipient,
-        amount: amountBigInt,
+        amount,
         publicKey: senderPublicKey,
         network: this.network,
       });
@@ -165,7 +163,7 @@ export class StacksService {
   public serializeTransaction = async (
     senderPublicKey: string,
     recipient: string,
-    amount: number
+    amount: bigint
   ): Promise<{
     unsignedTx: StacksTransactionWire;
     preSignSigHash: string;
@@ -176,9 +174,9 @@ export class StacksService {
         recipient,
         amount
       );
-      let sigHash = unsignedTx.signBegin();
+      const sigHash = unsignedTx.signBegin();
 
-      let preSignSigHash = sigHashPreSign(
+      const preSignSigHash = sigHashPreSign(
         sigHash,
         unsignedTx.auth.authType,
         unsignedTx.auth.spendingCondition.fee,

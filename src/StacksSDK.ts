@@ -119,10 +119,10 @@ export class StacksSDK {
   };
 
   /**
-   * Retrieves the TAO balance for the current Stacks address.
+   * Retrieves the native coin balance for the current address.
    *
-   * @returns A promise that resolves to a {GetTaoBalanceResponse} containing the TAO balance information.
-   * @throws {Error} If the Stacks address is not set or if the balance retrieval fails.
+   * @returns A promise that resolves to a {GetNativeBalanceResponse} containing the native balance information.
+   * @throws {Error} If the address is not set or if the balance retrieval fails.
    */
   public getBalance = async (): Promise<GetNativeBalanceResponse> => {
     if (!this.address) {
@@ -145,12 +145,13 @@ export class StacksSDK {
   };
 
   /**
-   * Retrieves the transaction history for the current Stacks address.
+   * Retrieves the transaction history for the current address.
    *
+   * @param getCachedTransactions - Whether to return cached transactions (default is true).
    * @param limit - The maximum number of transactions to return (default is 50).
    * @param offset - The offset for pagination (default is 0).
-   * @returns A promise that resolves to an array of {TaoTransaction} containing transaction history.
-   * @throws {Error} If the Stacks address/Taostats api key are not set or if the transaction history retrieval fails.
+   * @returns A promise that resolves to an array of {Transaction} containing transaction history.
+   * @throws {Error} If the address is not set or if the transaction history retrieval fails.
    */
   public getTransactionHistory = async (
     getCachedTransactions: boolean = true, // Must be manually set to false to fetch fresh transactions
@@ -197,15 +198,15 @@ export class StacksSDK {
   };
 
   /**
-   * Creates a TAO transaction to transfer funds to a recipient address.
+   * Creates a native coin transaction to transfer funds to a recipient address.
    * @param recipientAddress - The address of the recipient.
-   * @param amount - The amount to transfer in TAO.
-   * @param inPlanck - Optional flag indicating if the amount is in Planck (default is false).
+   * @param amount - The amount to transfer in native coin.
+   * @param inMicro - Optional flag indicating if the amount is in Micro (default is false).
    * @param grossTransaction - Optional flag indicating if the transaction is gross, if so fee will be deducted from recipient (default is false).
    * @param note - Optional note to be attached to the transaction in raw signing.
    * @param testnet - Optional flag indicating if the transaction is for the testnet (default is false).
-   * @returns A promise that resolves to a {SignAndSendTransactionResponse}.
-   * @throws {Error} If the Stacks address, public key, or vault ID are not set, or if the transaction creation fails.
+   * @returns A promise that resolves to a {CreateTransactionResponse}.
+   * @throws {Error} If the address, public key, or vault ID are not set, or if the transaction creation fails.
    */
 
   public createNativeTransaction = async (
@@ -235,20 +236,20 @@ export class StacksSDK {
       console.log(`Amount is in micro: ${microAmount} microSTX`);
     }
 
-    const fee = await this.chainService.estimateTxFee(
-      this.address,
-      recipientAddress,
-      amount
-    );
+    // const fee = await this.chainService.estimateTxFee(
+    //   this.address,
+    //   recipientAddress,
+    //   amount
+    // );
 
-    const feeMicro = stxToMicro(fee);
+    // const feeMicro = stxToMicro(fee);
 
-    if (grossTransaction) {
-      console.log("Creating gross transaction");
-      console.log(`Estimated fee: ${fee} TAO`);
-      amount -= feeMicro;
-      console.log(`Net amount to transfer: ${microToStx(amount)} TAO`);
-    }
+    // if (grossTransaction) {
+    //   console.log("Creating gross transaction");
+    //   console.log(`Estimated fee: ${fee} STX, (${feeMicro} microSTX)`);
+    //   amount -= feeMicro;
+    //   console.log(`Net amount to transfer: ${microToStx(amount)} STX`);
+    // }
 
     const balancerResponse = await this.getBalance();
     if (!balancerResponse.success) {
@@ -267,9 +268,9 @@ export class StacksSDK {
       );
     }
 
-    if (amount + fee > balance) {
+    if (amount > balance) {
       throw new Error(
-        `No sufficient balance. Available: ${balance} STX, Required: ${amount} STX (including estimated fee of ${fee} STX)`
+        `No sufficient balance. Available: ${balance} STX, Required: ${amount} STX`
       );
     }
 
@@ -277,11 +278,11 @@ export class StacksSDK {
       const transactionToSign = await this.chainService.serializeTransaction(
         this.publicKey,
         recipientAddress,
-        amount
+        microAmount
       );
 
       const rawSignature = await this.fireblocksService.signTransaction(
-        transactionToSign,
+        transactionToSign.preSignSigHash,
         this.vaultAccountId.toString(),
         note || ""
       );
@@ -313,7 +314,7 @@ export class StacksSDK {
       };
     } catch (error: any) {
       throw new Error(
-        `Failed to create TAO transaction: ${formatErrorMessage(error)}`
+        `Failed to create transaction: ${formatErrorMessage(error)}`
       );
     }
   };
