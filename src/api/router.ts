@@ -94,6 +94,24 @@ router.get("/:vaultId/publicKey", validateVaultId, controller.getPublicKey);
  */
 router.get("/:vaultId/balance", validateVaultId, controller.getBalance);
 
+/**
+ * @openapi
+ * /{vaultId}/ft-balances:
+ *   get:
+ *     summary: Get fungible token balances
+ *     description: Retrieves balances for supported SIP-010 tokens for the address of the vault ID.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *     responses:
+ *       200:
+ *         description: Balances fetched successfully
+ *       400:
+ *         description: vaultId missing
+ *       500:
+ *         description: Internal server error
+ */
+router.get("/:vaultId/ft-balances", validateVaultId, controller.getFtBalances);
+
 // Transaction history
 /**
  * @openapi
@@ -124,11 +142,11 @@ router.get("/:vaultId/balance", validateVaultId, controller.getBalance);
  *           type: number
  *         description: Limit the number of transactions returned.
  *       - in: query
- *         name: after
+ *         name: offset
  *         required: false
  *         schema:
  *           type: number
- *         description: Pagination token returned with every transaction (use to fetch transactions after that token).
+ *         description: Offset for pagination.
  *       - in: query
  *         name: order
  *         required: false
@@ -152,39 +170,89 @@ router.get(
 );
 
 // Create transactions
+// /**
+//  * @openapi
+//  * /{vaultId}/transfer:
+//  *   post:
+//  *     summary: Create native coin (STX) transfer
+//  *     description: Initiates transfer of native STX coin from vault to recipient.
+//  *     parameters:
+//  *       - $ref: '#/components/parameters/vaultId'
+//  *     requestBody:
+//  *       required: true
+//  *       content:
+//  *         application/json:
+//  *           schema:
+//  *             type: object
+//  *             required: [recipientAddress, amount]
+//  *             properties:
+//  *               recipientAddress:
+//  *                 type: string
+//  *                 example: '0xabc123'
+//  *               amount:
+//  *                 type: number
+//  *                 example: 1.5
+//  *               grossTransaction:
+//  *                 type: boolean
+//  *                 example: false
+//  *                 description: Whether the amount includes the fee
+//  *               note:
+//  *                 type: string
+//  *                 example: 'Payment for services'
+//  *     responses:
+//  *       200:
+//  *         description: Transaction created successfully
+//  *       400:
+//  *         description: Invalid input
+//  *       500:
+//  *         description: Internal server error
+//  */
+// router.post(
+//   "/:vaultId/transfer",
+//   validateVaultId,
+//   controller.createTransaction
+// );
+
 /**
  * @openapi
  * /{vaultId}/transfer:
  *   post:
- *     summary: Create native coin (STX) transfer
- *     description: Initiates transfer of native STX coin from vault to recipient.
+ *     summary: Create transfer (STX or FT)
+ *     description: Initiates a transfer of native STX or a supported SIP-010 token.
  *     parameters:
  *       - $ref: '#/components/parameters/vaultId'
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [recipientAddress, amount]
- *             properties:
- *               recipientAddress:
- *                 type: string
- *                 example: '0xabc123'
- *               amount:
- *                 type: number
- *                 example: 1.5
- *               inMicro:
- *                 type: boolean
- *                 example: false
- *                 description: Whether the amount is in Micro (smallest unit) or in STX
- *               grossTransaction:
- *                 type: boolean
- *                 example: false
- *                 description: Whether the amount includes the fee
- *               note:
- *                 type: string
- *                 example: 'Payment for services'
+ *       - in: query
+ *         name: recipientAddress
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Recipient Stacks address (ST... / SP...)
+ *       - in: query
+ *         name: amount
+ *         required: true
+ *         schema:
+ *           type: number
+ *         description: Human amount (e.g., 1.5 STX, or 0.1 sBTC)
+ *       - in: query
+ *         name: assetType
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum: [STX, sBTC, USDC, USDH]
+ *         description: Asset to transfer. (Dropdown in Swagger)
+ *       - in: query
+ *         name: grossTransaction
+ *         required: false
+ *         schema:
+ *           type: boolean
+ *           default: false
+ *         description: STX only — if true, fee is deducted from the entered amount (recipient gets amount-fee)
+ *       - in: query
+ *         name: note
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Optional note attached to Fireblocks signing request
  *     responses:
  *       200:
  *         description: Transaction created successfully

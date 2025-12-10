@@ -66,6 +66,21 @@ export const getBalance: Handler = async (req, res, next) => {
   }
 };
 
+// GET /:vaultId/ft-balances
+export const getFtBalances: Handler = async (req, res, next) => {
+  try {
+    const { vaultId } = req.params;
+    const ftBalances = await apiService.executeAction(
+      vaultId,
+      ActionType.GET_FT_BALANCES,
+      {}
+    );
+    res.json(ftBalances);
+  } catch (err) {
+    next(err);
+  }
+};
+
 // GET /:vaultId/transactions
 export const getTransactionHistory: Handler = async (req, res, next) => {
   try {
@@ -77,7 +92,7 @@ export const getTransactionHistory: Handler = async (req, res, next) => {
         : true;
 
     const limit = req.query.limit ? Number(req.query.limit) : undefined;
-    const after = req.query.after ? String(req.query.after) : undefined;
+    const offset = req.query.offset ? String(req.query.offset) : undefined;
     const order = req.query.order
       ? String(req.query.order).toUpperCase() === "DESC"
         ? "DESC"
@@ -87,7 +102,7 @@ export const getTransactionHistory: Handler = async (req, res, next) => {
     const history = await apiService.executeAction(
       vaultId,
       ActionType.GET_TRANSACTIONS_HISTORY,
-      { getCachedTransactions, limit, after, order }
+      { getCachedTransactions, limit, offset }
     );
 
     res.json(history);
@@ -100,8 +115,7 @@ export const getTransactionHistory: Handler = async (req, res, next) => {
 export const createTransaction: Handler = async (req, res, next) => {
   try {
     const { vaultId } = req.params;
-    const { recipientAddress, amount, inMicro, grossTransaction, note } =
-      req.body;
+    const { recipientAddress, amount, grossTransaction, note } = req.body;
     if (!recipientAddress || !amount) {
       res.status(400).json({
         error: "Bad Request : recipientAddress and amount are required",
@@ -114,7 +128,6 @@ export const createTransaction: Handler = async (req, res, next) => {
       {
         recipientAddress,
         amount,
-        inMicro,
         grossTransaction,
         note,
       }

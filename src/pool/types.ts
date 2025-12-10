@@ -23,7 +23,9 @@ export interface ApiServiceConfig {
 
 export enum ActionType {
   CREATE_NATIVE_TRANSACTION = "createNativeTransaction",
+  CREATE_FT_TRANSACTION = "createFTTransaction",
   GET_BALANCE = "getBalance",
+  GET_FT_BALANCES = "getFtBalances",
   GET_TRANSACTIONS_HISTORY = "getTransactionsHistory",
   GET_ACCOUNT_ADDRESS = "getAddress",
   GET_ACCOUNT_PUBLIC_KEY = "getPublicKey",

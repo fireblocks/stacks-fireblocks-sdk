@@ -1,6 +1,7 @@
 import { c32addressDecode } from "c32check";
 import { formatErrorMessage } from "./errorHandling";
-import { stacks_info } from "./constants";
+import { ftInfo, stacks_info } from "./constants";
+import { TokenType } from "../services/types";
 
 export function validateAmount(amount: string | number): boolean {
   try {
@@ -48,20 +49,77 @@ export function isCompressedSecp256k1PubKeyHex(hex: string): boolean {
   return /^(02|03)[0-9a-fA-F]{64}$/.test(hex);
 }
 
-// amount is in STX → convert to uSTX bigint
 export function stxToMicro(amountStx: number | string): bigint {
   const s = String(amountStx);
   const [w = "0", fRaw = ""] = s.split(".");
-  const f = (fRaw + "000000").slice(0, stacks_info.stxDecimals); // 6 decimals
+  const f = (fRaw + "000000").slice(0, stacks_info.stxDecimals);
   return BigInt(w) * BigInt(10 ** stacks_info.stxDecimals) + BigInt(f);
 }
 
-export function microToStx(micro: bigint | number): number {
+export function microToStx(micro: bigint | number | string): number {
   const microBigInt = typeof micro === "bigint" ? micro : BigInt(micro);
   return Number(microBigInt) / 10 ** stacks_info.stxDecimals;
+}
+
+export function tokenToMicro(
+  amount: number | string,
+  token: TokenType
+): bigint {
+  const decimals = ftInfo[token].decimals;
+  const [w = "0", fRaw = ""] = String(amount).split(".");
+  const frac = (fRaw + "0".repeat(decimals)).slice(0, decimals);
+  return BigInt(w) * BigInt(10) ** BigInt(decimals) + BigInt(frac || "0");
+}
+
+export function microToToken(
+  micro: bigint | number | string,
+  decimals: number
+): number {
+  console.log(`Before conversion: ${micro}`);
+  const microBigInt = typeof micro === "bigint" ? micro : BigInt(micro);
+  const after = Number(microBigInt) / 10 ** decimals;
+  return after;
 }
 
 export function concatSignature(fullSig: string, v: number): string {
   const vHex = v == 0 ? "00" : "01";
   return vHex + fullSig;
+}
+
+export const getDecimalsFromFtInfo = (contractId: string): number => {
+  console.log(`recieved: ${contractId}`);
+  const [addr, contractAndToken] = contractId.split(".");
+  const [contractName, tokenName] = contractAndToken.split("::");
+  const hit = Object.values(ftInfo).find(
+    (t) =>
+      t &&
+      t.contractName === contractName &&
+      t.contractAddress.toLowerCase() === addr.toLowerCase()
+  );
+  console.log(`Found: ${hit}`);
+  return (
+    hit?.decimals ??
+    Object.values(ftInfo).find((t) => t?.contractName === contractName)
+      ?.decimals ??
+    0
+  );
+};
+
+export function parseAssetId(assetId: string) {
+  // "<contractAddress>.<contractName>::<tokenName>"
+  const [contractPrincipal, tokenName] = assetId.split("::");
+  const dot = contractPrincipal.lastIndexOf(".");
+  const contractAddress = contractPrincipal.slice(0, dot);
+  const contractName = contractPrincipal.slice(dot + 1);
+  return { contractAddress, contractName, tokenName };
+}
+
+export function selectSpeceficFTBalance(
+  token: TokenType,
+  balances: { token: string; balance: number }[]
+) {
+  let balanceObject = Object.values(balances).find(
+    (b) => b && b.token == token
+  );
+  return balanceObject.balance;
 }

@@ -23,13 +23,25 @@ import { FireblocksService } from "./services/fireblocks.service";
 import {
   CreateTransactionResponse,
   FireblocksConfig,
+  GetFtBalancesResponse,
   GetNativeBalanceResponse,
+  TokenType,
   Transaction,
+  TransactionType,
 } from "./services/types";
 import { pagination_defaults } from "./utils/constants";
 import { formatErrorMessage } from "./utils/errorHandling";
 import { validateApiCredentials } from "./utils/fireblocks.utils";
-import { concatSignature, microToStx, stxToMicro } from "./utils/helpers";
+import {
+  concatSignature,
+  getDecimalsFromFtInfo,
+  microToStx,
+  microToToken,
+  parseAssetId,
+  stxToMicro,
+  tokenToMicro,
+  validateAddress,
+} from "./utils/helpers";
 import { createMessageSignature } from "@stacks/transactions/dist/wire/create";
 
 export class StacksSDK {
@@ -144,6 +156,56 @@ export class StacksSDK {
   };
 
   /**
+   * Retrieves the fungible tokens balances for the current address.
+   *
+   * @returns A promise that resolves to a {GetFtBalancesResponse} containing the fungible tokens balances.
+   * @throws {Error} If the address is not set or if the balance retrieval fails.
+   */
+  public getFtBalances = async (): Promise<GetFtBalancesResponse> => {
+    if (!this.address) {
+      console.log(
+        "StacksSDK.getTransactionsHistory() error: address is not set."
+      );
+      throw new Error("Stacks address is not set.");
+    }
+
+    try {
+      let data: {
+        token: string;
+        balance: number;
+      }[] = [];
+
+      const balances = await this.chainService.getFTBalancesForAddress(
+        this.address
+      );
+
+      for (const [assetId, info] of Object.entries(balances)) {
+        const { contractAddress, contractName, tokenName } =
+          parseAssetId(assetId);
+        const decimals = getDecimalsFromFtInfo(assetId);
+        let balance = {
+          token: tokenName,
+          balance: microToToken((info as any).balance, decimals),
+        };
+        data.push(balance);
+      }
+
+      return {
+        success: true,
+        data,
+      };
+    } catch (error) {
+      console.error(
+        `Error fetching fungible tokens balances: ${formatErrorMessage(error)}`
+      );
+      return {
+        success: false,
+        error: formatErrorMessage(error),
+      };
+    }
+  };
+
+  /**
    * Retrieves the transaction history for the current address.
    *
    * @param getCachedTransactions - Whether to return cached transactions (default is true).
@@ -197,86 +259,142 @@ export class StacksSDK {
   };
 
   /**
-   * Creates a native coin transaction to transfer funds to a recipient address.
+   * Checks and validates transaction parameters, adjusting the amount if necessary.
+   *
    * @param recipientAddress - The address of the recipient.
    * @param amount - The amount to transfer in native coin.
-   * @param inMicro - Optional flag indicating if the amount is in Micro (default is false).
    * @param grossTransaction - Optional flag indicating if the transaction is gross, if so fee will be deducted from recipient (default is false).
-   * @param note - Optional note to be attached to the transaction in raw signing.
-   * @param testnet - Optional flag indicating if the transaction is for the testnet (default is false).
-   * @returns A promise that resolves to a {CreateTransactionResponse}.
-   * @throws {Error} If the address, public key, or vault ID are not set, or if the transaction creation fails.
+   * @param type - The type of transaction (default is native coin).
+   * @param token - The type of fungible token to transfer (required if type is FungibleToken).
+   * @returns A promise that resolves to an object indicating if parameters are valid, the final amount, and reason if invalid.
+   * @throws {Error} If parameter validation fails.
    */
-
-  public createNativeTransaction = async (
+  private checkParamsAndAdjustAmount = async (
     recipientAddress: string,
     amount: number,
-    inMicro: boolean = false,
-    grossTransaction: boolean = false,
-    note?: string
-  ): Promise<CreateTransactionResponse> => {
-    if (!this.address || !this.publicKey || !this.vaultAccountId) {
-      throw new Error("Address, Public Key or Vault ID are not set");
-    }
-
-    let microAmount;
-
-    if (!inMicro) {
-      microAmount = stxToMicro(amount);
-      console.log(
-        `Converted amount to micro: ${microAmount} (from ${microToStx(
-          microAmount
-        )} STX)`
-      );
-    } else {
-      microAmount = amount;
-      amount = microToStx(microAmount);
-      console.log(`Amount is in micro: ${microAmount} microSTX`);
-    }
-
-    // const fee = await this.chainService.estimateTxFee(
-    //   this.address,
-    //   recipientAddress,
-    //   amount
-    // );
-
-    // const feeMicro = stxToMicro(fee);
-
-    // if (grossTransaction) {
-    //   console.log("Creating gross transaction");
-    //   console.log(`Estimated fee: ${fee} STX, (${feeMicro} microSTX)`);
-    //   amount -= feeMicro;
-    //   console.log(`Net amount to transfer: ${microToStx(amount)} STX`);
-    // }
-
-    const balancerResponse = await this.getBalance();
-    if (!balancerResponse.success) {
-      throw new Error(
-        `createNativeTransaction Error: Failed to get balance: ${
-          balancerResponse.error || "unknown error"
-        }`
-      );
-    }
-
-    const balance = balancerResponse.balance;
-
-    if (amount <= 0) {
-      throw new Error(
-        `Amount after fee deduction must be greater than zero. Current amount: ${amount} planck`
-      );
-    }
-
-    if (amount > balance) {
-      throw new Error(
-        `No sufficient balance. Available: ${balance} STX, Required: ${amount} STX`
-      );
-    }
-
+    grossTransaction: boolean | undefined = false,
+    type: TransactionType = TransactionType.STX,
+    token?: TokenType
+  ): Promise<{
+    validParams: boolean;
+    finalAmount?: number | bigint;
+    reason?: string;
+  }> => {
     try {
-      const transactionToSign = await this.chainService.serializeTransaction(
-        this.publicKey,
+      if (!validateAddress(recipientAddress, this.testnet)) {
+        return {
+          validParams: false,
+          reason: `Not a valid recipient address`,
+        };
+      }
+
+      if (amount <= 0) {
+        return {
+          validParams: false,
+          reason: `Transfer amount must be greater than zero`,
+        };
+      }
+
+      if (type == TransactionType.FungibleToken && !token) {
+        return {
+          validParams: false,
+          reason: `Token type must be provided for fungible token transfers`,
+        };
+      }
+
+      let microAmount =
+        type == TransactionType.FungibleToken
+          ? tokenToMicro(amount, token)
+          : stxToMicro(amount);
+
+      const microfee = await this.chainService.estimateTxFee(
         recipientAddress,
         microAmount
+      );
+
+      const fee = microToStx(microfee);
+
+      const balanceResponse =
+        type == TransactionType.FungibleToken
+          ? await this.getFtBalances()
+          : await this.getBalance();
+
+      if (!balanceResponse.success) {
+        throw new Error(
+          `Could not fetch account balance to check funds sufficiency`
+        );
+      }
+
+      // if its a gross STX transfer, deduct fee from transferred amount
+      if (type == TransactionType.STX && grossTransaction) {
+        console.log(
+          `Gross transaction: deducting fee ${fee} STX from amount ${amount} STX`
+        );
+        amount -= fee;
+        if (amount <= 0) {
+          return {
+            validParams: false,
+            reason: `Amount after fee deduction is zero or negative`,
+          };
+        }
+      }
+
+      let balance;
+      // to do : check amount against balance
+      if (type == TransactionType.FungibleToken) {
+        balance = (balanceResponse as GetFtBalancesResponse).data?.find(
+          (b) => b.token === token
+        )?.balance;
+      } else {
+        balance = (balanceResponse as GetNativeBalanceResponse).balance;
+      }
+
+      if (amount + fee > balance) {
+        return {
+          validParams: false,
+          reason: `Insufficient funds. Available balance: ${balance}, required: ${amount}`,
+        };
+      }
+
+      // Recalculate microAmount after any adjustments
+      microAmount =
+        type == TransactionType.FungibleToken
+          ? tokenToMicro(amount, token)
+          : stxToMicro(amount);
+
+      console.log(
+        `Converted amount to micro: ${microAmount} (from ${amount} ${
+          token ? token : "STX"
+        })`
+      );
+
+      return {
+        validParams: true,
+        finalAmount: microAmount,
+      };
+    } catch (error) {
+      throw new Error(
+        `Parameter validation failed: ${formatErrorMessage(error)}`
+      );
+    }
+  };
+
+  // Builds, signs and sends a transaction using Fireblocks raw signing.
+  private buildSignSendTransaction = async (
+    recipientAddress: string,
+    microAmount: bigint,
+    type: TransactionType = TransactionType.STX,
+    token?: TokenType,
+    note?: string
+  ): Promise<any> => {
+    try {
+      const transactionToSign = await this.chainService.serializeTransaction(
+        this.address,
+        this.publicKey,
+        recipientAddress,
+        microAmount,
+        type,
+        token
       );
 
       const rawSignature = await this.fireblocksService.signTransaction(
@@ -292,6 +410,129 @@ export class StacksSDK {
 
       const result = await this.chainService.brodcastTransaction(
         transactionToSign.unsignedTx
+      );
+      return result;
+    } catch (error) {
+      throw new Error(
+        `Failed to build, sign or send transaction: ${formatErrorMessage(
+          error
+        )}`
+      );
+    }
+  };
+
+  /**
+   * Creates a native coin transaction to transfer funds to a recipient address.
+   * @param recipientAddress - The address of the recipient.
+   * @param amount - The amount to transfer in native coin.
+   * @param grossTransaction - Optional flag indicating if the transaction is gross, if so fee will be deducted from recipient (default is false).
+   * @param note - Optional note to be attached to the transaction in raw signing.
+   * @returns A promise that resolves to a {CreateTransactionResponse}.
+   * @throws {Error} If the address, public key, or vault ID are not set, or if the transaction creation fails.
+   */
+
+  public createNativeTransaction = async (
+    recipientAddress: string,
+    amount: number,
+    grossTransaction: boolean = false,
+    note?: string
+  ): Promise<CreateTransactionResponse> => {
+    if (!this.address || !this.publicKey || !this.vaultAccountId) {
+      throw new Error("Address, Public Key or Vault ID are not set");
+    }
+
+    try {
+      const paramsValidationResponse = await this.checkParamsAndAdjustAmount(
+        recipientAddress,
+        amount,
+        grossTransaction,
+        TransactionType.STX
+      );
+
+      if (!paramsValidationResponse.validParams) {
+        return {
+          success: false,
+          error: `Invalid transaction parameters: ${paramsValidationResponse.reason}`,
+        };
+      }
+
+      const microAmount = paramsValidationResponse.finalAmount as bigint;
+
+      const result = await this.buildSignSendTransaction(
+        recipientAddress,
+        microAmount,
+        TransactionType.STX,
+        undefined,
+        note
+      );
+
+      if (!result || result.err) {
+        console.error(
+          `Transaction broadcast failed: ${
+            formatErrorMessage(result?.err) || "unknown error"
+          }`
+        );
+        return {
+          success: false,
+          error: result?.err ? formatErrorMessage(result.err) : "unknown error",
+        };
+      }
+
+      return {
+        success: true,
+        txHash: result.txid,
+      };
+    } catch (error: any) {
+      throw new Error(
+        `Failed to create transaction: ${formatErrorMessage(error)}`
+      );
+    }
+  };
+
+  /**
+   * Creates a fungible token transaction to transfer funds to a recipient address.
+   * @param recipientAddress - The address of the recipient.
+   * @param amount - The amount to transfer in native coin.
+   * @param token - The type of fungible token to transfer.
+   * @param note - Optional note to be attached to the transaction in raw signing.
+   * @returns A promise that resolves to a {CreateTransactionResponse}.
+   * @throws {Error} If the address, public key, or vault ID are not set, or if the transaction creation fails.
+   */
+
+  public createFTTransaction = async (
+    recipientAddress: string,
+    amount: number,
+    token: TokenType,
+    note?: string
+  ): Promise<CreateTransactionResponse> => {
+    if (!this.address || !this.publicKey || !this.vaultAccountId) {
+      throw new Error("Address, Public Key or Vault ID are not set");
+    }
+
+    try {
+      const paramsValidationResponse = await this.checkParamsAndAdjustAmount(
+        recipientAddress,
+        amount,
+        undefined, // Gross transaction not applicable for FT transfers
+        TransactionType.FungibleToken,
+        token
+      );
+
+      if (!paramsValidationResponse.validParams) {
+        return {
+          success: false,
+          error: `Invalid transaction parameters: ${paramsValidationResponse.reason}`,
+        };
+      }
+
+      const microAmount = paramsValidationResponse.finalAmount as bigint;
+
+      const result = await this.buildSignSendTransaction(
+        recipientAddress,
+        microAmount,
+        TransactionType.FungibleToken,
+        token,
+        note
       );
 
       if (!result || result.err) {
@@ -317,3 +558,22 @@ export class StacksSDK {
     }
   };
 }
+
+// async function main() {
+//   const sdk = await StacksSDK.create(230, {
+//     apiKey: "79169abd-695f-40e8-8762-47bfb6072b63",
+//     apiSecret: "./secrets/fireblocks_secret.key",
+//     testnet: true,
+//   });
+
+//   const res = await sdk.createNativeTransaction(
+//     "ST3KBBFNJ7RPA7YTBCKYR9NWHNAJKEHQ5CYZ3W0S3",
+//     1,
+//     true,
+//     "Test FT transaction from StacksSDK"
+//   );
+
+//   console.log(res);
+// }
+
+// main();

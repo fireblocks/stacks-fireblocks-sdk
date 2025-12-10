@@ -8,24 +8,32 @@
  */
 
 import axios, { AxiosInstance } from "axios";
-import { Transaction } from "./types";
+import { TokenType, Transaction, TransactionType } from "./types";
 import { STACKS_TESTNET, STACKS_MAINNET, StacksNetwork } from "@stacks/network";
 import {
   broadcastTransaction,
+  createTokenTransferPayload,
   fetchCallReadOnlyFunction,
+  fetchFeeEstimateTransaction,
+  makeUnsignedContractCall,
   makeUnsignedSTXTokenTransfer,
+  noneCV,
+  principalCV,
   publicKeyToAddress,
+  serializePayload,
   sigHashPreSign,
   StacksTransactionWire,
+  uintCV,
 } from "@stacks/transactions";
 import { formatErrorMessage } from "../utils/errorHandling";
 import {
+  getDecimalsFromFtInfo,
   isCompressedSecp256k1PubKeyHex,
   validateAddress,
 } from "../utils/helpers";
 import {
   api_constants,
-  ftDecimals,
+  ftInfo,
   pagination_defaults,
   stacks_info,
 } from "../utils/constants";
@@ -33,14 +41,14 @@ import {
 export class StacksService {
   private axiosClient: AxiosInstance;
   private stackBaseUrl: string;
-  private network: "mainnet" | "testnet" | "devnet";
+  private network: StacksNetwork;
 
   constructor(testnet: boolean = false) {
     this.axiosClient = axios.create();
     this.stackBaseUrl = testnet
       ? api_constants.stacks_testnet_rpc
       : api_constants.stacks_mainnet_rpc;
-    this.network = testnet ? "testnet" : "mainnet";
+    this.network = testnet ? STACKS_TESTNET : STACKS_MAINNET;
   }
 
   public formatAddress = (pubKey: string): string => {
@@ -53,7 +61,7 @@ export class StacksService {
         throw new Error("Invalid compressed secp256k1 public key hex format");
       }
 
-      const isTestnet = this.network === "testnet";
+      const isTestnet = this.network === STACKS_TESTNET;
       const address = publicKeyToAddress(
         pubKey,
         isTestnet ? "testnet" : "mainnet"
@@ -104,7 +112,7 @@ export class StacksService {
     }
   };
 
-  public getFTBalance = async (address: string): Promise<any> => {
+  public getFTBalancesForAddress = async (address: string): Promise<any> => {
     try {
       const response = await this.makeBalanceCalls(address);
       const ftObject = response.data.fungible_tokens;
@@ -122,7 +130,7 @@ export class StacksService {
     }
   };
 
-  public getFtDecimals = async (
+  public fetchFtDecimals = async (
     senderAddress: string,
     contractAddress: string,
     contractName: string
@@ -142,12 +150,20 @@ export class StacksService {
   };
 
   public estimateTxFee = async (
-    senderAddress: string,
     recipientAddress: string,
-    amount: number
+    amountUstx: bigint
   ): Promise<number> => {
     try {
-      return 0;
+      const payload = createTokenTransferPayload(recipientAddress, amountUstx);
+
+      const payloadHex = serializePayload(payload);
+
+      const [low] = await fetchFeeEstimateTransaction({
+        payload: payloadHex,
+        network: this.network,
+      });
+
+      return low.fee;
     } catch (error) {
       console.error(
         "Error estimating transaction fee:",
@@ -157,12 +173,15 @@ export class StacksService {
   };
 
   public buildUnsignedTransaction = async (
+    sender: string,
     senderPublicKey: string,
     recipient: string,
-    amount: bigint
+    amount: bigint,
+    type: TransactionType = TransactionType.STX,
+    token?: TokenType
   ): Promise<StacksTransactionWire> => {
     try {
-      if (!validateAddress(recipient, this.network === "testnet")) {
+      if (!validateAddress(recipient, this.network === STACKS_TESTNET)) {
         throw new Error("Invalid recipient address");
       }
 
@@ -170,12 +189,34 @@ export class StacksService {
         throw new Error("Invalid compressed secp256k1 public key hex format");
       }
 
-      const unsignedTx = await makeUnsignedSTXTokenTransfer({
-        recipient,
-        amount,
-        publicKey: senderPublicKey,
-        network: this.network,
-      });
+      if (type == TransactionType.FungibleToken && !type) {
+        throw new Error(
+          `Token type must be provided for fungible token transfers`
+        );
+      }
+
+      const unsignedTx =
+        type == TransactionType.FungibleToken
+          ? await makeUnsignedContractCall({
+              contractAddress: ftInfo[token]?.contractAddress,
+              contractName: ftInfo[token]?.contractName,
+              functionName: "transfer",
+              functionArgs: [
+                uintCV(amount),
+                principalCV(sender),
+                principalCV(recipient),
+                noneCV(),
+              ],
+              publicKey: senderPublicKey,
+              network: this.network,
+              postConditionMode: 1 as any,
+            })
+          : await makeUnsignedSTXTokenTransfer({
+              recipient,
+              amount,
+              publicKey: senderPublicKey,
+              network: this.network,
+            });
 
       return unsignedTx;
     } catch (error) {
@@ -190,18 +231,24 @@ export class StacksService {
   };
 
   public serializeTransaction = async (
+    sender: string,
     senderPublicKey: string,
     recipient: string,
-    amount: bigint
+    amount: bigint,
+    type: TransactionType = TransactionType.STX,
+    token?: TokenType
   ): Promise<{
     unsignedTx: StacksTransactionWire;
     preSignSigHash: string;
   }> => {
     try {
       const unsignedTx = await this.buildUnsignedTransaction(
+        sender,
         senderPublicKey,
         recipient,
-        amount
+        amount,
+        type,
+        token
       );
       const sigHash = unsignedTx.signBegin();
 
@@ -248,7 +295,7 @@ export class StacksService {
     limit: number = pagination_defaults.limit,
     offset: number = pagination_defaults.page
   ): Promise<Transaction[]> => {
-    if (!validateAddress(address, this.network === "testnet")) {
+    if (!validateAddress(address, this.network === STACKS_TESTNET)) {
       throw new Error("Invalid Stacks address");
     }
 
@@ -276,7 +323,7 @@ export class StacksService {
           const amount = Number(amountMicro) / 1_000_000; // STX has 6 decimals
 
           txs.push({
-            type: "STX Transfer",
+            type: TransactionType.STX,
             sender: tx.sender_address,
             recipient: tx.token_transfer.recipient_address,
             amount,
@@ -320,9 +367,7 @@ export class StacksService {
 
           const contractId = tx.contract_call.contract_id as string;
           const contractName = contractId.split(".").slice(-1)[0];
-
-          const decimals =
-            ftDecimals[contractName as keyof typeof ftDecimals] ?? 0;
+          const decimals = getDecimalsFromFtInfo(contractId);
 
           const amountInt = BigInt(rawAmount);
           const amount =
@@ -331,7 +376,7 @@ export class StacksService {
               : Number(amountInt);
 
           txs.push({
-            type: "Fungible Token Transfer",
+            type: TransactionType.FungibleToken,
             tokenName: contractName,
             tokenContractAddress: contractId,
             sender,
@@ -355,10 +400,8 @@ export class StacksService {
 
 async function main() {
   const service = new StacksService(true);
-  const ftBalance = await service.getFTBalance(
+  const res = await service.getFTBalancesForAddress(
     "ST26DZD794NGXGY96XS172CV4DH6DDTY3HXKQT121"
   );
-  console.log(ftBalance);
+  console.log(res);
 }
-
-main();

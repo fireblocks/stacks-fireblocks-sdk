@@ -40,14 +40,23 @@ export class ApiService {
           result = await sdk.createNativeTransaction(
             params.recipientAddress,
             params.amount,
-            params.inMicro,
             params.grossTransaction,
-            params.note,
-            params.testnet
+            params.note
+          );
+          break;
+        case ActionType.CREATE_FT_TRANSACTION:
+          result = await sdk.createFTTransaction(
+            params.recipientAddress,
+            params.amount,
+            params.tokenType,
+            params.note
           );
           break;
         case ActionType.GET_BALANCE:
           result = await sdk.getBalance();
+          break;
+        case ActionType.GET_FT_BALANCES:
+          result = await sdk.getFtBalances();
           break;
         case ActionType.GET_TRANSACTIONS_HISTORY:
           result = await sdk.getTransactionHistory(
