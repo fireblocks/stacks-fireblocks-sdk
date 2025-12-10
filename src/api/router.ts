@@ -226,7 +226,7 @@ router.get(
  *         required: true
  *         schema:
  *           type: string
- *         description: Recipient Stacks address (ST... / SP...)
+ *         description: Recipient Stacks address
  *       - in: query
  *         name: amount
  *         required: true
@@ -239,14 +239,14 @@ router.get(
  *         schema:
  *           type: string
  *           enum: [STX, sBTC, USDC, USDH]
- *         description: Asset to transfer. (Dropdown in Swagger)
+ *         description: Asset to transfer.
  *       - in: query
  *         name: grossTransaction
  *         required: false
  *         schema:
  *           type: boolean
  *           default: false
- *         description: STX only — if true, fee is deducted from the entered amount (recipient gets amount-fee)
+ *         description: STX only — if true, fee is deducted from the entered amount.
  *       - in: query
  *         name: note
  *         required: false

@@ -144,7 +144,7 @@ export class StacksService {
       network,
       senderAddress,
     });
-    console.log("Decimals:", res);
+
     const val = (res as any).value.value as number;
     return Number(val);
   };
@@ -189,7 +189,7 @@ export class StacksService {
         throw new Error("Invalid compressed secp256k1 public key hex format");
       }
 
-      if (type == TransactionType.FungibleToken && !type) {
+      if (type == TransactionType.FungibleToken && !token) {
         throw new Error(
           `Token type must be provided for fungible token transfers`
         );
@@ -396,12 +396,4 @@ export class StacksService {
       );
     }
   };
-}
-
-async function main() {
-  const service = new StacksService(true);
-  const res = await service.getFTBalancesForAddress(
-    "ST26DZD794NGXGY96XS172CV4DH6DDTY3HXKQT121"
-  );
-  console.log(res);
 }

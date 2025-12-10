@@ -3,6 +3,7 @@ import { ApiService } from "./api.service";
 import { ActionType, ApiServiceConfig } from "../pool/types";
 import { BasePath } from "@fireblocks/ts-sdk";
 import { getApiService } from "./api_service_singleton";
+import { TokenType } from "../services/types";
 
 // Configure the API Service once for all handlers
 const apiConfig: ApiServiceConfig = {
@@ -111,26 +112,89 @@ export const getTransactionHistory: Handler = async (req, res, next) => {
   }
 };
 
+// // POST /:vaultId/transfer
+// export const createTransaction: Handler = async (req, res, next) => {
+//   try {
+//     const { vaultId } = req.params;
+//     const { recipientAddress, amount, grossTransaction, note } = req.body;
+//     if (!recipientAddress || !amount) {
+//       res.status(400).json({
+//         error: "Bad Request : recipientAddress and amount are required",
+//       });
+//       return;
+//     }
+//     const tx = await apiService.executeAction(
+//       vaultId,
+//       ActionType.CREATE_NATIVE_TRANSACTION,
+//       {
+//         recipientAddress,
+//         amount,
+//         grossTransaction,
+//         note,
+//       }
+//     );
+//     res.json(tx);
+//   } catch (err) {
+//     next(err);
+//   }
+// };
+
 // POST /:vaultId/transfer
 export const createTransaction: Handler = async (req, res, next) => {
   try {
     const { vaultId } = req.params;
-    const { recipientAddress, amount, grossTransaction, note } = req.body;
-    if (!recipientAddress || !amount) {
+
+    const recipientAddress = String(req.query.recipientAddress || "");
+    const amountStr = String(req.query.amount || "");
+    const assetUi = String(req.query.assetType || "").trim(); // "STX" | "sBTC" | "USDC" | "USDH"
+    const grossTransaction =
+      String(req.query.grossTransaction || "false").toLowerCase() === "true";
+    const note = req.query.note ? String(req.query.note) : undefined;
+
+    if (!recipientAddress || !amountStr || !assetUi) {
       res.status(400).json({
-        error: "Bad Request : recipientAddress and amount are required",
+        error:
+          "Bad Request: recipientAddress, amount and assetType are required",
       });
       return;
     }
+
+    const amount = Number(amountStr);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      res.status(400).json({ error: "Bad Request: amount must be > 0" });
+      return;
+    }
+
+    // Map UI label -> TokenType (enum value)
+    const mapUiToTokenType: Record<string, TokenType> = {
+      STX: TokenType.STX,
+      sBTC: TokenType.sBTC,
+      USDC: TokenType.USDC,
+      USDH: TokenType.USDH,
+    };
+    const tokenType = mapUiToTokenType[assetUi];
+
+    if (!tokenType) {
+      res.status(400).json({ error: `Unsupported assetType: ${assetUi}` });
+      return;
+    }
+
+    // Route: STX -> native; others -> FT
+    if (tokenType === TokenType.STX) {
+      const tx = await apiService.executeAction(
+        vaultId,
+        ActionType.CREATE_NATIVE_TRANSACTION,
+        { recipientAddress, amount, grossTransaction, note }
+      );
+      res.json(tx);
+      return;
+    }
+
+    // FT transfer
     const tx = await apiService.executeAction(
       vaultId,
-      ActionType.CREATE_NATIVE_TRANSACTION,
-      {
-        recipientAddress,
-        amount,
-        grossTransaction,
-        note,
-      }
+      ActionType.CREATE_FT_TRANSACTION,
+      { recipientAddress, amount, tokenType, note }
     );
     res.json(tx);
   } catch (err) {

@@ -307,12 +307,16 @@ export class StacksSDK {
           ? tokenToMicro(amount, token)
           : stxToMicro(amount);
 
-      const microfee = await this.chainService.estimateTxFee(
-        recipientAddress,
-        microAmount
-      );
+      let microfee = 0;
+      let fee = 0;
 
-      const fee = microToStx(microfee);
+      if (token == TokenType.sBTC) {
+        microfee = await this.chainService.estimateTxFee(
+          recipientAddress,
+          microAmount
+        );
+        fee = microToStx(microfee);
+      }
 
       const balanceResponse =
         type == TransactionType.FungibleToken
@@ -509,6 +513,10 @@ export class StacksSDK {
       throw new Error("Address, Public Key or Vault ID are not set");
     }
 
+    console.log(
+      `Creating FT transaction: ${amount} ${token} to ${recipientAddress}`
+    );
+
     try {
       const paramsValidationResponse = await this.checkParamsAndAdjustAmount(
         recipientAddress,
@@ -526,7 +534,6 @@ export class StacksSDK {
       }
 
       const microAmount = paramsValidationResponse.finalAmount as bigint;
-
       const result = await this.buildSignSendTransaction(
         recipientAddress,
         microAmount,
@@ -558,22 +565,3 @@ export class StacksSDK {
     }
   };
 }
-
-// async function main() {
-//   const sdk = await StacksSDK.create(230, {
-//     apiKey: "79169abd-695f-40e8-8762-47bfb6072b63",
-//     apiSecret: "./secrets/fireblocks_secret.key",
-//     testnet: true,
-//   });
-
-//   const res = await sdk.createNativeTransaction(
-//     "ST3KBBFNJ7RPA7YTBCKYR9NWHNAJKEHQ5CYZ3W0S3",
-//     1,
-//     true,
-//     "Test FT transaction from StacksSDK"
-//   );
-
-//   console.log(res);
-// }
-
-// main();

@@ -7,7 +7,7 @@ export function validateAmount(amount: string | number): boolean {
   try {
     const num = typeof amount === "number" ? amount : Number(amount);
     if (isNaN(num) || num <= 0) {
-      console.log("Amount must be a positive number");
+      console.log("Invalid Amount: amount must be a positive number");
       return false;
     }
     return true;
@@ -75,7 +75,6 @@ export function microToToken(
   micro: bigint | number | string,
   decimals: number
 ): number {
-  console.log(`Before conversion: ${micro}`);
   const microBigInt = typeof micro === "bigint" ? micro : BigInt(micro);
   const after = Number(microBigInt) / 10 ** decimals;
   return after;
@@ -87,7 +86,6 @@ export function concatSignature(fullSig: string, v: number): string {
 }
 
 export const getDecimalsFromFtInfo = (contractId: string): number => {
-  console.log(`recieved: ${contractId}`);
   const [addr, contractAndToken] = contractId.split(".");
   const [contractName, tokenName] = contractAndToken.split("::");
   const hit = Object.values(ftInfo).find(
@@ -96,7 +94,6 @@ export const getDecimalsFromFtInfo = (contractId: string): number => {
       t.contractName === contractName &&
       t.contractAddress.toLowerCase() === addr.toLowerCase()
   );
-  console.log(`Found: ${hit}`);
   return (
     hit?.decimals ??
     Object.values(ftInfo).find((t) => t?.contractName === contractName)
