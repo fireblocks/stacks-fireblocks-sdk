@@ -310,7 +310,7 @@ export class StacksSDK {
       let microfee = 0;
       let fee = 0;
 
-      if (token == TokenType.sBTC) {
+      if (type == TransactionType.STX) {
         microfee = await this.chainService.estimateTxFee(
           recipientAddress,
           microAmount
