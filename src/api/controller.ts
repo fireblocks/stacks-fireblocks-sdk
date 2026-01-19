@@ -1,19 +1,9 @@
 import { Request, Response, NextFunction } from "express";
-import { ApiService } from "./api.service";
-import { ActionType, ApiServiceConfig } from "../pool/types";
-import { BasePath } from "@fireblocks/ts-sdk";
-import { getApiService } from "./api_service_singleton";
+import { apiServiceSingleton } from "./api.service";
+import { ActionType } from "../pool/types";
 import { TokenType } from "../services/types";
 
-// Configure the API Service once for all handlers
-const apiConfig: ApiServiceConfig = {
-  apiKey: process.env.FIREBLOCKS_API_KEY || "",
-  apiSecret: process.env.FIREBLOCKS_SECRET_KEY_PATH || "",
-  basePath: (process.env.FIREBLOCKS_BASE_PATH as BasePath) || BasePath.US,
-  // Optional: customize pool size/timeouts here
-  poolConfig: {},
-};
-const apiService = getApiService();
+const apiService = apiServiceSingleton;
 
 // Handler utilities
 type Handler = (

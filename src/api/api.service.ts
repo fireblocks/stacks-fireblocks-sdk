@@ -5,6 +5,16 @@ import { StacksSDK } from "../StacksSDK";
 import { formatErrorMessage } from "../utils/errorHandling";
 import { SDKResponse } from "../services/types";
 
+// Configure the API Service once for all handlers
+const apiConfig: ApiServiceConfig = {
+  apiKey: process.env.FIREBLOCKS_API_KEY || "",
+  apiSecret: process.env.FIREBLOCKS_SECRET_KEY_PATH || "",
+  basePath: (process.env.FIREBLOCKS_BASE_PATH as BasePath) || BasePath.US,
+  testnet: (process.env.NETWORK ?? "").toLowerCase() === "testnet",
+  // Optional: customize pool size/timeouts here
+  poolConfig: {},
+};
+
 export class ApiService {
   private sdkManager: SdkManager;
 
@@ -106,3 +116,5 @@ export class ApiService {
     return this.sdkManager.shutdown();
   };
 }
+
+export const apiServiceSingleton = new ApiService(apiConfig);

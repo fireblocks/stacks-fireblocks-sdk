@@ -7,34 +7,41 @@
  * This service abstracts the complexity of direct SDK usage and provides utility methods for common blockchain operations.
  */
 
-import axios, { AxiosInstance } from "axios";
+import axios, { AxiosInstance, create } from "axios";
 import { TokenType, Transaction, TransactionType } from "./types";
 import { STACKS_TESTNET, STACKS_MAINNET, StacksNetwork } from "@stacks/network";
 import {
   broadcastTransaction,
+  ClarityValue,
+  contractPrincipalCV,
+  createContractCallPayload,
   createTokenTransferPayload,
   fetchCallReadOnlyFunction,
   fetchFeeEstimateTransaction,
   makeUnsignedContractCall,
   makeUnsignedSTXTokenTransfer,
   noneCV,
+  PostConditionMode,
   principalCV,
   publicKeyToAddress,
   serializePayload,
   sigHashPreSign,
   StacksTransactionWire,
+  standardPrincipalCV,
   uintCV,
 } from "@stacks/transactions";
 import { formatErrorMessage } from "../utils/errorHandling";
 import {
   getDecimalsFromFtInfo,
   isCompressedSecp256k1PubKeyHex,
+  untilBurnHeightForCycles,
   validateAddress,
 } from "../utils/helpers";
 import {
   api_constants,
   ftInfo,
   pagination_defaults,
+  poxInfo,
   stacks_info,
 } from "../utils/constants";
 
@@ -51,6 +58,11 @@ export class StacksService {
     this.network = testnet ? STACKS_TESTNET : STACKS_MAINNET;
   }
 
+  /**
+   * Formats a compressed secp256k1 public key hex into a Stacks address.
+   * @param pubKey - The compressed secp256k1 public key in hex format.
+   * @returns - The corresponding Stacks address.
+   */
   public formatAddress = (pubKey: string): string => {
     try {
       if (!pubKey || typeof pubKey !== "string") {
@@ -76,6 +88,11 @@ export class StacksService {
     }
   };
 
+  /**
+   * Makes a call to the Stacks balances endpoint for a given address.
+   * @param address - The Stacks address to query balances for.
+   * @returns - The response from the balances endpoint.
+   */
   public makeBalanceCalls = async (address: string): Promise<any> => {
     try {
       const response = await this.axiosClient.get(
@@ -85,6 +102,7 @@ export class StacksService {
       if (!response || !response.data || response.status !== 200) {
         throw new Error(`HTTP ${response.status}`);
       }
+
       return response;
     } catch (error) {
       console.error(
@@ -93,6 +111,11 @@ export class StacksService {
     }
   };
 
+  /**
+   * Retrieves the native STX balance for a given address from makeBalanceCalls response.
+   * @param address - The Stacks address to query balance for.
+   * @returns - The native STX balance.
+   */
   public getNativeBalance = async (address: string): Promise<number> => {
     try {
       const response = await this.makeBalanceCalls(address);
@@ -112,6 +135,11 @@ export class StacksService {
     }
   };
 
+  /**
+   * Retrieves the fungible token balances for a given address from makeBalanceCalls response.
+   * @param address - The Stacks address to query balances for.
+   * @returns - The fungible token balances.
+   */
   public getFTBalancesForAddress = async (address: string): Promise<any> => {
     try {
       const response = await this.makeBalanceCalls(address);
@@ -129,6 +157,14 @@ export class StacksService {
       );
     }
   };
+
+  /**
+   * Fetches the decimals for a given fungible token contract.
+   * @param senderAddress - The address of the sender making the read-only function call.
+   * @param contractAddress - The address of the fungible token contract.
+   * @param contractName - The name of the fungible token contract.
+   * @returns - The number of decimals for the fungible token.
+   */
 
   public fetchFtDecimals = async (
     senderAddress: string,
@@ -149,6 +185,12 @@ export class StacksService {
     return Number(val);
   };
 
+  /**
+   * Estimates the transaction fee for STX transfer.
+   * @param recipientAddress - The recipient's Stacks address.
+   * @param amountUstx - The amount to transfer in microSTX (ustx).
+   * @returns - The estimated transaction fee in microSTX (ustx).
+   */
   public estimateTxFee = async (
     recipientAddress: string,
     amountUstx: bigint
@@ -158,12 +200,19 @@ export class StacksService {
 
       const payloadHex = serializePayload(payload);
 
-      const [low] = await fetchFeeEstimateTransaction({
+      const [low, medium, high] = await fetchFeeEstimateTransaction({
         payload: payloadHex,
         network: this.network,
       });
 
-      return low.fee;
+      console.log(
+        "[DEBUG] Estimated transaction fee:",
+        high.fee,
+        medium.fee,
+        low.fee
+      );
+
+      return medium.fee;
     } catch (error) {
       console.error(
         "Error estimating transaction fee:",
@@ -172,6 +221,54 @@ export class StacksService {
     }
   };
 
+  /**
+   * Estimates the transaction fee for a contract call.
+   * @param contractAddress - The address of the contract.
+   * @param contractName - The name of the contract.
+   * @param functionName - The name of the function to call.
+   * @param functionArgs - The arguments to pass to the function.
+   * @returns - The estimated transaction fee in microSTX (ustx).
+   */
+  public estimateContractCallFee = async (
+    contractAddress: string,
+    contractName: string,
+    functionName: string,
+    functionArgs: ClarityValue[]
+  ): Promise<number> => {
+    try {
+      const payload = createContractCallPayload(
+        contractAddress,
+        contractName,
+        functionName,
+        functionArgs
+      );
+
+      const payloadHex = serializePayload(payload);
+
+      const [low, medium, high] = await fetchFeeEstimateTransaction({
+        payload: payloadHex,
+        network: this.network,
+      });
+
+      return medium.fee;
+    } catch (error) {
+      console.error(
+        "Error estimating contract call fee:",
+        formatErrorMessage(error)
+      );
+    }
+  };
+
+  /**
+   * Builds an unsigned transaction for STX transfer or fungible token transfer.
+   * @param sender - The sender's Stacks address.
+   * @param senderPublicKey - The sender's compressed secp256k1 public key in hex format.
+   * @param recipient - The recipient's Stacks address.
+   * @param amount - The amount to transfer (in STX or token units).
+   * @param type - The type of transaction (STX or FungibleToken).
+   * @param token - The type of fungible token (required if type is FungibleToken).
+   * @returns - The unsigned Stacks transaction.
+   */
   public buildUnsignedTransaction = async (
     sender: string,
     senderPublicKey: string,
@@ -230,6 +327,67 @@ export class StacksService {
     }
   };
 
+  /**
+   *  Builds an unsigned contract call transaction.
+   * @param senderPublicKey - The sender's compressed secp256k1 public key in hex format.
+   * @param contractAddress - The address of the contract.
+   * @param contractName - The name of the contract.
+   * @param functionName - The name of the function to call.
+   * @param functionArgs - The arguments to pass to the function.
+   * @returns - The unsigned Stacks contract call transaction.
+   */
+  public buildUnsignedContractCall = async (
+    senderPublicKey: string,
+    contractAddress: string,
+    contractName: string,
+    functionName: string,
+    functionArgs: ClarityValue[]
+  ): Promise<StacksTransactionWire> => {
+    try {
+      if (!validateAddress(contractAddress, this.network === STACKS_TESTNET)) {
+        throw new Error("Invalid recipient address");
+      }
+
+      if (!isCompressedSecp256k1PubKeyHex(senderPublicKey)) {
+        throw new Error("Invalid compressed secp256k1 public key hex format");
+      }
+
+      if (!contractName || !functionName) {
+        throw new Error("Contract name and function name must be provided");
+      }
+
+      const unsignedContractCall = await makeUnsignedContractCall({
+        contractAddress,
+        contractName,
+        functionName,
+        functionArgs,
+        publicKey: senderPublicKey,
+        network: this.network,
+        postConditionMode: PostConditionMode.Deny,
+      });
+
+      return unsignedContractCall;
+    } catch (error) {
+      console.error(
+        "Error building unsigned transaction:",
+        formatErrorMessage(error)
+      );
+      throw new Error(
+        `Failed to build unsigned transaction: ${formatErrorMessage(error)}`
+      );
+    }
+  };
+
+  /**
+   * Serializes a transaction for STX transfer or fungible token transfer.
+   * @param sender - The sender's Stacks address.
+   * @param senderPublicKey - The sender's compressed secp256k1 public key in hex format.
+   * @param recipient - The recipient's Stacks address.
+   * @param amount - The amount to transfer.
+   * @param type - The type of transaction (STX or FungibleToken).
+   * @param token - The type of fungible token (required if type is FungibleToken).
+   * @returns - The serialized unsigned Stacks transaction and pre-signature hash.
+   */
   public serializeTransaction = async (
     sender: string,
     senderPublicKey: string,
@@ -271,13 +429,67 @@ export class StacksService {
     }
   };
 
+  /**
+   *  Serializes a contract call transaction.
+   * @param senderPublicKey - The sender's compressed secp256k1 public key in hex format.
+   * @param contractAddress - The address of the contract.
+   * @param contractName - The name of the contract.
+   * @param functionName - The name of the function to call.
+   * @param functionArgs - The arguments to pass to the function.
+   * @returns - The serialized unsigned Stacks contract call transaction and pre-signature hash.
+   */
+  public serializeContractCall = async (
+    senderPublicKey: string,
+    contractAddress: string,
+    contractName: string,
+    functionName: string,
+    functionArgs: ClarityValue[]
+  ): Promise<{
+    unsignedContractCall: StacksTransactionWire;
+    preSignSigHash: string;
+  }> => {
+    try {
+      const unsignedContractCall = await this.buildUnsignedContractCall(
+        senderPublicKey,
+        contractAddress,
+        contractName,
+        functionName,
+        functionArgs
+      );
+      const sigHash = unsignedContractCall.signBegin();
+
+      const preSignSigHash = sigHashPreSign(
+        sigHash,
+        unsignedContractCall.auth.authType,
+        unsignedContractCall.auth.spendingCondition.fee,
+        unsignedContractCall.auth.spendingCondition.nonce
+      );
+
+      return { unsignedContractCall, preSignSigHash };
+    } catch (error) {
+      console.error(
+        "Error serializing transaction:",
+        formatErrorMessage(error)
+      );
+      throw new Error(
+        `Failed to serialize transaction: ${formatErrorMessage(error)}`
+      );
+    }
+  };
+
+  /**
+   *  Broadcasts a signed transaction to the Stacks network.
+   * @param signedTransaction - The signed Stacks transaction to broadcast.
+   * @returns - The result of the broadcast operation.
+   */
   public brodcastTransaction = async (
-    unsignedTransaction: StacksTransactionWire
+    signedTransaction: StacksTransactionWire
   ): Promise<any> => {
     try {
       const result = await broadcastTransaction({
-        transaction: unsignedTransaction,
+        transaction: signedTransaction,
       });
+
       return result;
     } catch (error) {
       console.error(
@@ -290,6 +502,13 @@ export class StacksService {
     }
   };
 
+  /**
+   * Retrieves the transaction history for a given address.
+   * @param address - The Stacks address to retrieve the transaction history for.
+   * @param limit - The maximum number of transactions to retrieve.
+   * @param offset - The offset for pagination.
+   * @returns An array of transactions associated with the address.
+   */
   public getTransactionHistory = async (
     address: string,
     limit: number = pagination_defaults.limit,
@@ -314,6 +533,7 @@ export class StacksService {
       for (const tx of items) {
         const base = {
           transaction_hash: tx.tx_id as string,
+          timestamp: tx.block_time_iso,
           success: tx.tx_status === "success",
         };
 
@@ -393,6 +613,143 @@ export class StacksService {
     } catch (error) {
       throw new Error(
         `Failed to fetch transaction history: ${formatErrorMessage(error)}`
+      );
+    }
+  };
+
+  /**
+   *  Fetches PoX contract information from the Stacks network.
+   * @returns - The PoX contract information.
+   */
+  public fetchPoxInfo = async (): Promise<any> => {
+    try {
+      const response = await this.axiosClient.get(
+        `${this.stackBaseUrl}/v2/pox`
+      );
+
+      if (!response || !response.data || response.status !== 200) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      return response;
+    } catch (error) {
+      console.error(`Error fetching pox info: ${formatErrorMessage(error)}`);
+    }
+  };
+
+  /**
+   * Delegates STX to a specified address for a given lock period.
+   * @param senderPublicKey - The sender's compressed secp256k1 public key in hex format.
+   * @param delegateTo - The address to delegate STX to.
+   * @param amount - The amount of STX to delegate (in microSTX).
+   * @param lockPeriod - Number of cycles to lock the delegation for.
+   * @returns - The unsigned delegate STX transaction.
+   */
+  public delegateStx = async (
+    senderPublicKey: string,
+    delegateTo: string,
+    amount: bigint,
+    lockPeriod: number // Number of cycles
+  ): Promise<{
+    unsignedContractCall: StacksTransactionWire;
+    preSignSigHash: string;
+  }> => {
+    try {
+      if (!validateAddress(delegateTo, this.network === STACKS_TESTNET)) {
+        throw new Error("Invalid delegateTo address");
+      }
+
+      if (!isCompressedSecp256k1PubKeyHex(senderPublicKey)) {
+        throw new Error("Invalid compressed secp256k1 public key hex format");
+      }
+
+      const { contractAddress: poxAddr, contractName: poxName } =
+        this.network === STACKS_TESTNET ? poxInfo.testnet : poxInfo.mainnet;
+
+      const poxResponse = await this.fetchPoxInfo();
+
+      if (!poxResponse || !poxResponse.data || poxResponse.status !== 200) {
+        throw new Error("Failed to fetch PoX contract info from the network");
+      }
+
+      const until_burn_ht = await untilBurnHeightForCycles(
+        lockPeriod,
+        poxResponse
+      );
+
+      const serializedContractCall = await this.serializeContractCall(
+        senderPublicKey,
+        poxAddr,
+        poxName,
+        "delegate-stx",
+        [
+          standardPrincipalCV(delegateTo),
+          uintCV(amount),
+          uintCV(until_burn_ht),
+          noneCV(),
+        ]
+      );
+
+      return serializedContractCall;
+    } catch (error) {
+      console.error(
+        "Error building delegate STX transaction:",
+        formatErrorMessage(error)
+      );
+      throw new Error(
+        `Failed to build delegate STX transaction: ${formatErrorMessage(error)}`
+      );
+    }
+  };
+
+  /**
+   * Allows the delegatee to call pox contract to lock delegated STX on the delegater's behalf.
+   * @param senderPublicKey - The sender's compressed secp256k1 public key in hex format.
+   * @param delegateTo - The address to delegate STX to.
+   * @param amount - The amount of STX to delegate (in microSTX).
+   * @param lockPeriod - Number of cycles to lock the delegation for.
+   * @returns - The unsigned delegate STX transaction.
+   */
+  public allowPoxContractCaller = async (
+    senderPublicKey: string,
+    poolAddress: string,
+    poolContractName: string
+  ): Promise<{
+    unsignedContractCall: StacksTransactionWire;
+    preSignSigHash: string;
+  }> => {
+    try {
+      if (!validateAddress(poolAddress, this.network === STACKS_TESTNET)) {
+        throw new Error("Invalid pool address");
+      }
+
+      if (!isCompressedSecp256k1PubKeyHex(senderPublicKey)) {
+        throw new Error("Invalid compressed secp256k1 public key hex format");
+      }
+
+      if (!poolContractName) {
+        throw new Error("Pool contract name must be provided");
+      }
+
+      const { contractAddress: poxAddr, contractName: poxName } =
+        poxInfo.mainnet;
+
+      const serializedContractCall = await this.serializeContractCall(
+        senderPublicKey,
+        poxAddr,
+        poxName,
+        "allow-contract-caller",
+        [contractPrincipalCV(poolAddress, poolContractName), noneCV()]
+      );
+
+      return serializedContractCall;
+    } catch (error) {
+      console.error(
+        "Error building delegate STX transaction:",
+        formatErrorMessage(error)
+      );
+      throw new Error(
+        `Failed to build delegate STX transaction: ${formatErrorMessage(error)}`
       );
     }
   };

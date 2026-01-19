@@ -42,6 +42,7 @@ export type Transaction = {
   recipient: string;
   amount: number;
   transaction_hash: string;
+  timestamp: any;
   success: boolean;
 };
 

@@ -1,4 +1,6 @@
+import test from "node:test";
 import { TokenInfo, TokenType } from "../services/types";
+import { address } from "@stacks/transactions/dist/cl";
 
 export const derivationPath = {
   purpose: 44,
@@ -46,4 +48,15 @@ export const ftInfo: Partial<Record<TokenType, TokenInfo>> = {
 export const ft: Record<string, number> = {
   "sbtc-token": 8,
   "aeusdc-token": 8,
+};
+
+export const poxInfo = {
+  testnet: {
+    contractAddress: "ST000000000000000000002AMW42H",
+    contractName: "pox-4",
+  },
+  mainnet: {
+    contractAddress: "SP000000000000000000002Q6VF78",
+    contractName: "pox-4",
+  },
 };

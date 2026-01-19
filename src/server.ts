@@ -6,7 +6,6 @@ import dotenv from "dotenv";
 import { ApiServiceConfig } from "./pool/types";
 import router from "./api/router";
 import { swaggerUi, specs } from "./utils/swagger";
-import { getApiService } from "./api/api_service_singleton";
 
 // Load environment variables
 dotenv.config();
@@ -45,9 +44,6 @@ if (apiServiceConfig.apiSecret === "") {
   console.error("FIREBLOCKS_API_SECRET is not set in environment variables");
   throw new Error("InvalidEnvParams : FIREBLOCKS_API_SECRET is required");
 }
-
-// Initialize API service
-const apiService = getApiService();
 
 // Apply routes
 app.use("/api", router);

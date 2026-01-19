@@ -29,6 +29,7 @@ export enum ActionType {
   GET_TRANSACTIONS_HISTORY = "getTransactionsHistory",
   GET_ACCOUNT_ADDRESS = "getAddress",
   GET_ACCOUNT_PUBLIC_KEY = "getPublicKey",
+  STACK_WITH_POOL = "stackWithPool",
 }
 
 export interface SdkManagerMetrics {

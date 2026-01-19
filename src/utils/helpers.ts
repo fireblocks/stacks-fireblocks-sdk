@@ -120,3 +120,41 @@ export function selectSpeceficFTBalance(
   );
   return balanceObject.balance;
 }
+
+/** Convert “N cycles” → until_burn_ht */
+export async function untilBurnHeightForCycles(
+  cycles: number,
+  poxInfo: any
+): Promise<number> {
+  if (!Number.isInteger(cycles) || cycles < 1 || cycles > 12) {
+    throw new Error("cycles must be an integer between 1 and 12");
+  }
+
+  const pox = await poxInfo.json();
+
+  const P = Number(pox.next_cycle.prepare_phase_start_block_height);
+  const Q = Number(pox.prepare_phase_block_length);
+  const R = Number(pox.reward_phase_block_length);
+  const cycleLen = Q + R;
+
+  return P + cycles * cycleLen - 1;
+}
+
+export function assertResultSuccess(
+  result: any
+): { success: true } | { success: false; error: string } {
+  if (!result || result.error || !result.txid || result.reason) {
+    const errorAndReason =
+      result.error && result.reason
+        ? `${result.error} - ${result.reason}`
+        : result.error || result.reason || "unknown error";
+    console.error(
+      `Transaction broadcast failed: ${formatErrorMessage(errorAndReason)}`
+    );
+    return {
+      success: false,
+      error: formatErrorMessage(errorAndReason),
+    };
+  }
+  return { success: true };
+}

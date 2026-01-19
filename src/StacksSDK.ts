@@ -29,10 +29,11 @@ import {
   Transaction,
   TransactionType,
 } from "./services/types";
-import { pagination_defaults } from "./utils/constants";
+import { pagination_defaults, poxInfo } from "./utils/constants";
 import { formatErrorMessage } from "./utils/errorHandling";
 import { validateApiCredentials } from "./utils/fireblocks.utils";
 import {
+  assertResultSuccess,
   concatSignature,
   getDecimalsFromFtInfo,
   microToStx,
@@ -43,6 +44,13 @@ import {
   validateAddress,
 } from "./utils/helpers";
 import { createMessageSignature } from "@stacks/transactions/dist/wire/create";
+import {
+  contractPrincipalCV,
+  noneCV,
+  standardPrincipalCV,
+  uintCV,
+} from "@stacks/transactions";
+import { assert } from "console";
 
 export class StacksSDK {
   private fireblocksService: FireblocksService;
@@ -383,8 +391,16 @@ export class StacksSDK {
     }
   };
 
-  // Builds, signs and sends a transaction using Fireblocks raw signing.
-  private buildSignSendTransaction = async (
+  /**
+   *  Builds, signs, and sends an STX or fungible token transfer transaction.
+   * @param recipientAddress - The address of the recipient.
+   * @param microAmount - The amount to transfer in micro units.
+   * @param type - The type of transaction (default is native coin).
+   * @param token - The token type for fungible token transfers.
+   * @param note - Optional note to be attached to the transaction in raw signing.
+   * @returns - A promise that resolves to the transaction broadcast result.
+   */
+  private buildSignSendTransfer = async (
     recipientAddress: string,
     microAmount: bigint,
     type: TransactionType = TransactionType.STX,
@@ -419,6 +435,75 @@ export class StacksSDK {
     } catch (error) {
       throw new Error(
         `Failed to build, sign or send transaction: ${formatErrorMessage(
+          error
+        )}`
+      );
+    }
+  };
+
+  /**
+   *  Builds, signs, and sends the delegate-stx or allow-contract-caller contract calls.
+   * @param poolAddress - The address of the stacking pool.
+   * @param functionName - The contract function name to call ("delegate-stx" or "allow-contract-caller").
+   * @param poolContractName - The contract name of the stacking pool.
+   * @param amount - The amount of STX to delegate in micro units.
+   * @param lockPeriod - The lock period in cycles.
+   * @returns - A promise that resolves to the transaction broadcast result.
+   */
+  private buildSignSendContractCall = async (
+    poolAddress: string,
+    functionName: "delegate-stx" | "allow-contract-caller",
+    poolContractName?: string,
+    amount?: bigint,
+    lockPeriod?: number,
+    note?: string
+  ): Promise<any> => {
+    try {
+      if (functionName === "allow-contract-caller" && !poolContractName) {
+        throw new Error(
+          "Pool contract name must be provided for allow-contract-caller"
+        );
+      }
+
+      if (functionName === "delegate-stx" && (!amount || !lockPeriod)) {
+        throw new Error(
+          "Amount and lock period must be provided for delegate-stx"
+        );
+      }
+
+      const transactionToSign =
+        functionName === "allow-contract-caller"
+          ? await this.chainService.allowPoxContractCaller(
+              this.publicKey,
+              poolAddress,
+              poolContractName!
+            )
+          : await this.chainService.delegateStx(
+              this.publicKey,
+              poolAddress,
+              amount!,
+              lockPeriod!
+            );
+
+      const rawSignature = await this.fireblocksService.signTransaction(
+        transactionToSign.preSignSigHash,
+        this.vaultAccountId.toString(),
+        note || ""
+      );
+
+      const signature = concatSignature(rawSignature.fullSig, rawSignature.v);
+
+      (
+        transactionToSign.unsignedContractCall as any
+      ).auth.spendingCondition.signature = createMessageSignature(signature);
+
+      const result = await this.chainService.brodcastTransaction(
+        transactionToSign.unsignedContractCall
+      );
+      return result;
+    } catch (error) {
+      throw new Error(
+        `Failed to build, sign or send contract call transaction: ${formatErrorMessage(
           error
         )}`
       );
@@ -462,7 +547,7 @@ export class StacksSDK {
 
       const microAmount = paramsValidationResponse.finalAmount as bigint;
 
-      const result = await this.buildSignSendTransaction(
+      const result = await this.buildSignSendTransfer(
         recipientAddress,
         microAmount,
         TransactionType.STX,
@@ -470,15 +555,19 @@ export class StacksSDK {
         note
       );
 
-      if (!result || result.err) {
+      if (!result || result.error || !result.txid || result.reason) {
+        const errorAndReason =
+          result.error && result.reason
+            ? `${result.error} - ${result.reason}`
+            : result.error || result.reason || "unknown error";
         console.error(
-          `Transaction broadcast failed: ${
-            formatErrorMessage(result?.err) || "unknown error"
-          }`
+          `Transaction broadcast failed: ${formatErrorMessage(errorAndReason)}`
         );
         return {
           success: false,
-          error: result?.err ? formatErrorMessage(result.err) : "unknown error",
+          error: result?.error
+            ? formatErrorMessage(errorAndReason)
+            : "unknown error",
         };
       }
 
@@ -534,7 +623,7 @@ export class StacksSDK {
       }
 
       const microAmount = paramsValidationResponse.finalAmount as bigint;
-      const result = await this.buildSignSendTransaction(
+      const result = await this.buildSignSendTransfer(
         recipientAddress,
         microAmount,
         TransactionType.FungibleToken,
@@ -557,6 +646,72 @@ export class StacksSDK {
       return {
         success: true,
         txHash: result.txid,
+      };
+    } catch (error: any) {
+      throw new Error(
+        `Failed to create transaction: ${formatErrorMessage(error)}`
+      );
+    }
+  };
+
+  /**
+   * Stacks an amount of STX with a pool by delegating the amount to the pool's address and allowing the pool to manage the staking on behalf of the user.
+
+   */
+
+  public stackWithPool = async (
+    poolsAddress: string,
+    poolContractName: string,
+    amount: number,
+    lockPeriod: number // Number of cycles
+  ): Promise<CreateTransactionResponse> => {
+    if (!this.address || !this.publicKey || !this.vaultAccountId) {
+      throw new Error("Address, Public Key or Vault ID are not set");
+    }
+
+    console.log(
+      `Stacking ${amount} STX with pool: ${poolsAddress} for ${lockPeriod} cycles`
+    );
+
+    try {
+      // Allow contract caller
+      const allowCallerResult = await this.buildSignSendContractCall(
+        poolsAddress,
+        "allow-contract-caller",
+        poolContractName
+      );
+
+      const assertAllowCallerResult = assertResultSuccess(allowCallerResult);
+      if (assertAllowCallerResult.success === false) {
+        return {
+          success: false,
+          error: `Failed to allow contract caller: ${assertAllowCallerResult.error}`,
+        };
+      }
+
+      // Delegate STX to pool address
+      const delegateResult = await this.buildSignSendContractCall(
+        poolsAddress,
+        "delegate-stx",
+        poolContractName,
+        stxToMicro(amount),
+        lockPeriod
+      );
+
+      const assertDelegateResult = assertResultSuccess(delegateResult);
+      if (assertDelegateResult.success === false) {
+        return {
+          success: false,
+          error: `Failed to delegate STX: ${assertDelegateResult.error}`,
+        };
+      }
+
+      console.log(
+        `Successfully stacked ${amount} STX with pool ${poolsAddress}.${poolContractName}`
+      );
+      return {
+        success: true,
+        txHash: delegateResult.txid,
       };
     } catch (error: any) {
       throw new Error(
