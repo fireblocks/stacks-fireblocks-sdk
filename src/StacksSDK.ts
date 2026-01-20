@@ -47,14 +47,6 @@ import {
   validateAddress,
 } from "./utils/helpers";
 import { createMessageSignature } from "@stacks/transactions/dist/wire/create";
-import {
-  contractPrincipalCV,
-  noneCV,
-  standardPrincipalCV,
-  uintCV,
-} from "@stacks/transactions";
-import { assert } from "console";
-import { json } from "stream/consumers";
 
 export class StacksSDK {
   private fireblocksService: FireblocksService;
@@ -693,6 +685,21 @@ export class StacksSDK {
 
     if (!this.address || !this.publicKey || !this.vaultAccountId) {
       throw new Error("Address, Public Key or Vault ID are not set");
+    }
+
+    const status = await this.checkStatus();
+    if (!status.success) {
+      return {
+        success: false,
+        error: `Failed to check account status before delegating STX: ${status.error}`,
+      };
+    }
+
+    if (status.data?.delegation.is_delegated) {
+      return {
+        success: false,
+        error: `Account already has an active delegation to ${status.data.delegation.delegated_to}, if you wish to change delegation please revoke existing delegation first, run checkStatus for more info.`,
+      };
     }
 
     console.log(
