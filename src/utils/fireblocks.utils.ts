@@ -1,12 +1,5 @@
 import {
   Fireblocks,
-  TransactionOperation,
-  TransferPeerPathType,
-  TransactionRequest,
-  TransactionResponse,
-  FireblocksResponse,
-  TransactionStateEnum,
-  SignedMessageSignature,
   VaultsApiGetPublicKeyInfoRequest,
   SignedMessageAlgorithmEnum,
 } from "@fireblocks/ts-sdk";
@@ -17,7 +10,7 @@ import * as fs from "fs";
 export const validateApiCredentials = (
   apiKey: string,
   secretKeyPath: string,
-  vaultAccountId?: string | number
+  vaultAccountId?: string | number,
 ): void => {
   // Validate API key is a valid UUID (v4)
   const uuidV4Regex =
@@ -40,7 +33,7 @@ export const validateApiCredentials = (
         vaultAccountId.trim() === "")
     ) {
       throw new Error(
-        "vaultAccountId must be a number or a string representing a number."
+        "vaultAccountId must be a number or a string representing a number.",
       );
     }
   }
@@ -49,7 +42,7 @@ export const validateApiCredentials = (
 export const getPublicKeyForDerivationPath = async (
   fireblocksSDK: Fireblocks,
   vaultAccountId: string,
-  testnet?: boolean
+  testnet?: boolean,
 ): Promise<string> => {
   const requestParams: VaultsApiGetPublicKeyInfoRequest = {
     derivationPath: `[${derivationPath.purpose}, ${

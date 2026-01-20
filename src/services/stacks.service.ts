@@ -47,7 +47,6 @@ import {
   stacks_info,
 } from "../utils/constants";
 import util from "node:util";
-import { address } from "@stacks/transactions/dist/cl";
 
 export class StacksService {
   private axiosClient: AxiosInstance;

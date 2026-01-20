@@ -1,5 +1,4 @@
 import express from "express";
-import { ApiService } from "./api/api.service";
 import cors from "cors";
 import { BasePath } from "@fireblocks/ts-sdk";
 import dotenv from "dotenv";
@@ -30,7 +29,7 @@ const apiServiceConfig: ApiServiceConfig = {
     maxPoolSize: parseInt(process.env.POOL_MAX_SIZE || "100"),
     idleTimeoutMs: parseInt(process.env.POOL_IDLE_TIMEOUT_MS || "1800000"),
     cleanupIntervalMs: parseInt(
-      process.env.POOL_CLEANUP_INTERVAL_MS || "300000"
+      process.env.POOL_CLEANUP_INTERVAL_MS || "300000",
     ),
   },
 };

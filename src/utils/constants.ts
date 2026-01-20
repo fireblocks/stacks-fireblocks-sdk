@@ -1,11 +1,9 @@
-import test from "node:test";
 import {
   PoolInfo,
   StackingPools,
   TokenInfo,
   TokenType,
 } from "../services/types";
-import { address } from "@stacks/transactions/dist/cl";
 
 export const derivationPath = {
   purpose: 44,
