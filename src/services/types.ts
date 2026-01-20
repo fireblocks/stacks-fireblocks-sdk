@@ -46,6 +46,30 @@ export type Transaction = {
   success: boolean;
 };
 
+export type CheckStatusData = {
+  balance: {
+    stx_total: number;
+    stx_locked: number;
+    lock_tx_id: string | null;
+    lock_height: number | null;
+    burnchain_lock_height: number | null;
+    burnchain_unlock_height: number | null;
+  };
+  delegation: {
+    is_delegated: boolean;
+    delegated_to: string | null;
+    amount_delegated: number | null;
+    until_burn_ht: number | null;
+    pox_addr: string | null;
+  };
+};
+
+export type CheckStatusResponse = {
+  success: boolean;
+  data?: CheckStatusData;
+  error?: string;
+};
+
 export enum TransactionType {
   STX = "STX",
   FungibleToken = "Fungible Token",
@@ -58,10 +82,19 @@ export enum TokenType {
   USDH = "usdh-token-v1",
 }
 
+export enum StackingPools {
+  FAST_POOL = "fast-pool",
+}
+
 export type TokenInfo = {
   contractAddress: string;
   contractName: string;
   decimals: number;
+};
+
+export type PoolInfo = {
+  poolAddress: string;
+  poolContractName: string;
 };
 
 export type SDKResponse =

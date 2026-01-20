@@ -1,5 +1,10 @@
 import test from "node:test";
-import { TokenInfo, TokenType } from "../services/types";
+import {
+  PoolInfo,
+  StackingPools,
+  TokenInfo,
+  TokenType,
+} from "../services/types";
 import { address } from "@stacks/transactions/dist/cl";
 
 export const derivationPath = {
@@ -42,6 +47,13 @@ export const ftInfo: Partial<Record<TokenType, TokenInfo>> = {
     contractAddress: "SPN5AKG35QZSK2M8GAMR4AFX45659RJHDW353HSG",
     contractName: "usdh-token-v1",
     decimals: 8,
+  },
+};
+
+export const poolInfo: Partial<Record<StackingPools, PoolInfo>> = {
+  [StackingPools.FAST_POOL]: {
+    poolAddress: "SP21YTSM60CAY6D011EZVEVNKXVW8FVZE198XEFFP",
+    poolContractName: "pox4-fast-pool-v3",
   },
 };
 

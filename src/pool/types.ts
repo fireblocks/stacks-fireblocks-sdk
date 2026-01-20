@@ -30,6 +30,8 @@ export enum ActionType {
   GET_ACCOUNT_ADDRESS = "getAddress",
   GET_ACCOUNT_PUBLIC_KEY = "getPublicKey",
   STACK_WITH_POOL = "stackWithPool",
+  REVOKE_DELEGATION = "revokeDelegation",
+  CHECK_STATUS = "checkStatus",
 }
 
 export interface SdkManagerMetrics {

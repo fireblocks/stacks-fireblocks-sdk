@@ -16,6 +16,7 @@ import {
   contractPrincipalCV,
   createContractCallPayload,
   createTokenTransferPayload,
+  cvToValue,
   fetchCallReadOnlyFunction,
   fetchFeeEstimateTransaction,
   makeUnsignedContractCall,
@@ -26,6 +27,7 @@ import {
   publicKeyToAddress,
   serializePayload,
   sigHashPreSign,
+  someCV,
   StacksTransactionWire,
   standardPrincipalCV,
   uintCV,
@@ -44,6 +46,8 @@ import {
   poxInfo,
   stacks_info,
 } from "../utils/constants";
+import util from "node:util";
+import { address } from "@stacks/transactions/dist/cl";
 
 export class StacksService {
   private axiosClient: AxiosInstance;
@@ -76,13 +80,13 @@ export class StacksService {
       const isTestnet = this.network === STACKS_TESTNET;
       const address = publicKeyToAddress(
         pubKey,
-        isTestnet ? "testnet" : "mainnet"
+        isTestnet ? "testnet" : "mainnet",
       );
       return address;
     } catch (error) {
       console.error(
         "formatAddress : Error formatting address:",
-        formatErrorMessage(error)
+        formatErrorMessage(error),
       );
       throw new Error(`Failed to format address: ${error}`);
     }
@@ -96,7 +100,7 @@ export class StacksService {
   public makeBalanceCalls = async (address: string): Promise<any> => {
     try {
       const response = await this.axiosClient.get(
-        `${this.stackBaseUrl}/extended/v1/address/${address}/balances`
+        `${this.stackBaseUrl}/extended/v1/address/${address}/balances`,
       );
 
       if (!response || !response.data || response.status !== 200) {
@@ -106,7 +110,12 @@ export class StacksService {
       return response;
     } catch (error) {
       console.error(
-        `Error calling Stacks balances endpoint: ${formatErrorMessage(error)}`
+        `Error calling Stacks balances endpoint: ${formatErrorMessage(error)}`,
+      );
+      throw new Error(
+        `Failed to call Stacks balances endpoint for address ${address}: ${formatErrorMessage(
+          error,
+        )}`,
       );
     }
   };
@@ -125,12 +134,12 @@ export class StacksService {
     } catch (error) {
       console.error(
         "getNativeBalance : Error fetching native balance:",
-        formatErrorMessage(error)
+        formatErrorMessage(error),
       );
       throw new Error(
         `Failed to fetch native balance for address ${address}: ${formatErrorMessage(
-          error
-        )}`
+          error,
+        )}`,
       );
     }
   };
@@ -148,12 +157,12 @@ export class StacksService {
     } catch (error) {
       console.error(
         "getNativeBalance : Error fetching native balance:",
-        formatErrorMessage(error)
+        formatErrorMessage(error),
       );
       throw new Error(
         `Failed to fetch native balance for address ${address}: ${formatErrorMessage(
-          error
-        )}`
+          error,
+        )}`,
       );
     }
   };
@@ -169,20 +178,27 @@ export class StacksService {
   public fetchFtDecimals = async (
     senderAddress: string,
     contractAddress: string,
-    contractName: string
+    contractName: string,
   ): Promise<number> => {
-    const network = this.network;
-    const res = await fetchCallReadOnlyFunction({
-      contractName,
-      contractAddress,
-      functionName: "get-decimals",
-      functionArgs: [],
-      network,
-      senderAddress,
-    });
+    try {
+      const network = this.network;
+      const res = await fetchCallReadOnlyFunction({
+        contractName,
+        contractAddress,
+        functionName: "get-decimals",
+        functionArgs: [],
+        network,
+        senderAddress,
+      });
 
-    const val = (res as any).value.value as number;
-    return Number(val);
+      const val = (res as any).value.value as number;
+      return Number(val);
+    } catch (error) {
+      console.error("Error fetching FT decimals:", formatErrorMessage(error));
+      throw new Error(
+        `Failed to fetch FT decimals: ${formatErrorMessage(error)}`,
+      );
+    }
   };
 
   /**
@@ -193,7 +209,7 @@ export class StacksService {
    */
   public estimateTxFee = async (
     recipientAddress: string,
-    amountUstx: bigint
+    amountUstx: bigint,
   ): Promise<number> => {
     try {
       const payload = createTokenTransferPayload(recipientAddress, amountUstx);
@@ -209,14 +225,17 @@ export class StacksService {
         "[DEBUG] Estimated transaction fee:",
         high.fee,
         medium.fee,
-        low.fee
+        low.fee,
       );
 
       return medium.fee;
     } catch (error) {
       console.error(
         "Error estimating transaction fee:",
-        formatErrorMessage(error)
+        formatErrorMessage(error),
+      );
+      throw new Error(
+        `Failed to estimate transaction fee: ${formatErrorMessage(error)}`,
       );
     }
   };
@@ -233,14 +252,14 @@ export class StacksService {
     contractAddress: string,
     contractName: string,
     functionName: string,
-    functionArgs: ClarityValue[]
+    functionArgs: ClarityValue[],
   ): Promise<number> => {
     try {
       const payload = createContractCallPayload(
         contractAddress,
         contractName,
         functionName,
-        functionArgs
+        functionArgs,
       );
 
       const payloadHex = serializePayload(payload);
@@ -254,7 +273,50 @@ export class StacksService {
     } catch (error) {
       console.error(
         "Error estimating contract call fee:",
-        formatErrorMessage(error)
+        formatErrorMessage(error),
+      );
+      throw new Error(
+        `Failed to estimate contract call fee: ${formatErrorMessage(error)}`,
+      );
+    }
+  };
+
+  /**
+   * Checks the delegation status of a given address.
+   * @param address
+   * @returns
+   */
+
+  public checkDelegationStatus = async (address: string): Promise<any> => {
+    try {
+      if (!validateAddress(address, this.network === STACKS_TESTNET)) {
+        throw new Error("Invalid Stacks address");
+      }
+
+      const { contractAddress: poxAddr, contractName: poxName } =
+        this.network === STACKS_TESTNET ? poxInfo.testnet : poxInfo.mainnet;
+
+      const cv = await fetchCallReadOnlyFunction({
+        contractAddress: poxAddr,
+        contractName: poxName,
+        functionName: "get-delegation-info",
+        functionArgs: [principalCV(address)],
+        network: this.network,
+        senderAddress: address,
+      });
+
+      if (!cv) {
+        throw new Error("No response from get-delegation-info");
+      }
+
+      return cvToValue(cv);
+    } catch (error) {
+      console.error(
+        "Error checking delegation status:",
+        formatErrorMessage(error),
+      );
+      throw new Error(
+        `Failed to check delegation status: ${formatErrorMessage(error)}`,
       );
     }
   };
@@ -275,7 +337,7 @@ export class StacksService {
     recipient: string,
     amount: bigint,
     type: TransactionType = TransactionType.STX,
-    token?: TokenType
+    token?: TokenType,
   ): Promise<StacksTransactionWire> => {
     try {
       if (!validateAddress(recipient, this.network === STACKS_TESTNET)) {
@@ -288,7 +350,7 @@ export class StacksService {
 
       if (type == TransactionType.FungibleToken && !token) {
         throw new Error(
-          `Token type must be provided for fungible token transfers`
+          `Token type must be provided for fungible token transfers`,
         );
       }
 
@@ -319,10 +381,10 @@ export class StacksService {
     } catch (error) {
       console.error(
         "Error building unsigned transaction:",
-        formatErrorMessage(error)
+        formatErrorMessage(error),
       );
       throw new Error(
-        `Failed to build unsigned transaction: ${formatErrorMessage(error)}`
+        `Failed to build unsigned transaction: ${formatErrorMessage(error)}`,
       );
     }
   };
@@ -341,7 +403,7 @@ export class StacksService {
     contractAddress: string,
     contractName: string,
     functionName: string,
-    functionArgs: ClarityValue[]
+    functionArgs: ClarityValue[],
   ): Promise<StacksTransactionWire> => {
     try {
       if (!validateAddress(contractAddress, this.network === STACKS_TESTNET)) {
@@ -355,6 +417,18 @@ export class StacksService {
       if (!contractName || !functionName) {
         throw new Error("Contract name and function name must be provided");
       }
+
+      console.log(`[DEBUG] Parameters for serializeContractCall:
+      senderPublicKey: ${senderPublicKey},
+      contractAddress: ${contractAddress},
+      contractName: ${contractName},
+      functionName: ${functionName},
+      `);
+
+      console.log(
+        "functionArgs:",
+        util.inspect(functionArgs, { depth: null, colors: true }),
+      );
 
       const unsignedContractCall = await makeUnsignedContractCall({
         contractAddress,
@@ -370,10 +444,10 @@ export class StacksService {
     } catch (error) {
       console.error(
         "Error building unsigned transaction:",
-        formatErrorMessage(error)
+        formatErrorMessage(error),
       );
       throw new Error(
-        `Failed to build unsigned transaction: ${formatErrorMessage(error)}`
+        `Failed to build unsigned transaction: ${formatErrorMessage(error)}`,
       );
     }
   };
@@ -394,7 +468,7 @@ export class StacksService {
     recipient: string,
     amount: bigint,
     type: TransactionType = TransactionType.STX,
-    token?: TokenType
+    token?: TokenType,
   ): Promise<{
     unsignedTx: StacksTransactionWire;
     preSignSigHash: string;
@@ -406,7 +480,7 @@ export class StacksService {
         recipient,
         amount,
         type,
-        token
+        token,
       );
       const sigHash = unsignedTx.signBegin();
 
@@ -414,17 +488,17 @@ export class StacksService {
         sigHash,
         unsignedTx.auth.authType,
         unsignedTx.auth.spendingCondition.fee,
-        unsignedTx.auth.spendingCondition.nonce
+        unsignedTx.auth.spendingCondition.nonce,
       );
 
       return { unsignedTx, preSignSigHash };
     } catch (error) {
       console.error(
         "Error serializing transaction:",
-        formatErrorMessage(error)
+        formatErrorMessage(error),
       );
       throw new Error(
-        `Failed to serialize transaction: ${formatErrorMessage(error)}`
+        `Failed to serialize transaction: ${formatErrorMessage(error)}`,
       );
     }
   };
@@ -443,7 +517,7 @@ export class StacksService {
     contractAddress: string,
     contractName: string,
     functionName: string,
-    functionArgs: ClarityValue[]
+    functionArgs: ClarityValue[],
   ): Promise<{
     unsignedContractCall: StacksTransactionWire;
     preSignSigHash: string;
@@ -454,7 +528,7 @@ export class StacksService {
         contractAddress,
         contractName,
         functionName,
-        functionArgs
+        functionArgs,
       );
       const sigHash = unsignedContractCall.signBegin();
 
@@ -462,17 +536,17 @@ export class StacksService {
         sigHash,
         unsignedContractCall.auth.authType,
         unsignedContractCall.auth.spendingCondition.fee,
-        unsignedContractCall.auth.spendingCondition.nonce
+        unsignedContractCall.auth.spendingCondition.nonce,
       );
 
       return { unsignedContractCall, preSignSigHash };
     } catch (error) {
       console.error(
         "Error serializing transaction:",
-        formatErrorMessage(error)
+        formatErrorMessage(error),
       );
       throw new Error(
-        `Failed to serialize transaction: ${formatErrorMessage(error)}`
+        `Failed to serialize transaction: ${formatErrorMessage(error)}`,
       );
     }
   };
@@ -483,7 +557,7 @@ export class StacksService {
    * @returns - The result of the broadcast operation.
    */
   public brodcastTransaction = async (
-    signedTransaction: StacksTransactionWire
+    signedTransaction: StacksTransactionWire,
   ): Promise<any> => {
     try {
       const result = await broadcastTransaction({
@@ -494,10 +568,10 @@ export class StacksService {
     } catch (error) {
       console.error(
         "Error broadcasting transaction:",
-        formatErrorMessage(error)
+        formatErrorMessage(error),
       );
       throw new Error(
-        `Failed to broadcast transaction: ${formatErrorMessage(error)}`
+        `Failed to broadcast transaction: ${formatErrorMessage(error)}`,
       );
     }
   };
@@ -512,14 +586,14 @@ export class StacksService {
   public getTransactionHistory = async (
     address: string,
     limit: number = pagination_defaults.limit,
-    offset: number = pagination_defaults.page
+    offset: number = pagination_defaults.page,
   ): Promise<Transaction[]> => {
     if (!validateAddress(address, this.network === STACKS_TESTNET)) {
       throw new Error("Invalid Stacks address");
     }
 
     const response = await this.axiosClient.get(
-      `${this.stackBaseUrl}/extended/v1/address/${address}/transactions?limit=${limit}&offset=${offset}`
+      `${this.stackBaseUrl}/extended/v1/address/${address}/transactions?limit=${limit}&offset=${offset}`,
     );
 
     if (!response || !response.data || response.status !== 200) {
@@ -612,7 +686,7 @@ export class StacksService {
       return txs;
     } catch (error) {
       throw new Error(
-        `Failed to fetch transaction history: ${formatErrorMessage(error)}`
+        `Failed to fetch transaction history: ${formatErrorMessage(error)}`,
       );
     }
   };
@@ -624,7 +698,7 @@ export class StacksService {
   public fetchPoxInfo = async (): Promise<any> => {
     try {
       const response = await this.axiosClient.get(
-        `${this.stackBaseUrl}/v2/pox`
+        `${this.stackBaseUrl}/v2/pox`,
       );
 
       if (!response || !response.data || response.status !== 200) {
@@ -649,7 +723,7 @@ export class StacksService {
     senderPublicKey: string,
     delegateTo: string,
     amount: bigint,
-    lockPeriod: number // Number of cycles
+    lockPeriod: number, // Number of cycles
   ): Promise<{
     unsignedContractCall: StacksTransactionWire;
     preSignSigHash: string;
@@ -664,7 +738,7 @@ export class StacksService {
       }
 
       const { contractAddress: poxAddr, contractName: poxName } =
-        this.network === STACKS_TESTNET ? poxInfo.testnet : poxInfo.mainnet;
+        poxInfo.mainnet;
 
       const poxResponse = await this.fetchPoxInfo();
 
@@ -674,8 +748,15 @@ export class StacksService {
 
       const until_burn_ht = await untilBurnHeightForCycles(
         lockPeriod,
-        poxResponse
+        poxResponse,
       );
+
+      console.log(`[DEBUG] Delegating STX:
+      delegateTo: ${delegateTo},
+      amount: ${amount},
+      lockPeriod (cycles): ${lockPeriod},
+      until_burn_ht: ${until_burn_ht}
+      `);
 
       const serializedContractCall = await this.serializeContractCall(
         senderPublicKey,
@@ -683,21 +764,60 @@ export class StacksService {
         poxName,
         "delegate-stx",
         [
-          standardPrincipalCV(delegateTo),
           uintCV(amount),
-          uintCV(until_burn_ht),
+          standardPrincipalCV(delegateTo),
+          someCV(uintCV(until_burn_ht)),
           noneCV(),
-        ]
+        ],
       );
 
       return serializedContractCall;
     } catch (error) {
       console.error(
         "Error building delegate STX transaction:",
-        formatErrorMessage(error)
+        formatErrorMessage(error),
       );
       throw new Error(
-        `Failed to build delegate STX transaction: ${formatErrorMessage(error)}`
+        `Failed to build delegate STX transaction: ${formatErrorMessage(error)}`,
+      );
+    }
+  };
+
+  /**
+   * Revokes STX delegation.
+   * @param senderPublicKey - The sender's compressed secp256k1 public key in hex format.
+   * @returns - The unsigned revoke delegation transaction.
+   */
+  public revokeStxDelegation = async (
+    senderPublicKey: string,
+  ): Promise<{
+    unsignedContractCall: StacksTransactionWire;
+    preSignSigHash: string;
+  }> => {
+    try {
+      if (!isCompressedSecp256k1PubKeyHex(senderPublicKey)) {
+        throw new Error("Invalid compressed secp256k1 public key hex format");
+      }
+
+      const { contractAddress: poxAddr, contractName: poxName } =
+        poxInfo.mainnet;
+
+      const serializedContractCall = await this.serializeContractCall(
+        senderPublicKey,
+        poxAddr,
+        poxName,
+        "revoke-delegate-stx",
+        [],
+      );
+
+      return serializedContractCall;
+    } catch (error) {
+      console.error(
+        "Error building revoke STX delegation transaction:",
+        formatErrorMessage(error),
+      );
+      throw new Error(
+        `Failed to build revoke STX delegation transaction: ${formatErrorMessage(error)}`,
       );
     }
   };
@@ -713,7 +833,7 @@ export class StacksService {
   public allowPoxContractCaller = async (
     senderPublicKey: string,
     poolAddress: string,
-    poolContractName: string
+    poolContractName: string,
   ): Promise<{
     unsignedContractCall: StacksTransactionWire;
     preSignSigHash: string;
@@ -739,17 +859,17 @@ export class StacksService {
         poxAddr,
         poxName,
         "allow-contract-caller",
-        [contractPrincipalCV(poolAddress, poolContractName), noneCV()]
+        [contractPrincipalCV(poolAddress, poolContractName), noneCV()],
       );
 
       return serializedContractCall;
     } catch (error) {
       console.error(
-        "Error building delegate STX transaction:",
-        formatErrorMessage(error)
+        "Error building allow contract caller transaction:",
+        formatErrorMessage(error),
       );
       throw new Error(
-        `Failed to build delegate STX transaction: ${formatErrorMessage(error)}`
+        `Failed to allow contract caller: ${formatErrorMessage(error)}`,
       );
     }
   };

@@ -21,6 +21,8 @@
 import { StacksService } from "./services/stacks.service";
 import { FireblocksService } from "./services/fireblocks.service";
 import {
+  CheckStatusData,
+  CheckStatusResponse,
   CreateTransactionResponse,
   FireblocksConfig,
   GetFtBalancesResponse,
@@ -39,6 +41,7 @@ import {
   microToStx,
   microToToken,
   parseAssetId,
+  safeStringify,
   stxToMicro,
   tokenToMicro,
   validateAddress,
@@ -51,6 +54,7 @@ import {
   uintCV,
 } from "@stacks/transactions";
 import { assert } from "console";
+import { json } from "stream/consumers";
 
 export class StacksSDK {
   private fireblocksService: FireblocksService;
@@ -63,7 +67,7 @@ export class StacksSDK {
 
   private constructor(
     vaultAccountId: string | number,
-    fireblocksConfig?: FireblocksConfig
+    fireblocksConfig?: FireblocksConfig,
   ) {
     try {
       // Validate Fireblocks API credentials before initializing services
@@ -71,7 +75,7 @@ export class StacksSDK {
         validateApiCredentials(
           fireblocksConfig.apiKey,
           fireblocksConfig.apiSecret ?? "",
-          vaultAccountId
+          vaultAccountId,
         );
       }
       this.fireblocksService = new FireblocksService(fireblocksConfig);
@@ -79,7 +83,7 @@ export class StacksSDK {
       this.chainService = new StacksService(this.testnet);
     } catch (error) {
       throw new Error(
-        `Failed to initialize services: ${formatErrorMessage(error)}`
+        `Failed to initialize services: ${formatErrorMessage(error)}`,
       );
     }
     if (typeof vaultAccountId === "string") {
@@ -104,19 +108,19 @@ export class StacksSDK {
 
   public static create = async (
     vaultAccountId: string | number,
-    fireblocksConfig?: FireblocksConfig
+    fireblocksConfig?: FireblocksConfig,
   ): Promise<StacksSDK> => {
     try {
       const instance = new StacksSDK(vaultAccountId, fireblocksConfig);
       instance.publicKey =
         await instance.fireblocksService.getPublicKeyByVaultID(vaultAccountId);
       instance.address = instance.chainService.formatAddress(
-        instance.publicKey
+        instance.publicKey,
       );
       return instance;
     } catch (error) {
       throw new Error(
-        `Failed to create StacksSDK instance: ${formatErrorMessage(error)}`
+        `Failed to create StacksSDK instance: ${formatErrorMessage(error)}`,
       );
     }
   };
@@ -172,7 +176,7 @@ export class StacksSDK {
   public getFtBalances = async (): Promise<GetFtBalancesResponse> => {
     if (!this.address) {
       console.log(
-        "StacksSDK.getTransactionsHistory() error: address is not set."
+        "StacksSDK.getTransactionsHistory() error: address is not set.",
       );
       throw new Error("Stacks address is not set.");
     }
@@ -184,7 +188,7 @@ export class StacksSDK {
       }[] = [];
 
       const balances = await this.chainService.getFTBalancesForAddress(
-        this.address
+        this.address,
       );
 
       for (const [assetId, info] of Object.entries(balances)) {
@@ -204,7 +208,7 @@ export class StacksSDK {
       };
     } catch (error) {
       console.error(
-        `Error fetching fungible tokens balances: ${formatErrorMessage(error)}`
+        `Error fetching fungible tokens balances: ${formatErrorMessage(error)}`,
       );
       return {
         success: false,
@@ -225,7 +229,7 @@ export class StacksSDK {
   public getTransactionHistory = async (
     getCachedTransactions: boolean = true, // Must be manually set to false to fetch fresh transactions
     limit: number = pagination_defaults.limit,
-    offset: number = pagination_defaults.page
+    offset: number = pagination_defaults.page,
   ): Promise<Transaction[]> => {
     if (getCachedTransactions) {
       console.log("Using cached transactions");
@@ -234,7 +238,7 @@ export class StacksSDK {
 
     if (!this.address) {
       console.log(
-        "StacksSDK.getTransactionsHistory() error: address is not set."
+        "StacksSDK.getTransactionsHistory() error: address is not set.",
       );
       throw new Error("Stacks address is not set.");
     }
@@ -243,15 +247,15 @@ export class StacksSDK {
       const txs = await this.chainService.getTransactionHistory(
         this.address,
         limit,
-        offset
+        offset,
       );
 
       const existingHashes = new Set(
-        this.chachedTransactions.map((tx) => tx.transaction_hash)
+        this.chachedTransactions.map((tx) => tx.transaction_hash),
       );
 
       const newTransactions = txs.filter(
-        (tx) => !existingHashes.has(tx.transaction_hash)
+        (tx) => !existingHashes.has(tx.transaction_hash),
       );
 
       this.chachedTransactions = [
@@ -261,7 +265,7 @@ export class StacksSDK {
       return txs;
     } catch (error) {
       throw new Error(
-        `Failed to get transaction history: ${formatErrorMessage(error)}`
+        `Failed to get transaction history: ${formatErrorMessage(error)}`,
       );
     }
   };
@@ -282,7 +286,7 @@ export class StacksSDK {
     amount: number,
     grossTransaction: boolean | undefined = false,
     type: TransactionType = TransactionType.STX,
-    token?: TokenType
+    token?: TokenType,
   ): Promise<{
     validParams: boolean;
     finalAmount?: number | bigint;
@@ -321,7 +325,7 @@ export class StacksSDK {
       if (type == TransactionType.STX) {
         microfee = await this.chainService.estimateTxFee(
           recipientAddress,
-          microAmount
+          microAmount,
         );
         fee = microToStx(microfee);
       }
@@ -333,14 +337,14 @@ export class StacksSDK {
 
       if (!balanceResponse.success) {
         throw new Error(
-          `Could not fetch account balance to check funds sufficiency`
+          `Could not fetch account balance to check funds sufficiency`,
         );
       }
 
       // if its a gross STX transfer, deduct fee from transferred amount
       if (type == TransactionType.STX && grossTransaction) {
         console.log(
-          `Gross transaction: deducting fee ${fee} STX from amount ${amount} STX`
+          `Gross transaction: deducting fee ${fee} STX from amount ${amount} STX`,
         );
         amount -= fee;
         if (amount <= 0) {
@@ -355,7 +359,7 @@ export class StacksSDK {
       // to do : check amount against balance
       if (type == TransactionType.FungibleToken) {
         balance = (balanceResponse as GetFtBalancesResponse).data?.find(
-          (b) => b.token === token
+          (b) => b.token === token,
         )?.balance;
       } else {
         balance = (balanceResponse as GetNativeBalanceResponse).balance;
@@ -377,7 +381,7 @@ export class StacksSDK {
       console.log(
         `Converted amount to micro: ${microAmount} (from ${amount} ${
           token ? token : "STX"
-        })`
+        })`,
       );
 
       return {
@@ -386,7 +390,7 @@ export class StacksSDK {
       };
     } catch (error) {
       throw new Error(
-        `Parameter validation failed: ${formatErrorMessage(error)}`
+        `Parameter validation failed: ${formatErrorMessage(error)}`,
       );
     }
   };
@@ -405,7 +409,7 @@ export class StacksSDK {
     microAmount: bigint,
     type: TransactionType = TransactionType.STX,
     token?: TokenType,
-    note?: string
+    note?: string,
   ): Promise<any> => {
     try {
       const transactionToSign = await this.chainService.serializeTransaction(
@@ -414,13 +418,13 @@ export class StacksSDK {
         recipientAddress,
         microAmount,
         type,
-        token
+        token,
       );
 
       const rawSignature = await this.fireblocksService.signTransaction(
         transactionToSign.preSignSigHash,
         this.vaultAccountId.toString(),
-        note || ""
+        note || "",
       );
 
       const signature = concatSignature(rawSignature.fullSig, rawSignature.v);
@@ -429,14 +433,14 @@ export class StacksSDK {
         createMessageSignature(signature);
 
       const result = await this.chainService.brodcastTransaction(
-        transactionToSign.unsignedTx
+        transactionToSign.unsignedTx,
       );
       return result;
     } catch (error) {
       throw new Error(
         `Failed to build, sign or send transaction: ${formatErrorMessage(
-          error
-        )}`
+          error,
+        )}`,
       );
     }
   };
@@ -451,23 +455,30 @@ export class StacksSDK {
    * @returns - A promise that resolves to the transaction broadcast result.
    */
   private buildSignSendContractCall = async (
-    poolAddress: string,
-    functionName: "delegate-stx" | "allow-contract-caller",
+    functionName:
+      | "delegate-stx"
+      | "allow-contract-caller"
+      | "revoke-delegate-stx",
+    poolAddress?: string,
     poolContractName?: string,
     amount?: bigint,
     lockPeriod?: number,
-    note?: string
+    note?: string,
   ): Promise<any> => {
     try {
+      if (functionName !== "revoke-delegate-stx" && !poolAddress) {
+        throw new Error(`${functionName} requires a valid pool address`);
+      }
+
       if (functionName === "allow-contract-caller" && !poolContractName) {
         throw new Error(
-          "Pool contract name must be provided for allow-contract-caller"
+          "Pool contract name must be provided for allow-contract-caller",
         );
       }
 
       if (functionName === "delegate-stx" && (!amount || !lockPeriod)) {
         throw new Error(
-          "Amount and lock period must be provided for delegate-stx"
+          "Amount and lock period must be provided for delegate-stx",
         );
       }
 
@@ -476,19 +487,21 @@ export class StacksSDK {
           ? await this.chainService.allowPoxContractCaller(
               this.publicKey,
               poolAddress,
-              poolContractName!
+              poolContractName!,
             )
-          : await this.chainService.delegateStx(
-              this.publicKey,
-              poolAddress,
-              amount!,
-              lockPeriod!
-            );
+          : functionName === "delegate-stx"
+            ? await this.chainService.delegateStx(
+                this.publicKey,
+                poolAddress,
+                amount!,
+                lockPeriod!,
+              )
+            : await this.chainService.revokeStxDelegation(this.publicKey);
 
       const rawSignature = await this.fireblocksService.signTransaction(
         transactionToSign.preSignSigHash,
         this.vaultAccountId.toString(),
-        note || ""
+        note || "",
       );
 
       const signature = concatSignature(rawSignature.fullSig, rawSignature.v);
@@ -498,14 +511,14 @@ export class StacksSDK {
       ).auth.spendingCondition.signature = createMessageSignature(signature);
 
       const result = await this.chainService.brodcastTransaction(
-        transactionToSign.unsignedContractCall
+        transactionToSign.unsignedContractCall,
       );
       return result;
     } catch (error) {
       throw new Error(
         `Failed to build, sign or send contract call transaction: ${formatErrorMessage(
-          error
-        )}`
+          error,
+        )}`,
       );
     }
   };
@@ -524,7 +537,7 @@ export class StacksSDK {
     recipientAddress: string,
     amount: number,
     grossTransaction: boolean = false,
-    note?: string
+    note?: string,
   ): Promise<CreateTransactionResponse> => {
     if (!this.address || !this.publicKey || !this.vaultAccountId) {
       throw new Error("Address, Public Key or Vault ID are not set");
@@ -535,7 +548,7 @@ export class StacksSDK {
         recipientAddress,
         amount,
         grossTransaction,
-        TransactionType.STX
+        TransactionType.STX,
       );
 
       if (!paramsValidationResponse.validParams) {
@@ -552,7 +565,7 @@ export class StacksSDK {
         microAmount,
         TransactionType.STX,
         undefined,
-        note
+        note,
       );
 
       if (!result || result.error || !result.txid || result.reason) {
@@ -561,7 +574,7 @@ export class StacksSDK {
             ? `${result.error} - ${result.reason}`
             : result.error || result.reason || "unknown error";
         console.error(
-          `Transaction broadcast failed: ${formatErrorMessage(errorAndReason)}`
+          `Transaction broadcast failed: ${formatErrorMessage(errorAndReason)}`,
         );
         return {
           success: false,
@@ -577,7 +590,7 @@ export class StacksSDK {
       };
     } catch (error: any) {
       throw new Error(
-        `Failed to create transaction: ${formatErrorMessage(error)}`
+        `Failed to create transaction: ${formatErrorMessage(error)}`,
       );
     }
   };
@@ -596,14 +609,14 @@ export class StacksSDK {
     recipientAddress: string,
     amount: number,
     token: TokenType,
-    note?: string
+    note?: string,
   ): Promise<CreateTransactionResponse> => {
     if (!this.address || !this.publicKey || !this.vaultAccountId) {
       throw new Error("Address, Public Key or Vault ID are not set");
     }
 
     console.log(
-      `Creating FT transaction: ${amount} ${token} to ${recipientAddress}`
+      `Creating FT transaction: ${amount} ${token} to ${recipientAddress}`,
     );
 
     try {
@@ -612,7 +625,7 @@ export class StacksSDK {
         amount,
         undefined, // Gross transaction not applicable for FT transfers
         TransactionType.FungibleToken,
-        token
+        token,
       );
 
       if (!paramsValidationResponse.validParams) {
@@ -628,14 +641,14 @@ export class StacksSDK {
         microAmount,
         TransactionType.FungibleToken,
         token,
-        note
+        note,
       );
 
       if (!result || result.err) {
         console.error(
           `Transaction broadcast failed: ${
             formatErrorMessage(result?.err) || "unknown error"
-          }`
+          }`,
         );
         return {
           success: false,
@@ -649,36 +662,49 @@ export class StacksSDK {
       };
     } catch (error: any) {
       throw new Error(
-        `Failed to create transaction: ${formatErrorMessage(error)}`
+        `Failed to create transaction: ${formatErrorMessage(error)}`,
       );
     }
   };
 
   /**
    * Stacks an amount of STX with a pool by delegating the amount to the pool's address and allowing the pool to manage the staking on behalf of the user.
-
+   * @param poolsAddress - The address of the stacking pool.
+   * @param poolContractName - The contract name of the stacking pool.
+   * @param amount - The amount of STX to stack.
+   * @param lockPeriod - The lock period in cycles.
+   * @returns A promise that resolves to a {CreateTransactionResponse}.
+   * @throws {Error} If the address, public key, or vault ID are not set, or if the stacking process fails.
    */
 
   public stackWithPool = async (
     poolsAddress: string,
     poolContractName: string,
     amount: number,
-    lockPeriod: number // Number of cycles
+    lockPeriod: number, // Number of cycles
   ): Promise<CreateTransactionResponse> => {
+    if (this.testnet) {
+      console.log(`[WARNING] stackWithPool is not supported on testnet.`);
+      return {
+        success: false,
+        error: `stackWithPool is not supported on testnet.`,
+      };
+    }
+
     if (!this.address || !this.publicKey || !this.vaultAccountId) {
       throw new Error("Address, Public Key or Vault ID are not set");
     }
 
     console.log(
-      `Stacking ${amount} STX with pool: ${poolsAddress} for ${lockPeriod} cycles`
+      `Stacking ${amount} STX with pool: ${poolsAddress} for ${lockPeriod} cycles`,
     );
 
     try {
       // Allow contract caller
       const allowCallerResult = await this.buildSignSendContractCall(
-        poolsAddress,
         "allow-contract-caller",
-        poolContractName
+        poolsAddress,
+        poolContractName,
       );
 
       const assertAllowCallerResult = assertResultSuccess(allowCallerResult);
@@ -689,13 +715,17 @@ export class StacksSDK {
         };
       }
 
+      console.log(
+        `Successfully allowed contract caller for pool ${poolsAddress}.${poolContractName}`,
+      );
+
       // Delegate STX to pool address
       const delegateResult = await this.buildSignSendContractCall(
-        poolsAddress,
         "delegate-stx",
+        poolsAddress,
         poolContractName,
         stxToMicro(amount),
-        lockPeriod
+        lockPeriod,
       );
 
       const assertDelegateResult = assertResultSuccess(delegateResult);
@@ -707,16 +737,164 @@ export class StacksSDK {
       }
 
       console.log(
-        `Successfully stacked ${amount} STX with pool ${poolsAddress}.${poolContractName}`
+        `Successfully stacked ${amount} STX with pool ${poolsAddress}.${poolContractName}`,
       );
       return {
         success: true,
         txHash: delegateResult.txid,
       };
     } catch (error: any) {
-      throw new Error(
-        `Failed to create transaction: ${formatErrorMessage(error)}`
+      console.error(`Error stacking with pool: ${formatErrorMessage(error)}`);
+      return {
+        success: false,
+        error: `Failed to stack with pool: ${formatErrorMessage(error)}`,
+      };
+    }
+  };
+
+  /**
+   * Revoke any STX delegation to any address for this account.
+   * @returns A promise that resolves to a {CreateTransactionResponse}.
+   * @throws {Error} If the address, public key, or vault ID are not set, or if the stacking process fails.
+   */
+
+  public revokeDelegation = async (): Promise<CreateTransactionResponse> => {
+    if (this.testnet) {
+      console.log(`[WARNING] revokeDelegation is not supported on testnet.`);
+      return {
+        success: false,
+        error: `revokeDelegation is not supported on testnet.`,
+      };
+    }
+
+    if (!this.address || !this.publicKey || !this.vaultAccountId) {
+      throw new Error("Address, Public Key or Vault ID are not set");
+    }
+
+    console.log(`Revoking STX delegations from address: ${this.address}`);
+
+    try {
+      // Revoke any existing delegations.
+      const revokeResult = await this.buildSignSendContractCall(
+        "revoke-delegate-stx",
       );
+
+      const assertDelegateResult = assertResultSuccess(revokeResult);
+      if (assertDelegateResult.success === false) {
+        return {
+          success: false,
+          error: `Failed to delegate STX: ${assertDelegateResult.error}`,
+        };
+      }
+
+      console.log(
+        `Successfully revoked STX delegations from address ${this.address}`,
+      );
+      return {
+        success: true,
+        txHash: revokeResult.txid,
+      };
+    } catch (error: any) {
+      console.error(`Error revoking delegation: ${formatErrorMessage(error)}`);
+      return {
+        success: false,
+        error: `Failed to revoke delegation: ${formatErrorMessage(error)}`,
+      };
+    }
+  };
+
+  /**
+   * Check account status: balance total, locked amount and delegation status.
+   * @returns A promise that resolves to a {CreateTransactionResponse}.
+   * @throws {Error} If the address, public key, or vault ID are not set, or if the stacking process fails.
+   */
+
+  public checkStatus = async (): Promise<CheckStatusResponse> => {
+    if (this.testnet) {
+      console.log(`[WARNING] checkStatus is not supported on testnet.`);
+      return {
+        success: false,
+        error: `checkStatus is not supported on testnet.`,
+      };
+    }
+
+    if (!this.address || !this.publicKey || !this.vaultAccountId) {
+      throw new Error("Address, Public Key or Vault ID are not set");
+    }
+
+    console.log(`Checking account status for address: ${this.address}`);
+
+    try {
+      const [delegationData, balanceResponse] = await Promise.all([
+        this.chainService.checkDelegationStatus(this.address), // may be null
+        this.chainService.makeBalanceCalls(this.address),
+      ]);
+
+      if (!balanceResponse) {
+        throw new Error("Failed to fetch balance data");
+      }
+
+      const balanceData = balanceResponse.data;
+
+      console.log(
+        `[DEBUG] Delegation data: ${JSON.stringify(delegationData, null, 2)}`,
+      );
+      console.log(`[DEBUG] Balance data: ${safeStringify(balanceData)}`);
+
+      const stxBalMicro = BigInt(balanceData.stx.balance ?? "0");
+      const stxLockedMicro = BigInt(balanceData.stx.locked ?? "0");
+
+      const isDelegated = !!(delegationData && delegationData.value);
+
+      const amountDelegatedMicro = isDelegated
+        ? BigInt(delegationData.value["amount-ustx"]?.value ?? "0")
+        : null;
+
+      const delegatedTo = isDelegated
+        ? (delegationData.value["delegated-to"]?.value ?? null)
+        : null;
+
+      const untilBurnHt = isDelegated
+        ? delegationData.value["until-burn-ht"]?.value?.value
+          ? Number(delegationData.value["until-burn-ht"].value.value)
+          : null
+        : null;
+
+      const poxAddrTuple = isDelegated
+        ? (delegationData.value["pox-addr"]?.value ?? null) // null if none
+        : null;
+
+      const statusData: CheckStatusData = {
+        balance: {
+          stx_total: microToStx(stxBalMicro),
+          stx_locked: microToStx(stxLockedMicro),
+          lock_tx_id: balanceData.stx.lock_tx_id || null,
+          lock_height: balanceData.stx.lock_height || null,
+          burnchain_lock_height: balanceData.stx.burnchain_lock_height || null,
+          burnchain_unlock_height:
+            balanceData.stx.burnchain_unlock_height || null,
+        },
+        delegation: {
+          is_delegated: isDelegated,
+          delegated_to: delegatedTo,
+          amount_delegated: amountDelegatedMicro
+            ? microToStx(amountDelegatedMicro)
+            : null,
+          until_burn_ht: untilBurnHt,
+          pox_addr: poxAddrTuple,
+        },
+      };
+
+      return {
+        success: true,
+        data: statusData,
+      };
+    } catch (error: any) {
+      console.error(`Error checking status: ${formatErrorMessage(error)}`);
+      return {
+        success: false,
+        error: `Failed to check status: ${formatErrorMessage(error)}`,
+      };
     }
   };
 }

@@ -5,7 +5,7 @@ import * as controller from "./controller";
 const validateVaultId = (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): void => {
   const { vaultId } = req.params;
   if (!vaultId) {
@@ -73,6 +73,26 @@ router.get("/:vaultId/address", validateVaultId, controller.getAddress);
  *         description: Internal server error
  */
 router.get("/:vaultId/publicKey", validateVaultId, controller.getPublicKey);
+
+/**
+ * @openapi
+ * /{vaultId}/check-status:
+ *   get:
+ *     summary: Get account status (balance total, locked STX and delegation status)
+ *     description: >
+ *       fetches the account status for STX balance total,
+ *       locked (Stacked) STX, and delegation status (if there's an active delegation, to which address and delegated amount in STX).
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *     responses:
+ *       200:
+ *         description: Account status fetched successfully
+ *       400:
+ *         description: vaultId missing
+ *       500:
+ *         description: Internal server error
+ */
+router.get("/:vaultId/check-status", validateVaultId, controller.checkStatus);
 
 // Balance endpoints
 
@@ -166,52 +186,8 @@ router.get("/:vaultId/ft-balances", validateVaultId, controller.getFtBalances);
 router.get(
   "/:vaultId/transactions",
   validateVaultId,
-  controller.getTransactionHistory
+  controller.getTransactionHistory,
 );
-
-// Create transactions
-// /**
-//  * @openapi
-//  * /{vaultId}/transfer:
-//  *   post:
-//  *     summary: Create native coin (STX) transfer
-//  *     description: Initiates transfer of native STX coin from vault to recipient.
-//  *     parameters:
-//  *       - $ref: '#/components/parameters/vaultId'
-//  *     requestBody:
-//  *       required: true
-//  *       content:
-//  *         application/json:
-//  *           schema:
-//  *             type: object
-//  *             required: [recipientAddress, amount]
-//  *             properties:
-//  *               recipientAddress:
-//  *                 type: string
-//  *                 example: '0xabc123'
-//  *               amount:
-//  *                 type: number
-//  *                 example: 1.5
-//  *               grossTransaction:
-//  *                 type: boolean
-//  *                 example: false
-//  *                 description: Whether the amount includes the fee
-//  *               note:
-//  *                 type: string
-//  *                 example: 'Payment for services'
-//  *     responses:
-//  *       200:
-//  *         description: Transaction created successfully
-//  *       400:
-//  *         description: Invalid input
-//  *       500:
-//  *         description: Internal server error
-//  */
-// router.post(
-//   "/:vaultId/transfer",
-//   validateVaultId,
-//   controller.createTransaction
-// );
 
 /**
  * @openapi
@@ -264,7 +240,73 @@ router.get(
 router.post(
   "/:vaultId/transfer",
   validateVaultId,
-  controller.createTransaction
+  controller.createTransaction,
+);
+
+/**
+ * @openapi
+ * /{vaultId}/pool-stack:
+ *   post:
+ *     summary: Stack STX with a pool
+ *     description: >
+ *       Initiates a delegation of STX to a specified pool and allows the pool
+ *       to stack on behalf of the user. Please don't stack less than the chosen
+ *       pool's minimum; check the pool's website for the minimum STX required.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *       - in: query
+ *         name: amount
+ *         required: true
+ *         schema:
+ *           type: number
+ *         description: Human amount (e.g., 40 STX)
+ *       - in: query
+ *         name: pool
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum: [FAST_POOL]
+ *         description: Pool to stack with.
+ *       - in: query
+ *         name: lockPeriod
+ *         required: false
+ *         schema:
+ *           type: number
+ *           default: 1
+ *           minimum: 1
+ *           maximum: 12
+ *         description: Number of cycles to stack (1-12). Default is 1.
+ *     responses:
+ *       200:
+ *         description: Delegated to pool successfully.
+ *       400:
+ *         description: Invalid input
+ *       500:
+ *         description: Internal server error
+ */
+router.post("/:vaultId/pool-stack", validateVaultId, controller.poolStack);
+
+/**
+ * @openapi
+ * /{vaultId}/revoke-delegation:
+ *   post:
+ *     summary: Revoke existing delegations
+ *     description: >
+ *       Revokes any existing STX delegations for the account associated with the given vault ID.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *     responses:
+ *       200:
+ *         description: Delegation revoked successfully.
+ *       400:
+ *         description: vaultId missing
+ *       500:
+ *         description: Internal server error
+ */
+router.post(
+  "/:vaultId/revoke-delegation",
+  validateVaultId,
+  controller.revokeDelegation,
 );
 
 // Pool metrics

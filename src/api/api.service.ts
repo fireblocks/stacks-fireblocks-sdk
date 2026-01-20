@@ -36,7 +36,7 @@ export class ApiService {
   public executeAction = async (
     vaultAccountId: string,
     actionType: ActionType,
-    params: any
+    params: any,
   ): Promise<SDKResponse | TransactionResponse> => {
     let sdk: StacksSDK | null = null;
     try {
@@ -46,12 +46,26 @@ export class ApiService {
       // Execute the appropriate action based on type
       let result;
       switch (actionType) {
+        case ActionType.REVOKE_DELEGATION:
+          result = await sdk.revokeDelegation();
+          break;
+        case ActionType.CHECK_STATUS:
+          result = await sdk.checkStatus();
+          break;
+        case ActionType.STACK_WITH_POOL:
+          result = await sdk.stackWithPool(
+            params.poolAddress,
+            params.poolContractName,
+            params.amount,
+            params.lockPeriod,
+          );
+          break;
         case ActionType.CREATE_NATIVE_TRANSACTION:
           result = await sdk.createNativeTransaction(
             params.recipientAddress,
             params.amount,
             params.grossTransaction,
-            params.note
+            params.note,
           );
           break;
         case ActionType.CREATE_FT_TRANSACTION:
@@ -59,7 +73,7 @@ export class ApiService {
             params.recipientAddress,
             params.amount,
             params.tokenType,
-            params.note
+            params.note,
           );
           break;
         case ActionType.GET_BALANCE:
@@ -72,7 +86,7 @@ export class ApiService {
           result = await sdk.getTransactionHistory(
             params.getCachedTransactions,
             params.limit,
-            params.offset
+            params.offset,
           );
           break;
         case ActionType.GET_ACCOUNT_ADDRESS:
@@ -84,7 +98,7 @@ export class ApiService {
         default:
           throw new Error(
             `InvalidType :
-            Unknown action type: ${actionType}`
+            Unknown action type: ${actionType}`,
           );
       }
 
@@ -92,7 +106,7 @@ export class ApiService {
     } catch (error) {
       console.error(
         `Error executing ${actionType} for vault ${vaultAccountId}:`,
-        error
+        error,
       );
       throw new Error(`Failed to execute action: ${formatErrorMessage(error)}`);
     } finally {

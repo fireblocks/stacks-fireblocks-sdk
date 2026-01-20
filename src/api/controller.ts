@@ -1,7 +1,9 @@
 import { Request, Response, NextFunction } from "express";
 import { apiServiceSingleton } from "./api.service";
 import { ActionType } from "../pool/types";
-import { TokenType } from "../services/types";
+import { StackingPools, TokenType } from "../services/types";
+import { validateAmount } from "../utils/helpers";
+import { poolInfo } from "../utils/constants";
 
 const apiService = apiServiceSingleton;
 
@@ -9,7 +11,7 @@ const apiService = apiServiceSingleton;
 type Handler = (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => Promise<void>;
 
 // GET /:vaultId/address
@@ -19,9 +21,24 @@ export const getAddress: Handler = async (req, res, next) => {
     const address = await apiService.executeAction(
       vaultId,
       ActionType.GET_ACCOUNT_ADDRESS,
-      {}
+      {},
     );
     res.json({ address });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// GET /:vaultId/check-status
+export const checkStatus: Handler = async (req, res, next) => {
+  try {
+    const { vaultId } = req.params;
+    const status = await apiService.executeAction(
+      vaultId,
+      ActionType.CHECK_STATUS,
+      {},
+    );
+    res.json(status);
   } catch (err) {
     next(err);
   }
@@ -34,7 +51,7 @@ export const getPublicKey: Handler = async (req, res, next) => {
     const pubKey = await apiService.executeAction(
       vaultId,
       ActionType.GET_ACCOUNT_PUBLIC_KEY,
-      {}
+      {},
     );
     res.json({ publicKey: pubKey });
   } catch (err) {
@@ -49,7 +66,7 @@ export const getBalance: Handler = async (req, res, next) => {
     const balance = await apiService.executeAction(
       vaultId,
       ActionType.GET_BALANCE,
-      {}
+      {},
     );
     res.json(balance);
   } catch (err) {
@@ -64,7 +81,7 @@ export const getFtBalances: Handler = async (req, res, next) => {
     const ftBalances = await apiService.executeAction(
       vaultId,
       ActionType.GET_FT_BALANCES,
-      {}
+      {},
     );
     res.json(ftBalances);
   } catch (err) {
@@ -93,7 +110,7 @@ export const getTransactionHistory: Handler = async (req, res, next) => {
     const history = await apiService.executeAction(
       vaultId,
       ActionType.GET_TRANSACTIONS_HISTORY,
-      { getCachedTransactions, limit, offset }
+      { getCachedTransactions, limit, offset },
     );
 
     res.json(history);
@@ -101,33 +118,6 @@ export const getTransactionHistory: Handler = async (req, res, next) => {
     next(err);
   }
 };
-
-// // POST /:vaultId/transfer
-// export const createTransaction: Handler = async (req, res, next) => {
-//   try {
-//     const { vaultId } = req.params;
-//     const { recipientAddress, amount, grossTransaction, note } = req.body;
-//     if (!recipientAddress || !amount) {
-//       res.status(400).json({
-//         error: "Bad Request : recipientAddress and amount are required",
-//       });
-//       return;
-//     }
-//     const tx = await apiService.executeAction(
-//       vaultId,
-//       ActionType.CREATE_NATIVE_TRANSACTION,
-//       {
-//         recipientAddress,
-//         amount,
-//         grossTransaction,
-//         note,
-//       }
-//     );
-//     res.json(tx);
-//   } catch (err) {
-//     next(err);
-//   }
-// };
 
 // POST /:vaultId/transfer
 export const createTransaction: Handler = async (req, res, next) => {
@@ -174,7 +164,7 @@ export const createTransaction: Handler = async (req, res, next) => {
       const tx = await apiService.executeAction(
         vaultId,
         ActionType.CREATE_NATIVE_TRANSACTION,
-        { recipientAddress, amount, grossTransaction, note }
+        { recipientAddress, amount, grossTransaction, note },
       );
       res.json(tx);
       return;
@@ -184,7 +174,87 @@ export const createTransaction: Handler = async (req, res, next) => {
     const tx = await apiService.executeAction(
       vaultId,
       ActionType.CREATE_FT_TRANSACTION,
-      { recipientAddress, amount, tokenType, note }
+      { recipientAddress, amount, tokenType, note },
+    );
+    res.json(tx);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /:vaultId/pool-stack
+export const poolStack: Handler = async (req, res, next) => {
+  try {
+    const { vaultId } = req.params;
+
+    const amountStr = String(req.query.amount || "");
+    const lockPeriodStr = String(req.query.lockPeriod || "1");
+    const pool = String(req.query.pool || "FAST_POOL").trim();
+
+    console.log(
+      `[DEBUG] poolStack called with pool=${pool}, amount=${amountStr}, lockPeriod=${lockPeriodStr}`,
+    );
+
+    if (!pool || !amountStr) {
+      res.status(400).json({
+        error: "Bad Request: pool and amount are required",
+      });
+      return;
+    }
+
+    const amount = Number(amountStr);
+    if (!validateAmount(amount)) {
+      res.status(400).json({ error: "Bad Request: amount is invalid" });
+      return;
+    }
+
+    const lockPeriod = Number(lockPeriodStr);
+    if (!Number.isInteger(lockPeriod) || lockPeriod < 1 || lockPeriod > 12) {
+      res.status(400).json({
+        error: "Bad Request: lockPeriod must be an integer between 1 and 12",
+      });
+      return;
+    }
+
+    // Map UI label -> Pool Type (enum value)
+    const poolSelectionMap: Record<string, StackingPools> = {
+      FAST_POOL: StackingPools.FAST_POOL,
+    };
+    const poolType = poolSelectionMap[pool];
+
+    if (!poolType) {
+      res.status(400).json({ error: `Unsupported pool: ${poolType}` });
+      return;
+    }
+
+    const poolAddress = poolInfo[poolType].poolAddress;
+    const poolContractName = poolInfo[poolType].poolContractName;
+
+    console.log(
+      `[DEBUG] poolStack resolved to poolAddress=${poolAddress}, poolContractName=${poolContractName}`,
+    );
+
+    // FT transfer
+    const tx = await apiService.executeAction(
+      vaultId,
+      ActionType.STACK_WITH_POOL,
+      { poolAddress, poolContractName, amount, lockPeriod },
+    );
+    res.json(tx);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /:vaultId/revoke-delegation
+export const revokeDelegation: Handler = async (req, res, next) => {
+  try {
+    const { vaultId } = req.params;
+
+    const tx = await apiService.executeAction(
+      vaultId,
+      ActionType.REVOKE_DELEGATION,
+      {},
     );
     res.json(tx);
   } catch (err) {
