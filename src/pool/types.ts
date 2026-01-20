@@ -30,6 +30,8 @@ export enum ActionType {
   GET_ACCOUNT_ADDRESS = "getAddress",
   GET_ACCOUNT_PUBLIC_KEY = "getPublicKey",
   STACK_WITH_POOL = "stackWithPool",
+  DELEGATE_TO_POOL = "delegateToPool",
+  ALLOW_CONTRACT_CALLER = "allowContractCaller",
   REVOKE_DELEGATION = "revokeDelegation",
   CHECK_STATUS = "checkStatus",
 }

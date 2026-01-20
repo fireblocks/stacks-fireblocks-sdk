@@ -760,6 +760,150 @@ export class StacksSDK {
   };
 
   /**
+   * Delegate STX to a stacking pool.
+   * @param poolsAddress - The address of the stacking pool.
+   * @param poolContractName - The contract name of the stacking pool.
+   * @param amount - The amount of STX to stack.
+   * @param lockPeriod - The lock period in cycles.
+   * @returns A promise that resolves to a {CreateTransactionResponse}.
+   * @throws {Error} If the address, public key, or vault ID are not set, or if the delegate process fails.
+   */
+
+  public delegateToPool = async (
+    poolsAddress: string,
+    poolContractName: string,
+    amount: number,
+    lockPeriod: number, // Number of cycles
+  ): Promise<CreateTransactionResponse> => {
+    if (this.testnet) {
+      console.log(`[WARNING] delegateToPool is not supported on testnet.`);
+      return {
+        success: false,
+        error: `delegateToPool is not supported on testnet.`,
+      };
+    }
+
+    if (!this.address || !this.publicKey || !this.vaultAccountId) {
+      throw new Error("Address, Public Key or Vault ID are not set");
+    }
+
+    const status = await this.checkStatus();
+    if (!status.success) {
+      return {
+        success: false,
+        error: `Failed to check account status before delegating STX: ${status.error}`,
+      };
+    }
+
+    if (status.data?.delegation.is_delegated) {
+      return {
+        success: false,
+        error: `Account already has an active delegation to ${status.data.delegation.delegated_to}, if you wish to change delegation please revoke existing delegation first, run checkStatus for more info.`,
+      };
+    }
+
+    console.log(
+      `Delegating ${amount} STX to pool: ${poolsAddress} for ${lockPeriod} cycles`,
+    );
+
+    try {
+      // Delegate STX to pool address
+      const delegateResult = await this.buildSignSendContractCall(
+        "delegate-stx",
+        poolsAddress,
+        poolContractName,
+        stxToMicro(amount),
+        lockPeriod,
+      );
+
+      const assertDelegateResult = assertResultSuccess(delegateResult);
+      if (assertDelegateResult.success === false) {
+        return {
+          success: false,
+          error: `Failed to delegate STX: ${assertDelegateResult.error}`,
+        };
+      }
+
+      console.log(
+        `Successfully delegated ${amount} STX to pool ${poolsAddress}.${poolContractName}`,
+      );
+      return {
+        success: true,
+        txHash: delegateResult.txid,
+      };
+    } catch (error: any) {
+      console.error(`Error delegating to pool: ${formatErrorMessage(error)}`);
+      return {
+        success: false,
+        error: `Failed to delegate to pool: ${formatErrorMessage(error)}`,
+      };
+    }
+  };
+
+  /**
+   * Allows a stacking pool to lock delegated STX on behalf of the delegator.
+   * @param poolsAddress - The address of the stacking pool.
+   * @param poolContractName - The contract name of the stacking pool.
+   * @returns A promise that resolves to a {CreateTransactionResponse}.
+   * @throws {Error} If the address, public key, or vault ID are not set, or if the process fails.
+   */
+
+  public allowContractCaller = async (
+    poolsAddress: string,
+    poolContractName: string,
+  ): Promise<CreateTransactionResponse> => {
+    if (this.testnet) {
+      console.log(`[WARNING] allowContractCaller is not supported on testnet.`);
+      return {
+        success: false,
+        error: `allowContractCaller is not supported on testnet.`,
+      };
+    }
+
+    if (!this.address || !this.publicKey || !this.vaultAccountId) {
+      throw new Error("Address, Public Key or Vault ID are not set");
+    }
+
+    console.log(
+      `Allowing ${poolsAddress}.${poolContractName} as PoX contract caller on behalf of ${this.address}`,
+    );
+
+    try {
+      // Allow contract caller
+      const allowCallerResult = await this.buildSignSendContractCall(
+        "allow-contract-caller",
+        poolsAddress,
+        poolContractName,
+      );
+
+      const assertAllowCallerResult = assertResultSuccess(allowCallerResult);
+      if (assertAllowCallerResult.success === false) {
+        return {
+          success: false,
+          error: `Failed to allow contract caller: ${assertAllowCallerResult.error}`,
+        };
+      }
+
+      console.log(
+        `Successfully allowed contract caller for pool ${poolsAddress}.${poolContractName}`,
+      );
+
+      return {
+        success: true,
+        txHash: allowCallerResult.txid,
+      };
+    } catch (error: any) {
+      console.error(
+        `Error allowing contract caller: ${formatErrorMessage(error)}`,
+      );
+      return {
+        success: false,
+        error: `Failed to allow contract caller: ${formatErrorMessage(error)}`,
+      };
+    }
+  };
+
+  /**
    * Revoke any STX delegation to any address for this account.
    * @returns A promise that resolves to a {CreateTransactionResponse}.
    * @throws {Error} If the address, public key, or vault ID are not set, or if the stacking process fails.

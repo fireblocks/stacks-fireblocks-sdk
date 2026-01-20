@@ -245,13 +245,13 @@ router.post(
 
 /**
  * @openapi
- * /{vaultId}/pool-stack:
+ * /{vaultId}/stacking/pool/delegate:
  *   post:
- *     summary: Stack STX with a pool
+ *     summary: Delegate STX to a pool
  *     description: >
- *       Initiates a delegation of STX to a specified pool and allows the pool
- *       to stack on behalf of the user. Please don't stack less than the chosen
- *       pool's minimum; check the pool's website for the minimum STX required.
+ *       Initiates a delegation of STX to a specified pool.
+ *       Please don't delegate less than the chosen pool's minimum;
+ *       check the pool's website for the minimum STX required.
  *     parameters:
  *       - $ref: '#/components/parameters/vaultId'
  *       - in: query
@@ -266,7 +266,7 @@ router.post(
  *         schema:
  *           type: string
  *           enum: [FAST_POOL]
- *         description: Pool to stack with.
+ *         description: Pool to delegate to.
  *       - in: query
  *         name: lockPeriod
  *         required: false
@@ -284,7 +284,42 @@ router.post(
  *       500:
  *         description: Internal server error
  */
-router.post("/:vaultId/pool-stack", validateVaultId, controller.poolStack);
+router.post(
+  "/:vaultId/stacking/pool/delegate",
+  validateVaultId,
+  controller.delegateToPool,
+);
+
+/**
+ * @openapi
+ * /{vaultId}/stacking/pool/allow-contract-caller:
+ *   post:
+ *     summary: Allow stacking pool as contract caller
+ *     description: >
+ *       Allows the specified stacking pool to call PoX contract to
+ *       lock delegated STX on behalf of the account associated with the given vault ID.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *       - in: query
+ *         name: pool
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum: [FAST_POOL]
+ *         description: Pool to allow as contract caller.
+ *     responses:
+ *       200:
+ *         description: Pool allowed as contract caller successfully.
+ *       400:
+ *         description: Invalid input
+ *       500:
+ *         description: Internal server error
+ */
+router.post(
+  "/:vaultId/stacking/pool/allow-contract-caller",
+  validateVaultId,
+  controller.allowContractCaller,
+);
 
 /**
  * @openapi

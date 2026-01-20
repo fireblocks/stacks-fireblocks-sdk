@@ -52,12 +52,18 @@ export class ApiService {
         case ActionType.CHECK_STATUS:
           result = await sdk.checkStatus();
           break;
-        case ActionType.STACK_WITH_POOL:
-          result = await sdk.stackWithPool(
+        case ActionType.DELEGATE_TO_POOL:
+          result = await sdk.delegateToPool(
             params.poolAddress,
             params.poolContractName,
             params.amount,
             params.lockPeriod,
+          );
+          break;
+        case ActionType.ALLOW_CONTRACT_CALLER:
+          result = await sdk.allowContractCaller(
+            params.poolAddress,
+            params.poolContractName,
           );
           break;
         case ActionType.CREATE_NATIVE_TRANSACTION:

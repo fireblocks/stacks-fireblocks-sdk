@@ -182,8 +182,8 @@ export const createTransaction: Handler = async (req, res, next) => {
   }
 };
 
-// POST /:vaultId/pool-stack
-export const poolStack: Handler = async (req, res, next) => {
+// POST /:vaultId/stacking/pool/delegate
+export const delegateToPool: Handler = async (req, res, next) => {
   try {
     const { vaultId } = req.params;
 
@@ -192,7 +192,7 @@ export const poolStack: Handler = async (req, res, next) => {
     const pool = String(req.query.pool || "FAST_POOL").trim();
 
     console.log(
-      `[DEBUG] poolStack called with pool=${pool}, amount=${amountStr}, lockPeriod=${lockPeriodStr}`,
+      `[DEBUG] delegateToPool called with pool=${pool}, amount=${amountStr}, lockPeriod=${lockPeriodStr}`,
     );
 
     if (!pool || !amountStr) {
@@ -231,14 +231,60 @@ export const poolStack: Handler = async (req, res, next) => {
     const poolContractName = poolInfo[poolType].poolContractName;
 
     console.log(
-      `[DEBUG] poolStack resolved to poolAddress=${poolAddress}, poolContractName=${poolContractName}`,
+      `[DEBUG] delegateToPoolresolved to poolAddress=${poolAddress}, poolContractName=${poolContractName}`,
     );
 
     // FT transfer
     const tx = await apiService.executeAction(
       vaultId,
-      ActionType.STACK_WITH_POOL,
+      ActionType.DELEGATE_TO_POOL,
       { poolAddress, poolContractName, amount, lockPeriod },
+    );
+    res.json(tx);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /:vaultId/stacking/pool/allow-contract-caller
+export const allowContractCaller: Handler = async (req, res, next) => {
+  try {
+    const { vaultId } = req.params;
+
+    const pool = String(req.query.pool || "FAST_POOL").trim();
+
+    console.log(`[DEBUG] allowContractCaller called with pool=${pool}`);
+
+    if (!pool) {
+      res.status(400).json({
+        error: "Bad Request: pool is required",
+      });
+      return;
+    }
+
+    // Map UI label -> Pool Type (enum value)
+    const poolSelectionMap: Record<string, StackingPools> = {
+      FAST_POOL: StackingPools.FAST_POOL,
+    };
+    const poolType = poolSelectionMap[pool];
+
+    if (!poolType) {
+      res.status(400).json({ error: `Unsupported pool: ${poolType}` });
+      return;
+    }
+
+    const poolAddress = poolInfo[poolType].poolAddress;
+    const poolContractName = poolInfo[poolType].poolContractName;
+
+    console.log(
+      `[DEBUG] delegateToPoolresolved to poolAddress=${poolAddress}, poolContractName=${poolContractName}`,
+    );
+
+    // FT transfer
+    const tx = await apiService.executeAction(
+      vaultId,
+      ActionType.ALLOW_CONTRACT_CALLER,
+      { poolAddress, poolContractName },
     );
     res.json(tx);
   } catch (err) {
