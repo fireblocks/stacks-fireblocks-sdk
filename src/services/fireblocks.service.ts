@@ -9,7 +9,11 @@
 import { BasePath, Fireblocks } from "@fireblocks/ts-sdk";
 import { config } from "../config";
 import fs, { readFileSync } from "fs";
-import { getPublicKeyForDerivationPath } from "../utils/fireblocks.utils";
+import {
+  checkWalletExistsInVault,
+  createAssetWalletInVault,
+  getPublicKeyForDerivationPath,
+} from "../utils/fireblocks.utils";
 import { FireblocksConfig } from "./types";
 import { formatErrorMessage } from "../utils/errorHandling";
 import { FireblocksSigner } from "../utils/Fireblocks-signer";
@@ -66,7 +70,7 @@ export class FireblocksService {
    * @throws {Error} If the vault ID is invalid or if any error occurs during the process.
    */
   public getPublicKeyByVaultID = async (
-    vaultID: string | number
+    vaultID: string | number,
   ): Promise<string> => {
     const id = typeof vaultID === "string" ? Number(vaultID) : vaultID;
     if (!Number.isInteger(id) || id < 0) {
@@ -77,13 +81,99 @@ export class FireblocksService {
       const publicKey = await getPublicKeyForDerivationPath(
         this.fireblocksSDK,
         vaultID.toString(),
-        this.testnet
+        this.testnet,
       );
 
       return publicKey;
     } catch (error: any) {
       throw new Error(
-        `Failed to get public key by vault ID: ${formatErrorMessage(error)}`
+        `Failed to get public key by vault ID: ${formatErrorMessage(error)}`,
+      );
+    }
+  };
+
+  /**
+   * Ensures a BTC (or BTC_TEST) wallet exists in the given Fireblocks vault ID.
+   * @param vaultID - The Fireblocks vault ID as a string or number. Must be a valid non-negative integer.
+   * @throws {Error} If the vault ID is invalid or if any error occurs during the process.
+   */
+  public ensureBtcWalletExists = async (
+    vaultID: string | number,
+  ): Promise<void> => {
+    const id = typeof vaultID === "string" ? Number(vaultID) : vaultID;
+    if (!Number.isInteger(id) || id < 0) {
+      throw new Error("vaultID must be a valid non-negative integer.");
+    }
+
+    try {
+      const assetId = this.testnet ? "BTC_TEST" : "BTC";
+      const walletExists = await checkWalletExistsInVault(
+        id,
+        assetId,
+        this.fireblocksSDK,
+      );
+      if (!walletExists) {
+        await createAssetWalletInVault(id, assetId, this.fireblocksSDK);
+      }
+    } catch (error: any) {
+      throw new Error(
+        `Failed to ensure BTC wallet exists for vault ID ${vaultID}: ${formatErrorMessage(error)}`,
+      );
+    }
+  };
+
+  /**
+   * Retrieves the public key associated with a given Fireblocks vault ID.
+   *
+   * This method converts the provided `vaultID` to a non-negative integer, validates it,
+   * and then retrieves the corresponding public key using the Fireblocks SDK.
+   *
+   * @param vaultID - The Fireblocks vault ID as a string or number. Must be a valid non-negative integer.
+   * @returns A promise that resolves to the public key as a string.
+   * @throws {Error} If the vault ID is invalid or if any error occurs during the process.
+   */
+  public getBtcSegwitAddressForVaultID = async (
+    vaultID: string | number,
+  ): Promise<string> => {
+    const id = typeof vaultID === "string" ? Number(vaultID) : vaultID;
+    if (!Number.isInteger(id) || id < 0) {
+      throw new Error("vaultID must be a valid non-negative integer.");
+    }
+
+    try {
+      const assetId = this.testnet ? "BTC_TEST" : "BTC";
+
+      await this.ensureBtcWalletExists(id);
+
+      const assetAdresses =
+        await this.fireblocksSDK.vaults.getVaultAccountAssetAddressesPaginated({
+          vaultAccountId: String(id),
+          assetId,
+        });
+
+      if (
+        !assetAdresses ||
+        !assetAdresses.data ||
+        !assetAdresses.data.addresses
+      ) {
+        throw new Error("No addresses found for the given vault account ID.");
+      }
+
+      for (const addrObj of assetAdresses.data.addresses) {
+        if (
+          addrObj.type === "Permanent" &&
+          addrObj.addressFormat === "SEGWIT"
+        ) {
+          return addrObj.address;
+        }
+      }
+
+      throw new Error(
+        "No Segwit address found for the given vault account ID.",
+      );
+    } catch (error: any) {
+      throw new Error(
+        `Failed to get public key by vault ID: ${formatErrorMessage(error)}`,
       );
     }
   };
@@ -103,20 +193,20 @@ export class FireblocksService {
   public signTransaction = async (
     content: string,
     vaultAccountId: string,
-    txNote?: string
+    txNote?: string,
   ): Promise<any> => {
     try {
       const signature = await this.fireblocksSigner.rawSign(
         content,
         vaultAccountId,
         txNote || "",
-        this.testnet
+        this.testnet,
       );
       return signature;
     } catch (error) {
       console.error("Error in signTransaction:", formatErrorMessage(error));
       throw new Error(
-        `Failed to sign transaction: ${formatErrorMessage(error)}`
+        `Failed to sign transaction: ${formatErrorMessage(error)}`,
       );
     }
   };

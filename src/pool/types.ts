@@ -29,6 +29,7 @@ export enum ActionType {
   GET_TRANSACTIONS_HISTORY = "getTransactionsHistory",
   GET_ACCOUNT_ADDRESS = "getAddress",
   GET_ACCOUNT_PUBLIC_KEY = "getPublicKey",
+  GET_BTC_REWARDS_ADDRESS = "getBtcRewardsAddress",
   STACK_WITH_POOL = "stackWithPool",
   DELEGATE_TO_POOL = "delegateToPool",
   ALLOW_CONTRACT_CALLER = "allowContractCaller",

@@ -46,6 +46,9 @@ export class ApiService {
       // Execute the appropriate action based on type
       let result;
       switch (actionType) {
+        case ActionType.GET_BTC_REWARDS_ADDRESS:
+          result = await sdk.getBtcRewardsAddress();
+          break;
         case ActionType.REVOKE_DELEGATION:
           result = await sdk.revokeDelegation();
           break;

@@ -50,6 +50,36 @@ router.get("/:vaultId/address", validateVaultId, controller.getAddress);
 
 /**
  * @openapi
+ * /{vaultId}/btc-rewards-address:
+ *   get:
+ *     summary: Get BTC rewards address
+ *     description: Retrieves the BTC rewards address for the given vault ID (corresponding to the same public key as the Stacks address).
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *     responses:
+ *       200:
+ *         description: BTC rewards address fetched successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 address:
+ *                   type: string
+ *                   example: '0x1a2b3c4d'
+ *       400:
+ *         description: vaultId missing
+ *       500:
+ *         description: Internal server error
+ */
+router.get(
+  "/:vaultId/btc-rewards-address",
+  validateVaultId,
+  controller.getBtcRewardsAddress,
+);
+
+/**
+ * @openapi
  * /{vaultId}/publicKey:
  *   get:
  *     summary: Get account public key

@@ -53,6 +53,7 @@ export class StacksSDK {
   private chainService: StacksService;
   private vaultAccountId: string | number;
   private address: string | undefined;
+  private btcRewardsAddress: string | undefined;
   private publicKey: string | undefined;
   private chachedTransactions: Transaction[] = [];
   private testnet: boolean = false;
@@ -109,6 +110,10 @@ export class StacksSDK {
       instance.address = instance.chainService.formatAddress(
         instance.publicKey,
       );
+      instance.btcRewardsAddress =
+        await instance.fireblocksService.getBtcSegwitAddressForVaultID(
+          vaultAccountId,
+        );
       return instance;
     } catch (error) {
       throw new Error(
@@ -131,6 +136,14 @@ export class StacksSDK {
    */
   public getAddress = (): string => {
     return this.address || "";
+  };
+
+  /**
+   * Retrieves the BTC rewards address associated with the Fireblocks vault account (derived from the same public key).
+   * @returns The BTC rewards address or empty string if not set.
+   */
+  public getBtcRewardsAddress = (): string => {
+    return this.btcRewardsAddress || "";
   };
 
   /**

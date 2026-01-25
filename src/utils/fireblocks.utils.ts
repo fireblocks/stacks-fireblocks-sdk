@@ -6,7 +6,10 @@ import {
 import { derivationPath } from "./constants";
 import { formatErrorMessage } from "./errorHandling";
 import * as fs from "fs";
+import { safeStringify } from "./helpers";
+import { createAsset } from "@stacks/transactions";
 
+// Validate Fireblocks API credentials and vaultAccountId
 export const validateApiCredentials = (
   apiKey: string,
   secretKeyPath: string,
@@ -39,6 +42,7 @@ export const validateApiCredentials = (
   }
 };
 
+// Retrieves the public key for a given vault account ID using the Fireblocks SDK.
 export const getPublicKeyForDerivationPath = async (
   fireblocksSDK: Fireblocks,
   vaultAccountId: string,
@@ -62,5 +66,90 @@ export const getPublicKeyForDerivationPath = async (
     return publicKey;
   } catch (error: any) {
     throw new Error(`Error fetching public key: ${formatErrorMessage(error)}`);
+  }
+};
+
+// Retrieves the asset addresses for a given vault account ID using the Fireblocks SDK.
+export const getAssetAddressesByVaultID = async (
+  vaultID: string | number,
+  assetId: string,
+  fireblocksSDK: Fireblocks,
+): Promise<void> => {
+  const id = typeof vaultID === "string" ? Number(vaultID) : vaultID;
+  if (!Number.isInteger(id) || id < 0) {
+    throw new Error("vaultID must be a valid non-negative integer.");
+  }
+
+  try {
+    const assetAdresses =
+      await fireblocksSDK.vaults.getVaultAccountAssetAddressesPaginated({
+        vaultAccountId: String(id),
+        assetId: assetId,
+      });
+    console.log("assetAdresses", JSON.stringify(assetAdresses.data.addresses));
+    // return publicKey;
+  } catch (error: any) {
+    throw new Error(
+      `Failed to get public key by vault ID: ${formatErrorMessage(error)}`,
+    );
+  }
+};
+
+// Checks if a wallet exists in the given vault account ID for a given asset ID.
+export const checkWalletExistsInVault = async (
+  vaultID: string | number,
+  assetId: string,
+  fireblocksSDK: Fireblocks,
+): Promise<boolean> => {
+  const id = typeof vaultID === "string" ? Number(vaultID) : vaultID;
+  if (!Number.isInteger(id) || id < 0) {
+    throw new Error("vaultID must be a valid non-negative integer.");
+  }
+
+  try {
+    const response = await fireblocksSDK.vaults.getVaultAccountAsset({
+      vaultAccountId: String(id),
+      assetId,
+    });
+
+    if (response && response.data) {
+      return true;
+    }
+
+    return false;
+  } catch (error: any) {
+    if (error.data.code === 1006 || error.data.message === "Not found") {
+      return false;
+    }
+    throw error;
+  }
+};
+
+// Creates a wallet in the given vault account ID for a given asset ID.
+export const createAssetWalletInVault = async (
+  vaultID: string | number,
+  assetId: string,
+  fireblocksSDK: Fireblocks,
+): Promise<void> => {
+  const id = typeof vaultID === "string" ? Number(vaultID) : vaultID;
+  if (!Number.isInteger(id) || id < 0) {
+    throw new Error("vaultID must be a valid non-negative integer.");
+  }
+
+  try {
+    const response = await fireblocksSDK.vaults.createVaultAccountAsset({
+      vaultAccountId: String(id),
+      assetId,
+    });
+
+    if (!response || !response.data || response.statusCode !== 200) {
+      throw new Error(
+        `Create asset wallet in vault failed: No response data received.`,
+      );
+    }
+  } catch (error: any) {
+    throw new Error(
+      `Failed to create asset wallet in vault: code: $ ${error.data.code}, Message: ${error.data.message || error}`,
+    );
   }
 };

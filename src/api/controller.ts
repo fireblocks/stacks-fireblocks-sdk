@@ -29,6 +29,21 @@ export const getAddress: Handler = async (req, res, next) => {
   }
 };
 
+// GET /:vaultId/btc-rewards-address
+export const getBtcRewardsAddress: Handler = async (req, res, next) => {
+  try {
+    const { vaultId } = req.params;
+    const address = await apiService.executeAction(
+      vaultId,
+      ActionType.GET_BTC_REWARDS_ADDRESS,
+      {},
+    );
+    res.json({ address });
+  } catch (err) {
+    next(err);
+  }
+};
+
 // GET /:vaultId/check-status
 export const checkStatus: Handler = async (req, res, next) => {
   try {
