@@ -130,7 +130,9 @@ type PoxInfo = {
   reward_phase_block_length: number | string;
   next_cycle: {
     prepare_phase_start_block_height: number | string;
+    reward_phase_start_block_height: number | string;
   };
+  current_burnchain_block_height: number | string;
 };
 
 /** Convert N cycles → until_burn_ht (inclusive) */
@@ -184,4 +186,31 @@ export function safeStringify(obj: any) {
     },
     2,
   );
+}
+
+/**
+ * Returns true if we're in a "safe" window to submit a stacking request now.
+ * Safe = (a) current reward phase, or (b) prepare phase with >= safetyBlocks left.
+ */
+export async function isSafeToSubmit(
+  safetyBlocks = stacks_info.stacking.solo.safetyBlocks,
+  poxInput: PoxInfo | { data: PoxInfo },
+): Promise<boolean> {
+  const pox: PoxInfo = (poxInput as any).data ?? (poxInput as PoxInfo);
+
+  const current = Number(pox.current_burnchain_block_height);
+  const prepStart = Number(pox.next_cycle.prepare_phase_start_block_height);
+  const rewardStart = Number(pox.next_cycle.reward_phase_start_block_height);
+
+  // If we haven't reached the next prepare phase yet, we're in reward phase → safe.
+  if (current < prepStart) return true;
+
+  // If we're in prepare phase, check remaining blocks until reward phase.
+  if (current >= prepStart && current < rewardStart) {
+    const blocksLeft = rewardStart - current;
+    return blocksLeft >= safetyBlocks;
+  }
+
+  // If we're already past the recorded next reward start, treat as safe (API will roll forward).
+  return true;
 }

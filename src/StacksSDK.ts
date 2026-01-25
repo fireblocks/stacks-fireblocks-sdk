@@ -961,14 +961,6 @@ export class StacksSDK {
    */
 
   public checkStatus = async (): Promise<CheckStatusResponse> => {
-    if (this.testnet) {
-      console.log(`[WARNING] checkStatus is not supported on testnet.`);
-      return {
-        success: false,
-        error: `checkStatus is not supported on testnet.`,
-      };
-    }
-
     if (!this.address || !this.publicKey || !this.vaultAccountId) {
       throw new Error("Address, Public Key or Vault ID are not set");
     }

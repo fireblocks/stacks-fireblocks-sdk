@@ -21,6 +21,15 @@ export const api_constants = {
 export const stacks_info = {
   stxDecimals: 6,
   stxSymbol: "STX",
+  stacking: {
+    pool: {
+      minLockCycles: 1,
+      maxLockCycles: 12,
+    },
+    solo: {
+      safetyBlocks: 30,
+    },
+  },
 };
 
 export const pagination_defaults = {
