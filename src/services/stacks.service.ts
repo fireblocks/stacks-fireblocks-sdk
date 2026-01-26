@@ -12,6 +12,7 @@ import { TokenType, Transaction, TransactionType } from "./types";
 import { STACKS_TESTNET, STACKS_MAINNET, StacksNetwork } from "@stacks/network";
 import {
   broadcastTransaction,
+  bufferCV,
   ClarityValue,
   contractPrincipalCV,
   createContractCallPayload,
@@ -30,12 +31,15 @@ import {
   someCV,
   StacksTransactionWire,
   standardPrincipalCV,
+  tupleCV,
   uintCV,
 } from "@stacks/transactions";
 import { formatErrorMessage } from "../utils/errorHandling";
 import {
+  btcAddressToPoxTuple,
   getDecimalsFromFtInfo,
   isCompressedSecp256k1PubKeyHex,
+  isSafeToSubmit,
   untilBurnHeightForCycles,
   validateAddress,
 } from "../utils/helpers";
@@ -860,6 +864,105 @@ export class StacksService {
         "allow-contract-caller",
         [contractPrincipalCV(poolAddress, poolContractName), noneCV()],
       );
+
+      return serializedContractCall;
+    } catch (error) {
+      console.error(
+        "Error building allow contract caller transaction:",
+        formatErrorMessage(error),
+      );
+      throw new Error(
+        `Failed to allow contract caller: ${formatErrorMessage(error)}`,
+      );
+    }
+  };
+
+  /**
+   * Solo stacks STX on Stacks PoX to earn rewards directly.
+   * @param senderPublicKey
+   * @param address
+   * @param amountUstx
+   * @param btcRewardAddress
+   * @param lockPeriod
+   * @param maxAmountUstx
+   * @param authId
+   * @returns the unsigned solo stack transaction.
+   */
+  public soloStack = async (
+    senderPublicKey: string,
+    address: string,
+    amountUstx: bigint,
+    btcRewardAddress: string,
+    lockPeriod: number,
+    maxAmountUstx: bigint,
+    signerSig65Hex: string,
+    authId?: bigint,
+  ): Promise<any> => {
+    try {
+      if (!validateAddress(address, this.network === STACKS_TESTNET)) {
+        throw new Error("Invalid address");
+      }
+
+      if (!isCompressedSecp256k1PubKeyHex(senderPublicKey)) {
+        throw new Error("Invalid compressed secp256k1 public key hex format");
+      }
+
+      if (!authId) {
+        authId = BigInt(Date.now());
+      }
+
+      const pox = await this.fetchPoxInfo();
+
+      const safe = await isSafeToSubmit(30, pox);
+      if (!safe) {
+        const current = Number(pox.current_burnchain_block_height);
+        const prepStart = Number(
+          pox.next_cycle.prepare_phase_start_block_height,
+        );
+        const rewardStart = Number(
+          pox.next_cycle.reward_phase_start_block_height,
+        );
+        const blocksLeft = rewardStart - current;
+
+        throw new Error(
+          `Not safe to submit solo stacking now. ` +
+            `currentBurn=${current} prepStart=${prepStart} rewardStart=${rewardStart} ` +
+            `blocksLeft=${blocksLeft}`,
+        );
+      }
+
+      const startBurnHeight = pox.current_burnchain_block_height;
+      const rewardCycleId = Number(pox.reward_cycle_id);
+      if (!Number.isFinite(rewardCycleId)) {
+        throw new Error("Missing/invalid reward_cycle_id from /v2/pox");
+      }
+
+      const { contractAddress: poxAddr, contractName: poxName } =
+        poxInfo.mainnet;
+
+      const { version, hashbytes } = btcAddressToPoxTuple(btcRewardAddress);
+
+      const serializedContractCall = await makeUnsignedContractCall({
+        contractAddress: poxAddr,
+        contractName: poxName,
+        functionName: "stack-stx",
+        functionArgs: [
+          uintCV(amountUstx),
+          tupleCV({
+            version: bufferCV(Uint8Array.from([version])),
+            hashbytes: bufferCV(hashbytes),
+          }),
+          uintCV(startBurnHeight),
+          uintCV(lockPeriod),
+          someCV(bufferCV(Buffer.from(signerSig65Hex, "hex"))),
+          bufferCV(Buffer.from(senderPublicKey, "hex")),
+          uintCV(maxAmountUstx),
+          uintCV(authId),
+        ],
+        publicKey: senderPublicKey,
+        network: this.network,
+        postConditionMode: PostConditionMode.Deny,
+      });
 
       return serializedContractCall;
     } catch (error) {

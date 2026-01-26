@@ -37,7 +37,9 @@ import { validateApiCredentials } from "./utils/fireblocks.utils";
 import {
   assertResultSuccess,
   concatSignature,
+  concatSignerSignature,
   getDecimalsFromFtInfo,
+  getPox4SignerSigDigest,
   microToStx,
   microToToken,
   parseAssetId,
@@ -463,7 +465,8 @@ export class StacksSDK {
     functionName:
       | "delegate-stx"
       | "allow-contract-caller"
-      | "revoke-delegate-stx",
+      | "revoke-delegate-stx"
+      | "solo--stack",
     poolAddress?: string,
     poolContractName?: string,
     amount?: bigint,
@@ -1051,6 +1054,53 @@ export class StacksSDK {
         success: false,
         error: `Failed to check status: ${formatErrorMessage(error)}`,
       };
+    }
+  };
+
+  /**
+   * Creates a signerSig65Hex from the provided parameters.
+   * @returns the signerSig65Hex.
+   */
+  public createSignerSig65HexFromParams = async (
+    rewardCycleId: number,
+    lockPeriod: number,
+    maxAmountUstx: bigint,
+    authId: bigint,
+  ): Promise<string> => {
+    try {
+      const network = this.testnet ? "testnet" : "mainnet";
+      let signerDigest = getPox4SignerSigDigest({
+        network: network,
+        btcRewardAddress: this.btcRewardsAddress,
+        rewardCycle: rewardCycleId,
+        lockPeriods: lockPeriod,
+        maxAmountUstx: maxAmountUstx,
+        authId: authId,
+      });
+
+      if (signerDigest.startsWith("0x")) {
+        // remove 0x prefix if present
+        signerDigest = signerDigest.slice(2);
+      }
+
+      const signerRawSig = await this.fireblocksService.signTransaction(
+        signerDigest,
+        this.vaultAccountId.toString(),
+      );
+
+      const signerSig65Hex = concatSignerSignature(
+        signerRawSig.fullSig,
+        signerRawSig.v,
+      );
+
+      return signerSig65Hex;
+    } catch (error) {
+      console.error(
+        `Error creating signerSig65Hex: ${formatErrorMessage(error)}`,
+      );
+      throw new Error(
+        `Failed to create signerSig65Hex: ${formatErrorMessage(error)}`,
+      );
     }
   };
 }

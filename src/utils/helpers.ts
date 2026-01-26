@@ -2,7 +2,17 @@ import { c32addressDecode } from "c32check";
 import { formatErrorMessage } from "./errorHandling";
 import { ftInfo, stacks_info } from "./constants";
 import { TokenType } from "../services/types";
+import {
+  decodeBtcAddressBytes,
+  pox4SignatureMessage,
+  Pox4SignatureTopic,
+} from "@stacks/stacking";
+import { StacksNetwork, StacksNetworkName } from "@stacks/network";
+import { encodeStructuredDataBytes } from "@stacks/transactions";
+import { sha256 } from "@noble/hashes/sha256";
+import { bytesToHex } from "@stacks/common";
 
+// Validate that the provided amount is a positive number.
 export function validateAmount(amount: string | number): boolean {
   try {
     const num = typeof amount === "number" ? amount : Number(amount);
@@ -49,6 +59,7 @@ export function isCompressedSecp256k1PubKeyHex(hex: string): boolean {
   return /^(02|03)[0-9a-fA-F]{64}$/.test(hex);
 }
 
+// Convert STX amount to micro units
 export function stxToMicro(amountStx: number | string): bigint {
   if (!validateAmount(amountStx)) {
     throw new Error("Invalid amount for stxToMicro conversion");
@@ -59,11 +70,13 @@ export function stxToMicro(amountStx: number | string): bigint {
   return BigInt(w) * BigInt(10 ** stacks_info.stxDecimals) + BigInt(f);
 }
 
+// Convert micro units to STX amount
 export function microToStx(micro: bigint | number | string): number {
   const microBigInt = typeof micro === "bigint" ? micro : BigInt(micro);
   return Number(microBigInt) / 10 ** stacks_info.stxDecimals;
 }
 
+// Convert token amount to micro units based on decimals
 export function tokenToMicro(
   amount: number | string,
   token: TokenType,
@@ -74,6 +87,7 @@ export function tokenToMicro(
   return BigInt(w) * BigInt(10) ** BigInt(decimals) + BigInt(frac || "0");
 }
 
+// Convert micro units to token amount based on decimals
 export function microToToken(
   micro: bigint | number | string,
   decimals: number,
@@ -83,11 +97,20 @@ export function microToToken(
   return after;
 }
 
+// Concatenate a full signature (r + s) with recovery id v to form a single hex string.
 export function concatSignature(fullSig: string, v: number): string {
   const vHex = v == 0 ? "00" : "01";
   return vHex + fullSig;
 }
 
+// Concatnate full signature for stacking signature digest
+export const concatSignerSignature = (fullSig: string, v: number): string => {
+  const vv = v >= 27 ? v - 27 : v;
+  const vHex = vv === 0 ? "00" : "01";
+  return fullSig + vHex; // r||s FIRST, then v LAST (opposite of transaction sigs)
+};
+
+// Get decimals for a fungible token from its contract ID
 export const getDecimalsFromFtInfo = (contractId: string): number => {
   const [addr, contractAndToken] = contractId.split(".");
   const [contractName, tokenName] = contractAndToken.split("::");
@@ -105,6 +128,7 @@ export const getDecimalsFromFtInfo = (contractId: string): number => {
   );
 };
 
+// Parse asset ID into contract address, contract name, and token name
 export function parseAssetId(assetId: string) {
   // "<contractAddress>.<contractName>::<tokenName>"
   const [contractPrincipal, tokenName] = assetId.split("::");
@@ -114,6 +138,7 @@ export function parseAssetId(assetId: string) {
   return { contractAddress, contractName, tokenName };
 }
 
+// Select specific fungible token balance from list
 export function selectSpeceficFTBalance(
   token: TokenType,
   balances: { token: string; balance: number }[],
@@ -153,6 +178,7 @@ export function untilBurnHeightForCycles(
   return P + cycles * cycleLen - 1;
 }
 
+// Assert that a transaction result indicates success, else log and return error details.
 export function assertResultSuccess(
   result: any,
 ): { success: true } | { success: false; error: string } {
@@ -172,6 +198,7 @@ export function assertResultSuccess(
   return { success: true };
 }
 
+// Safely stringify an object, handling BigInt and circular references.
 export function safeStringify(obj: any) {
   const seen = new WeakSet();
   return JSON.stringify(
@@ -213,4 +240,46 @@ export async function isSafeToSubmit(
 
   // If we're already past the recorded next reward start, treat as safe (API will roll forward).
   return true;
+}
+
+// Convert a BTC address to a PoX tuple (version and hashbytes).
+export function btcAddressToPoxTuple(btcAddr: string): {
+  version: number;
+  hashbytes: Uint8Array;
+} {
+  const addr = btcAddr.trim();
+
+  // decodeBtcAddressBytes throws InvalidAddressError for bad formats/prefixes
+  const { version, data } = decodeBtcAddressBytes(addr);
+
+  return {
+    version: Number(version),
+    hashbytes: data,
+  };
+}
+
+// Generate the PoX v4 signer signature digest for stacking operations.
+export function getPox4SignerSigDigest(params: {
+  network: "mainnet" | "testnet";
+  btcRewardAddress: string;
+  rewardCycle: number;
+  lockPeriods: number; // 1..12
+  maxAmountUstx: bigint;
+  authId: bigint;
+}): string {
+  const stacksNetworkName: StacksNetworkName =
+    params.network === "mainnet" ? "mainnet" : "testnet";
+
+  const { message, domain } = pox4SignatureMessage({
+    topic: Pox4SignatureTopic.StackStx, // "stack-stx"
+    poxAddress: params.btcRewardAddress,
+    rewardCycle: params.rewardCycle,
+    period: params.lockPeriods,
+    network: stacksNetworkName,
+    maxAmount: params.maxAmountUstx,
+    authId: params.authId,
+  });
+
+  const digest = sha256(encodeStructuredDataBytes({ message, domain }));
+  return "0x" + bytesToHex(digest);
 }
