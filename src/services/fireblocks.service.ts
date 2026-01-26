@@ -173,7 +173,7 @@ export class FireblocksService {
       );
     } catch (error: any) {
       throw new Error(
-        `Failed to get public key by vault ID: ${formatErrorMessage(error)}`,
+        `Failed to get BTC address for vault ID: ${formatErrorMessage(error)}`,
       );
     }
   };

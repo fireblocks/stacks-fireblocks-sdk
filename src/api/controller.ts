@@ -323,6 +323,59 @@ export const revokeDelegation: Handler = async (req, res, next) => {
   }
 };
 
+// POST /:vaultId/stacking/solo
+export const stackSolo: Handler = async (req, res, next) => {
+  try {
+    const { vaultId } = req.params;
+
+    const amountStr = String(req.query.amount || "");
+    const lockPeriodStr = String(req.query.lockPeriod || "1");
+    const authIdStr = req.query.authId ? String(req.query.authId).trim() : "";
+
+    if (!amountStr) {
+      res.status(400).json({ error: "Bad Request: amount is required" });
+      return;
+    }
+
+    const amount = Number(amountStr);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      res.status(400).json({ error: "Bad Request: amount must be > 0" });
+      return;
+    }
+
+    const lockPeriod = Number(lockPeriodStr);
+    if (!Number.isInteger(lockPeriod) || lockPeriod < 1 || lockPeriod > 12) {
+      res.status(400).json({
+        error: "Bad Request: lockPeriod must be an integer between 1 and 12",
+      });
+      return;
+    }
+
+    // authId is optional; must be an integer string if provided
+    let authId: bigint | undefined = undefined;
+    if (authIdStr) {
+      // reject decimals / scientific notation / garbage early
+      if (!/^[0-9]+$/.test(authIdStr)) {
+        res.status(400).json({
+          error: "Bad Request: authId must be a positive integer string",
+        });
+        return;
+      }
+      authId = BigInt(authIdStr);
+    }
+
+    const tx = await apiService.executeAction(vaultId, ActionType.STACK_SOLO, {
+      amount, // human STX amount (your SDK converts using stxToMicro)
+      lockPeriod, // cycles (1..12)
+      authId, // bigint | undefined
+    });
+
+    res.json(tx);
+  } catch (err) {
+    next(err);
+  }
+};
+
 // GET /metrics
 export const getPoolMetrics: Handler = async (req, res, next) => {
   try {

@@ -40,6 +40,7 @@ import {
   concatSignerSignature,
   getDecimalsFromFtInfo,
   getPox4SignerSigDigest,
+  isSafeToSubmit,
   microToStx,
   microToToken,
   parseAssetId,
@@ -49,6 +50,8 @@ import {
   validateAddress,
 } from "./utils/helpers";
 import { createMessageSignature } from "@stacks/transactions/dist/wire/create";
+import { error } from "node:console";
+import { StacksTransactionWire } from "@stacks/transactions";
 
 export class StacksSDK {
   private fireblocksService: FireblocksService;
@@ -466,45 +469,86 @@ export class StacksSDK {
       | "delegate-stx"
       | "allow-contract-caller"
       | "revoke-delegate-stx"
-      | "solo--stack",
+      | "solo-stack",
     poolAddress?: string,
     poolContractName?: string,
     amount?: bigint,
     lockPeriod?: number,
+    signerSig65Hex?: string,
+    startBurnHeight?: number,
+    authId?: bigint,
     note?: string,
   ): Promise<any> => {
     try {
-      if (functionName !== "revoke-delegate-stx" && !poolAddress) {
-        throw new Error(`${functionName} requires a valid pool address`);
-      }
-
-      if (functionName === "allow-contract-caller" && !poolContractName) {
+      if (
+        functionName === "allow-contract-caller" &&
+        (!poolContractName || !poolAddress)
+      ) {
         throw new Error(
-          "Pool contract name must be provided for allow-contract-caller",
+          "Pool contract name and address must be provided for allow-contract-caller",
         );
       }
 
-      if (functionName === "delegate-stx" && (!amount || !lockPeriod)) {
+      if (
+        functionName === "delegate-stx" &&
+        (!amount || !lockPeriod || !poolAddress)
+      ) {
         throw new Error(
-          "Amount and lock period must be provided for delegate-stx",
+          "Amount, lock period, and pool address must be provided for delegate-stx",
         );
       }
 
-      const transactionToSign =
-        functionName === "allow-contract-caller"
-          ? await this.chainService.allowPoxContractCaller(
-              this.publicKey,
-              poolAddress,
-              poolContractName!,
-            )
-          : functionName === "delegate-stx"
-            ? await this.chainService.delegateStx(
-                this.publicKey,
-                poolAddress,
-                amount!,
-                lockPeriod!,
-              )
-            : await this.chainService.revokeStxDelegation(this.publicKey);
+      if (
+        functionName === "solo-stack" &&
+        (!amount || !lockPeriod || !signerSig65Hex || !startBurnHeight)
+      ) {
+        throw new Error(
+          "Amount, lock period, signer signature, and start burn height must be provided for solo-stack",
+        );
+      }
+
+      let transactionToSign: {
+        unsignedContractCall: StacksTransactionWire;
+        preSignSigHash: string;
+      };
+
+      switch (functionName) {
+        case "allow-contract-caller":
+          transactionToSign = await this.chainService.allowPoxContractCaller(
+            this.publicKey,
+            poolAddress,
+            poolContractName!,
+          );
+          break;
+        case "delegate-stx":
+          transactionToSign = await this.chainService.delegateStx(
+            this.publicKey,
+            poolAddress,
+            amount!,
+            lockPeriod!,
+          );
+          break;
+        case "revoke-delegate-stx":
+          transactionToSign = await this.chainService.revokeStxDelegation(
+            this.publicKey,
+          );
+          break;
+        case "solo-stack":
+          transactionToSign = await this.chainService.soloStack(
+            this.publicKey,
+            this.address,
+            amount,
+            this.btcRewardsAddress,
+            lockPeriod,
+            amount, // maxAmount ( >= amount )
+            signerSig65Hex,
+            startBurnHeight,
+            authId,
+          );
+          break;
+        default:
+          throw new Error(`Unknown contract call function: ${functionName}`);
+      }
 
       const rawSignature = await this.fireblocksService.signTransaction(
         transactionToSign.preSignSigHash,
@@ -803,26 +847,26 @@ export class StacksSDK {
       throw new Error("Address, Public Key or Vault ID are not set");
     }
 
-    const status = await this.checkStatus();
-    if (!status.success) {
-      return {
-        success: false,
-        error: `Failed to check account status before delegating STX: ${status.error}`,
-      };
-    }
-
-    if (status.data?.delegation.is_delegated) {
-      return {
-        success: false,
-        error: `Account already has an active delegation to ${status.data.delegation.delegated_to}, if you wish to change delegation please revoke existing delegation first, run checkStatus for more info.`,
-      };
-    }
-
-    console.log(
-      `Delegating ${amount} STX to pool: ${poolsAddress} for ${lockPeriod} cycles`,
-    );
-
     try {
+      const status = await this.checkStatus();
+      if (!status.success) {
+        return {
+          success: false,
+          error: `Failed to check account status before delegating STX: ${status.error}`,
+        };
+      }
+
+      if (status.data?.delegation.is_delegated) {
+        return {
+          success: false,
+          error: `Account already has an active delegation to ${status.data.delegation.delegated_to}, if you wish to change delegation please revoke existing delegation first, run checkStatus for more info.`,
+        };
+      }
+
+      console.log(
+        `Delegating ${amount} STX to pool: ${poolsAddress} for ${lockPeriod} cycles`,
+      );
+
       // Delegate STX to pool address
       const delegateResult = await this.buildSignSendContractCall(
         "delegate-stx",
@@ -922,7 +966,7 @@ export class StacksSDK {
   /**
    * Revoke any STX delegation to any address for this account.
    * @returns A promise that resolves to a {CreateTransactionResponse}.
-   * @throws {Error} If the address, public key, or vault ID are not set, or if the stacking process fails.
+   * @throws {Error} If the address, public key, or vault ID are not set, or if the process fails.
    */
 
   public revokeDelegation = async (): Promise<CreateTransactionResponse> => {
@@ -973,7 +1017,6 @@ export class StacksSDK {
   /**
    * Check account status: balance total, locked amount and delegation status.
    * @returns A promise that resolves to a {CreateTransactionResponse}.
-   * @throws {Error} If the address, public key, or vault ID are not set, or if the stacking process fails.
    */
 
   public checkStatus = async (): Promise<CheckStatusResponse> => {
@@ -1058,14 +1101,91 @@ export class StacksSDK {
   };
 
   /**
+   * Check eligibility for solo stacking.
+   * @returns A promise that resolves to an object indicating eligibility and reason if not eligible.
+   */
+  public checkEligibility = async (
+    pox: any,
+    amount: number,
+  ): Promise<{ eligible: boolean; reason?: string }> => {
+    try {
+      const status = await this.checkStatus();
+      if (!status.success) {
+        throw new Error(
+          `Failed to check account status before solo stacking STX: ${status.error}`,
+        );
+      }
+
+      if (status.data?.delegation.is_delegated) {
+        return {
+          eligible: false,
+          reason: `Account already has an active delegation to ${status.data.delegation.delegated_to}, please revoke existing delegation first.`,
+        };
+      }
+
+      const safe = await isSafeToSubmit(30, pox);
+      if (!safe) {
+        const current = Number(pox.current_burnchain_block_height);
+        const prepStart = Number(
+          pox.next_cycle.prepare_phase_start_block_height,
+        );
+        const rewardStart = Number(
+          pox.next_cycle.reward_phase_start_block_height,
+        );
+        const blocksLeft = rewardStart - current;
+
+        return {
+          eligible: false,
+          reason:
+            `Not safe to submit solo stacking now. ` +
+            `currentBurn=${current} prepStart=${prepStart} rewardStart=${rewardStart} ` +
+            `blocksLeft=${blocksLeft}`,
+        };
+      }
+
+      if (stxToMicro(amount) < BigInt(pox.min_amount_ustx)) {
+        return {
+          eligible: false,
+          reason: `Amount to stack is less than the minimum required amount of ${microToStx(BigInt(pox.min_amount_ustx))} STX.`,
+        };
+      }
+
+      const balance = await this.getBalance();
+      if (!balance.success) {
+        throw new Error(
+          `Could not fetch account balance to check funds sufficiency`,
+        );
+      }
+
+      if (stxToMicro(amount) > stxToMicro(balance.balance)) {
+        return {
+          eligible: false,
+          reason: `Amount to stack is greater than the available balance of ${balance.balance} STX.`,
+        };
+      }
+
+      return {
+        eligible: true,
+      };
+    } catch (error) {
+      console.error(`Error checking eligibility: ${formatErrorMessage(error)}`);
+      return {
+        eligible: false,
+        reason: `Failed to check eligibility: ${formatErrorMessage(error)}`,
+      };
+    }
+  };
+
+  /**
    * Creates a signerSig65Hex from the provided parameters.
    * @returns the signerSig65Hex.
+   * @throws {Error} If vault ID is not set, or if the process fails.
    */
   public createSignerSig65HexFromParams = async (
     rewardCycleId: number,
     lockPeriod: number,
     maxAmountUstx: bigint,
-    authId: bigint,
+    authId?: bigint,
   ): Promise<string> => {
     try {
       const network = this.testnet ? "testnet" : "mainnet";
@@ -1101,6 +1221,87 @@ export class StacksSDK {
       throw new Error(
         `Failed to create signerSig65Hex: ${formatErrorMessage(error)}`,
       );
+    }
+  };
+
+  /**
+   * Solo stacks a specified amount of STX for a given lock period.
+   * @param amount - The amount of STX to stack.
+   * @param lockPeriod - The number of cycles to lock the STX.
+   * @param authId - Optional authorization ID for the transaction.
+   * @param note - Optional note for raw signing.
+   * @returns A response indicating success or failure of the transaction.
+   */
+  public stackSolo = async (
+    amount: number,
+    lockPeriod: number, // Number of cycles
+    authId?: bigint,
+  ): Promise<CreateTransactionResponse> => {
+    try {
+      if (!this.address || !this.publicKey || !this.vaultAccountId) {
+        throw new Error("Address, Public Key or Vault ID are not set");
+      }
+
+      console.log(`Solo stacking ${amount} STX for ${lockPeriod} cycles`);
+
+      if (!authId) {
+        authId = BigInt(Date.now());
+      }
+
+      const poxResponse = await this.chainService.fetchPoxInfo();
+      const pox = poxResponse.data;
+
+      const eligibilityCheck = await this.checkEligibility(pox, amount);
+      if (!eligibilityCheck.eligible) {
+        return {
+          success: false,
+          error: `Account not eligible for solo stacking: ${eligibilityCheck.reason}`,
+        };
+      }
+
+      const startBurnHeight = pox.current_burnchain_block_height;
+      const rewardCycleId = Number(pox.reward_cycle_id);
+      if (!Number.isFinite(rewardCycleId)) {
+        throw new Error("Missing/invalid reward_cycle_id from /v2/pox");
+      }
+
+      const signerSig65Hex = await this.createSignerSig65HexFromParams(
+        rewardCycleId,
+        lockPeriod,
+        stxToMicro(amount),
+        authId,
+      );
+
+      const result = await this.buildSignSendContractCall(
+        "solo-stack",
+        undefined,
+        undefined,
+        stxToMicro(amount),
+        lockPeriod,
+        signerSig65Hex,
+        startBurnHeight,
+        authId,
+      );
+
+      const assertResult = assertResultSuccess(result);
+      if (assertResult.success === false) {
+        return {
+          success: false,
+          error: `Failed to solo stack STX: ${assertResult.error}`,
+        };
+      }
+
+      console.log(`Successfully solo stacked ${amount} STX`);
+      return {
+        success: true,
+        txHash: result.txid,
+      };
+    } catch (error) {
+      console.error(`Error solo stacking: ${formatErrorMessage(error)}`);
+      return {
+        success: false,
+        error: `Failed to solo stack: ${formatErrorMessage(error)}`,
+      };
     }
   };
 }

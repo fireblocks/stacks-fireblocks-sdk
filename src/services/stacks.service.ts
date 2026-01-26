@@ -741,7 +741,7 @@ export class StacksService {
       }
 
       const { contractAddress: poxAddr, contractName: poxName } =
-        poxInfo.mainnet;
+        this.network === STACKS_TESTNET ? poxInfo.testnet : poxInfo.mainnet;
 
       const poxResponse = await this.fetchPoxInfo();
 
@@ -803,7 +803,7 @@ export class StacksService {
       }
 
       const { contractAddress: poxAddr, contractName: poxName } =
-        poxInfo.mainnet;
+        this.network === STACKS_TESTNET ? poxInfo.testnet : poxInfo.mainnet;
 
       const serializedContractCall = await this.serializeContractCall(
         senderPublicKey,
@@ -855,7 +855,7 @@ export class StacksService {
       }
 
       const { contractAddress: poxAddr, contractName: poxName } =
-        poxInfo.mainnet;
+        this.network === STACKS_TESTNET ? poxInfo.testnet : poxInfo.mainnet;
 
       const serializedContractCall = await this.serializeContractCall(
         senderPublicKey,
@@ -896,8 +896,12 @@ export class StacksService {
     lockPeriod: number,
     maxAmountUstx: bigint,
     signerSig65Hex: string,
+    startBurnHeight: number,
     authId?: bigint,
-  ): Promise<any> => {
+  ): Promise<{
+    unsignedContractCall: StacksTransactionWire;
+    preSignSigHash: string;
+  }> => {
     try {
       if (!validateAddress(address, this.network === STACKS_TESTNET)) {
         throw new Error("Invalid address");
@@ -911,42 +915,17 @@ export class StacksService {
         authId = BigInt(Date.now());
       }
 
-      const pox = await this.fetchPoxInfo();
-
-      const safe = await isSafeToSubmit(30, pox);
-      if (!safe) {
-        const current = Number(pox.current_burnchain_block_height);
-        const prepStart = Number(
-          pox.next_cycle.prepare_phase_start_block_height,
-        );
-        const rewardStart = Number(
-          pox.next_cycle.reward_phase_start_block_height,
-        );
-        const blocksLeft = rewardStart - current;
-
-        throw new Error(
-          `Not safe to submit solo stacking now. ` +
-            `currentBurn=${current} prepStart=${prepStart} rewardStart=${rewardStart} ` +
-            `blocksLeft=${blocksLeft}`,
-        );
-      }
-
-      const startBurnHeight = pox.current_burnchain_block_height;
-      const rewardCycleId = Number(pox.reward_cycle_id);
-      if (!Number.isFinite(rewardCycleId)) {
-        throw new Error("Missing/invalid reward_cycle_id from /v2/pox");
-      }
-
       const { contractAddress: poxAddr, contractName: poxName } =
-        poxInfo.mainnet;
+        this.network === STACKS_TESTNET ? poxInfo.testnet : poxInfo.mainnet;
 
       const { version, hashbytes } = btcAddressToPoxTuple(btcRewardAddress);
 
-      const serializedContractCall = await makeUnsignedContractCall({
-        contractAddress: poxAddr,
-        contractName: poxName,
-        functionName: "stack-stx",
-        functionArgs: [
+      const serializedContractCall = await this.serializeContractCall(
+        senderPublicKey,
+        poxAddr,
+        poxName,
+        "stack-stx",
+        [
           uintCV(amountUstx),
           tupleCV({
             version: bufferCV(Uint8Array.from([version])),
@@ -959,20 +938,15 @@ export class StacksService {
           uintCV(maxAmountUstx),
           uintCV(authId),
         ],
-        publicKey: senderPublicKey,
-        network: this.network,
-        postConditionMode: PostConditionMode.Deny,
-      });
+      );
 
       return serializedContractCall;
     } catch (error) {
       console.error(
-        "Error building allow contract caller transaction:",
+        "Error building solo stack transaction:",
         formatErrorMessage(error),
       );
-      throw new Error(
-        `Failed to allow contract caller: ${formatErrorMessage(error)}`,
-      );
+      throw new Error(`Failed to solo stack: ${formatErrorMessage(error)}`);
     }
   };
 }

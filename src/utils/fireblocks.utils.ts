@@ -118,7 +118,7 @@ export const checkWalletExistsInVault = async (
 
     return false;
   } catch (error: any) {
-    if (error.data.code === 1006 || error.data.message === "Not found") {
+    if (error.message === "Not found") {
       return false;
     }
     throw error;

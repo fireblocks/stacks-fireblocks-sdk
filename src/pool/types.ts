@@ -35,6 +35,7 @@ export enum ActionType {
   ALLOW_CONTRACT_CALLER = "allowContractCaller",
   REVOKE_DELEGATION = "revokeDelegation",
   CHECK_STATUS = "checkStatus",
+  STACK_SOLO = "stackSolo",
 }
 
 export interface SdkManagerMetrics {

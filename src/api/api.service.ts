@@ -55,6 +55,13 @@ export class ApiService {
         case ActionType.CHECK_STATUS:
           result = await sdk.checkStatus();
           break;
+        case ActionType.STACK_SOLO:
+          result = await sdk.stackSolo(
+            params.amount,
+            params.lockPeriod,
+            params.authId,
+          );
+          break;
         case ActionType.DELEGATE_TO_POOL:
           result = await sdk.delegateToPool(
             params.poolAddress,

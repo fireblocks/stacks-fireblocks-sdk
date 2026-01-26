@@ -374,6 +374,45 @@ router.post(
   controller.revokeDelegation,
 );
 
+/**
+ * @openapi
+ * /{vaultId}/stacking/solo:
+ *   post:
+ *     summary: Solo stack STX (PoX-4)
+ *     description: >
+ *       Initiates a solo stacking request using pox-4::stack-stx.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *       - in: query
+ *         name: amount
+ *         required: true
+ *         schema:
+ *           type: number
+ *         description: Human STX amount to solo stack (e.g. 1000).
+ *       - in: query
+ *         name: lockPeriod
+ *         required: true
+ *         schema:
+ *           type: number
+ *           minimum: 1
+ *           maximum: 12
+ *         description: Number of cycles to lock (1-12).
+ *       - in: query
+ *         name: authId
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Optional integer string (bigint) used for signer-sig replay protection.
+ *     responses:
+ *       200:
+ *         description: Solo stacking transaction submitted
+ *       400:
+ *         description: Invalid input
+ *       500:
+ *         description: Internal server error
+ */
+router.post("/:vaultId/stacking/solo", validateVaultId, controller.stackSolo);
+
 // Pool metrics
 /**
  * @openapi
