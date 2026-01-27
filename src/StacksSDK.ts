@@ -27,11 +27,13 @@ import {
   FireblocksConfig,
   GetFtBalancesResponse,
   GetNativeBalanceResponse,
+  GetTransactionStatusResponse,
   TokenType,
   Transaction,
+  TransactionDetails,
   TransactionType,
 } from "./services/types";
-import { pagination_defaults, poxInfo } from "./utils/constants";
+import { pagination_defaults, POX4_ERRORS, poxInfo } from "./utils/constants";
 import { formatErrorMessage } from "./utils/errorHandling";
 import { validateApiCredentials } from "./utils/fireblocks.utils";
 import {
@@ -44,6 +46,7 @@ import {
   microToStx,
   microToToken,
   parseAssetId,
+  parseClarityErrCode,
   safeStringify,
   stxToMicro,
   tokenToMicro,
@@ -170,6 +173,55 @@ export class StacksSDK {
       };
     } catch (error) {
       console.log(`Failed to get balance: ${formatErrorMessage(error)}`);
+      return {
+        success: false,
+        error: formatErrorMessage(error),
+      };
+    }
+  };
+
+  /**
+
+   */
+  public getTxStatusById = async (
+    txId: string,
+  ): Promise<GetTransactionStatusResponse> => {
+    if (!txId || typeof txId !== "string") {
+      console.log("StacksSDK.getTxStatusById() error: invalid transaction ID.");
+      throw new Error("Transaction ID is invalid.");
+    }
+    try {
+      const transaction = await this.chainService.getTxStatusById(txId);
+
+      if (!transaction) {
+        return { success: false, error: "Transaction not found." };
+      }
+
+      let txDetails: TransactionDetails;
+
+      txDetails = {
+        tx_id: transaction.tx_id,
+        tx_status: transaction.tx_status,
+        tx_result: transaction.tx_result,
+        full_tx_details: transaction,
+      };
+
+      if (transaction.tx_status !== "success") {
+        const errorNumber = parseClarityErrCode(transaction.tx_result);
+        const error = POX4_ERRORS[errorNumber];
+        txDetails.tx_error = error
+          ? `${error.name}`
+          : "Unknown error occurred.";
+      }
+
+      return {
+        success: true,
+        data: txDetails,
+      };
+    } catch (error) {
+      console.log(
+        `Failed to get transaction status: ${formatErrorMessage(error)}`,
+      );
       return {
         success: false,
         error: formatErrorMessage(error),

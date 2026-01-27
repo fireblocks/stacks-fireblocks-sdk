@@ -580,6 +580,34 @@ export class StacksService {
   };
 
   /**
+   *  Retrieves the status of a transaction from the Stacks network.
+   * @param txid - The transaction ID to check the status for.
+   * @returns - Json object containing transaction details.
+   */
+  public getTxStatusById = async (txid: string): Promise<any> => {
+    try {
+      const response = await this.axiosClient.get(
+        `${this.stackBaseUrl}/extended/v1/tx/${txid}`,
+      );
+
+      if (!response || !response.data || response.status !== 200) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      return response.data;
+    } catch (error) {
+      console.error(
+        `Error getting transaction status: ${formatErrorMessage(error)}`,
+      );
+      throw new Error(
+        `Failed to get transaction status for txid ${txid}: ${formatErrorMessage(
+          error,
+        )}`,
+      );
+    }
+  };
+
+  /**
    * Retrieves the transaction history for a given address.
    * @param address - The Stacks address to retrieve the transaction history for.
    * @param limit - The maximum number of transactions to retrieve.

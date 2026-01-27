@@ -62,6 +62,10 @@ export class ApiService {
             params.authId,
           );
           break;
+        case ActionType.GET_TX_STATUS_BY_ID:
+          result = await sdk.getTxStatusById(params.txId);
+          break;
+
         case ActionType.DELEGATE_TO_POOL:
           result = await sdk.delegateToPool(
             params.poolAddress,

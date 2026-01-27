@@ -323,6 +323,28 @@ export const revokeDelegation: Handler = async (req, res, next) => {
   }
 };
 
+// GET /:vaultId/transactions/:txId
+export const getTxStatusById: Handler = async (req, res, next) => {
+  try {
+    const { vaultId, txId } = req.params;
+
+    if (!txId || typeof txId !== "string") {
+      res.status(400).json({ error: "Bad Request: txId is required" });
+      return;
+    }
+
+    const tx = await apiService.executeAction(
+      vaultId,
+      ActionType.GET_TX_STATUS_BY_ID,
+      { txId },
+    );
+
+    res.json(tx);
+  } catch (err) {
+    next(err);
+  }
+};
+
 // POST /:vaultId/stacking/solo
 export const stackSolo: Handler = async (req, res, next) => {
   try {

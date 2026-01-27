@@ -124,6 +124,34 @@ router.get("/:vaultId/publicKey", validateVaultId, controller.getPublicKey);
  */
 router.get("/:vaultId/check-status", validateVaultId, controller.checkStatus);
 
+/**
+ * @openapi
+ * /{vaultId}/transactions/{txId}:
+ *   get:
+ *     summary: Get transaction status by txid
+ *     description: Retrieves status and details for a specific transaction ID.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *       - in: path
+ *         name: txId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Transaction ID (txid) to fetch.
+ *     responses:
+ *       200:
+ *         description: Transaction status fetched successfully
+ *       400:
+ *         description: Invalid input
+ *       500:
+ *         description: Internal server error
+ */
+router.get(
+  "/:vaultId/transactions/:txId",
+  validateVaultId,
+  controller.getTxStatusById,
+);
+
 // Balance endpoints
 
 /**

@@ -280,3 +280,21 @@ export function getPox4SignerSigDigest(params: {
   const digest = sha256(encodeStructuredDataBytes({ message, domain }));
   return "0x" + bytesToHex(digest);
 }
+
+/**
+ * Extracts the Clarity error code from a tx_result like:
+ * { hex: "0x...", repr: "(err 3)" }
+ *
+ * Returns the number (e.g. 3) or null if it's not an (err N).
+ */
+export function parseClarityErrCode(txResult?: {
+  repr?: string | null;
+}): number | null {
+  const repr = txResult?.repr;
+  if (typeof repr !== "string") return null;
+
+  const m = repr.match(/^\(err\s+u?(\d+)\)$/);
+  if (!m) return null;
+
+  return Number(m[1]);
+}

@@ -34,6 +34,20 @@ export type GetTransactionHistoryResponse = {
   error?: string;
 };
 
+export type TransactionDetails = {
+  tx_id: string;
+  tx_status: string;
+  tx_result: any;
+  full_tx_details?: any;
+  tx_error?: string;
+};
+
+export type GetTransactionStatusResponse = {
+  success: boolean;
+  data?: TransactionDetails;
+  error?: string;
+};
+
 export type Transaction = {
   type: TransactionType.STX | TransactionType.FungibleToken;
   tokenName?: string;

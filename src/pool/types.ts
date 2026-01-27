@@ -36,6 +36,7 @@ export enum ActionType {
   REVOKE_DELEGATION = "revokeDelegation",
   CHECK_STATUS = "checkStatus",
   STACK_SOLO = "stackSolo",
+  GET_TX_STATUS_BY_ID = "getTxStatusById",
 }
 
 export interface SdkManagerMetrics {
