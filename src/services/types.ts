@@ -54,6 +54,7 @@ export type CheckStatusData = {
     lock_height: number | null;
     burnchain_lock_height: number | null;
     burnchain_unlock_height: number | null;
+    total_miner_rewards_received: number | null;
   };
   delegation: {
     is_delegated: boolean;
