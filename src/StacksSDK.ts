@@ -1129,23 +1129,11 @@ export class StacksSDK {
         };
       }
 
-      const safe = await isSafeToSubmit(30, pox);
-      if (!safe) {
-        const current = Number(pox.current_burnchain_block_height);
-        const prepStart = Number(
-          pox.next_cycle.prepare_phase_start_block_height,
-        );
-        const rewardStart = Number(
-          pox.next_cycle.reward_phase_start_block_height,
-        );
-        const blocksLeft = rewardStart - current;
-
+      const safteyCheckResponse = isSafeToSubmit(pox);
+      if (!safteyCheckResponse.safe) {
         return {
           eligible: false,
-          reason:
-            `Not safe to submit solo stacking now. ` +
-            `currentBurn=${current} prepStart=${prepStart} rewardStart=${rewardStart} ` +
-            `blocksLeft=${blocksLeft}`,
+          reason: `Too close to prepare phase boundary, try again next cycle`,
         };
       }
 

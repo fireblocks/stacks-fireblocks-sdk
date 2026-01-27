@@ -27,7 +27,7 @@ export const stacks_info = {
       maxLockCycles: 12,
     },
     solo: {
-      safetyBlocks: 30,
+      safetyBlocks: 10,
     },
   },
 };
