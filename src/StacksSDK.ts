@@ -53,7 +53,6 @@ import {
   validateAddress,
 } from "./utils/helpers";
 import { createMessageSignature } from "@stacks/transactions/dist/wire/create";
-import { error } from "node:console";
 import { StacksTransactionWire } from "@stacks/transactions";
 
 export class StacksSDK {

@@ -6,8 +6,6 @@ import {
 import { derivationPath } from "./constants";
 import { formatErrorMessage } from "./errorHandling";
 import * as fs from "fs";
-import { safeStringify } from "./helpers";
-import { createAsset } from "@stacks/transactions";
 
 // Validate Fireblocks API credentials and vaultAccountId
 export const validateApiCredentials = (

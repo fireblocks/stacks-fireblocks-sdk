@@ -7,7 +7,7 @@ import {
   pox4SignatureMessage,
   Pox4SignatureTopic,
 } from "@stacks/stacking";
-import { StacksNetwork, StacksNetworkName } from "@stacks/network";
+import { StacksNetworkName } from "@stacks/network";
 import { encodeStructuredDataBytes } from "@stacks/transactions";
 import { sha256 } from "@noble/hashes/sha256";
 import { bytesToHex } from "@stacks/common";

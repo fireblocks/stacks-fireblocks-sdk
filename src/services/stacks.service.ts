@@ -7,7 +7,7 @@
  * This service abstracts the complexity of direct SDK usage and provides utility methods for common blockchain operations.
  */
 
-import axios, { AxiosInstance, create } from "axios";
+import axios, { AxiosInstance } from "axios";
 import { TokenType, Transaction, TransactionType } from "./types";
 import { STACKS_TESTNET, STACKS_MAINNET, StacksNetwork } from "@stacks/network";
 import {
@@ -39,7 +39,6 @@ import {
   btcAddressToPoxTuple,
   getDecimalsFromFtInfo,
   isCompressedSecp256k1PubKeyHex,
-  isSafeToSubmit,
   untilBurnHeightForCycles,
   validateAddress,
 } from "../utils/helpers";
