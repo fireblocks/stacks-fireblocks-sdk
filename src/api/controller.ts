@@ -206,10 +206,6 @@ export const delegateToPool: Handler = async (req, res, next) => {
     const lockPeriodStr = String(req.query.lockPeriod || "1");
     const pool = String(req.query.pool || "FAST_POOL").trim();
 
-    console.log(
-      `[DEBUG] delegateToPool called with pool=${pool}, amount=${amountStr}, lockPeriod=${lockPeriodStr}`,
-    );
-
     if (!pool || !amountStr) {
       res.status(400).json({
         error: "Bad Request: pool and amount are required",
@@ -245,10 +241,6 @@ export const delegateToPool: Handler = async (req, res, next) => {
     const poolAddress = poolInfo[poolType].poolAddress;
     const poolContractName = poolInfo[poolType].poolContractName;
 
-    console.log(
-      `[DEBUG] delegateToPoolresolved to poolAddress=${poolAddress}, poolContractName=${poolContractName}`,
-    );
-
     // FT transfer
     const tx = await apiService.executeAction(
       vaultId,
@@ -267,8 +259,6 @@ export const allowContractCaller: Handler = async (req, res, next) => {
     const { vaultId } = req.params;
 
     const pool = String(req.query.pool || "FAST_POOL").trim();
-
-    console.log(`[DEBUG] allowContractCaller called with pool=${pool}`);
 
     if (!pool) {
       res.status(400).json({
@@ -290,10 +280,6 @@ export const allowContractCaller: Handler = async (req, res, next) => {
 
     const poolAddress = poolInfo[poolType].poolAddress;
     const poolContractName = poolInfo[poolType].poolContractName;
-
-    console.log(
-      `[DEBUG] delegateToPoolresolved to poolAddress=${poolAddress}, poolContractName=${poolContractName}`,
-    );
 
     // FT transfer
     const tx = await apiService.executeAction(

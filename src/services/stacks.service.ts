@@ -223,13 +223,6 @@ export class StacksService {
         network: this.network,
       });
 
-      console.log(
-        "[DEBUG] Estimated transaction fee:",
-        high.fee,
-        medium.fee,
-        low.fee,
-      );
-
       return medium.fee;
     } catch (error) {
       console.error(
@@ -419,18 +412,6 @@ export class StacksService {
       if (!contractName || !functionName) {
         throw new Error("Contract name and function name must be provided");
       }
-
-      console.log(`[DEBUG] Parameters for serializeContractCall:
-      senderPublicKey: ${senderPublicKey},
-      contractAddress: ${contractAddress},
-      contractName: ${contractName},
-      functionName: ${functionName},
-      `);
-
-      console.log(
-        "functionArgs:",
-        util.inspect(functionArgs, { depth: null, colors: true }),
-      );
 
       const unsignedContractCall = await makeUnsignedContractCall({
         contractAddress,
@@ -780,13 +761,6 @@ export class StacksService {
         lockPeriod,
         poxResponse,
       );
-
-      console.log(`[DEBUG] Delegating STX:
-      delegateTo: ${delegateTo},
-      amount: ${amount},
-      lockPeriod (cycles): ${lockPeriod},
-      until_burn_ht: ${until_burn_ht}
-      `);
 
       const serializedContractCall = await this.serializeContractCall(
         senderPublicKey,

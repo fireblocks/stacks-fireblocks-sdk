@@ -84,7 +84,7 @@ export const getAssetAddressesByVaultID = async (
         vaultAccountId: String(id),
         assetId: assetId,
       });
-    console.log("assetAdresses", JSON.stringify(assetAdresses.data.addresses));
+
     // return publicKey;
   } catch (error: any) {
     throw new Error(

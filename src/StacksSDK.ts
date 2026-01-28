@@ -989,11 +989,6 @@ export class StacksSDK {
 
       const balanceData = balanceResponse.data;
 
-      console.log(
-        `[DEBUG] Delegation data: ${JSON.stringify(delegationData, null, 2)}`,
-      );
-      console.log(`[DEBUG] Balance data: ${safeStringify(balanceData)}`);
-
       const stxBalMicro = BigInt(balanceData.stx.balance ?? "0");
       const stxLockedMicro = BigInt(balanceData.stx.locked ?? "0");
       const totalMinerRewardsRecievedMicro = BigInt(
