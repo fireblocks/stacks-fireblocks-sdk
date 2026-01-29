@@ -12,8 +12,24 @@ const apiConfig: ApiServiceConfig = {
   basePath: (process.env.FIREBLOCKS_BASE_PATH as BasePath) || BasePath.US,
   testnet: (process.env.NETWORK ?? "").toLowerCase() === "testnet",
   // Optional: customize pool size/timeouts here
-  poolConfig: {},
+  poolConfig: {
+    maxPoolSize: parseInt(process.env.POOL_MAX_SIZE || "100"),
+    idleTimeoutMs: parseInt(process.env.POOL_IDLE_TIMEOUT_MS || "1800000"),
+    cleanupIntervalMs: parseInt(
+      process.env.POOL_CLEANUP_INTERVAL_MS || "300000",
+    ),
+  },
 };
+
+// Validate required environment variables
+if (apiConfig.apiKey === "") {
+  console.error("FIREBLOCKS_API_KEY is not set in environment variables");
+  throw new Error("InvalidEnvParams : FIREBLOCKS_API_KEY is required");
+}
+if (apiConfig.apiSecret === "") {
+  console.error("FIREBLOCKS_API_SECRET is not set in environment variables");
+  throw new Error("InvalidEnvParams : FIREBLOCKS_API_SECRET is required");
+}
 
 export class ApiService {
   private sdkManager: SdkManager;
