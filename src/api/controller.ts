@@ -181,8 +181,6 @@ export const createTransaction: Handler = async (req, res, next) => {
     const mapUiToTokenType: Record<string, TokenType> = {
       STX: TokenType.STX,
       sBTC: TokenType.sBTC,
-      USDC: TokenType.USDC,
-      USDH: TokenType.USDH,
       Custom: TokenType.CUSTOM,
     };
     const tokenType = mapUiToTokenType[assetUi];

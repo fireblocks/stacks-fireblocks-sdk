@@ -272,7 +272,7 @@ router.get(
  *         required: true
  *         schema:
  *           type: string
- *           enum: [STX, sBTC, USDC, USDH, Custom]
+ *           enum: [STX, sBTC,Custom]
  *         description: Asset to transfer. Select "Custom" to specify a custom SIP-010 token.
  *       - in: query
  *         name: tokenContractAddress
