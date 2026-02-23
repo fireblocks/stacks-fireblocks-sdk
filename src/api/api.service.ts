@@ -109,6 +109,8 @@ export class ApiService {
             params.recipientAddress,
             params.amount,
             params.tokenType,
+            params.tokenContractAddress,
+            params.tokenContractName,
             params.note,
           );
           break;

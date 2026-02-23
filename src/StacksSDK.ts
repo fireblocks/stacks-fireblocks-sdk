@@ -245,6 +245,8 @@ export class StacksSDK {
     try {
       let data: {
         token: string;
+        tokenContractName: string;
+        tokenContractAddress: string;
         balance: number;
       }[] = [];
 
@@ -255,9 +257,20 @@ export class StacksSDK {
       for (const [assetId, info] of Object.entries(balances)) {
         const { contractAddress, contractName, tokenName } =
           parseAssetId(assetId);
-        const decimals = getDecimalsFromFtInfo(assetId);
+        let decimals = getDecimalsFromFtInfo(assetId);
+
+        // if decimals is 0 => not found in ftInfo => custom token
+        if (decimals == 0) {
+          decimals = await this.chainService.fetchFtDecimals(
+            contractAddress,
+            contractName,
+          );
+        }
+
         let balance = {
           token: tokenName,
+          tokenContractName: contractName,
+          tokenContractAddress: contractAddress,
           balance: microToToken((info as any).balance, decimals),
         };
         data.push(balance);
@@ -348,6 +361,8 @@ export class StacksSDK {
     grossTransaction: boolean | undefined = false,
     type: TransactionType = TransactionType.STX,
     token?: TokenType,
+    customTokenContractAddress?: string,
+    customTokenContractName?: string,
   ): Promise<{
     validParams: boolean;
     finalAmount?: number | bigint;
@@ -375,9 +390,24 @@ export class StacksSDK {
         };
       }
 
+      if (token === TokenType.CUSTOM) {
+        if (!customTokenContractAddress || !customTokenContractName) {
+          return {
+            validParams: false,
+            reason: `Custom token contract address and name must be provided for CUSTOM token type`,
+          };
+        }
+      }
+
       let microAmount =
         type == TransactionType.FungibleToken
-          ? tokenToMicro(amount, token)
+          ? await tokenToMicro(
+              amount,
+              token,
+              this.chainService,
+              customTokenContractAddress,
+              customTokenContractName,
+            )
           : stxToMicro(amount);
 
       let microfee = 0;
@@ -417,10 +447,12 @@ export class StacksSDK {
       }
 
       let balance;
-      // to do : check amount against balance
+      // to do : refactor balance fetching logic for custom tokens
       if (type == TransactionType.FungibleToken) {
         balance = (balanceResponse as GetFtBalancesResponse).data?.find(
-          (b) => b.token === token,
+          (b) =>
+            b.token === token ||
+            b.tokenContractAddress === customTokenContractAddress,
         )?.balance;
       } else {
         balance = (balanceResponse as GetNativeBalanceResponse).balance;
@@ -436,7 +468,13 @@ export class StacksSDK {
       // Recalculate microAmount after any adjustments
       microAmount =
         type == TransactionType.FungibleToken
-          ? tokenToMicro(amount, token)
+          ? await tokenToMicro(
+              amount,
+              token,
+              this.chainService,
+              customTokenContractAddress,
+              customTokenContractName,
+            )
           : stxToMicro(amount);
 
       console.log(
@@ -470,6 +508,8 @@ export class StacksSDK {
     microAmount: bigint,
     type: TransactionType = TransactionType.STX,
     token?: TokenType,
+    customTokenContractAddress?: string,
+    customTokenContractName?: string,
     note?: string,
   ): Promise<any> => {
     try {
@@ -480,6 +520,8 @@ export class StacksSDK {
         microAmount,
         type,
         token,
+        customTokenContractAddress,
+        customTokenContractName,
       );
 
       const rawSignature = await this.fireblocksService.signTransaction(
@@ -712,10 +754,22 @@ export class StacksSDK {
     recipientAddress: string,
     amount: number,
     token: TokenType,
+    customTokenContractAddress?: string,
+    customTokenContractName?: string,
     note?: string,
   ): Promise<CreateTransactionResponse> => {
     if (!this.address || !this.publicKey || !this.vaultAccountId) {
       throw new Error("Address, Public Key or Vault ID are not set");
+    }
+
+    // if custom token, validate contract address and name are provided
+    if (token === TokenType.CUSTOM) {
+      if (!customTokenContractAddress || !customTokenContractName) {
+        return {
+          success: false,
+          error: `Custom token contract address and name must be provided for CUSTOM token type`,
+        };
+      }
     }
 
     console.log(
@@ -729,6 +783,8 @@ export class StacksSDK {
         undefined, // Gross transaction not applicable for FT transfers
         TransactionType.FungibleToken,
         token,
+        customTokenContractAddress,
+        customTokenContractName,
       );
 
       if (!paramsValidationResponse.validParams) {
@@ -744,6 +800,8 @@ export class StacksSDK {
         microAmount,
         TransactionType.FungibleToken,
         token,
+        customTokenContractAddress,
+        customTokenContractName,
         note,
       );
 

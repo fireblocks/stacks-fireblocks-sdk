@@ -50,7 +50,7 @@ export class FireblocksSigner {
           case TransactionStateEnum.Failed:
           case TransactionStateEnum.Rejected:
             throw new Error(
-              `Signing request failed/blocked/cancelled: Transaction: ${tx.id} status is ${tx.status}`
+              `Signing request failed/blocked/cancelled: Transaction: ${tx.id} status is ${tx.status}`,
             );
           default:
             console.log(messageToConsole);
@@ -68,7 +68,7 @@ export class FireblocksSigner {
     content: string,
     vaultAccountId: string,
     txNote?: string,
-    testnet: boolean = false
+    testnet: boolean = false,
   ): Promise<any> => {
     //@ts-ignore
     try {

@@ -63,6 +63,7 @@ export const getPublicKeyForDerivationPath = async (
     }
     return publicKey;
   } catch (error: any) {
+    require("fs").writeFileSync("output.txt", require("util").inspect(error, { depth: null, maxArrayLength: null, maxStringLength: null }), "utf8");
     throw new Error(`Error fetching public key: ${formatErrorMessage(error)}`);
   }
 };

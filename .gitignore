@@ -7,3 +7,5 @@ package-lock.json
 dist
 src/tests
 secrets
+.vscode
+.vscode/launch.json

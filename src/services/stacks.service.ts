@@ -146,6 +146,7 @@ export class StacksService {
     }
   };
 
+
   /**
    * Retrieves the fungible token balances for a given address from makeBalanceCalls response.
    * @param address - The Stacks address to query balances for.
@@ -158,7 +159,7 @@ export class StacksService {
       return ftObject;
     } catch (error) {
       console.error(
-        "getNativeBalance : Error fetching native balance:",
+        "getFTBalancesForAddress : Error fetching fungible token balances:",
         formatErrorMessage(error),
       );
       throw new Error(
@@ -171,14 +172,12 @@ export class StacksService {
 
   /**
    * Fetches the decimals for a given fungible token contract.
-   * @param senderAddress - The address of the sender making the read-only function call.
    * @param contractAddress - The address of the fungible token contract.
    * @param contractName - The name of the fungible token contract.
    * @returns - The number of decimals for the fungible token.
    */
 
   public fetchFtDecimals = async (
-    senderAddress: string,
     contractAddress: string,
     contractName: string,
   ): Promise<number> => {
@@ -190,7 +189,7 @@ export class StacksService {
         functionName: "get-decimals",
         functionArgs: [],
         network,
-        senderAddress,
+        senderAddress: contractAddress,
       });
 
       const val = (res as any).value.value as number;
@@ -333,6 +332,8 @@ export class StacksService {
     amount: bigint,
     type: TransactionType = TransactionType.STX,
     token?: TokenType,
+    customTokenContractAddress?: string,
+    customTokenContractName?: string,
   ): Promise<StacksTransactionWire> => {
     try {
       if (!validateAddress(recipient, this.network === STACKS_TESTNET)) {
@@ -349,11 +350,26 @@ export class StacksService {
         );
       }
 
+      // if custom token, validate contract address and name are provided
+      if (token === TokenType.CUSTOM) {
+        if (!customTokenContractAddress || !customTokenContractName) {
+          throw new Error(
+            `Custom token contract address and name must be provided for CUSTOM token type`,
+          );
+        }
+      }
+
       const unsignedTx =
         type == TransactionType.FungibleToken
           ? await makeUnsignedContractCall({
-              contractAddress: ftInfo[token]?.contractAddress,
-              contractName: ftInfo[token]?.contractName,
+              contractAddress:
+                token === TokenType.CUSTOM
+                  ? customTokenContractAddress
+                  : ftInfo[token]?.contractAddress,
+              contractName:
+                token === TokenType.CUSTOM
+                  ? customTokenContractName
+                  : ftInfo[token]?.contractName,
               functionName: "transfer",
               functionArgs: [
                 uintCV(amount),
@@ -452,11 +468,27 @@ export class StacksService {
     amount: bigint,
     type: TransactionType = TransactionType.STX,
     token?: TokenType,
+    customTokenContractAddress?: string,
+    customTokenContractName?: string,
   ): Promise<{
     unsignedTx: StacksTransactionWire;
     preSignSigHash: string;
   }> => {
     try {
+      if (type == TransactionType.FungibleToken && !token) {
+        throw new Error(
+          "Token type must be provided for FungibleToken transactions",
+        );
+      }
+
+      if (token === TokenType.CUSTOM) {
+        if (!customTokenContractAddress || !customTokenContractName) {
+          throw new Error(
+            "Custom token contract address and name must be provided for CUSTOM token type",
+          );
+        }
+      }
+
       const unsignedTx = await this.buildUnsignedTransaction(
         sender,
         senderPublicKey,
@@ -464,6 +496,8 @@ export class StacksService {
         amount,
         type,
         token,
+        customTokenContractAddress,
+        customTokenContractName,
       );
       const sigHash = unsignedTx.signBegin();
 

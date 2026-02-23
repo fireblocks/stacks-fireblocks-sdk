@@ -11,6 +11,7 @@ import { StacksNetworkName } from "@stacks/network";
 import { encodeStructuredDataBytes } from "@stacks/transactions";
 import { sha256 } from "@noble/hashes/sha256";
 import { bytesToHex } from "@stacks/common";
+import { StacksService } from "../services/stacks.service";
 
 // Validate that the provided amount is a positive number.
 export function validateAmount(amount: string | number): boolean {
@@ -77,11 +78,32 @@ export function microToStx(micro: bigint | number | string): number {
 }
 
 // Convert token amount to micro units based on decimals
-export function tokenToMicro(
+export async function tokenToMicro(
   amount: number | string,
   token: TokenType,
-): bigint {
-  const decimals = ftInfo[token].decimals;
+  stacksService?: StacksService,
+  customTokenContractAddress?: string,
+  customTokenContractName?: string,
+): Promise<bigint> {
+  if (token === TokenType.CUSTOM) {
+    if (!customTokenContractAddress || !customTokenContractName) {
+      throw new Error(
+        `Custom token contract address and name must be provided for CUSTOM token type`,
+      );
+    }
+  }
+
+  let decimals: number;
+  const info = ftInfo[token]; // get token info from constants, if not available => custom token => fetch decimals from chain.
+  if (!info) {
+    decimals = await stacksService.fetchFtDecimals(
+      customTokenContractAddress,
+      customTokenContractName,
+    );
+  } else {
+    decimals = info.decimals;
+  }
+
   const [w = "0", fRaw = ""] = String(amount).split(".");
   const frac = (fRaw + "0".repeat(decimals)).slice(0, decimals);
   return BigInt(w) * BigInt(10) ** BigInt(decimals) + BigInt(frac || "0");

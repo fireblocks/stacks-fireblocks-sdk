@@ -272,8 +272,20 @@ router.get(
  *         required: true
  *         schema:
  *           type: string
- *           enum: [STX, sBTC, USDC, USDH]
- *         description: Asset to transfer.
+ *           enum: [STX, sBTC, USDC, USDH, Custom]
+ *         description: Asset to transfer. Select "Custom" to specify a custom SIP-010 token.
+ *       - in: query
+ *         name: tokenContractAddress
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Required when assetType is "Custom". The contract address of the SIP-010 token.
+ *       - in: query
+ *         name: tokenContractName
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Required when assetType is "Custom". The contract name of the SIP-010 token.
  *       - in: query
  *         name: grossTransaction
  *         required: false
@@ -291,7 +303,7 @@ router.get(
  *       200:
  *         description: Transaction created successfully
  *       400:
- *         description: Invalid input
+ *         description: Invalid input (includes missing tokenContractAddress/tokenContractName when assetType is Custom)
  *       500:
  *         description: Internal server error
  */

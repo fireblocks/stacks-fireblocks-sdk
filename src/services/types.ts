@@ -10,6 +10,8 @@ export type GetFtBalancesResponse = {
   success: boolean;
   data?: {
     token: string;
+    tokenContractName: string;
+    tokenContractAddress: string;
     balance: number;
   }[];
   error?: string;
@@ -95,6 +97,7 @@ export enum TokenType {
   sBTC = "sbtc-token",
   USDC = "token-aeusdc",
   USDH = "usdh-token-v1",
+  CUSTOM = "custom-token",
 }
 
 export enum StackingPools {

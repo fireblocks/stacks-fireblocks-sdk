@@ -141,10 +141,16 @@ export const createTransaction: Handler = async (req, res, next) => {
 
     const recipientAddress = String(req.query.recipientAddress || "");
     const amountStr = String(req.query.amount || "");
-    const assetUi = String(req.query.assetType || "").trim(); // "STX" | "sBTC" | "USDC" | "USDH"
+    const assetUi = String(req.query.assetType || "").trim(); // "STX" | "sBTC" | "USDC" | "USDH" | "Custom"
     const grossTransaction =
       String(req.query.grossTransaction || "false").toLowerCase() === "true";
     const note = req.query.note ? String(req.query.note) : undefined;
+    const tokenContractAddress = req.query.tokenContractAddress
+      ? String(req.query.tokenContractAddress).trim()
+      : undefined;
+    const tokenContractName = req.query.tokenContractName
+      ? String(req.query.tokenContractName).trim()
+      : undefined;
 
     if (!recipientAddress || !amountStr || !assetUi) {
       res.status(400).json({
@@ -152,6 +158,17 @@ export const createTransaction: Handler = async (req, res, next) => {
           "Bad Request: recipientAddress, amount and assetType are required",
       });
       return;
+    }
+
+    // Validate custom token fields
+    if (assetUi === "Custom") {
+      if (!tokenContractAddress || !tokenContractName) {
+        res.status(400).json({
+          error:
+            "Bad Request: tokenContractAddress and tokenContractName are required when assetType is Custom",
+        });
+        return;
+      }
     }
 
     const amount = Number(amountStr);
@@ -166,10 +183,12 @@ export const createTransaction: Handler = async (req, res, next) => {
       sBTC: TokenType.sBTC,
       USDC: TokenType.USDC,
       USDH: TokenType.USDH,
+      Custom: TokenType.CUSTOM,
     };
     const tokenType = mapUiToTokenType[assetUi];
 
-    if (!tokenType) {
+    // Validate assetType (must be known token or Custom)
+    if (!tokenType && assetUi !== "Custom") {
       res.status(400).json({ error: `Unsupported assetType: ${assetUi}` });
       return;
     }
@@ -189,7 +208,14 @@ export const createTransaction: Handler = async (req, res, next) => {
     const tx = await apiService.executeAction(
       vaultId,
       ActionType.CREATE_FT_TRANSACTION,
-      { recipientAddress, amount, tokenType, note },
+      {
+        recipientAddress,
+        amount,
+        tokenType,
+        tokenContractAddress,
+        tokenContractName,
+        note,
+      },
     );
     res.json(tx);
   } catch (err) {
