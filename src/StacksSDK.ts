@@ -567,6 +567,7 @@ export class StacksSDK {
     poolContractName?: string,
     amount?: bigint,
     lockPeriod?: number,
+    signerKey?: string,
     signerSig65Hex?: string,
     startBurnHeight?: number,
     authId?: bigint,
@@ -593,10 +594,10 @@ export class StacksSDK {
 
       if (
         functionName === "solo-stack" &&
-        (!amount || !lockPeriod || !signerSig65Hex || !startBurnHeight)
+        (!amount || !lockPeriod || !signerSig65Hex || !startBurnHeight || !signerKey)
       ) {
         throw new Error(
-          "Amount, lock period, signer signature, and start burn height must be provided for solo-stack",
+          "Amount, lock period, signer signature, start burn height, and signer key must be provided for solo-stack",
         );
       }
 
@@ -629,7 +630,7 @@ export class StacksSDK {
         case "solo-stack":
           transactionToSign = await this.chainService.soloStack(
             this.publicKey,
-            this.address,
+            signerKey,
             amount,
             this.btcRewardsAddress,
             lockPeriod,
@@ -1231,6 +1232,8 @@ export class StacksSDK {
    * @returns A response indicating success or failure of the transaction.
    */
   public stackSolo = async (
+    signerKey: string,
+    signerSig65Hex: string,
     amount: number,
     lockPeriod: number, // Number of cycles
     authId?: bigint,
@@ -1258,17 +1261,6 @@ export class StacksSDK {
       }
 
       const startBurnHeight = pox.current_burnchain_block_height;
-      const rewardCycleId = Number(pox.reward_cycle_id);
-      if (!Number.isFinite(rewardCycleId)) {
-        throw new Error("Missing/invalid reward_cycle_id from /v2/pox");
-      }
-
-      const signerSig65Hex = await this.createSignerSig65HexFromParams(
-        rewardCycleId,
-        lockPeriod,
-        stxToMicro(amount),
-        authId,
-      );
 
       const result = await this.buildSignSendContractCall(
         "solo-stack",
@@ -1276,6 +1268,7 @@ export class StacksSDK {
         undefined,
         stxToMicro(amount),
         lockPeriod,
+        signerKey,
         signerSig65Hex,
         startBurnHeight,
         authId,

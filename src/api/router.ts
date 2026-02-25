@@ -424,6 +424,18 @@ router.post(
  *     parameters:
  *       - $ref: '#/components/parameters/vaultId'
  *       - in: query
+ *         name: signerKey
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The key of the running signer
+ *       - in: query
+ *         name: signerSig65Hex
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The signature of the running signer key
+ *       - in: query
  *         name: amount
  *         required: true
  *         schema:

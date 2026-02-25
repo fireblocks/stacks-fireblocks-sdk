@@ -925,7 +925,7 @@ export class StacksService {
    */
   public soloStack = async (
     senderPublicKey: string,
-    address: string,
+    signerKey: string,
     amountUstx: bigint,
     btcRewardAddress: string,
     lockPeriod: number,
@@ -938,9 +938,6 @@ export class StacksService {
     preSignSigHash: string;
   }> => {
     try {
-      if (!validateAddress(address, this.network === STACKS_TESTNET)) {
-        throw new Error("Invalid address");
-      }
 
       if (!isCompressedSecp256k1PubKeyHex(senderPublicKey)) {
         throw new Error("Invalid compressed secp256k1 public key hex format");
@@ -969,7 +966,7 @@ export class StacksService {
           uintCV(startBurnHeight),
           uintCV(lockPeriod),
           someCV(bufferCV(Buffer.from(signerSig65Hex, "hex"))),
-          bufferCV(Buffer.from(senderPublicKey, "hex")),
+          bufferCV(Buffer.from(signerKey, "hex")),
           uintCV(maxAmountUstx),
           uintCV(authId),
         ],

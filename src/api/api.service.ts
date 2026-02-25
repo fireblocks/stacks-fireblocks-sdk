@@ -73,6 +73,8 @@ export class ApiService {
           break;
         case ActionType.STACK_SOLO:
           result = await sdk.stackSolo(
+            params.signerKey,
+            params.signerSig65Hex,
             params.amount,
             params.lockPeriod,
             params.authId,

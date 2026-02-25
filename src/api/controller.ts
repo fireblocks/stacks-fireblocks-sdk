@@ -360,6 +360,8 @@ export const stackSolo: Handler = async (req, res, next) => {
   try {
     const { vaultId } = req.params;
 
+    const signerKey = String(req.query.signerKey || "").trim();
+    const signerSig65Hex = String(req.query.signerSig65Hex || "").trim();
     const amountStr = String(req.query.amount || "");
     const lockPeriodStr = String(req.query.lockPeriod || "1");
     const authIdStr = req.query.authId ? String(req.query.authId).trim() : "";
@@ -397,6 +399,8 @@ export const stackSolo: Handler = async (req, res, next) => {
     }
 
     const tx = await apiService.executeAction(vaultId, ActionType.STACK_SOLO, {
+      signerKey, // hex string
+      signerSig65Hex, // hex string
       amount, // human STX amount (your SDK converts using stxToMicro)
       lockPeriod, // cycles (1..12)
       authId, // bigint | undefined
