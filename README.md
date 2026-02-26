@@ -28,7 +28,7 @@ It's designed to simplify integration with Fireblocks for secure Stacks transact
 - **Native STX transfers**: Send STX with optional gross transactions (fee deduction from recipient)
 - **Fungible token transfers**: Support for SIP-010 token transfers (sBTC, USDC, etc.)
 - **Stacking functionality**:
-  - Solo stacking with automatic signer signature generation
+  - Solo stacking 
   - Pool delegation and stacking
   - Delegation management (delegate, revoke, allow contract caller)
   - Account status and eligibility checking
@@ -233,12 +233,27 @@ if (status.success) {
 
 ### **Solo Stacking**
 
+Solo stacking requires you to provide a signer key and signature. You can use any valid `secp256k1` key pair for your signer.
+
+**Generate signer signature:**
+Use the [Stacks Signature Generation Tool](https://signature.stacking.tools/) to generate your signer signature with the following parameters:
+- **Function**: "stack-stx"
+- **Max Amount**: Maximum STX amount to authorize, equal or more to what you'll stack
+- **Lock period**: Number of cycles (1-12)
+- **Auth ID**: Random integer for replay protection, must be the same one used to generate the signature
+- **Reward cycle**: Current reward cycle
+- **PoX address**: Your BTC rewards address
+- If you plan to run your own signer to earn full rewards, use your signer's public key here
+- If using a hosted signer service, use their public key and signature
+
 ```typescript
 // Stack 150,000 STX for 6 cycles
 const stackResponse = await sdk.stackSolo(
+  "02778d476704afa...", // Signer public key
+  "1997445c32fc172f...", // Signer signature
   150000, // amount in STX
   6, // lock period in cycles (1-12)
-  BigInt(Date.now()), // optional authId
+  "1772114443795", // authId (same as used to generate signature)
 );
 
 if (stackResponse.success) {
@@ -328,7 +343,7 @@ history.forEach((tx) => {
 | Method | Route                              | Description                                             |
 | ------ | ---------------------------------- | ------------------------------------------------------- |
 | GET    | `/api/:vaultId/transactions`       | List recent transactions for this vault                 |
-| GET    | `/api/:vaultId/transactions/:txId` | Get detailed transaction status with error code mapping |
+| GET    | `/api/transactions/:txId`          | Get detailed transaction status with error code mapping |
 | POST   | `/api/:vaultId/transfer`           | Transfer STX or Fungible Tokens to another address      |
 
 ### **Stacking Endpoints**
@@ -336,6 +351,7 @@ history.forEach((tx) => {
 | Method | Route                                               | Description                                       |
 | ------ | --------------------------------------------------- | ------------------------------------------------- |
 | GET    | `/api/:vaultId/check-status`                        | Check account stacking status and delegation info |
+| GET    | `/api/poxInfo`                                      | Fetch current PoX info from blockchain            |
 | POST   | `/api/:vaultId/stacking/solo`                       | Solo stack STX with automatic signer signature    |
 | POST   | `/api/:vaultId/stacking/pool/delegate`              | Delegate amonunt of STX to a stacking pool        |
 | POST   | `/api/:vaultId/stacking/pool/allow-contract-caller` | Allow a pool contract to lock your STX            |
@@ -430,15 +446,17 @@ curl -X 'POST' \
 ```
 
 ### **Solo Stack STX**
-
 ```bash
 curl -X 'POST' \
-  'http://localhost:3000/api/123/stack/solo' \
+  'http://localhost:3000/api/123/stacking/solo' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
   -d '{
-  "amount": 150000,
-  "lockPeriod": 6
+  "signerKey": "02778d476704afa540ac01438f62c371dc387",
+  "signerSig65Hex": "1997445c32fc1720b202995f656396b50c355",
+  "amount": 6520000,
+  "lockPeriod": 1,
+  "authId": "1"
 }'
 ```
 
