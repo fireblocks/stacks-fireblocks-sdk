@@ -13,6 +13,10 @@ export const derivationPath = {
   addressIndex: 0,
 };
 
+export const helperConstants = {
+  vaultIdForReadOnlyActions: "0", // Use a dummy vault ID for read-only actions that don't require a specific vault account/blockchain address
+}
+
 export const api_constants = {
   stacks_mainnet_rpc: "https://api.hiro.so",
   stacks_testnet_rpc: "https://api.testnet.hiro.so",

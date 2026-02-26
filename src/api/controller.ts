@@ -3,7 +3,7 @@ import { apiServiceSingleton } from "./api.service";
 import { ActionType } from "../pool/types";
 import { StackingPools, TokenType } from "../services/types";
 import { validateAmount } from "../utils/helpers";
-import { poolInfo } from "../utils/constants";
+import { helperConstants, poolInfo } from "../utils/constants";
 
 const apiService = apiServiceSingleton;
 
@@ -336,7 +336,7 @@ export const revokeDelegation: Handler = async (req, res, next) => {
 // GET /:vaultId/transactions/:txId
 export const getTxStatusById: Handler = async (req, res, next) => {
   try {
-    const { vaultId, txId } = req.params;
+    const {  txId } = req.params;
 
     if (!txId || typeof txId !== "string") {
       res.status(400).json({ error: "Bad Request: txId is required" });
@@ -344,7 +344,7 @@ export const getTxStatusById: Handler = async (req, res, next) => {
     }
 
     const tx = await apiService.executeAction(
-      vaultId,
+      helperConstants.vaultIdForReadOnlyActions,
       ActionType.GET_TX_STATUS_BY_ID,
       { txId },
     );
@@ -411,6 +411,17 @@ export const stackSolo: Handler = async (req, res, next) => {
     next(err);
   }
 };
+
+// GET /poxInfo
+export const getPoxInfo: Handler = async (req, res, next) => {
+  try {
+    const poxInfo = await apiService.executeAction(helperConstants.vaultIdForReadOnlyActions, ActionType.GET_POX_INFO, {});
+    res.json(poxInfo);
+  } catch (err) {
+    next(err);
+  }
+};
+
 
 // GET /metrics
 export const getPoolMetrics: Handler = async (req, res, next) => {

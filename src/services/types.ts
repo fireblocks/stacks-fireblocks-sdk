@@ -36,6 +36,12 @@ export type GetTransactionHistoryResponse = {
   error?: string;
 };
 
+export type GetPoxInfoResponse = {
+  success: boolean;
+  data?: any;
+  error?: string;
+}
+
 export type TransactionDetails = {
   tx_id: string;
   tx_status: string;

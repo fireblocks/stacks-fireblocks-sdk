@@ -135,6 +135,9 @@ export class ApiService {
         case ActionType.GET_ACCOUNT_PUBLIC_KEY:
           result = await sdk.getPublicKey();
           break;
+        case ActionType.GET_POX_INFO:
+          result = await sdk.getPoxInfo();
+          break;
         default:
           throw new Error(
             `InvalidType :

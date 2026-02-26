@@ -27,6 +27,7 @@ import {
   FireblocksConfig,
   GetFtBalancesResponse,
   GetNativeBalanceResponse,
+  GetPoxInfoResponse,
   GetTransactionStatusResponse,
   TokenType,
   Transaction,
@@ -1292,6 +1293,36 @@ export class StacksSDK {
       return {
         success: false,
         error: `Failed to solo stack: ${formatErrorMessage(error)}`,
+      };
+    }
+  };
+
+
+   /**
+   * fetches current pox info from blockchain.
+   * @returns the pox info response.
+   * @throws {Error} If fetching pox info fails.
+   */
+  public getPoxInfo = async (
+  ): Promise<GetPoxInfoResponse> => {
+    try {
+      const poxResponse = await this.chainService.fetchPoxInfo();
+      if(!poxResponse || !poxResponse.data) {
+        return {
+          success: false,
+          error: `Failed to fetch POX info: empty response`,
+        }
+      }
+      
+      return {
+        success: true,
+        data: poxResponse.data,
+      }
+    } catch (error) {
+      console.error(`Error fetching POX info: ${formatErrorMessage(error)}`);
+      return {
+        success: false,
+        error: `Failed to fetch POX info: ${formatErrorMessage(error)}`,
       };
     }
   };

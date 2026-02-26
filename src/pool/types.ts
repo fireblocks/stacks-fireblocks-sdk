@@ -37,6 +37,7 @@ export enum ActionType {
   CHECK_STATUS = "checkStatus",
   STACK_SOLO = "stackSolo",
   GET_TX_STATUS_BY_ID = "getTxStatusById",
+  GET_POX_INFO = "getPoxInfo",  
 }
 
 export interface SdkManagerMetrics {

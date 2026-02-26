@@ -126,12 +126,11 @@ router.get("/:vaultId/check-status", validateVaultId, controller.checkStatus);
 
 /**
  * @openapi
- * /{vaultId}/transactions/{txId}:
+ *  /transactions/{txId}:
  *   get:
  *     summary: Get transaction status by txid
  *     description: Retrieves status and details for a specific transaction ID.
  *     parameters:
- *       - $ref: '#/components/parameters/vaultId'
  *       - in: path
  *         name: txId
  *         required: true
@@ -147,13 +146,28 @@ router.get("/:vaultId/check-status", validateVaultId, controller.checkStatus);
  *         description: Internal server error
  */
 router.get(
-  "/:vaultId/transactions/:txId",
-  validateVaultId,
+  "/transactions/:txId",
   controller.getTxStatusById,
 );
 
-// Balance endpoints
+// Pox Info
+/**
+ * @openapi
+ * /poxInfo:
+ *   get:
+ *     summary: Get PoX info
+ *     description: >
+ *       Retrieves information related to the Proof of Transfer (PoX) from blockchain
+ *     responses:
+ *       200:
+ *         description: PoX info fetched successfully
+ *       500:
+ *         description: Internal server error
+ * */
+ router.get("/poxInfo", controller.getPoxInfo);
 
+
+// Balance endpoints
 /**
  * @openapi
  * /{vaultId}/balance:
