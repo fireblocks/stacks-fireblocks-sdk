@@ -1228,7 +1228,7 @@ export class StacksSDK {
    * Solo stacks a specified amount of STX for a given lock period.
    * @param amount - The amount of STX to stack.
    * @param lockPeriod - The number of cycles to lock the STX.
-   * @param authId - Optional authorization ID for the transaction.
+   * @param authId - Authorization ID for the transaction.
    * @param note - Optional note for raw signing.
    * @returns A response indicating success or failure of the transaction.
    */
@@ -1237,7 +1237,7 @@ export class StacksSDK {
     signerSig65Hex: string,
     amount: number,
     lockPeriod: number, // Number of cycles
-    authId?: bigint,
+    authId: bigint,
   ): Promise<CreateTransactionResponse> => {
     try {
       if (!this.address || !this.publicKey || !this.vaultAccountId) {
@@ -1245,10 +1245,6 @@ export class StacksSDK {
       }
 
       console.log(`Solo stacking ${amount} STX for ${lockPeriod} cycles`);
-
-      if (!authId) {
-        authId = BigInt(Date.now());
-      }
 
       const poxResponse = await this.chainService.fetchPoxInfo();
       const pox = poxResponse.data;

@@ -364,7 +364,7 @@ export const stackSolo: Handler = async (req, res, next) => {
     const signerSig65Hex = String(req.query.signerSig65Hex || "").trim();
     const amountStr = String(req.query.amount || "");
     const lockPeriodStr = String(req.query.lockPeriod || "1");
-    const authIdStr = req.query.authId ? String(req.query.authId).trim() : "";
+    const authIdStr = String(req.query.authId);
 
     if (!amountStr) {
       res.status(400).json({ error: "Bad Request: amount is required" });
@@ -385,22 +385,20 @@ export const stackSolo: Handler = async (req, res, next) => {
       return;
     }
 
-    // authId is optional; must be an integer string if provided
+    // authId must be an integer string
     let authId: bigint | undefined = undefined;
-    if (authIdStr) {
-      // reject decimals / scientific notation / garbage early
-      if (!/^[0-9]+$/.test(authIdStr)) {
+    if (!/^[0-9]+$/.test(authIdStr)) {
         res.status(400).json({
           error: "Bad Request: authId must be a positive integer string",
         });
         return;
-      }
-      authId = BigInt(authIdStr);
     }
+    authId = BigInt(authIdStr);
+    
 
     const tx = await apiService.executeAction(vaultId, ActionType.STACK_SOLO, {
-      signerKey, // hex string
-      signerSig65Hex, // hex string
+      signerKey, 
+      signerSig65Hex, 
       amount, // human STX amount (your SDK converts using stxToMicro)
       lockPeriod, // cycles (1..12)
       authId, // bigint | undefined

@@ -932,20 +932,16 @@ export class StacksService {
     maxAmountUstx: bigint,
     signerSig65Hex: string,
     startBurnHeight: number,
-    authId?: bigint,
+    authId: bigint,
   ): Promise<{
     unsignedContractCall: StacksTransactionWire;
     preSignSigHash: string;
   }> => {
     try {
 
-      if (!isCompressedSecp256k1PubKeyHex(senderPublicKey)) {
-        throw new Error("Invalid compressed secp256k1 public key hex format");
-      }
-
-      if (!authId) {
-        authId = BigInt(Date.now());
-      }
+    if (!isCompressedSecp256k1PubKeyHex(senderPublicKey)) {
+      throw new Error("Invalid compressed secp256k1 public key hex format");
+    }
 
       const { contractAddress: poxAddr, contractName: poxName } =
         this.network === STACKS_TESTNET ? poxInfo.testnet : poxInfo.mainnet;

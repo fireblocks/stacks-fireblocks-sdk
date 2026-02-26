@@ -465,10 +465,10 @@ router.post(
  *         description: Number of cycles to lock (1-12).
  *       - in: query
  *         name: authId
- *         required: false
+ *         required: true
  *         schema:
  *           type: string
- *         description: Optional integer string (bigint) used for signer-sig replay protection.
+ *         description: Integer string (bigint) used for signer-sig replay protection (must be the same authId used to generate the signature).
  *     responses:
  *       200:
  *         description: Solo stacking transaction submitted
