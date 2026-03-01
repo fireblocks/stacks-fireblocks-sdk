@@ -28,6 +28,7 @@ import {
   GetFtBalancesResponse,
   GetNativeBalanceResponse,
   GetPoxInfoResponse,
+  GetTransactionHistoryResponse,
   GetTransactionStatusResponse,
   TokenType,
   Transaction,
@@ -305,10 +306,10 @@ export class StacksSDK {
     getCachedTransactions: boolean = true, // Must be manually set to false to fetch fresh transactions
     limit: number = pagination_defaults.limit,
     offset: number = pagination_defaults.page,
-  ): Promise<Transaction[]> => {
+  ): Promise<GetTransactionHistoryResponse> => {
     if (getCachedTransactions) {
       console.log("Using cached transactions");
-      return this.chachedTransactions;
+      return { success: true, data: this.chachedTransactions };
     }
 
     if (!this.address) {
@@ -337,11 +338,12 @@ export class StacksSDK {
         ...this.chachedTransactions,
         ...newTransactions,
       ];
-      return txs;
+      return { success: true, data: txs };
     } catch (error) {
-      throw new Error(
-        `Failed to get transaction history: ${formatErrorMessage(error)}`,
-      );
+      return {
+        success: false,
+        error: formatErrorMessage(error),
+      };
     }
   };
 
