@@ -706,7 +706,16 @@ export class StacksService {
 
           const contractId = tx.contract_call.contract_id as string;
           const contractName = contractId.split(".").slice(-1)[0];
-          const decimals = getDecimalsFromFtInfo(contractId);
+          const contractAddress = contractId.split(".")[0];
+          let decimals = getDecimalsFromFtInfo(contractId);
+
+          // if decimals is 0 => not found in ftInfo => custom token
+          if (decimals == 0) {
+            decimals = await this.fetchFtDecimals(
+              contractAddress,
+              contractName,
+            );
+          }
 
           const amountInt = BigInt(rawAmount);
           const amount =
