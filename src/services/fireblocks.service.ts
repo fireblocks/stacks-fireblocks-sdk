@@ -16,7 +16,7 @@ import {
 } from "../utils/fireblocks.utils";
 import { FireblocksConfig } from "./types";
 import { formatErrorMessage } from "../utils/errorHandling";
-import { FireblocksSigner } from "../utils/Fireblocks-signer";
+import { FireblocksSigner } from "../utils/FireblocksSigner";
 
 const secretKeyPath = process.env.FIREBLOCKS_SECRET_KEY_PATH || "";
 const basePath = process.env.FIREBLOCKS_BASE_PATH || BasePath.US;
