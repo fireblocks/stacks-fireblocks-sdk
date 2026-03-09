@@ -573,7 +573,7 @@ export class StacksService {
    * @param signedTransaction - The signed Stacks transaction to broadcast.
    * @returns - The result of the broadcast operation.
    */
-  public brodcastTransaction = async (
+  public broadcastTransaction = async (
     signedTransaction: StacksTransactionWire,
   ): Promise<any> => {
     try {
