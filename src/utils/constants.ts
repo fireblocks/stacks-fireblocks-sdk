@@ -128,6 +128,10 @@ export const POX4_ERRORS: Record<number, { name: string; message: string }> = {
     name: "ERR_STACKING_INVALID_POX_ADDRESS",
     message: "Invalid Bitcoin reward address format.",
   },
+  18: {
+  name: "ERR_STACKING_INVALID_AMOUNT",
+  message: "Invalid stacking amount. Amount must be greater than zero.",
+  },
   19: {
     name: "ERR_STACKING_IS_DELEGATED",
     message:
