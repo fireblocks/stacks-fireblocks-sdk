@@ -20,11 +20,6 @@ export const validateApiCredentials = (
     throw new Error("API key is not a valid UUID v4.");
   }
 
-  // Validate secret key path exists and is a file
-  if (!fs.existsSync(secretKeyPath) || !fs.statSync(secretKeyPath).isFile()) {
-    throw new Error(`Secret key file does not exist at path: ${secretKeyPath}`);
-  }
-
   // Validate vaultAccountId if provided
   if (vaultAccountId !== undefined) {
     if (

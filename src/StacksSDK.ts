@@ -35,7 +35,7 @@ import {
   TransactionDetails,
   TransactionType,
 } from "./services/types";
-import { pagination_defaults, POX4_ERRORS, poxInfo } from "./utils/constants";
+import { pagination_defaults, POX4_ERRORS} from "./utils/constants";
 import { formatErrorMessage } from "./utils/errorHandling";
 import { validateApiCredentials } from "./utils/fireblocks.utils";
 import {
@@ -54,7 +54,7 @@ import {
   tokenToMicro,
   validateAddress,
 } from "./utils/helpers";
-import { createMessageSignature } from "@stacks/transactions/dist/wire/create";
+import { createMessageSignature } from "@stacks/transactions";
 import { StacksTransactionWire } from "@stacks/transactions";
 
 export class StacksSDK {
@@ -538,7 +538,7 @@ export class StacksSDK {
       (transactionToSign.unsignedTx as any).auth.spendingCondition.signature =
         createMessageSignature(signature);
 
-      const result = await this.chainService.brodcastTransaction(
+      const result = await this.chainService.broadcastTransaction(
         transactionToSign.unsignedTx,
       );
       return result;
@@ -659,7 +659,7 @@ export class StacksSDK {
         transactionToSign.unsignedContractCall as any
       ).auth.spendingCondition.signature = createMessageSignature(signature);
 
-      const result = await this.chainService.brodcastTransaction(
+      const result = await this.chainService.broadcastTransaction(
         transactionToSign.unsignedContractCall,
       );
       return result;

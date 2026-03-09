@@ -36,6 +36,12 @@ export type GetTransactionHistoryResponse = {
   error?: string;
 };
 
+export type GetTransactionHistoryParams = {
+  getCachedTransactions?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
 export type GetPoxInfoResponse = {
   success: boolean;
   data?: any;
