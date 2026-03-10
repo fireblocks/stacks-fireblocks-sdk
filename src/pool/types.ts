@@ -19,6 +19,7 @@ export interface ApiServiceConfig {
   basePath: BasePath | string;
   poolConfig?: Partial<PoolConfig>;
   testnet?: boolean;
+  chainApiKey?: string;
 }
 
 export enum ActionType {

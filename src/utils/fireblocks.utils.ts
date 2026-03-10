@@ -5,7 +5,6 @@ import {
 } from "@fireblocks/ts-sdk";
 import { derivationPath } from "./constants";
 import { formatErrorMessage } from "./errorHandling";
-import * as fs from "fs";
 
 // Validate Fireblocks API credentials and vaultAccountId
 export const validateApiCredentials = (

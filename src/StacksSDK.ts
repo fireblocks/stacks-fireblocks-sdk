@@ -70,6 +70,7 @@ export class StacksSDK {
   private constructor(
     vaultAccountId: string | number,
     fireblocksConfig?: FireblocksConfig,
+    hiroApiKey?: string,
   ) {
     try {
       // Validate Fireblocks API credentials before initializing services
@@ -82,7 +83,7 @@ export class StacksSDK {
       }
       this.fireblocksService = new FireblocksService(fireblocksConfig);
       this.testnet = fireblocksConfig?.testnet || false;
-      this.chainService = new StacksService(this.testnet);
+      this.chainService = new StacksService(this.testnet, hiroApiKey);
     } catch (error) {
       throw new Error(
         `Failed to initialize services: ${formatErrorMessage(error)}`,
@@ -111,9 +112,10 @@ export class StacksSDK {
   public static create = async (
     vaultAccountId: string | number,
     fireblocksConfig?: FireblocksConfig,
+    hiroApiKey?: string,  
   ): Promise<StacksSDK> => {
     try {
-      const instance = new StacksSDK(vaultAccountId, fireblocksConfig);
+      const instance = new StacksSDK(vaultAccountId, fireblocksConfig, hiroApiKey);
       instance.publicKey =
         await instance.fireblocksService.getPublicKeyByVaultID(vaultAccountId);
       instance.address = instance.chainService.formatAddress(

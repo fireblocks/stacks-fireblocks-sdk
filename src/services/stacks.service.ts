@@ -56,8 +56,11 @@ export class StacksService {
   private stackBaseUrl: string;
   private network: StacksNetwork;
 
-  constructor(testnet: boolean = false) {
+  constructor(testnet: boolean = false, hiroApiKey?: string) {
     this.axiosClient = axios.create();
+    if(hiroApiKey) {
+      this.axiosClient.defaults.headers['x-hiro-api-key'] = hiroApiKey;
+    }
     this.stackBaseUrl = testnet
       ? api_constants.stacks_testnet_rpc
       : api_constants.stacks_mainnet_rpc;
