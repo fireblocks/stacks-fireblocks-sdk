@@ -38,6 +38,7 @@ import { formatErrorMessage } from "../utils/errorHandling";
 import {
   btcAddressToPoxTuple,
   getDecimalsFromFtInfo,
+  getTokenInfo,
   isCompressedSecp256k1PubKeyHex,
   untilBurnHeightForCycles,
   validateAddress,
@@ -359,17 +360,23 @@ export class StacksService {
         }
       }
 
+      const tokenInfo = getTokenInfo(token, this.network === STACKS_TESTNET ? "testnet" : "mainnet");
+
+      if (token !== TokenType.CUSTOM && !tokenInfo) {
+        throw new Error(`Token ${token} is not supported on ${this.network}`);
+      }
+
       const unsignedTx =
         type == TransactionType.FungibleToken
           ? await makeUnsignedContractCall({
               contractAddress:
                 token === TokenType.CUSTOM
                   ? customTokenContractAddress
-                  : ftInfo[token]?.contractAddress,
+                  : tokenInfo!.contractAddress,
               contractName:
                 token === TokenType.CUSTOM
                   ? customTokenContractName
-                  : ftInfo[token]?.contractName,
+                  : tokenInfo!.contractName,
               functionName: "transfer",
               functionArgs: [
                 uintCV(amount),

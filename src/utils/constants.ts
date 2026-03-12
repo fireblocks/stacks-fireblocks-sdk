@@ -3,6 +3,7 @@ import {
   StackingPools,
   TokenInfo,
   TokenType,
+  Network,
 } from "../services/types";
 
 export const derivationPath = {
@@ -41,23 +42,30 @@ export const pagination_defaults = {
   limit: 50,
 };
 
-export const ftInfo: Partial<Record<TokenType, TokenInfo>> = {
-  [TokenType.sBTC]: {
-    contractAddress: "ST1F7QA2MDF17S807EPA36TSS8AMEFY4KA9TVGWXT",
-    contractName: "sbtc-token",
-    decimals: 8,
+export const ftInfo: Partial<Record<TokenType, Record<Network, TokenInfo>>> = {
+   [TokenType.sBTC]: {
+    mainnet: {
+      contractAddress: "SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4",
+      contractName: "sbtc-token",
+      decimals: 8,
+    },
+    testnet: {
+      contractAddress: "ST1F7QA2MDF17S807EPA36TSS8AMEFY4KA9TVGWXT",
+      contractName: "sbtc-token",
+      decimals: 8,
+    },
   },
-
   [TokenType.USDC]: {
-    contractAddress: "SP3Y2ZSH8P7D50B0VBTSX11S7XSG24M1VB9YFQA4K",
-    contractName: "token-aeusdc",
-    decimals: 6,
-  },
-
-  [TokenType.USDH]: {
-    contractAddress: "SPN5AKG35QZSK2M8GAMR4AFX45659RJHDW353HSG",
-    contractName: "usdh-token-v1",
-    decimals: 8,
+    mainnet: {
+      contractAddress: "SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE",
+      contractName: "usdcx",
+      decimals: 6,
+    },
+    testnet: {
+      contractAddress: "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM",
+      contractName: "usdcx",
+      decimals: 6,
+    },
   },
 };
 
@@ -68,10 +76,10 @@ export const poolInfo: Partial<Record<StackingPools, PoolInfo>> = {
   },
 };
 
-export const ft: Record<string, number> = {
-  "sbtc-token": 8,
-  "aeusdc-token": 8,
-};
+// export const ft: Record<string, number> = {
+//   "sbtc-token": 8,
+//   "aeusdc-token": 8,
+// };
 
 export const poxInfo = {
   testnet: {
