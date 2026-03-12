@@ -67,31 +67,31 @@ export const getPublicKeyForDerivationPath = async (
   }
 };
 
-// Retrieves the asset addresses for a given vault account ID using the Fireblocks SDK.
-export const getAssetAddressesByVaultID = async (
-  vaultID: string | number,
-  assetId: string,
-  fireblocksSDK: Fireblocks,
-): Promise<void> => {
-  const id = typeof vaultID === "string" ? Number(vaultID) : vaultID;
-  if (!Number.isInteger(id) || id < 0) {
-    throw new Error("vaultID must be a valid non-negative integer.");
-  }
+// // Retrieves the asset addresses for a given vault account ID using the Fireblocks SDK.
+// export const getAssetAddressesByVaultID = async (
+//   vaultID: string | number,
+//   assetId: string,
+//   fireblocksSDK: Fireblocks,
+// ): Promise<void> => {
+//   const id = typeof vaultID === "string" ? Number(vaultID) : vaultID;
+//   if (!Number.isInteger(id) || id < 0) {
+//     throw new Error("vaultID must be a valid non-negative integer.");
+//   }
 
-  try {
-    const assetAdresses =
-      await fireblocksSDK.vaults.getVaultAccountAssetAddressesPaginated({
-        vaultAccountId: String(id),
-        assetId: assetId,
-      });
+//   try {
+//     const assetAdresses =
+//       await fireblocksSDK.vaults.getVaultAccountAssetAddressesPaginated({
+//         vaultAccountId: String(id),
+//         assetId: assetId,
+//       });
 
-    // return publicKey;
-  } catch (error: any) {
-    throw new Error(
-      `Failed to get public key by vault ID: ${formatErrorMessage(error)}`,
-    );
-  }
-};
+//     // return publicKey;
+//   } catch (error: any) {
+//     throw new Error(
+//       `Failed to get public key by vault ID: ${formatErrorMessage(error)}`,
+//     );
+//   }
+// };
 
 // Checks if a wallet exists in the given vault account ID for a given asset ID.
 export const checkWalletExistsInVault = async (
