@@ -132,74 +132,74 @@ export const POX4_ERRORS: Record<number, { name: string; message: string }> = {
     message: "Invalid Bitcoin reward address format.",
   },
   18: {
-  name: "ERR_STACKING_INVALID_AMOUNT",
-  message: "Invalid stacking amount. Amount must be greater than zero.",
+    name: "ERR_STACKING_INVALID_AMOUNT",
+    message: "Invalid stacking amount. Amount must be greater than zero.",
   },
   19: {
-    name: "ERR_STACKING_IS_DELEGATED",
-    message:
-      "This address has delegated its stacking rights to a pool operator.",
+    name: "ERR_NOT_ALLOWED",
+    message: "This operation is not allowed.",
   },
   20: {
+    name: "ERR_STACKING_ALREADY_DELEGATED",
+    message: "This address has already delegated to a pool.",
+  },
+  21: {
     name: "ERR_DELEGATION_EXPIRES_DURING_LOCK",
     message: "The delegation would expire before the lock period ends.",
   },
-  21: {
+  22: {
     name: "ERR_DELEGATION_TOO_MUCH_LOCKED",
     message: "Trying to lock more STX than the delegator has authorized.",
   },
-  22: {
+  23: {
     name: "ERR_DELEGATION_POX_ADDR_REQUIRED",
     message: "A PoX address must be specified for this delegation operation.",
   },
-  23: {
+  24: {
     name: "ERR_INVALID_START_BURN_HEIGHT",
     message:
       "Invalid start burn height. The cycle may have already started or the timing is incorrect.",
   },
-  24: {
-    name: "ERR_NOT_ALLOWED",
-    message: "This operation is not allowed.",
-  },
   25: {
-    name: "ERR_STACKING_ALREADY_DELEGATED",
-    message: "This address has already delegated to a pool.",
-  },
-  26: {
-    name: "ERR_DELEGATION_ALREADY_REVOKED",
-    message: "The delegation has already been revoked.",
-  },
-  27: {
-    name: "ERR_STACKING_ALREADY_REJECTED",
-    message: "This stacking operation was already rejected.",
-  },
-  28: {
-    name: "ERR_STACKING_INVALID_AMOUNT",
-    message: "Invalid stacking amount.",
-  },
-  29: {
     name: "ERR_NOT_CURRENT_STACKER",
     message: "You are not currently stacking.",
   },
-  30: {
+  26: {
     name: "ERR_STACK_EXTEND_NOT_LOCKED",
     message: "Cannot extend: your STX are not currently locked.",
   },
-  31: {
+  27: {
     name: "ERR_STACK_INCREASE_NOT_LOCKED",
     message: "Cannot increase: your STX are not currently locked.",
   },
-  32: {
+  28: {
     name: "ERR_DELEGATION_NO_REWARD_SLOT",
     message: "No reward slot available for this delegation.",
   },
-  33: {
+  29: {
     name: "ERR_DELEGATION_WRONG_REWARD_SLOT",
     message: "Wrong reward slot specified for this delegation.",
   },
+  30: {
+    name: "ERR_STACKING_IS_DELEGATED",
+    message:
+      "This address has delegated its stacking rights and cannot perform direct stacking operations.",
+  },
+  31: {
+    name: "ERR_STACKING_NOT_DELEGATED",
+    message: "This address is not delegated to any pool operator.",
+  },
+  32: {
+    name: "ERR_INVALID_SIGNER_KEY",
+    message: "Invalid signer key provided.",
+  },
+  33: {
+    name: "ERR_REUSED_SIGNER_KEY",
+    message: "This signer key has already been used.",
+  },
   34: {
-    name: "ERR_STACKING_UNREACHABLE",
-    message: "An unreachable code path was hit (internal error).",
+    name: "ERR_DELEGATION_ALREADY_REVOKED",
+    message: "The delegation has already been revoked.",
   },
   35: {
     name: "ERR_INVALID_SIGNATURE_PUBKEY",
