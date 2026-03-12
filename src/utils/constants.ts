@@ -76,11 +76,6 @@ export const poolInfo: Partial<Record<StackingPools, PoolInfo>> = {
   },
 };
 
-// export const ft: Record<string, number> = {
-//   "sbtc-token": 8,
-//   "aeusdc-token": 8,
-// };
-
 export const poxInfo = {
   testnet: {
     contractAddress: "ST000000000000000000002AMW42H",

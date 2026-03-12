@@ -179,17 +179,6 @@ export function parseAssetId(assetId: string) {
   return { contractAddress, contractName, tokenName };
 }
 
-// SHOULD BE REMOVED
-// // Select specific fungible token balance from list
-// export function selectSpeceficFTBalance(
-//   token: TokenType,
-//   balances: { token: string; balance: number }[],
-// ) {
-//   let balanceObject = Object.values(balances).find(
-//     (b) => b && b.token == token,
-//   );
-//   return balanceObject.balance;
-// }
 
 // PoX info structure for until_burn_ht calculation
 type PoxInfo = {

@@ -2,6 +2,7 @@ import { StacksSDK } from "../StacksSDK";
 import { PoolConfig, SdkPoolItem, SdkManagerMetrics } from "./types";
 import { FireblocksConfig } from "../services/types";
 import { formatErrorMessage } from "../utils/errorHandling";
+import { PoolCapacityError, SdkInitializationError } from "./errors";
 
 export class SdkManager {
   private sdkPool: Map<string, SdkPoolItem> = new Map();
@@ -47,7 +48,7 @@ export class SdkManager {
       // Try to find and remove an idle instance
       const removed = await this.removeOldestIdleSdk();
       if (!removed) {
-        throw new Error(
+        throw new PoolCapacityError(
           `SDK pool is at maximum capacity (${this.poolConfig.maxPoolSize}) with no idle connections`
         );
       }
@@ -100,11 +101,9 @@ export class SdkManager {
       return sdk;
     } catch (error) {
       console.error(`Failed to create SDK for vault ${vaultAccountId}:`, error);
-      throw new Error(
-        `SdkCreationFailed : 
-        Failed to create SDK instance for vault ${vaultAccountId}: ${formatErrorMessage(
-          error
-        )}`
+      throw new SdkInitializationError(
+        vaultAccountId,
+        formatErrorMessage(error)
       );
     }
   };
