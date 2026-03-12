@@ -140,8 +140,7 @@ export function concatSignature(fullSig: string, v: number): string {
 
 // Concatnate full signature for stacking signature digest
 export const concatSignerSignature = (fullSig: string, v: number): string => {
-  const vv = v >= 27 ? v - 27 : v;
-  const vHex = vv === 0 ? "00" : "01";
+  const vHex = v === 0 ? "00" : "01";
   return fullSig + vHex; // r||s FIRST, then v LAST (opposite of transaction sigs)
 };
 
