@@ -35,7 +35,7 @@ import {
   TransactionDetails,
   TransactionType,
 } from "./services/types";
-import { pagination_defaults, POX4_ERRORS, poxInfo } from "./utils/constants";
+import { pagination_defaults, POX4_ERRORS} from "./utils/constants";
 import { formatErrorMessage } from "./utils/errorHandling";
 import { validateApiCredentials } from "./utils/fireblocks.utils";
 import {
@@ -49,7 +49,6 @@ import {
   microToToken,
   parseAssetId,
   parseClarityErrCode,
-  safeStringify,
   stxToMicro,
   tokenToMicro,
   validateAddress,
