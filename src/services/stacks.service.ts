@@ -45,12 +45,10 @@ import {
 } from "../utils/helpers";
 import {
   api_constants,
-  ftInfo,
   pagination_defaults,
   poxInfo,
   stacks_info,
 } from "../utils/constants";
-import util from "node:util";
 
 export class StacksService {
   private axiosClient: AxiosInstance;
@@ -64,6 +62,23 @@ export class StacksService {
       : api_constants.stacks_mainnet_rpc;
     this.network = testnet ? STACKS_TESTNET : STACKS_MAINNET;
   }
+
+
+/**
+ * Fetches the current PoX contract address and name.
+ * @returns An object containing the PoX contract address and name
+ */
+private getPoxContractInfo = async (): Promise<{ contractAddress: string; contractName: string }> => {
+  const poxResponse = await this.fetchPoxInfo();
+  
+  if (poxResponse?.data?.contract_id) {
+    const [contractAddress, contractName] = poxResponse.data.contract_id.split(".");
+    return { contractAddress, contractName };
+  }
+  
+  // Fallback to static config
+  return this.network === STACKS_TESTNET ? poxInfo.testnet : poxInfo.mainnet;
+};
 
   /**
    * Formats a compressed secp256k1 public key hex into a Stacks address.
@@ -288,8 +303,7 @@ export class StacksService {
         throw new Error("Invalid Stacks address");
       }
 
-      const { contractAddress: poxAddr, contractName: poxName } =
-        this.network === STACKS_TESTNET ? poxInfo.testnet : poxInfo.mainnet;
+      const { contractAddress: poxAddr, contractName: poxName } = await this.getPoxContractInfo();
 
       const cv = await fetchCallReadOnlyFunction({
         contractAddress: poxAddr,
@@ -362,7 +376,7 @@ export class StacksService {
 
       const tokenInfo = getTokenInfo(token, this.network === STACKS_TESTNET ? "testnet" : "mainnet");
 
-      if (token !== TokenType.CUSTOM && !tokenInfo) {
+      if (type === TransactionType.FungibleToken && token !== TokenType.CUSTOM && !tokenInfo) {
         throw new Error(`Token ${token} is not supported on ${this.network}`);
       }
 
@@ -798,10 +812,9 @@ export class StacksService {
         throw new Error("Invalid compressed secp256k1 public key hex format");
       }
 
-      const { contractAddress: poxAddr, contractName: poxName } =
-        this.network === STACKS_TESTNET ? poxInfo.testnet : poxInfo.mainnet;
-
       const poxResponse = await this.fetchPoxInfo();
+
+      const { contractAddress: poxAddr, contractName: poxName } = await this.getPoxContractInfo();
 
       if (!poxResponse || !poxResponse.data || poxResponse.status !== 200) {
         throw new Error("Failed to fetch PoX contract info from the network");
@@ -853,8 +866,7 @@ export class StacksService {
         throw new Error("Invalid compressed secp256k1 public key hex format");
       }
 
-      const { contractAddress: poxAddr, contractName: poxName } =
-        this.network === STACKS_TESTNET ? poxInfo.testnet : poxInfo.mainnet;
+      const { contractAddress: poxAddr, contractName: poxName } = await this.getPoxContractInfo();
 
       const serializedContractCall = await this.serializeContractCall(
         senderPublicKey,
@@ -905,8 +917,7 @@ export class StacksService {
         throw new Error("Pool contract name must be provided");
       }
 
-      const { contractAddress: poxAddr, contractName: poxName } =
-        this.network === STACKS_TESTNET ? poxInfo.testnet : poxInfo.mainnet;
+      const { contractAddress: poxAddr, contractName: poxName } = await this.getPoxContractInfo();
 
       const serializedContractCall = await this.serializeContractCall(
         senderPublicKey,
@@ -959,8 +970,7 @@ export class StacksService {
       throw new Error("Invalid compressed secp256k1 public key hex format");
     }
 
-      const { contractAddress: poxAddr, contractName: poxName } =
-        this.network === STACKS_TESTNET ? poxInfo.testnet : poxInfo.mainnet;
+      const { contractAddress: poxAddr, contractName: poxName } = await this.getPoxContractInfo();
 
       const { version, hashbytes } = btcAddressToPoxTuple(btcRewardAddress);
 
