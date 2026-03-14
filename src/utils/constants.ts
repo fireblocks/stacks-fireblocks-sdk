@@ -55,7 +55,7 @@ export const ftInfo: Partial<Record<TokenType, Record<Network, TokenInfo>>> = {
       decimals: 8,
     },
   },
-  [TokenType.USDC]: {
+  [TokenType.USDCx]: {
     mainnet: {
       contractAddress: "SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE",
       contractName: "usdcx",

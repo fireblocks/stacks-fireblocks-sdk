@@ -104,7 +104,7 @@ export enum TransactionType {
 export enum TokenType {
   STX = "STX",
   sBTC = "sbtc-token",
-  USDC = "usdcx-token",
+  USDCx = "usdcx-token",
   CUSTOM = "custom-token",
 }
 

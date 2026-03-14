@@ -141,7 +141,7 @@ export const createTransaction: Handler = async (req, res, next) => {
 
     const recipientAddress = String(req.query.recipientAddress || "");
     const amountStr = String(req.query.amount || "");
-    const assetUi = String(req.query.assetType || "").trim(); // "STX" | "sBTC" | "USDC" | "Custom"
+    const assetUi = String(req.query.assetType || "").trim(); // "STX" | "sBTC" | "USDCx" | "Custom"
     const grossTransaction =
       String(req.query.grossTransaction || "false").toLowerCase() === "true";
     const note = req.query.note ? String(req.query.note) : undefined;
@@ -181,7 +181,7 @@ export const createTransaction: Handler = async (req, res, next) => {
     const mapUiToTokenType: Record<string, TokenType> = {
       STX: TokenType.STX,
       sBTC: TokenType.sBTC,
-      USDC: TokenType.USDC,
+      USDCx: TokenType.USDCx,
       Custom: TokenType.CUSTOM,
     };
     const tokenType = mapUiToTokenType[assetUi];
