@@ -9,3 +9,4 @@ src/tests
 secrets
 .vscode
 .vscode/launch.json
+.DS_Store

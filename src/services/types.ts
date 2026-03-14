@@ -1,5 +1,8 @@
 import { BasePath } from "@fireblocks/ts-sdk";
 
+
+export type Network = "mainnet" | "testnet";
+
 export type GetNativeBalanceResponse = {
   success: boolean;
   balance?: number;
@@ -107,8 +110,7 @@ export enum TransactionType {
 export enum TokenType {
   STX = "STX",
   sBTC = "sbtc-token",
-  USDC = "token-aeusdc",
-  USDH = "usdh-token-v1",
+  USDCx = "usdcx-token",
   CUSTOM = "custom-token",
 }
 

@@ -49,13 +49,13 @@ import {
   microToToken,
   parseAssetId,
   parseClarityErrCode,
-  safeStringify,
   stxToMicro,
   tokenToMicro,
   validateAddress,
 } from "./utils/helpers";
 import { createMessageSignature } from "@stacks/transactions";
 import { StacksTransactionWire } from "@stacks/transactions";
+import { join } from "path/win32";
 
 export class StacksSDK {
   private fireblocksService: FireblocksService;
@@ -184,7 +184,10 @@ export class StacksSDK {
   };
 
   /**
-
+   * Retrieves the status of a transaction by its ID.
+   * @param txId - The transaction ID.
+   * @returns A promise that resolves to a {GetTransactionStatusResponse} containing the transaction status information.
+   * @throws {Error} If the transaction ID is invalid or if the status retrieval fails.
    */
   public getTxStatusById = async (
     txId: string,
@@ -1282,6 +1285,16 @@ export class StacksSDK {
           error: `Failed to solo stack STX: ${assertResult.error}`,
         };
       }
+
+      const txStatus = await this.getTxStatusById(result.txid);
+      if (txStatus.success && txStatus.data?.tx_status !== "success") {
+        return {
+          success: false,
+          error: txStatus.data?.tx_error || "Transaction failed at the contract level.",
+          txHash: result.txid,
+        };
+      }
+
 
       console.log(`Successfully solo stacked ${amount} STX`);
       return {
