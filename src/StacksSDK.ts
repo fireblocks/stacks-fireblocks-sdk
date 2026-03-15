@@ -233,6 +233,34 @@ export class StacksSDK {
     }
   };
 
+
+  /**
+   * Waits for a transaction to be settled (either success or failure) by polling its status.
+   * @param txId - The transaction ID.
+   * @param intervalMs - The interval in milliseconds between status checks (default is 3000ms).
+   * @param maxAttempts - The maximum number of attempts to check the status (default is 20).
+   * @returns A promise that resolves to a {GetTransactionStatusResponse} containing the final transaction status.
+   */
+  private waitForTxSettlement = async (
+  txId: string,
+  intervalMs = 3000,
+  maxAttempts = 20,
+  ): Promise<GetTransactionStatusResponse> => {
+    for (let i = 0; i < maxAttempts; i++) {
+      const status = await this.getTxStatusById(txId);
+      if (!status.success) return status;
+
+      const txStatus = status.data?.tx_status;
+      if (txStatus !== "submitted" && txStatus !== "pending") {
+        return status; // settled — success or a real error
+      }
+
+      await new Promise(res => setTimeout(res, intervalMs));
+    }
+
+    return { success: false, error: "Transaction timed out waiting for confirmation." };
+  };
+
   /**
    * Retrieves the fungible tokens balances for the current address.
    *
@@ -1284,7 +1312,7 @@ export class StacksSDK {
         };
       }
 
-      const txStatus = await this.getTxStatusById(result.txid);
+      const txStatus = await this.waitForTxSettlement(result.txid);
       if (txStatus.success && txStatus.data?.tx_status !== "success") {
         return {
           success: false,
@@ -1292,7 +1320,6 @@ export class StacksSDK {
           txHash: result.txid,
         };
       }
-
 
       console.log(`Successfully solo stacked ${amount} STX`);
       return {
