@@ -596,11 +596,15 @@ export class StacksSDK {
       | "delegate-stx"
       | "allow-contract-caller"
       | "revoke-delegate-stx"
-      | "solo-stack",
+      | "solo-stack"
+      | "increase-stack-amount"
+      | "extend-stack-period",
     poolAddress?: string,
     poolContractName?: string,
     amount?: bigint,
+    maxAmount?: bigint,
     lockPeriod?: number,
+    extendCycles?: number,
     signerKey?: string,
     signerSig65Hex?: string,
     startBurnHeight?: number,
@@ -628,10 +632,28 @@ export class StacksSDK {
 
       if (
         functionName === "solo-stack" &&
-        (!amount || !lockPeriod || !signerSig65Hex || !startBurnHeight || !signerKey)
+        (!amount || !lockPeriod || !signerSig65Hex || !startBurnHeight || !signerKey || !maxAmount || !authId)
       ) {
         throw new Error(
-          "Amount, lock period, signer signature, start burn height, and signer key must be provided for solo-stack",
+          "Amount, lock period, signer signature, start burn height, signer key, max amount, and auth ID must be provided for solo-stack",
+        );
+      }
+
+      if (
+        functionName === "increase-stack-amount" &&
+        (!amount || !signerSig65Hex  || !signerKey || !authId || !maxAmount)
+      ) {
+        throw new Error(
+          "Amount,signer signature, signer key, auth ID and max amount must be provided for increase-stack-amount",
+        );
+      }
+
+      if (
+        functionName === "extend-stack-period" &&
+        (!extendCycles || !signerSig65Hex  || !signerKey || !authId || !maxAmount)
+      ) {
+        throw new Error(
+          "Extend cycles, signer signature, signer key, auth ID and max amount must be provided for extend-stack-period",
         );
       }
 
@@ -668,10 +690,31 @@ export class StacksSDK {
             amount,
             this.btcRewardsAddress,
             lockPeriod,
-            amount, // maxAmount ( >= amount )
+            maxAmount, // maxAmount ( >= amount )
             signerSig65Hex,
             startBurnHeight,
             authId,
+          );
+          break;
+        case "increase-stack-amount":
+          transactionToSign = await this.chainService.increaseStackedStx(
+            this.publicKey,
+            signerKey!,
+            amount!,
+            maxAmount!, 
+            signerSig65Hex!,
+            authId!,
+          );
+          break;
+        case "extend-stack-period":
+          transactionToSign = await this.chainService.extendStackingPeriod(
+            this.publicKey,
+            signerKey!,
+            this.btcRewardsAddress!,
+            extendCycles!,
+            maxAmount!, 
+            signerSig65Hex!,
+            authId!,
           );
           break;
         default:
@@ -917,6 +960,7 @@ export class StacksSDK {
         poolsAddress,
         poolContractName,
         stxToMicro(amount),
+        undefined,
         lockPeriod,
       );
 
@@ -1259,16 +1303,19 @@ export class StacksSDK {
 
   /**
    * Solo stacks a specified amount of STX for a given lock period.
+   * @param signerKey - The signer's compressed public key (hex).
+   * @param signerSig65Hex - 65-byte signer signature (hex).
    * @param amount - The amount of STX to stack.
+   * @param maxAmount - The maximum authorized amount of STX to stack (must be >= amount).
    * @param lockPeriod - The number of cycles to lock the STX.
    * @param authId - Authorization ID for the transaction.
-   * @param note - Optional note for raw signing.
    * @returns A response indicating success or failure of the transaction.
    */
   public stackSolo = async (
     signerKey: string,
     signerSig65Hex: string,
     amount: number,
+    maxAmount: number,
     lockPeriod: number, // Number of cycles
     authId: bigint,
   ): Promise<CreateTransactionResponse> => {
@@ -1297,7 +1344,9 @@ export class StacksSDK {
         undefined,
         undefined,
         stxToMicro(amount),
+        stxToMicro(maxAmount),
         lockPeriod,
+        undefined,
         signerKey,
         signerSig65Hex,
         startBurnHeight,
@@ -1331,6 +1380,142 @@ export class StacksSDK {
       return {
         success: false,
         error: `Failed to solo stack: ${formatErrorMessage(error)}`,
+      };
+    }
+  };
+
+  /**
+   * Increases the stacked amount of an existing solo stacking position.
+   * @param signerKey - The signer's compressed public key (hex).
+   * @param signerSig65Hex - 65-byte signer signature (hex).
+   * @param increaseBy - The amount of STX to add to the existing stack.
+   * @param maxAmount - The new maximum amount of the stack after increase.
+   * @param authId - Authorization ID for the transaction.
+   * @returns A response indicating success or failure of the transaction.
+   */
+  public increaseStackedAmount = async (
+    signerKey: string,
+    signerSig65Hex: string,
+    increaseBy: number,
+    maxAmount: number,
+    authId: bigint,
+  ): Promise<CreateTransactionResponse> => {
+    try {
+      if (!this.address || !this.publicKey || !this.vaultAccountId) {
+        throw new Error("Address, Public Key or Vault ID are not set");
+      }
+
+      console.log(`Increasing stacked amount by ${increaseBy} STX`);
+      
+      const result = await this.buildSignSendContractCall(
+        "increase-stack-amount",
+        undefined,
+        undefined,
+        stxToMicro(increaseBy),
+        stxToMicro(maxAmount),
+        undefined,
+        undefined,
+        signerKey,
+        signerSig65Hex,
+        undefined,
+        authId,
+      );
+
+      const assertResult = assertResultSuccess(result);
+      if (assertResult.success === false) {
+        return {
+          success: false,
+          error: `Failed to increase stacked amount: ${assertResult.error}`,
+        };
+      }
+
+      const txStatus = await this.waitForTxSettlement(result.txid);
+      if (txStatus.success && txStatus.data?.tx_status !== "success") {
+        return {
+          success: false,
+          error: txStatus.data?.tx_error || "Transaction failed at the contract level.",
+          txHash: result.txid,
+        };
+      }
+
+      console.log(`Successfully increased stacked amount by ${increaseBy} STX`);
+      return {
+        success: true,
+        txHash: result.txid,
+      };
+    } catch (error) {
+      console.error(`Error increasing stacked amount: ${formatErrorMessage(error)}`);
+      return {
+        success: false,
+        error: `Failed to increase stacked amount: ${formatErrorMessage(error)}`,
+      };
+    }
+  };
+
+   /**
+   * Extends the stacking period of an existing solo stacking position.
+   * @param signerKey - The signer's compressed public key (hex).
+   * @param signerSig65Hex - 65-byte signer signature (hex).
+   * @param increaseBy - The amount of STX to add to the existing stack.
+   * @param maxAmount - Maximum amount authorized for the stack
+   * @param authId - Authorization ID for the transaction.
+   * @returns A response indicating success or failure of the transaction.
+   */
+  public extendStackingPeriod = async (
+    signerKey: string,
+    signerSig65Hex: string,
+    extendCycles: number,
+    maxAmount: number,
+    authId: bigint,
+  ): Promise<CreateTransactionResponse> => {
+    try {
+      if (!this.address || !this.publicKey || !this.vaultAccountId) {
+        throw new Error("Address, Public Key or Vault ID are not set");
+      }
+
+      console.log(`Extending stacking period by ${extendCycles} cycles`);
+      
+      const result = await this.buildSignSendContractCall(
+        "extend-stack-period",
+        undefined,
+        undefined,
+        undefined,
+        stxToMicro(maxAmount),
+        undefined,
+        extendCycles,
+        signerKey,
+        signerSig65Hex,
+        undefined,
+        authId,
+      );
+
+      const assertResult = assertResultSuccess(result);
+      if (assertResult.success === false) {
+        return {
+          success: false,
+          error: `Failed to extend stacking period: ${assertResult.error}`,
+        };
+      }
+
+      const txStatus = await this.waitForTxSettlement(result.txid);
+      if (txStatus.success && txStatus.data?.tx_status !== "success") {
+        return {
+          success: false,
+          error: txStatus.data?.tx_error || "Transaction failed at the contract level.",
+          txHash: result.txid,
+        };
+      }
+
+      console.log(`Successfully extended stacking period by ${extendCycles} cycles`);
+      return {
+        success: true,
+        txHash: result.txid,
+      };
+    } catch (error) {
+      console.error(`Error extending stacking period: ${formatErrorMessage(error)}`);
+      return {
+        success: false,
+        error: `Failed to extend stacking period: ${formatErrorMessage(error)}`,
       };
     }
   };
