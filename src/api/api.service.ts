@@ -51,6 +51,7 @@ export class ApiService {
             params.signerKey,
             params.signerSig65Hex,
             params.amount,
+            params.maxAmount,
             params.lockPeriod,
             params.authId,
           );
@@ -112,6 +113,24 @@ export class ApiService {
           break;
         case ActionType.GET_POX_INFO:
           result = await sdk.getPoxInfo();
+          break;
+        case ActionType.INCREASE_STACKED_AMOUNT:
+          result = await sdk.increaseStackedAmount(
+            params.signerKey,
+            params.signerSig65Hex,
+            params.increaseBy,
+            params.maxAmount,
+            params.authId,
+          );
+          break;
+        case ActionType.EXTEND_STACKING_PERIOD:
+          result = await sdk.extendStackingPeriod(
+            params.signerKey,
+            params.signerSig65Hex,
+            params.extendCycles,
+            params.maxAmount,
+            params.authId,
+          );
           break;
         default:
           throw new Error(
