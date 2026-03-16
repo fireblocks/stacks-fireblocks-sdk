@@ -40,6 +40,7 @@ import {
   getDecimalsFromFtInfo,
   getTokenInfo,
   isCompressedSecp256k1PubKeyHex,
+  stxToMicro,
   untilBurnHeightForCycles,
   validateAddress,
 } from "../utils/helpers";
@@ -1001,6 +1002,123 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
         formatErrorMessage(error),
       );
       throw new Error(`Failed to solo stack: ${formatErrorMessage(error)}`);
+    }
+  };
+
+/**
+ * Increases the amount of STX in an existing solo stacking position.
+ * @param senderPublicKey - Public key of the transaction sender
+ * @param signerKey - Signer public key (33-byte compressed hex)
+ * @param increaseBy - Amount of microSTX to add to existing stack
+ * @param maxAmountUstx - Maximum total amount of microSTX to be stacked after increase 
+ * @param signerSig65Hex - 65-byte signer signature (hex)
+ * @param authId - Random integer for replay protection (must match signature)
+ * @returns the unsigned stack-increase transaction.
+ */
+  public increaseStackedStx = async (
+    senderPublicKey: string,
+    signerKey: string,
+    increaseBy: bigint,
+    maxAmountUstx: bigint,
+    signerSig65Hex: string,
+    authId: bigint,
+  ): Promise<{
+    unsignedContractCall: StacksTransactionWire;
+    preSignSigHash: string;
+  }> => {
+    try {
+      if (!isCompressedSecp256k1PubKeyHex(senderPublicKey)) {
+        throw new Error("Invalid compressed secp256k1 public key hex format");
+      }
+
+      const { contractAddress: poxAddr, contractName: poxName } = 
+        await this.getPoxContractInfo();
+    
+      const serializedContractCall = await this.serializeContractCall(
+        senderPublicKey,
+        poxAddr,
+        poxName,
+        "stack-increase",
+        [
+          uintCV(increaseBy),                                    // increase-by
+          someCV(bufferCV(Buffer.from(signerSig65Hex, "hex"))), // signer-sig
+          bufferCV(Buffer.from(signerKey, "hex")),              // signer-key
+          uintCV(maxAmountUstx),                                 // max-amount
+          uintCV(authId),                                        // auth-id
+        ],
+      );
+
+      return serializedContractCall;
+    } catch (error) {
+      console.error(
+        "Error building stack-increase transaction:",
+        formatErrorMessage(error),
+      );
+      throw new Error(
+        `Failed to increase stacked STX: ${formatErrorMessage(error)}`,
+      );
+    }
+  };
+
+  /**
+ * Extends the stacking period of an existing solo stacking position.
+ * @param senderPublicKey - Public key of the transaction sender
+ * @param signerKey - Signer public key (33-byte compressed hex)
+ * @param extendCycles - cycles to extend the stacking period by
+ * @param maxAmountUstx - Maximum total amount of microSTX to be stacked
+ * @param signerSig65Hex - 65-byte signer signature (hex)
+ * @param authId - Random integer for replay protection (must match signature)
+ * @returns the unsigned stack-extend transaction.
+ */
+  public extendStackingPeriod = async (
+    senderPublicKey: string,
+    signerKey: string,
+    btcRewardAddress: string,
+    extendCycles: number,
+    maxAmountUstx: bigint,
+    signerSig65Hex: string,
+    authId: bigint,
+  ): Promise<{
+    unsignedContractCall: StacksTransactionWire;
+    preSignSigHash: string;
+  }> => {
+    try {
+      if (!isCompressedSecp256k1PubKeyHex(senderPublicKey)) {
+        throw new Error("Invalid compressed secp256k1 public key hex format");
+      }
+
+      const { contractAddress: poxAddr, contractName: poxName } = 
+        await this.getPoxContractInfo();
+
+      const { version, hashbytes } = btcAddressToPoxTuple(btcRewardAddress);
+    
+      const serializedContractCall = await this.serializeContractCall(
+        senderPublicKey,
+        poxAddr,
+        poxName,
+        "stack-extend",
+        [
+          uintCV(extendCycles), // extend-cycles
+          tupleCV({                                              // 2. pox-addr
+          version: bufferCV(Uint8Array.from([version])),
+          hashbytes: bufferCV(hashbytes),
+          }),                                    
+          someCV(bufferCV(Buffer.from(signerSig65Hex, "hex"))), // signer-sig
+          bufferCV(Buffer.from(signerKey, "hex")),              // signer-key
+          uintCV(maxAmountUstx),                                 // max-amount
+          uintCV(authId),                                        // auth-id
+        ],
+      );
+
+      return serializedContractCall;
+    } catch (error) {
+      console.error(
+        "Error building stack-extend transaction:",
+        formatErrorMessage(error),
+      );
+      throw new Error(
+        `Failed to extend stacking period: ${formatErrorMessage(error)}`,
+      );
     }
   };
 }
