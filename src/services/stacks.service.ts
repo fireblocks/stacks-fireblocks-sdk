@@ -38,18 +38,18 @@ import { formatErrorMessage } from "../utils/errorHandling";
 import {
   btcAddressToPoxTuple,
   getDecimalsFromFtInfo,
+  getTokenInfo,
   isCompressedSecp256k1PubKeyHex,
+  stxToMicro,
   untilBurnHeightForCycles,
   validateAddress,
 } from "../utils/helpers";
 import {
   api_constants,
-  ftInfo,
   pagination_defaults,
   poxInfo,
   stacks_info,
 } from "../utils/constants";
-import util from "node:util";
 
 export class StacksService {
   private axiosClient: AxiosInstance;
@@ -63,6 +63,23 @@ export class StacksService {
       : api_constants.stacks_mainnet_rpc;
     this.network = testnet ? STACKS_TESTNET : STACKS_MAINNET;
   }
+
+
+/**
+ * Fetches the current PoX contract address and name.
+ * @returns An object containing the PoX contract address and name
+ */
+private getPoxContractInfo = async (): Promise<{ contractAddress: string; contractName: string }> => {
+  const poxResponse = await this.fetchPoxInfo();
+  
+  if (poxResponse?.data?.contract_id) {
+    const [contractAddress, contractName] = poxResponse.data.contract_id.split(".");
+    return { contractAddress, contractName };
+  }
+  
+  // Fallback to static config
+  return this.network === STACKS_TESTNET ? poxInfo.testnet : poxInfo.mainnet;
+};
 
   /**
    * Formats a compressed secp256k1 public key hex into a Stacks address.
@@ -287,8 +304,7 @@ export class StacksService {
         throw new Error("Invalid Stacks address");
       }
 
-      const { contractAddress: poxAddr, contractName: poxName } =
-        this.network === STACKS_TESTNET ? poxInfo.testnet : poxInfo.mainnet;
+      const { contractAddress: poxAddr, contractName: poxName } = await this.getPoxContractInfo();
 
       const cv = await fetchCallReadOnlyFunction({
         contractAddress: poxAddr,
@@ -359,17 +375,23 @@ export class StacksService {
         }
       }
 
+      const tokenInfo = getTokenInfo(token, this.network === STACKS_TESTNET ? "testnet" : "mainnet");
+
+      if (type === TransactionType.FungibleToken && token !== TokenType.CUSTOM && !tokenInfo) {
+        throw new Error(`Token ${token} is not supported on ${this.network}`);
+      }
+
       const unsignedTx =
         type == TransactionType.FungibleToken
           ? await makeUnsignedContractCall({
               contractAddress:
                 token === TokenType.CUSTOM
                   ? customTokenContractAddress
-                  : ftInfo[token]?.contractAddress,
+                  : tokenInfo!.contractAddress,
               contractName:
                 token === TokenType.CUSTOM
                   ? customTokenContractName
-                  : ftInfo[token]?.contractName,
+                  : tokenInfo!.contractName,
               functionName: "transfer",
               functionArgs: [
                 uintCV(amount),
@@ -573,7 +595,7 @@ export class StacksService {
    * @param signedTransaction - The signed Stacks transaction to broadcast.
    * @returns - The result of the broadcast operation.
    */
-  public brodcastTransaction = async (
+  public broadcastTransaction = async (
     signedTransaction: StacksTransactionWire,
   ): Promise<any> => {
     try {
@@ -791,10 +813,9 @@ export class StacksService {
         throw new Error("Invalid compressed secp256k1 public key hex format");
       }
 
-      const { contractAddress: poxAddr, contractName: poxName } =
-        this.network === STACKS_TESTNET ? poxInfo.testnet : poxInfo.mainnet;
-
       const poxResponse = await this.fetchPoxInfo();
+
+      const { contractAddress: poxAddr, contractName: poxName } = await this.getPoxContractInfo();
 
       if (!poxResponse || !poxResponse.data || poxResponse.status !== 200) {
         throw new Error("Failed to fetch PoX contract info from the network");
@@ -846,8 +867,7 @@ export class StacksService {
         throw new Error("Invalid compressed secp256k1 public key hex format");
       }
 
-      const { contractAddress: poxAddr, contractName: poxName } =
-        this.network === STACKS_TESTNET ? poxInfo.testnet : poxInfo.mainnet;
+      const { contractAddress: poxAddr, contractName: poxName } = await this.getPoxContractInfo();
 
       const serializedContractCall = await this.serializeContractCall(
         senderPublicKey,
@@ -898,8 +918,7 @@ export class StacksService {
         throw new Error("Pool contract name must be provided");
       }
 
-      const { contractAddress: poxAddr, contractName: poxName } =
-        this.network === STACKS_TESTNET ? poxInfo.testnet : poxInfo.mainnet;
+      const { contractAddress: poxAddr, contractName: poxName } = await this.getPoxContractInfo();
 
       const serializedContractCall = await this.serializeContractCall(
         senderPublicKey,
@@ -952,8 +971,7 @@ export class StacksService {
       throw new Error("Invalid compressed secp256k1 public key hex format");
     }
 
-      const { contractAddress: poxAddr, contractName: poxName } =
-        this.network === STACKS_TESTNET ? poxInfo.testnet : poxInfo.mainnet;
+      const { contractAddress: poxAddr, contractName: poxName } = await this.getPoxContractInfo();
 
       const { version, hashbytes } = btcAddressToPoxTuple(btcRewardAddress);
 
@@ -984,6 +1002,123 @@ export class StacksService {
         formatErrorMessage(error),
       );
       throw new Error(`Failed to solo stack: ${formatErrorMessage(error)}`);
+    }
+  };
+
+/**
+ * Increases the amount of STX in an existing solo stacking position.
+ * @param senderPublicKey - Public key of the transaction sender
+ * @param signerKey - Signer public key (33-byte compressed hex)
+ * @param increaseBy - Amount of microSTX to add to existing stack
+ * @param maxAmountUstx - Maximum total amount of microSTX to be stacked after increase 
+ * @param signerSig65Hex - 65-byte signer signature (hex)
+ * @param authId - Random integer for replay protection (must match signature)
+ * @returns the unsigned stack-increase transaction.
+ */
+  public increaseStackedStx = async (
+    senderPublicKey: string,
+    signerKey: string,
+    increaseBy: bigint,
+    maxAmountUstx: bigint,
+    signerSig65Hex: string,
+    authId: bigint,
+  ): Promise<{
+    unsignedContractCall: StacksTransactionWire;
+    preSignSigHash: string;
+  }> => {
+    try {
+      if (!isCompressedSecp256k1PubKeyHex(senderPublicKey)) {
+        throw new Error("Invalid compressed secp256k1 public key hex format");
+      }
+
+      const { contractAddress: poxAddr, contractName: poxName } = 
+        await this.getPoxContractInfo();
+    
+      const serializedContractCall = await this.serializeContractCall(
+        senderPublicKey,
+        poxAddr,
+        poxName,
+        "stack-increase",
+        [
+          uintCV(increaseBy),                                    // increase-by
+          someCV(bufferCV(Buffer.from(signerSig65Hex, "hex"))), // signer-sig
+          bufferCV(Buffer.from(signerKey, "hex")),              // signer-key
+          uintCV(maxAmountUstx),                                 // max-amount
+          uintCV(authId),                                        // auth-id
+        ],
+      );
+
+      return serializedContractCall;
+    } catch (error) {
+      console.error(
+        "Error building stack-increase transaction:",
+        formatErrorMessage(error),
+      );
+      throw new Error(
+        `Failed to increase stacked STX: ${formatErrorMessage(error)}`,
+      );
+    }
+  };
+
+  /**
+ * Extends the stacking period of an existing solo stacking position.
+ * @param senderPublicKey - Public key of the transaction sender
+ * @param signerKey - Signer public key (33-byte compressed hex)
+ * @param extendCycles - cycles to extend the stacking period by
+ * @param maxAmountUstx - Maximum total amount of microSTX to be stacked
+ * @param signerSig65Hex - 65-byte signer signature (hex)
+ * @param authId - Random integer for replay protection (must match signature)
+ * @returns the unsigned stack-extend transaction.
+ */
+  public extendStackingPeriod = async (
+    senderPublicKey: string,
+    signerKey: string,
+    btcRewardAddress: string,
+    extendCycles: number,
+    maxAmountUstx: bigint,
+    signerSig65Hex: string,
+    authId: bigint,
+  ): Promise<{
+    unsignedContractCall: StacksTransactionWire;
+    preSignSigHash: string;
+  }> => {
+    try {
+      if (!isCompressedSecp256k1PubKeyHex(senderPublicKey)) {
+        throw new Error("Invalid compressed secp256k1 public key hex format");
+      }
+
+      const { contractAddress: poxAddr, contractName: poxName } = 
+        await this.getPoxContractInfo();
+
+      const { version, hashbytes } = btcAddressToPoxTuple(btcRewardAddress);
+    
+      const serializedContractCall = await this.serializeContractCall(
+        senderPublicKey,
+        poxAddr,
+        poxName,
+        "stack-extend",
+        [
+          uintCV(extendCycles), // extend-cycles
+          tupleCV({                                              // 2. pox-addr
+          version: bufferCV(Uint8Array.from([version])),
+          hashbytes: bufferCV(hashbytes),
+          }),                                    
+          someCV(bufferCV(Buffer.from(signerSig65Hex, "hex"))), // signer-sig
+          bufferCV(Buffer.from(signerKey, "hex")),              // signer-key
+          uintCV(maxAmountUstx),                                 // max-amount
+          uintCV(authId),                                        // auth-id
+        ],
+      );
+
+      return serializedContractCall;
+    } catch (error) {
+      console.error(
+        "Error building stack-extend transaction:",
+        formatErrorMessage(error),
+      );
+      throw new Error(
+        `Failed to extend stacking period: ${formatErrorMessage(error)}`,
+      );
     }
   };
 }

@@ -286,7 +286,7 @@ router.get(
  *         required: true
  *         schema:
  *           type: string
- *           enum: [STX, sBTC,Custom]
+ *           enum: [STX, sBTC, USDCx, Custom]
  *         description: Asset to transfer. Select "Custom" to specify a custom SIP-010 token.
  *       - in: query
  *         name: tokenContractAddress
@@ -456,6 +456,12 @@ router.post(
  *           type: number
  *         description: Human STX amount to solo stack (e.g. 1000).
  *       - in: query
+ *         name: maxAmount
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Maximum amount in microSTX (integer string) used in the signer signature.
+ *       - in: query
  *         name: lockPeriod
  *         required: true
  *         schema:
@@ -478,6 +484,106 @@ router.post(
  *         description: Internal server error
  */
 router.post("/:vaultId/stacking/solo", validateVaultId, controller.stackSolo);
+
+/**
+ * @openapi
+ * /{vaultId}/stacking/solo/increase:
+ *   post:
+ *     summary: Increase solo stacked amount (PoX-4)
+ *     description: >
+ *       Increases the amount of STX in an existing solo stacking position using pox-4::stack-increase.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *       - in: query
+ *         name: signerKey
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The key of the running signer
+ *       - in: query
+ *         name: signerSig65Hex
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The signature of the running signer key
+ *       - in: query
+ *         name: increaseBy
+ *         required: true
+ *         schema:
+ *           type: number
+ *         description: Human STX amount to add to the existing stack (e.g. 500).
+ *       - in: query
+ *         name: maxAmount
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Maximum amount in microSTX (integer string) used in the signer signature.
+ *       - in: query
+ *         name: authId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Integer string (bigint) used for signer-sig replay protection (must be the same authId used to generate the signature).
+ *     responses:
+ *       200:
+ *         description: Increase stacked amount transaction submitted
+ *       400:
+ *         description: Invalid input
+ *       500:
+ *         description: Internal server error
+ */
+router.post("/:vaultId/stacking/solo/increase", validateVaultId, controller.increaseStackedAmount);
+
+/**
+ * @openapi
+ * /{vaultId}/stacking/solo/extend:
+ *   post:
+ *     summary: Extend solo stacking period (PoX-4)
+ *     description: >
+ *       Extends the stacking period of an existing solo stacking position using pox-4::stack-extend.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *       - in: query
+ *         name: signerKey
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The key of the running signer
+ *       - in: query
+ *         name: signerSig65Hex
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The signature of the running signer key
+ *       - in: query
+ *         name: extendCycles
+ *         required: true
+ *         schema:
+ *           type: number
+ *           minimum: 1
+ *           maximum: 12
+ *         description: Number of cycles to extend the stacking period by (1-12).
+ *       - in: query
+ *         name: maxAmount
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Maximum amount in microSTX (integer string) used in the signer signature.
+ *       - in: query
+ *         name: authId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Integer string (bigint) used for signer-sig replay protection (must be the same authId used to generate the signature).
+ *     responses:
+ *       200:
+ *         description: Extend stacking period transaction submitted
+ *       400:
+ *         description: Invalid input
+ *       500:
+ *         description: Internal server error
+ */
+router.post("/:vaultId/stacking/solo/extend", validateVaultId, controller.extendStackingPeriod);
 
 // Pool metrics
 /**

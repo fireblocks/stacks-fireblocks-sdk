@@ -1,17 +1,26 @@
 import { c32addressDecode } from "c32check";
 import { formatErrorMessage } from "./errorHandling";
 import { ftInfo, stacks_info } from "./constants";
-import { TokenType } from "../services/types";
+import { Network, TokenInfo, TokenType } from "../services/types";
 import {
   decodeBtcAddressBytes,
   pox4SignatureMessage,
   Pox4SignatureTopic,
 } from "@stacks/stacking";
-import { StacksNetworkName } from "@stacks/network";
+import { StacksNetwork, StacksNetworkName } from "@stacks/network";
 import { encodeStructuredDataBytes } from "@stacks/transactions";
 import { sha256 } from "@noble/hashes/sha256";
 import { bytesToHex } from "@stacks/common";
 import { StacksService } from "../services/stacks.service";
+
+
+// Returns the token info from ftInfo for a given token type and network, or undefined if not found.
+export function getTokenInfo(
+  token: TokenType,
+  network: Network,
+): TokenInfo| undefined {
+  return ftInfo[token]?.[network];
+}
 
 // Validate that the provided amount is a positive number.
 export function validateAmount(amount: string | number): boolean {
@@ -94,7 +103,11 @@ export async function tokenToMicro(
   }
 
   let decimals: number;
-  const info = ftInfo[token]; // get token info from constants, if not available => custom token => fetch decimals from chain.
+
+  // get token info from constants, if not available => custom token => fetch decimals from chain.
+  // use mainnet by default (decimals are the same across networks)
+  const info = getTokenInfo(token,"mainnet");
+
   if (!info) {
     decimals = await stacksService.fetchFtDecimals(
       customTokenContractAddress,
@@ -127,28 +140,33 @@ export function concatSignature(fullSig: string, v: number): string {
 
 // Concatnate full signature for stacking signature digest
 export const concatSignerSignature = (fullSig: string, v: number): string => {
-  const vv = v >= 27 ? v - 27 : v;
-  const vHex = vv === 0 ? "00" : "01";
+  const vHex = v === 0 ? "00" : "01";
   return fullSig + vHex; // r||s FIRST, then v LAST (opposite of transaction sigs)
 };
 
 // Get decimals for a fungible token from its contract ID
 export const getDecimalsFromFtInfo = (contractId: string): number => {
   const [addr, contractAndToken] = contractId.split(".");
-  const [contractName, tokenName] = contractAndToken.split("::");
-  const hit = Object.values(ftInfo).find(
+  const [contractName] = contractAndToken.split("::");
+
+  const allNetworkInfos = Object.values(ftInfo)
+    .filter((t) => t !== undefined && t !== null)
+    .flatMap((t) => [t.mainnet, t.testnet]);
+
+  const hit = allNetworkInfos.find(
     (t) =>
-      t &&
       t.contractName === contractName &&
       t.contractAddress.toLowerCase() === addr.toLowerCase(),
   );
-  return (
-    hit?.decimals ??
-    Object.values(ftInfo).find((t) => t?.contractName === contractName)
-      ?.decimals ??
-    0
-  );
+
+  if (hit) {
+    return hit.decimals;
+  }
+
+  return 0;
 };
+
+
 
 // Parse asset ID into contract address, contract name, and token name
 export function parseAssetId(assetId: string) {
@@ -160,16 +178,6 @@ export function parseAssetId(assetId: string) {
   return { contractAddress, contractName, tokenName };
 }
 
-// Select specific fungible token balance from list
-export function selectSpeceficFTBalance(
-  token: TokenType,
-  balances: { token: string; balance: number }[],
-) {
-  let balanceObject = Object.values(balances).find(
-    (b) => b && b.token == token,
-  );
-  return balanceObject.balance;
-}
 
 // PoX info structure for until_burn_ht calculation
 type PoxInfo = {

@@ -3,6 +3,7 @@ import {
   StackingPools,
   TokenInfo,
   TokenType,
+  Network,
 } from "../services/types";
 
 export const derivationPath = {
@@ -41,23 +42,30 @@ export const pagination_defaults = {
   limit: 50,
 };
 
-export const ftInfo: Partial<Record<TokenType, TokenInfo>> = {
-  [TokenType.sBTC]: {
-    contractAddress: "ST1F7QA2MDF17S807EPA36TSS8AMEFY4KA9TVGWXT",
-    contractName: "sbtc-token",
-    decimals: 8,
+export const ftInfo: Partial<Record<TokenType, Record<Network, TokenInfo>>> = {
+   [TokenType.sBTC]: {
+    mainnet: {
+      contractAddress: "SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4",
+      contractName: "sbtc-token",
+      decimals: 8,
+    },
+    testnet: {
+      contractAddress: "ST1F7QA2MDF17S807EPA36TSS8AMEFY4KA9TVGWXT",
+      contractName: "sbtc-token",
+      decimals: 8,
+    },
   },
-
-  [TokenType.USDC]: {
-    contractAddress: "SP3Y2ZSH8P7D50B0VBTSX11S7XSG24M1VB9YFQA4K",
-    contractName: "token-aeusdc",
-    decimals: 6,
-  },
-
-  [TokenType.USDH]: {
-    contractAddress: "SPN5AKG35QZSK2M8GAMR4AFX45659RJHDW353HSG",
-    contractName: "usdh-token-v1",
-    decimals: 8,
+  [TokenType.USDCx]: {
+    mainnet: {
+      contractAddress: "SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE",
+      contractName: "usdcx",
+      decimals: 6,
+    },
+    testnet: {
+      contractAddress: "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM",
+      contractName: "usdcx",
+      decimals: 6,
+    },
   },
 };
 
@@ -66,11 +74,6 @@ export const poolInfo: Partial<Record<StackingPools, PoolInfo>> = {
     poolAddress: "SP21YTSM60CAY6D011EZVEVNKXVW8FVZE198XEFFP",
     poolContractName: "pox4-fast-pool-v3",
   },
-};
-
-export const ft: Record<string, number> = {
-  "sbtc-token": 8,
-  "aeusdc-token": 8,
 };
 
 export const poxInfo = {
@@ -128,71 +131,75 @@ export const POX4_ERRORS: Record<number, { name: string; message: string }> = {
     name: "ERR_STACKING_INVALID_POX_ADDRESS",
     message: "Invalid Bitcoin reward address format.",
   },
+  18: {
+    name: "ERR_STACKING_INVALID_AMOUNT",
+    message: "Invalid stacking amount. Amount must be greater than zero.",
+  },
   19: {
-    name: "ERR_STACKING_IS_DELEGATED",
-    message:
-      "This address has delegated its stacking rights to a pool operator.",
+    name: "ERR_NOT_ALLOWED",
+    message: "This operation is not allowed.",
   },
   20: {
+    name: "ERR_STACKING_ALREADY_DELEGATED",
+    message: "This address has already delegated to a pool.",
+  },
+  21: {
     name: "ERR_DELEGATION_EXPIRES_DURING_LOCK",
     message: "The delegation would expire before the lock period ends.",
   },
-  21: {
+  22: {
     name: "ERR_DELEGATION_TOO_MUCH_LOCKED",
     message: "Trying to lock more STX than the delegator has authorized.",
   },
-  22: {
+  23: {
     name: "ERR_DELEGATION_POX_ADDR_REQUIRED",
     message: "A PoX address must be specified for this delegation operation.",
   },
-  23: {
+  24: {
     name: "ERR_INVALID_START_BURN_HEIGHT",
     message:
       "Invalid start burn height. The cycle may have already started or the timing is incorrect.",
   },
-  24: {
-    name: "ERR_NOT_ALLOWED",
-    message: "This operation is not allowed.",
-  },
   25: {
-    name: "ERR_STACKING_ALREADY_DELEGATED",
-    message: "This address has already delegated to a pool.",
-  },
-  26: {
-    name: "ERR_DELEGATION_ALREADY_REVOKED",
-    message: "The delegation has already been revoked.",
-  },
-  27: {
-    name: "ERR_STACKING_ALREADY_REJECTED",
-    message: "This stacking operation was already rejected.",
-  },
-  28: {
-    name: "ERR_STACKING_INVALID_AMOUNT",
-    message: "Invalid stacking amount.",
-  },
-  29: {
     name: "ERR_NOT_CURRENT_STACKER",
     message: "You are not currently stacking.",
   },
-  30: {
+  26: {
     name: "ERR_STACK_EXTEND_NOT_LOCKED",
     message: "Cannot extend: your STX are not currently locked.",
   },
-  31: {
+  27: {
     name: "ERR_STACK_INCREASE_NOT_LOCKED",
     message: "Cannot increase: your STX are not currently locked.",
   },
-  32: {
+  28: {
     name: "ERR_DELEGATION_NO_REWARD_SLOT",
     message: "No reward slot available for this delegation.",
   },
-  33: {
+  29: {
     name: "ERR_DELEGATION_WRONG_REWARD_SLOT",
     message: "Wrong reward slot specified for this delegation.",
   },
+  30: {
+    name: "ERR_STACKING_IS_DELEGATED",
+    message:
+      "This address has delegated its stacking rights and cannot perform direct stacking operations.",
+  },
+  31: {
+    name: "ERR_STACKING_NOT_DELEGATED",
+    message: "This address is not delegated to any pool operator.",
+  },
+  32: {
+    name: "ERR_INVALID_SIGNER_KEY",
+    message: "Invalid signer key provided.",
+  },
+  33: {
+    name: "ERR_REUSED_SIGNER_KEY",
+    message: "This signer key has already been used.",
+  },
   34: {
-    name: "ERR_STACKING_UNREACHABLE",
-    message: "An unreachable code path was hit (internal error).",
+    name: "ERR_DELEGATION_ALREADY_REVOKED",
+    message: "The delegation has already been revoked.",
   },
   35: {
     name: "ERR_INVALID_SIGNATURE_PUBKEY",

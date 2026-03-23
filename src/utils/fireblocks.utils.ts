@@ -63,34 +63,7 @@ export const getPublicKeyForDerivationPath = async (
     }
     return publicKey;
   } catch (error: any) {
-    require("fs").writeFileSync("output.txt", require("util").inspect(error, { depth: null, maxArrayLength: null, maxStringLength: null }), "utf8");
     throw new Error(`Error fetching public key: ${formatErrorMessage(error)}`);
-  }
-};
-
-// Retrieves the asset addresses for a given vault account ID using the Fireblocks SDK.
-export const getAssetAddressesByVaultID = async (
-  vaultID: string | number,
-  assetId: string,
-  fireblocksSDK: Fireblocks,
-): Promise<void> => {
-  const id = typeof vaultID === "string" ? Number(vaultID) : vaultID;
-  if (!Number.isInteger(id) || id < 0) {
-    throw new Error("vaultID must be a valid non-negative integer.");
-  }
-
-  try {
-    const assetAdresses =
-      await fireblocksSDK.vaults.getVaultAccountAssetAddressesPaginated({
-        vaultAccountId: String(id),
-        assetId: assetId,
-      });
-
-    // return publicKey;
-  } catch (error: any) {
-    throw new Error(
-      `Failed to get public key by vault ID: ${formatErrorMessage(error)}`,
-    );
   }
 };
 

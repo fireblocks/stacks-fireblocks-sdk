@@ -141,7 +141,7 @@ export const createTransaction: Handler = async (req, res, next) => {
 
     const recipientAddress = String(req.query.recipientAddress || "");
     const amountStr = String(req.query.amount || "");
-    const assetUi = String(req.query.assetType || "").trim(); // "STX" | "sBTC" | "USDC" | "USDH" | "Custom"
+    const assetUi = String(req.query.assetType || "").trim(); // "STX" | "sBTC" | "USDCx" | "Custom"
     const grossTransaction =
       String(req.query.grossTransaction || "false").toLowerCase() === "true";
     const note = req.query.note ? String(req.query.note) : undefined;
@@ -181,6 +181,7 @@ export const createTransaction: Handler = async (req, res, next) => {
     const mapUiToTokenType: Record<string, TokenType> = {
       STX: TokenType.STX,
       sBTC: TokenType.sBTC,
+      USDCx: TokenType.USDCx,
       Custom: TokenType.CUSTOM,
     };
     const tokenType = mapUiToTokenType[assetUi];
@@ -363,11 +364,12 @@ export const stackSolo: Handler = async (req, res, next) => {
     const signerKey = String(req.query.signerKey || "").trim();
     const signerSig65Hex = String(req.query.signerSig65Hex || "").trim();
     const amountStr = String(req.query.amount || "");
+    const maxAmountStr = String(req.query.maxAmount || "");
     const lockPeriodStr = String(req.query.lockPeriod || "1");
     const authIdStr = String(req.query.authId);
 
-    if (!amountStr) {
-      res.status(400).json({ error: "Bad Request: amount is required" });
+    if (!amountStr || !maxAmountStr) {
+      res.status(400).json({ error: "Bad Request: amount and maxAmount are required" });
       return;
     }
 
@@ -385,23 +387,139 @@ export const stackSolo: Handler = async (req, res, next) => {
       return;
     }
 
-    // authId must be an integer string
-    let authId: bigint | undefined = undefined;
     if (!/^[0-9]+$/.test(authIdStr)) {
-        res.status(400).json({
-          error: "Bad Request: authId must be a positive integer string",
-        });
-        return;
+      res.status(400).json({
+        error: "Bad Request: authId must be a positive integer string",
+      });
+      return;
     }
-    authId = BigInt(authIdStr);
-    
+    const authId = BigInt(authIdStr);
+
+    if (!/^[0-9]+$/.test(maxAmountStr)) {
+      res.status(400).json({
+        error: "Bad Request: maxAmount must be a positive integer string (microSTX)",
+      });
+      return;
+    }
+    const maxAmount = Number(maxAmountStr);
 
     const tx = await apiService.executeAction(vaultId, ActionType.STACK_SOLO, {
-      signerKey, 
-      signerSig65Hex, 
-      amount, // human STX amount (your SDK converts using stxToMicro)
-      lockPeriod, // cycles (1..12)
-      authId, // bigint | undefined
+      signerKey,
+      signerSig65Hex,
+      amount,
+      maxAmount,
+      lockPeriod,
+      authId,
+    });
+
+    res.json(tx);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /:vaultId/stacking/solo/increase
+export const increaseStackedAmount: Handler = async (req, res, next) => {
+  try {
+    const { vaultId } = req.params;
+
+    const signerKey = String(req.query.signerKey || "").trim();
+    const signerSig65Hex = String(req.query.signerSig65Hex || "").trim();
+    const increaseByStr = String(req.query.increaseBy || "");
+    const maxAmountStr = String(req.query.maxAmount || "");
+    const authIdStr = String(req.query.authId || "");
+
+    if (!signerKey || !signerSig65Hex || !increaseByStr || !maxAmountStr || !authIdStr) {
+      res.status(400).json({
+        error: "Bad Request: signerKey, signerSig65Hex, increaseBy, maxAmount and authId are required",
+      });
+      return;
+    }
+
+    const increaseBy = Number(increaseByStr);
+    if (!Number.isFinite(increaseBy) || increaseBy <= 0) {
+      res.status(400).json({ error: "Bad Request: increaseBy must be > 0" });
+      return;
+    }
+
+    if (!/^[0-9]+$/.test(authIdStr)) {
+      res.status(400).json({
+        error: "Bad Request: authId must be a positive integer string",
+      });
+      return;
+    }
+    const authId = BigInt(authIdStr);
+
+    if (!/^[0-9]+$/.test(maxAmountStr)) {
+      res.status(400).json({
+        error: "Bad Request: maxAmount must be a positive integer string (microSTX)",
+      });
+      return;
+    }
+    const maxAmount = BigInt(maxAmountStr);
+
+    const tx = await apiService.executeAction(vaultId, ActionType.INCREASE_STACKED_AMOUNT, {
+      signerKey,
+      signerSig65Hex,
+      increaseBy,
+      maxAmount,
+      authId,
+    });
+
+    res.json(tx);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /:vaultId/stacking/solo/extend
+export const extendStackingPeriod: Handler = async (req, res, next) => {
+  try {
+    const { vaultId } = req.params;
+
+    const signerKey = String(req.query.signerKey || "").trim();
+    const signerSig65Hex = String(req.query.signerSig65Hex || "").trim();
+    const extendCyclesStr = String(req.query.extendCycles || "");
+    const maxAmountStr = String(req.query.maxAmount || "");
+    const authIdStr = String(req.query.authId || "");
+
+    if (!signerKey || !signerSig65Hex || !extendCyclesStr || !maxAmountStr || !authIdStr) {
+      res.status(400).json({
+        error: "Bad Request: signerKey, signerSig65Hex, extendCycles, maxAmount and authId are required",
+      });
+      return;
+    }
+
+    const extendCycles = Number(extendCyclesStr);
+    if (!Number.isInteger(extendCycles) || extendCycles < 1 || extendCycles > 12) {
+      res.status(400).json({
+        error: "Bad Request: extendCycles must be an integer between 1 and 12",
+      });
+      return;
+    }
+
+    if (!/^[0-9]+$/.test(authIdStr)) {
+      res.status(400).json({
+        error: "Bad Request: authId must be a positive integer string",
+      });
+      return;
+    }
+    const authId = BigInt(authIdStr);
+
+    if (!/^[0-9]+$/.test(maxAmountStr)) {
+      res.status(400).json({
+        error: "Bad Request: maxAmount must be a positive integer string (microSTX)",
+      });
+      return;
+    }
+    const maxAmount = Number(maxAmountStr);
+
+    const tx = await apiService.executeAction(vaultId, ActionType.EXTEND_STACKING_PERIOD, {
+      signerKey,
+      signerSig65Hex,
+      extendCycles,
+      maxAmount,
+      authId,
     });
 
     res.json(tx);
