@@ -1,0 +1,158 @@
+import {
+  derivationPath,
+  api_constants,
+  stacks_info,
+  ftInfo,
+  poolInfo,
+  poxInfo,
+  POX4_ERRORS,
+  pagination_defaults,
+} from "../utils/constants";
+import { TokenType, StackingPools } from "../services/types";
+
+describe("derivationPath", () => {
+  it("has correct BIP-44 purpose", () => {
+    expect(derivationPath.purpose).toBe(44);
+  });
+
+  it("has correct coin types for mainnet and testnet", () => {
+    expect(derivationPath.coinTypeMainnet).toBe(0); // Bitcoin mainnet
+    expect(derivationPath.coinTypeTestnet).toBe(1); // Testnet
+  });
+
+  it("has correct change and address index", () => {
+    expect(derivationPath.change).toBe(0);
+    expect(derivationPath.addressIndex).toBe(0);
+  });
+});
+
+describe("api_constants", () => {
+  it("has valid mainnet RPC URL", () => {
+    expect(api_constants.stacks_mainnet_rpc).toBe("https://api.hiro.so");
+    expect(api_constants.stacks_mainnet_rpc).toMatch(/^https:\/\//);
+  });
+
+  it("has valid testnet RPC URL", () => {
+    expect(api_constants.stacks_testnet_rpc).toBe("https://api.testnet.hiro.so");
+    expect(api_constants.stacks_testnet_rpc).toMatch(/^https:\/\//);
+  });
+});
+
+describe("stacks_info", () => {
+  it("has correct STX decimals", () => {
+    expect(stacks_info.stxDecimals).toBe(6);
+  });
+
+  it("has correct STX symbol", () => {
+    expect(stacks_info.stxSymbol).toBe("STX");
+  });
+
+  it("has valid stacking configuration", () => {
+    expect(stacks_info.stacking.pool.minLockCycles).toBe(1);
+    expect(stacks_info.stacking.pool.maxLockCycles).toBe(12);
+    expect(stacks_info.stacking.solo.safetyBlocks).toBeGreaterThan(0);
+  });
+});
+
+describe("pagination_defaults", () => {
+  it("has sensible defaults", () => {
+    expect(pagination_defaults.page).toBe(0);
+    expect(pagination_defaults.limit).toBeGreaterThan(0);
+    expect(pagination_defaults.limit).toBeLessThanOrEqual(100);
+  });
+});
+
+describe("ftInfo", () => {
+  it("has sBTC token info with correct structure", () => {
+    const sbtc = ftInfo[TokenType.sBTC];
+    expect(sbtc).toBeDefined();
+    expect(sbtc!.contractAddress).toMatch(/^S[PT][A-Z0-9]+$/);
+    expect(sbtc!.contractName).toBe("sbtc-token");
+    expect(sbtc!.decimals).toBe(8);
+  });
+
+  it("has USDC token info with correct structure", () => {
+    const usdc = ftInfo[TokenType.USDC];
+    expect(usdc).toBeDefined();
+    expect(usdc!.contractAddress).toMatch(/^S[PT][A-Z0-9]+$/);
+    expect(usdc!.contractName).toBe("token-aeusdc");
+    expect(usdc!.decimals).toBe(6);
+  });
+
+  it("has USDH token info with correct structure", () => {
+    const usdh = ftInfo[TokenType.USDH];
+    expect(usdh).toBeDefined();
+    expect(usdh!.contractAddress).toMatch(/^S[PT][A-Z0-9]+$/);
+    expect(usdh!.contractName).toBe("usdh-token-v1");
+    expect(usdh!.decimals).toBe(8);
+  });
+
+  it("all tokens have required fields", () => {
+    Object.values(ftInfo).forEach((token) => {
+      if (token) {
+        expect(token).toHaveProperty("contractAddress");
+        expect(token).toHaveProperty("contractName");
+        expect(token).toHaveProperty("decimals");
+        expect(typeof token.decimals).toBe("number");
+        expect(token.decimals).toBeGreaterThanOrEqual(0);
+      }
+    });
+  });
+});
+
+describe("poolInfo", () => {
+  it("has FAST_POOL info with correct structure", () => {
+    const fastPool = poolInfo[StackingPools.FAST_POOL];
+    expect(fastPool).toBeDefined();
+    expect(fastPool!.poolAddress).toMatch(/^S[PT][A-Z0-9]+$/);
+    expect(fastPool!.poolContractName).toBe("pox4-fast-pool-v3");
+  });
+});
+
+describe("poxInfo", () => {
+  it("has mainnet PoX-4 contract info", () => {
+    expect(poxInfo.mainnet.contractAddress).toBe("SP000000000000000000002Q6VF78");
+    expect(poxInfo.mainnet.contractName).toBe("pox-4");
+  });
+
+  it("has testnet PoX-4 contract info", () => {
+    expect(poxInfo.testnet.contractAddress).toBe("ST000000000000000000002AMW42H");
+    expect(poxInfo.testnet.contractName).toBe("pox-4");
+  });
+
+  it("mainnet address starts with SP", () => {
+    expect(poxInfo.mainnet.contractAddress).toMatch(/^SP/);
+  });
+
+  it("testnet address starts with ST", () => {
+    expect(poxInfo.testnet.contractAddress).toMatch(/^ST/);
+  });
+});
+
+describe("POX4_ERRORS", () => {
+  it("has error definitions with name and message", () => {
+    Object.entries(POX4_ERRORS).forEach(([code, error]) => {
+      expect(typeof Number(code)).toBe("number");
+      expect(error).toHaveProperty("name");
+      expect(error).toHaveProperty("message");
+      expect(typeof error.name).toBe("string");
+      expect(typeof error.message).toBe("string");
+      expect(error.name.length).toBeGreaterThan(0);
+      expect(error.message.length).toBeGreaterThan(0);
+    });
+  });
+
+  it("has common PoX error codes", () => {
+    // These are well-known PoX-4 error codes
+    expect(POX4_ERRORS[1]).toBeDefined(); // ERR_STACKING_INSUFFICIENT_FUNDS
+    expect(POX4_ERRORS[3]).toBeDefined(); // ERR_STACKING_ALREADY_STACKED
+    expect(POX4_ERRORS[11]).toBeDefined(); // ERR_STACKING_THRESHOLD_NOT_MET
+    expect(POX4_ERRORS[35]).toBeDefined(); // ERR_INVALID_SIGNATURE_PUBKEY
+  });
+
+  it("error names follow ERR_ convention", () => {
+    Object.values(POX4_ERRORS).forEach((error) => {
+      expect(error.name).toMatch(/^ERR_/);
+    });
+  });
+});
