@@ -8,7 +8,7 @@ import {
   POX4_ERRORS,
   pagination_defaults,
 } from "../utils/constants";
-import { TokenType, StackingPools } from "../services/types";
+import { TokenType, StackingPools, TokenInfo } from "../services/types";
 
 describe("derivationPath", () => {
   it("has correct BIP-44 purpose", () => {
@@ -63,39 +63,50 @@ describe("pagination_defaults", () => {
 });
 
 describe("ftInfo", () => {
-  it("has sBTC token info with correct structure", () => {
-    const sbtc = ftInfo[TokenType.sBTC];
-    expect(sbtc).toBeDefined();
-    expect(sbtc!.contractAddress).toMatch(/^S[PT][A-Z0-9]+$/);
-    expect(sbtc!.contractName).toBe("sbtc-token");
-    expect(sbtc!.decimals).toBe(8);
+  it("has sBTC mainnet token info with correct structure", () => {
+    const sbtcMainnet = ftInfo[TokenType.sBTC]?.mainnet;
+    expect(sbtcMainnet).toBeDefined();
+    expect(sbtcMainnet!.contractAddress).toMatch(/^S[PM]/);
+    expect(sbtcMainnet!.contractName).toBe("sbtc-token");
+    expect(sbtcMainnet!.decimals).toBe(8);
   });
 
-  it("has USDC token info with correct structure", () => {
-    const usdc = ftInfo[TokenType.USDC];
-    expect(usdc).toBeDefined();
-    expect(usdc!.contractAddress).toMatch(/^S[PT][A-Z0-9]+$/);
-    expect(usdc!.contractName).toBe("token-aeusdc");
-    expect(usdc!.decimals).toBe(6);
+  it("has sBTC testnet token info with correct structure", () => {
+    const sbtcTestnet = ftInfo[TokenType.sBTC]?.testnet;
+    expect(sbtcTestnet).toBeDefined();
+    expect(sbtcTestnet!.contractAddress).toMatch(/^ST/);
+    expect(sbtcTestnet!.contractName).toBe("sbtc-token");
+    expect(sbtcTestnet!.decimals).toBe(8);
   });
 
-  it("has USDH token info with correct structure", () => {
-    const usdh = ftInfo[TokenType.USDH];
-    expect(usdh).toBeDefined();
-    expect(usdh!.contractAddress).toMatch(/^S[PT][A-Z0-9]+$/);
-    expect(usdh!.contractName).toBe("usdh-token-v1");
-    expect(usdh!.decimals).toBe(8);
+  it("has USDCx mainnet token info with correct structure", () => {
+    const usdcxMainnet = ftInfo[TokenType.USDCx]?.mainnet;
+    expect(usdcxMainnet).toBeDefined();
+    expect(usdcxMainnet!.contractAddress).toMatch(/^SP/);
+    expect(usdcxMainnet!.contractName).toBe("usdcx");
+    expect(usdcxMainnet!.decimals).toBe(6);
   });
 
-  it("all tokens have required fields", () => {
-    Object.values(ftInfo).forEach((token) => {
-      if (token) {
-        expect(token).toHaveProperty("contractAddress");
-        expect(token).toHaveProperty("contractName");
-        expect(token).toHaveProperty("decimals");
-        expect(typeof token.decimals).toBe("number");
-        expect(token.decimals).toBeGreaterThanOrEqual(0);
-      }
+  it("has USDCx testnet token info with correct structure", () => {
+    const usdcxTestnet = ftInfo[TokenType.USDCx]?.testnet;
+    expect(usdcxTestnet).toBeDefined();
+    expect(usdcxTestnet!.contractAddress).toMatch(/^ST/);
+    expect(usdcxTestnet!.contractName).toBe("usdcx");
+    expect(usdcxTestnet!.decimals).toBe(6);
+  });
+
+  it("all tokens have required fields for both networks", () => {
+    Object.values(ftInfo).forEach((networkInfo) => {
+      if (!networkInfo) return;
+      const networks: Array<"mainnet" | "testnet"> = ["mainnet", "testnet"];
+      networks.forEach((network) => {
+        const tokenInfo: TokenInfo = networkInfo[network];
+        expect(tokenInfo).toHaveProperty("contractAddress");
+        expect(tokenInfo).toHaveProperty("contractName");
+        expect(tokenInfo).toHaveProperty("decimals");
+        expect(typeof tokenInfo.decimals).toBe("number");
+        expect(tokenInfo.decimals).toBeGreaterThanOrEqual(0);
+      });
     });
   });
 });

@@ -14,11 +14,7 @@ describe("TokenType enum", () => {
   });
 
   it("has correct USDC contract name", () => {
-    expect(TokenType.USDC).toBe("token-aeusdc");
-  });
-
-  it("has correct USDH contract name", () => {
-    expect(TokenType.USDH).toBe("usdh-token-v1");
+    expect(TokenType.USDCx).toBe("usdcx-token");
   });
 
   it("has CUSTOM type for custom tokens", () => {
@@ -26,7 +22,7 @@ describe("TokenType enum", () => {
   });
 
   it("contains all expected token types", () => {
-    const expectedTokens = ["STX", "sbtc-token", "token-aeusdc", "usdh-token-v1", "custom-token"];
+    const expectedTokens = ["STX", "sbtc-token", "usdcx-token", "custom-token"];
     const actualTokens = Object.values(TokenType);
     expect(actualTokens).toEqual(expect.arrayContaining(expectedTokens));
     expect(actualTokens.length).toBe(expectedTokens.length);

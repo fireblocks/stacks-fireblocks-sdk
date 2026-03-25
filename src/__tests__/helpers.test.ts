@@ -6,7 +6,6 @@ import {
   microToStx,
   microToToken,
   concatSignature,
-  concatSignerSignature,
   parseAssetId,
   untilBurnHeightForCycles,
   assertResultSuccess,
@@ -138,19 +137,6 @@ describe("concatSignature", () => {
   });
 });
 
-describe("concatSignerSignature", () => {
-  it("appends v at the end for stacking signatures", () => {
-    const sig = "c".repeat(128);
-    expect(concatSignerSignature(sig, 0)).toBe(sig + "00");
-    expect(concatSignerSignature(sig, 1)).toBe(sig + "01");
-  });
-
-  it("handles v values >= 27 (EIP-155 style)", () => {
-    const sig = "d".repeat(128);
-    expect(concatSignerSignature(sig, 27)).toBe(sig + "00");
-    expect(concatSignerSignature(sig, 28)).toBe(sig + "01");
-  });
-});
 
 describe("parseAssetId", () => {
   it("parses asset ID correctly", () => {
