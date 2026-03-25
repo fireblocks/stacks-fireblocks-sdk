@@ -10,7 +10,7 @@ import * as fs from "fs";
 // Validate Fireblocks API credentials and vaultAccountId
 export const validateApiCredentials = (
   apiKey: string,
-  secretKeyPath: string,
+  secretKeyOrPem: string,
   vaultAccountId?: string | number,
 ): void => {
   // Validate API key is a valid UUID (v4)
@@ -20,9 +20,21 @@ export const validateApiCredentials = (
     throw new Error("API key is not a valid UUID v4.");
   }
 
-  // Validate secret key path exists and is a file
-  if (!fs.existsSync(secretKeyPath) || !fs.statSync(secretKeyPath).isFile()) {
-    throw new Error(`Secret key file does not exist at path: ${secretKeyPath}`);
+  // Check if it's an inline PEM string or a file path
+  const looksLikePem =
+    secretKeyOrPem.includes("-----BEGIN") &&
+    secretKeyOrPem.includes("PRIVATE KEY");
+
+  if (!looksLikePem) {
+    // It's a file path - validate it exists
+    if (
+      !fs.existsSync(secretKeyOrPem) ||
+      !fs.statSync(secretKeyOrPem).isFile()
+    ) {
+      throw new Error(
+        `Secret key file does not exist at path: ${secretKeyOrPem}`,
+      );
+    }
   }
 
   // Validate vaultAccountId if provided

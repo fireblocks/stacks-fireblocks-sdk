@@ -212,10 +212,19 @@ export class StacksSDK {
 
       if (transaction.tx_status !== "success") {
         const errorNumber = parseClarityErrCode(transaction.tx_result);
-        const error = POX4_ERRORS[errorNumber];
-        txDetails.tx_error = error
-          ? `${error.name}`
-          : "Unknown error occurred.";
+
+        // Only use PoX-4 error table for PoX contract calls
+        const isPoXTransaction =
+          transaction.tx_type === "contract_call" &&
+          transaction.contract_call?.contract_id?.includes("pox-4");
+
+        if (isPoXTransaction && errorNumber !== null && POX4_ERRORS[errorNumber]) {
+          txDetails.tx_error = POX4_ERRORS[errorNumber].name;
+        } else if (errorNumber !== null) {
+          txDetails.tx_error = `Contract error code: ${errorNumber}`;
+        } else {
+          txDetails.tx_error = transaction.tx_result?.repr || "Transaction failed";
+        }
       }
 
       return {
@@ -787,7 +796,9 @@ export class StacksSDK {
         recipientAddress,
         microAmount,
         TransactionType.STX,
-        undefined,
+        undefined, // token
+        undefined, // customTokenContractAddress
+        undefined, // customTokenContractName
         note,
       );
 

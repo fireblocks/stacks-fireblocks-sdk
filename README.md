@@ -10,14 +10,21 @@ https://fireblocks.github.io/stacks-fireblocks-sdk/
 ## ⚡ Project Overview
 
 **Stacks Fireblocks SDK** lets you securely execute Stacks transactions using Fireblocks vaults and raw signing.
-It's designed to simplify integration with Fireblocks for secure Stacks transactions, supporting both direct SDK use and a REST API interface.
+It's designed to simplify integration with Fireblocks for secure Stacks transactions.
+
+### **Two Usage Modes**
+
+| Mode | Use Case | How |
+|------|----------|-----|
+| **TypeScript SDK** | Import into your Node.js application | `import { StacksSDK } from "stacks-fireblocks-sdk"` |
+| **REST API Server** | Dockerized service for non-TS environments | `docker-compose up` or `node dist/server.js` |
 
 ### **Prerequisites**
 
 - Fireblocks workspace with raw signing enabled.
 - Fireblocks API key and secret key file.
 - Node.js v18+
-- Docker and Docker Compose (for API server).
+- Docker and Docker Compose (for REST API server mode).
 
 ---
 
@@ -40,7 +47,46 @@ It's designed to simplify integration with Fireblocks for secure Stacks transact
 
 ## 📦 Installation
 
-### **Local SDK Usage**
+### **Option 1: TypeScript SDK (for Node.js applications)**
+
+Install the package in your project:
+
+```bash
+npm install stacks-fireblocks-sdk
+```
+
+Import and use in your code:
+
+```typescript
+import { StacksSDK, FireblocksConfig } from "stacks-fireblocks-sdk";
+
+const config: FireblocksConfig = {
+  apiKey: process.env.FIREBLOCKS_API_KEY!,
+  apiSecret: fs.readFileSync(process.env.FIREBLOCKS_SECRET_KEY_PATH!, "utf8"),
+  testnet: true,
+};
+
+const sdk = await StacksSDK.create("YOUR_VAULT_ID", config);
+```
+
+> **Note:** Importing the SDK does NOT start a server. The SDK is a pure library.
+
+### **Option 2: REST API Server (Docker)**
+
+For non-TypeScript environments, run the SDK as a dockerized REST API service:
+
+```bash
+git clone https://github.com/fireblocks/stacks-fireblocks-sdk
+cd stacks-fireblocks-sdk
+cp .env.example .env
+# Make sure your Fireblocks secret key is in ./secrets/fireblocks_secret.key
+docker-compose up --build        # Dev Mode
+docker-compose -f docker-compose.yml up --build  # Prod Mode
+```
+
+> API will run on port `3000` by default. Change via `PORT` in `.env`.
+
+### **Option 3: Local Development**
 
 ```bash
 git clone https://github.com/fireblocks/stacks-fireblocks-sdk
@@ -51,22 +97,10 @@ cp .env.example .env
 
 Edit `.env` to include your API key, private key path, and Stacks network config.
 
-To start the SDK in dev mode:
-
 ```bash
-npm run dev
+npm run dev    # Start REST API server with hot reload
+npm run build  # Build for production
 ```
-
-### **Run as REST API (Docker)**
-
-```bash
-cp .env.example .env  # or create your .env manually
-# Make sure your Fireblocks secret key is in ./secrets/fireblocks_secret.key
-docker-compose up --build #(Dev Mode)
-docker-compose -f docker-compose.yml up --build #(Prod Mode)
-```
-
-> API will run on port `3000` by default. Change via `PORT` in `.env`.
 
 ---
 
@@ -126,8 +160,8 @@ volumes:
 ### **Initialize the SDK**
 
 ```typescript
-import { StacksSDK } from "./StacksSDK";
-import { FireblocksConfig } from "./services/types";
+import { StacksSDK, FireblocksConfig } from "stacks-fireblocks-sdk";
+import fs from "fs";
 
 const fireblocksConfig: FireblocksConfig = {
   apiKey: process.env.FIREBLOCKS_API_KEY!,
@@ -198,7 +232,7 @@ const grossTransfer = await sdk.createNativeTransaction(
 ### **Transfer Fungible Tokens**
 
 ```typescript
-import { TokenType } from "./services/types";
+import { TokenType } from "stacks-fireblocks-sdk";
 
 // Transfer sBTC
 const ftTransfer = await sdk.createFTTransaction(
