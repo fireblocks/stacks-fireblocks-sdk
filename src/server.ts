@@ -24,8 +24,13 @@ app.get("/api-docs-json", (req, res) => {
 // Apply routes
 app.use("/api", router);
 
-// Start the server
+// Start the server only if this file is run directly (not imported)
 const PORT = process.env.PORT || 3000;
-const server = app.listen(PORT, () => {
-  console.log(`Stacks-Fireblocks SDK API server running on port ${PORT}`);
-});
+
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Stacks-Fireblocks SDK API server running on port ${PORT}`);
+  });
+}
+
+export { app };

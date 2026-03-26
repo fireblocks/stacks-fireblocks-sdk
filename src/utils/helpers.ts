@@ -138,12 +138,6 @@ export function concatSignature(fullSig: string, v: number): string {
   return vHex + fullSig;
 }
 
-// Concatnate full signature for stacking signature digest
-export const concatSignerSignature = (fullSig: string, v: number): string => {
-  const vHex = v === 0 ? "00" : "01";
-  return fullSig + vHex; // r||s FIRST, then v LAST (opposite of transaction sigs)
-};
-
 // Get decimals for a fungible token from its contract ID
 export const getDecimalsFromFtInfo = (contractId: string): number => {
   const [addr, contractAndToken] = contractId.split(".");

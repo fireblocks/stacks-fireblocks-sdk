@@ -41,7 +41,6 @@ import { validateApiCredentials } from "./utils/fireblocks.utils";
 import {
   assertResultSuccess,
   concatSignature,
-  concatSignerSignature,
   getDecimalsFromFtInfo,
   getPox4SignerSigDigest,
   isSafeToSubmit,
@@ -212,10 +211,19 @@ export class StacksSDK {
 
       if (transaction.tx_status !== "success") {
         const errorNumber = parseClarityErrCode(transaction.tx_result);
-        const error = POX4_ERRORS[errorNumber];
-        txDetails.tx_error = error
-          ? `${error.name}`
-          : "Unknown error occurred.";
+
+        // Only use PoX-4 error table for PoX contract calls
+        const isPoXTransaction =
+          transaction.tx_type === "contract_call" &&
+          transaction.contract_call?.contract_id?.includes("pox-4");
+
+        if (isPoXTransaction && errorNumber !== null && POX4_ERRORS[errorNumber]) {
+          txDetails.tx_error = POX4_ERRORS[errorNumber].name;
+        } else if (errorNumber !== null) {
+          txDetails.tx_error = `Contract error code: ${errorNumber}`;
+        } else {
+          txDetails.tx_error = transaction.tx_result?.repr || "Transaction failed";
+        }
       }
 
       return {
@@ -787,7 +795,9 @@ export class StacksSDK {
         recipientAddress,
         microAmount,
         TransactionType.STX,
-        undefined,
+        undefined, // token
+        undefined, // customTokenContractAddress
+        undefined, // customTokenContractName
         note,
       );
 
@@ -1250,54 +1260,6 @@ export class StacksSDK {
         eligible: false,
         reason: `Failed to check eligibility: ${formatErrorMessage(error)}`,
       };
-    }
-  };
-
-  /**
-   * Creates a signerSig65Hex from the provided parameters.
-   * @returns the signerSig65Hex.
-   * @throws {Error} If vault ID is not set, or if the process fails.
-   */
-  public createSignerSig65HexFromParams = async (
-    rewardCycleId: number,
-    lockPeriod: number,
-    maxAmountUstx: bigint,
-    authId?: bigint,
-  ): Promise<string> => {
-    try {
-      const network = this.testnet ? "testnet" : "mainnet";
-      let signerDigest = getPox4SignerSigDigest({
-        network: network,
-        btcRewardAddress: this.btcRewardsAddress,
-        rewardCycle: rewardCycleId,
-        lockPeriods: lockPeriod,
-        maxAmountUstx: maxAmountUstx,
-        authId: authId,
-      });
-
-      if (signerDigest.startsWith("0x")) {
-        // remove 0x prefix if present
-        signerDigest = signerDigest.slice(2);
-      }
-
-      const signerRawSig = await this.fireblocksService.signTransaction(
-        signerDigest,
-        this.vaultAccountId.toString(),
-      );
-
-      const signerSig65Hex = concatSignerSignature(
-        signerRawSig.fullSig,
-        signerRawSig.v,
-      );
-
-      return signerSig65Hex;
-    } catch (error) {
-      console.error(
-        `Error creating signerSig65Hex: ${formatErrorMessage(error)}`,
-      );
-      throw new Error(
-        `Failed to create signerSig65Hex: ${formatErrorMessage(error)}`,
-      );
     }
   };
 
