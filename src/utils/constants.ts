@@ -16,6 +16,8 @@ export const derivationPath = {
 
 export const helperConstants = {
   vaultIdForReadOnlyActions: "0", // Use a dummy vault ID for read-only actions that don't require a specific vault account/blockchain address
+  stacks_api_page_size: 50, // Hard maximum per single Stacks API request
+  stacks_api_max_limit: 200, // Maximum limit accepted from callers; service paginates internally when limit > stacks_api_page_size
 }
 
 export const api_constants = {

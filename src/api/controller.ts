@@ -110,12 +110,26 @@ export const getTransactionHistory: Handler = async (req, res, next) => {
     const { vaultId } = req.params;
 
     const getCachedTransactions =
-      String(req.query.getCachedTransactions).toLowerCase() === "false"
-        ? false
-        : true;
+      String(req.query.getCachedTransactions).toLowerCase() === "true"
+        ? true
+        : false;
 
-    const limit = req.query.limit ? Number(req.query.limit) : undefined;
-    const offset = req.query.offset ? String(req.query.offset) : undefined;
+    // Parse limit; service paginates internally so limit can exceed the 50-per-request Stacks API cap
+    let limit = req.query.limit ? Number(req.query.limit) : helperConstants.stacks_api_max_limit;
+    if (!Number.isInteger(limit) || limit <= 0) {
+      res.status(400).json({ error: "Bad Request: limit must be a positive integer" });
+      return;
+    }
+    if (limit > helperConstants.stacks_api_max_limit) {
+      limit = helperConstants.stacks_api_max_limit;
+    }
+
+    const offset = req.query.offset ? Number(req.query.offset) : 0;
+    if (!Number.isInteger(offset) || offset < 0) {
+      res.status(400).json({ error: "Bad Request: offset must be a non-negative integer" });
+      return;
+    }
+
     const order = req.query.order
       ? String(req.query.order).toUpperCase() === "DESC"
         ? "DESC"
