@@ -352,6 +352,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
     token?: TokenType,
     customTokenContractAddress?: string,
     customTokenContractName?: string,
+    customTokenAssetName?: string,
   ): Promise<StacksTransactionWire> => {
     try {
       if (!validateAddress(recipient, this.network === STACKS_TESTNET)) {
@@ -368,11 +369,11 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
         );
       }
 
-      // if custom token, validate contract address and name are provided
+      // if custom token, validate contract address, name, and asset name are provided
       if (token === TokenType.CUSTOM) {
-        if (!customTokenContractAddress || !customTokenContractName) {
+        if (!customTokenContractAddress || !customTokenContractName || !customTokenAssetName) {
           throw new Error(
-            `Custom token contract address and name must be provided for CUSTOM token type`,
+            `Custom token contract address, name, and asset name must be provided for CUSTOM token type`,
           );
         }
       }
@@ -394,11 +395,16 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
           token === TokenType.CUSTOM
             ? customTokenContractName!
             : tokenInfo!.contractName;
+        // Asset name may differ from contract name (e.g., usdcx contract has usdcx-token asset)
+        const ftAssetName =
+          token === TokenType.CUSTOM
+            ? customTokenAssetName!
+            : tokenInfo!.assetName;
 
         // Create post-condition: sender sends exactly `amount` of this token
         const postCondition = Pc.principal(sender)
           .willSendEq(amount)
-          .ft(`${ftContractAddress}.${ftContractName}`, ftContractName);
+          .ft(`${ftContractAddress}.${ftContractName}`, ftAssetName);
 
         unsignedTx = await makeUnsignedContractCall({
           contractAddress: ftContractAddress,
@@ -506,6 +512,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
     token?: TokenType,
     customTokenContractAddress?: string,
     customTokenContractName?: string,
+    customTokenAssetName?: string,
   ): Promise<{
     unsignedTx: StacksTransactionWire;
     preSignSigHash: string;
@@ -518,9 +525,9 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
       }
 
       if (token === TokenType.CUSTOM) {
-        if (!customTokenContractAddress || !customTokenContractName) {
+        if (!customTokenContractAddress || !customTokenContractName || !customTokenAssetName) {
           throw new Error(
-            "Custom token contract address and name must be provided for CUSTOM token type",
+            "Custom token contract address, name, and asset name must be provided for CUSTOM token type",
           );
         }
       }
@@ -534,6 +541,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
         token,
         customTokenContractAddress,
         customTokenContractName,
+        customTokenAssetName,
       );
       const sigHash = unsignedTx.signBegin();
 

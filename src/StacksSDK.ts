@@ -558,6 +558,7 @@ export class StacksSDK {
     token?: TokenType,
     customTokenContractAddress?: string,
     customTokenContractName?: string,
+    customTokenAssetName?: string,
     note?: string,
   ): Promise<any> => {
     try {
@@ -570,6 +571,7 @@ export class StacksSDK {
         token,
         customTokenContractAddress,
         customTokenContractName,
+        customTokenAssetName,
       );
 
       const rawSignature = await this.fireblocksService.signTransaction(
@@ -804,6 +806,7 @@ export class StacksSDK {
         undefined, // token
         undefined, // customTokenContractAddress
         undefined, // customTokenContractName
+        undefined, // customTokenAssetName
         note,
       );
 
@@ -850,18 +853,19 @@ export class StacksSDK {
     token: TokenType,
     customTokenContractAddress?: string,
     customTokenContractName?: string,
+    customTokenAssetName?: string,
     note?: string,
   ): Promise<CreateTransactionResponse> => {
     if (!this.address || !this.publicKey || !this.vaultAccountId) {
       throw new Error("Address, Public Key or Vault ID are not set");
     }
 
-    // if custom token, validate contract address and name are provided
+    // if custom token, validate contract address, name, and asset name are provided
     if (token === TokenType.CUSTOM) {
-      if (!customTokenContractAddress || !customTokenContractName) {
+      if (!customTokenContractAddress || !customTokenContractName || !customTokenAssetName) {
         return {
           success: false,
-          error: `Custom token contract address and name must be provided for CUSTOM token type`,
+          error: `Custom token contract address, name, and asset name must be provided for CUSTOM token type`,
         };
       }
     }
@@ -896,6 +900,7 @@ export class StacksSDK {
         token,
         customTokenContractAddress,
         customTokenContractName,
+        customTokenAssetName,
         note,
       );
 

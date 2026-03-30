@@ -49,11 +49,13 @@ export const ftInfo: Partial<Record<TokenType, Record<Network, TokenInfo>>> = {
     mainnet: {
       contractAddress: "SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4",
       contractName: "sbtc-token",
+      assetName: "sbtc-token",
       decimals: 8,
     },
     testnet: {
       contractAddress: "ST1F7QA2MDF17S807EPA36TSS8AMEFY4KA9TVGWXT",
       contractName: "sbtc-token",
+      assetName: "sbtc-token",
       decimals: 8,
     },
   },
@@ -61,11 +63,13 @@ export const ftInfo: Partial<Record<TokenType, Record<Network, TokenInfo>>> = {
     mainnet: {
       contractAddress: "SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE",
       contractName: "usdcx",
+      assetName: "usdcx-token",
       decimals: 6,
     },
     testnet: {
       contractAddress: "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM",
       contractName: "usdcx",
+      assetName: "usdcx-token",
       decimals: 6,
     },
   },

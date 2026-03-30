@@ -172,6 +172,9 @@ export const createTransaction: Handler = async (req, res, next) => {
     const tokenContractName = req.body.tokenContractName
       ? String(req.body.tokenContractName).trim()
       : undefined;
+    const tokenAssetName = req.body.tokenAssetName
+      ? String(req.body.tokenAssetName).trim()
+      : undefined;
 
     if (!recipientAddress || !amountStr || !assetUi) {
       res.status(400).json({
@@ -183,10 +186,10 @@ export const createTransaction: Handler = async (req, res, next) => {
 
     // Validate custom token fields
     if (assetUi === "Custom") {
-      if (!tokenContractAddress || !tokenContractName) {
+      if (!tokenContractAddress || !tokenContractName || !tokenAssetName) {
         res.status(400).json({
           error:
-            "Bad Request: tokenContractAddress and tokenContractName are required when assetType is Custom",
+            "Bad Request: tokenContractAddress, tokenContractName, and tokenAssetName are required when assetType is Custom",
         });
         return;
       }
@@ -234,6 +237,7 @@ export const createTransaction: Handler = async (req, res, next) => {
         tokenType,
         tokenContractAddress,
         tokenContractName,
+        tokenAssetName,
         note,
       },
     );

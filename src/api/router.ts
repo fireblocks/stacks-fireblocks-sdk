@@ -296,6 +296,9 @@ router.get(
  *               tokenContractName:
  *                 type: string
  *                 description: Required when assetType is "Custom". The contract name of the SIP-010 token.
+ *               tokenAssetName:
+ *                 type: string
+ *                 description: Required when assetType is "Custom". The asset name from define-fungible-token (may differ from contract name).
  *               grossTransaction:
  *                 type: boolean
  *                 default: false
@@ -307,7 +310,7 @@ router.get(
  *       200:
  *         description: Transaction created successfully
  *       400:
- *         description: Invalid input (includes missing tokenContractAddress/tokenContractName when assetType is Custom)
+ *         description: Invalid input (includes missing tokenContractAddress/tokenContractName/tokenAssetName when assetType is Custom)
  *       500:
  *         description: Internal server error
  */
