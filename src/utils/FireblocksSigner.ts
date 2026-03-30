@@ -31,11 +31,10 @@ export class FireblocksSigner {
   };
 
   getTxStatus = async (txId: string): Promise<TransactionResponse> => {
-    try {
-      let response: FireblocksResponse<TransactionResponse> =
-        await this.fireblocks.transactions.getTransaction({ txId });
-      let tx: TransactionResponse = response.data;
-      let messageToConsole: string = `Transaction ${tx.id} is currently at status - ${tx.status}`;
+    let response: FireblocksResponse<TransactionResponse> =
+      await this.fireblocks.transactions.getTransaction({ txId });
+    let tx: TransactionResponse = response.data;
+    const messageToConsole: string = `Transaction ${tx.id} is currently at status - ${tx.status}`;
 
       console.log(messageToConsole);
       while (tx.status !== TransactionStateEnum.Completed) {
@@ -56,12 +55,8 @@ export class FireblocksSigner {
             console.log(messageToConsole);
             break;
         }
-      }
-      while (tx.status !== TransactionStateEnum.Completed);
-      return tx;
-    } catch (error) {
-      throw error;
     }
+    return tx;
   };
 
   rawSign = async (
@@ -70,7 +65,6 @@ export class FireblocksSigner {
     txNote?: string,
     testnet: boolean = false,
   ): Promise<any> => {
-    //@ts-ignore
     try {
       if (typeof content !== "string") {
         throw new Error("Content for raw signing must be a hex string");
@@ -93,7 +87,7 @@ export class FireblocksSigner {
               testnet
                 ? derivationPath.coinTypeTestnet
                 : derivationPath.coinTypeMainnet,
-              vaultAccountId,
+              Number(vaultAccountId),
               derivationPath.change,
               derivationPath.addressIndex,
             ],
@@ -106,13 +100,12 @@ export class FireblocksSigner {
         await this.fireblocks.transactions.createTransaction({
           transactionRequest: transactionPayload,
         });
-      //@ts-ignore
 
       const txId = transactionResponse.data.id;
       if (!txId) {
         throw new Error("Transaction ID is undefined.");
       }
-      let txInfo = (await this.getTxStatus(txId)) as any;
+      const txInfo = (await this.getTxStatus(txId)) as any;
 
       const signature = txInfo.signedMessages[0].signature;
 

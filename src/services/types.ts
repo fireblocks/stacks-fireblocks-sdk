@@ -115,6 +115,7 @@ export enum StackingPools {
 export type TokenInfo = {
   contractAddress: string;
   contractName: string;
+  assetName: string; // The asset name from define-fungible-token (may differ from contractName)
   decimals: number;
 };
 

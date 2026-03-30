@@ -28,7 +28,7 @@ export class FireblocksService {
 
   constructor(fireblocksConfig?: FireblocksConfig) {
     this.testnet = fireblocksConfig?.testnet || false;
-    var privateKey: string;
+    let privateKey: string;
     if (fireblocksConfig && fireblocksConfig.apiSecret) {
       privateKey =
         fireblocksConfig.apiSecret.endsWith(".pem") ||

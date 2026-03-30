@@ -42,7 +42,7 @@ import {
   assertResultSuccess,
   concatSignature,
   getDecimalsFromFtInfo,
-  getPox4SignerSigDigest,
+  getTokenInfo,
   isSafeToSubmit,
   microToStx,
   microToToken,
@@ -54,7 +54,6 @@ import {
 } from "./utils/helpers";
 import { createMessageSignature } from "@stacks/transactions";
 import { StacksTransactionWire } from "@stacks/transactions";
-import { join } from "path/win32";
 
 export class StacksSDK {
   private fireblocksService: FireblocksService;
@@ -200,9 +199,7 @@ export class StacksSDK {
         return { success: false, error: "Transaction not found." };
       }
 
-      let txDetails: TransactionDetails;
-
-      txDetails = {
+      const txDetails: TransactionDetails = {
         tx_id: transaction.tx_id,
         tx_status: transaction.tx_status,
         tx_result: transaction.tx_result,
@@ -284,7 +281,7 @@ export class StacksSDK {
     }
 
     try {
-      let data: {
+      const data: {
         token: string;
         tokenContractName: string;
         tokenContractAddress: string;
@@ -308,7 +305,7 @@ export class StacksSDK {
           );
         }
 
-        let balance = {
+        const balance = {
           token: tokenName,
           tokenContractName: contractName,
           tokenContractAddress: contractAddress,
@@ -489,12 +486,17 @@ export class StacksSDK {
       }
 
       let balance;
-      // to do : refactor balance fetching logic for custom tokens
       if (type == TransactionType.FungibleToken) {
+        // For known tokens, match by contract name from tokenInfo
+        // For custom tokens, match by contract address
+        const tokenInfo = token !== TokenType.CUSTOM
+          ? getTokenInfo(token, this.testnet ? "testnet" : "mainnet")
+          : undefined;
+
         balance = (balanceResponse as GetFtBalancesResponse).data?.find(
           (b) =>
-            b.token === token ||
-            b.tokenContractAddress === customTokenContractAddress,
+            (tokenInfo && b.tokenContractName === tokenInfo.contractName) ||
+            (customTokenContractAddress && b.tokenContractAddress === customTokenContractAddress),
         )?.balance;
       } else {
         balance = (balanceResponse as GetNativeBalanceResponse).balance;
@@ -552,6 +554,7 @@ export class StacksSDK {
     token?: TokenType,
     customTokenContractAddress?: string,
     customTokenContractName?: string,
+    customTokenAssetName?: string,
     note?: string,
   ): Promise<any> => {
     try {
@@ -564,6 +567,7 @@ export class StacksSDK {
         token,
         customTokenContractAddress,
         customTokenContractName,
+        customTokenAssetName,
       );
 
       const rawSignature = await this.fireblocksService.signTransaction(
@@ -798,6 +802,7 @@ export class StacksSDK {
         undefined, // token
         undefined, // customTokenContractAddress
         undefined, // customTokenContractName
+        undefined, // customTokenAssetName
         note,
       );
 
@@ -844,18 +849,19 @@ export class StacksSDK {
     token: TokenType,
     customTokenContractAddress?: string,
     customTokenContractName?: string,
+    customTokenAssetName?: string,
     note?: string,
   ): Promise<CreateTransactionResponse> => {
     if (!this.address || !this.publicKey || !this.vaultAccountId) {
       throw new Error("Address, Public Key or Vault ID are not set");
     }
 
-    // if custom token, validate contract address and name are provided
+    // if custom token, validate contract address, name, and asset name are provided
     if (token === TokenType.CUSTOM) {
-      if (!customTokenContractAddress || !customTokenContractName) {
+      if (!customTokenContractAddress || !customTokenContractName || !customTokenAssetName) {
         return {
           success: false,
-          error: `Custom token contract address and name must be provided for CUSTOM token type`,
+          error: `Custom token contract address, name, and asset name must be provided for CUSTOM token type`,
         };
       }
     }
@@ -890,18 +896,21 @@ export class StacksSDK {
         token,
         customTokenContractAddress,
         customTokenContractName,
+        customTokenAssetName,
         note,
       );
 
-      if (!result || result.err) {
+      if (!result || result.error || !result.txid || result.reason) {
+        const errorAndReason =
+          result?.error && result?.reason
+            ? `${result.error} - ${result.reason}`
+            : result?.error || result?.reason || "unknown error";
         console.error(
-          `Transaction broadcast failed: ${
-            formatErrorMessage(result?.err) || "unknown error"
-          }`,
+          `FT transaction broadcast failed: ${formatErrorMessage(errorAndReason)}`,
         );
         return {
           success: false,
-          error: result?.err ? formatErrorMessage(result.err) : "unknown error",
+          error: formatErrorMessage(errorAndReason),
         };
       }
 

@@ -234,18 +234,30 @@ const grossTransfer = await sdk.createNativeTransaction(
 ```typescript
 import { TokenType } from "stacks-fireblocks-sdk";
 
-// Transfer sBTC
+// Transfer sBTC (built-in token)
 const ftTransfer = await sdk.createFTTransaction(
   "ST2CY5V39NHDPWSXMW9QDT3HC3GD6Q6XX4CFRK9AG",
   0.1, // amount in token units
   TokenType.sBTC,
-  "sBTC payment",
 );
 
 if (ftTransfer.success) {
   console.log("Transaction Hash:", ftTransfer.txHash);
 }
+
+// Transfer custom SIP-010 token
+// Note: tokenAssetName is the name from define-fungible-token (may differ from contract name)
+const customTransfer = await sdk.createFTTransaction(
+  "ST2CY5V39NHDPWSXMW9QDT3HC3GD6Q6XX4CFRK9AG",
+  100, // amount in token units
+  TokenType.CUSTOM,
+  "SP3K8BC0PPEVCV7NZ6QSRWPQ2JE9E5B6N3PA0KBR9", // contract address
+  "my-token", // contract name
+  "my-token-asset", // asset name (from define-fungible-token)
+);
 ```
+
+> **Finding the asset name:** For custom tokens, the `tokenAssetName` is found in the contract's source code in the `define-fungible-token` declaration. View the contract on a block explorer (e.g., explorer.hiro.so) and look for `(define-fungible-token <asset-name>)`. This may differ from the contract name - for example, USDCx contract (`usdcx`) defines its token as `usdcx-token`.
 
 ### **Check Account Status**
 
@@ -468,16 +480,36 @@ curl -X 'GET' \
 
 ```bash
 curl -X 'POST' \
-  'http://localhost:3000/api/123/transfer/stx' \
+  'http://localhost:3000/api/123/transfer' \
   -H 'accept: application/json' \
   -H 'Content-Type: application/json' \
   -d '{
   "recipientAddress": "ST2CY5V39NHDPWSXMW9QDT3HC3GD6Q6XX4CFRK9AG",
   "amount": 100.5,
+  "assetType": "STX",
   "grossTransaction": false,
   "note": "Payment for services"
 }'
 ```
+
+### **Transfer Custom SIP-010 Token**
+
+```bash
+curl -X 'POST' \
+  'http://localhost:3000/api/123/transfer' \
+  -H 'accept: application/json' \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "recipientAddress": "ST2CY5V39NHDPWSXMW9QDT3HC3GD6Q6XX4CFRK9AG",
+  "amount": 100,
+  "assetType": "Custom",
+  "tokenContractAddress": "SP3K8BC0PPEVCV7NZ6QSRWPQ2JE9E5B6N3PA0KBR9",
+  "tokenContractName": "my-token",
+  "tokenAssetName": "my-token-asset"
+}'
+```
+
+> **Note:** `tokenAssetName` is the name from the contract's `define-fungible-token` declaration, which may differ from `tokenContractName`.
 
 ### **Solo Stack STX**
 ```bash

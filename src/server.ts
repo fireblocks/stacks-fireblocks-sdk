@@ -1,8 +1,6 @@
 import express from "express";
 import cors from "cors";
-import { BasePath } from "@fireblocks/ts-sdk";
 import dotenv from "dotenv";
-import { ApiServiceConfig } from "./pool/types";
 import router from "./api/router";
 import { swaggerUi, specs } from "./utils/swagger";
 

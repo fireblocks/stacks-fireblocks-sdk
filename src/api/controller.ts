@@ -14,10 +14,16 @@ type Handler = (
   next: NextFunction,
 ) => Promise<void>;
 
+// Helper to safely extract vaultId from params (Express types it as string | string[])
+const getVaultId = (req: Request): string => {
+  const vaultId = req.params.vaultId;
+  return Array.isArray(vaultId) ? vaultId[0] : vaultId;
+};
+
 // GET /:vaultId/address
 export const getAddress: Handler = async (req, res, next) => {
   try {
-    const { vaultId } = req.params;
+    const vaultId = getVaultId(req);
     const address = await apiService.executeAction(
       vaultId,
       ActionType.GET_ACCOUNT_ADDRESS,
@@ -32,7 +38,7 @@ export const getAddress: Handler = async (req, res, next) => {
 // GET /:vaultId/btc-rewards-address
 export const getBtcRewardsAddress: Handler = async (req, res, next) => {
   try {
-    const { vaultId } = req.params;
+    const vaultId = getVaultId(req);
     const address = await apiService.executeAction(
       vaultId,
       ActionType.GET_BTC_REWARDS_ADDRESS,
@@ -47,7 +53,7 @@ export const getBtcRewardsAddress: Handler = async (req, res, next) => {
 // GET /:vaultId/check-status
 export const checkStatus: Handler = async (req, res, next) => {
   try {
-    const { vaultId } = req.params;
+    const vaultId = getVaultId(req);
     const status = await apiService.executeAction(
       vaultId,
       ActionType.CHECK_STATUS,
@@ -62,7 +68,7 @@ export const checkStatus: Handler = async (req, res, next) => {
 // GET /:vaultId/publicKey
 export const getPublicKey: Handler = async (req, res, next) => {
   try {
-    const { vaultId } = req.params;
+    const vaultId = getVaultId(req);
     const pubKey = await apiService.executeAction(
       vaultId,
       ActionType.GET_ACCOUNT_PUBLIC_KEY,
@@ -77,7 +83,7 @@ export const getPublicKey: Handler = async (req, res, next) => {
 // GET /:vaultId/balance
 export const getBalance: Handler = async (req, res, next) => {
   try {
-    const { vaultId } = req.params;
+    const vaultId = getVaultId(req);
     const balance = await apiService.executeAction(
       vaultId,
       ActionType.GET_BALANCE,
@@ -92,7 +98,7 @@ export const getBalance: Handler = async (req, res, next) => {
 // GET /:vaultId/ft-balances
 export const getFtBalances: Handler = async (req, res, next) => {
   try {
-    const { vaultId } = req.params;
+    const vaultId = getVaultId(req);
     const ftBalances = await apiService.executeAction(
       vaultId,
       ActionType.GET_FT_BALANCES,
@@ -107,20 +113,28 @@ export const getFtBalances: Handler = async (req, res, next) => {
 // GET /:vaultId/transactions
 export const getTransactionHistory: Handler = async (req, res, next) => {
   try {
-    const { vaultId } = req.params;
+    const vaultId = getVaultId(req);
 
     const getCachedTransactions =
-      String(req.query.getCachedTransactions).toLowerCase() === "false"
-        ? false
-        : true;
+      String(req.query.getCachedTransactions).toLowerCase() === "true"
+        ? true
+        : false;
 
-    const limit = req.query.limit ? Number(req.query.limit) : undefined;
-    const offset = req.query.offset ? String(req.query.offset) : undefined;
-    const order = req.query.order
-      ? String(req.query.order).toUpperCase() === "DESC"
-        ? "DESC"
-        : "ASC"
-      : undefined;
+    // Parse limit; service paginates internally so limit can exceed the 50-per-request Stacks API cap
+    let limit = req.query.limit ? Number(req.query.limit) : helperConstants.stacks_api_max_limit;
+    if (!Number.isInteger(limit) || limit <= 0) {
+      res.status(400).json({ error: "Bad Request: limit must be a positive integer" });
+      return;
+    }
+    if (limit > helperConstants.stacks_api_max_limit) {
+      limit = helperConstants.stacks_api_max_limit;
+    }
+
+    const offset = req.query.offset ? Number(req.query.offset) : 0;
+    if (!Number.isInteger(offset) || offset < 0) {
+      res.status(400).json({ error: "Bad Request: offset must be a non-negative integer" });
+      return;
+    }
 
     const history = await apiService.executeAction(
       vaultId,
@@ -137,19 +151,23 @@ export const getTransactionHistory: Handler = async (req, res, next) => {
 // POST /:vaultId/transfer
 export const createTransaction: Handler = async (req, res, next) => {
   try {
-    const { vaultId } = req.params;
+    const vaultId = getVaultId(req);
 
-    const recipientAddress = String(req.query.recipientAddress || "");
-    const amountStr = String(req.query.amount || "");
-    const assetUi = String(req.query.assetType || "").trim(); // "STX" | "sBTC" | "USDCx" | "Custom"
+    const recipientAddress = String(req.body.recipientAddress || "");
+    const amountStr = String(req.body.amount || "");
+    const assetUi = String(req.body.assetType || "").trim(); // "STX" | "sBTC" | "USDCx" | "Custom"
     const grossTransaction =
-      String(req.query.grossTransaction || "false").toLowerCase() === "true";
-    const note = req.query.note ? String(req.query.note) : undefined;
-    const tokenContractAddress = req.query.tokenContractAddress
-      ? String(req.query.tokenContractAddress).trim()
+      req.body.grossTransaction === true ||
+      String(req.body.grossTransaction || "false").toLowerCase() === "true";
+    const note = req.body.note ? String(req.body.note) : undefined;
+    const tokenContractAddress = req.body.tokenContractAddress
+      ? String(req.body.tokenContractAddress).trim()
       : undefined;
-    const tokenContractName = req.query.tokenContractName
-      ? String(req.query.tokenContractName).trim()
+    const tokenContractName = req.body.tokenContractName
+      ? String(req.body.tokenContractName).trim()
+      : undefined;
+    const tokenAssetName = req.body.tokenAssetName
+      ? String(req.body.tokenAssetName).trim()
       : undefined;
 
     if (!recipientAddress || !amountStr || !assetUi) {
@@ -162,10 +180,10 @@ export const createTransaction: Handler = async (req, res, next) => {
 
     // Validate custom token fields
     if (assetUi === "Custom") {
-      if (!tokenContractAddress || !tokenContractName) {
+      if (!tokenContractAddress || !tokenContractName || !tokenAssetName) {
         res.status(400).json({
           error:
-            "Bad Request: tokenContractAddress and tokenContractName are required when assetType is Custom",
+            "Bad Request: tokenContractAddress, tokenContractName, and tokenAssetName are required when assetType is Custom",
         });
         return;
       }
@@ -213,6 +231,7 @@ export const createTransaction: Handler = async (req, res, next) => {
         tokenType,
         tokenContractAddress,
         tokenContractName,
+        tokenAssetName,
         note,
       },
     );
@@ -225,11 +244,11 @@ export const createTransaction: Handler = async (req, res, next) => {
 // POST /:vaultId/stacking/pool/delegate
 export const delegateToPool: Handler = async (req, res, next) => {
   try {
-    const { vaultId } = req.params;
+    const vaultId = getVaultId(req);
 
-    const amountStr = String(req.query.amount || "");
-    const lockPeriodStr = String(req.query.lockPeriod || "1");
-    const pool = String(req.query.pool || "FAST_POOL").trim();
+    const amountStr = String(req.body.amount || "");
+    const lockPeriodStr = String(req.body.lockPeriod || "1");
+    const pool = String(req.body.pool || "FAST_POOL").trim();
 
     if (!pool || !amountStr) {
       res.status(400).json({
@@ -281,9 +300,9 @@ export const delegateToPool: Handler = async (req, res, next) => {
 // POST /:vaultId/stacking/pool/allow-contract-caller
 export const allowContractCaller: Handler = async (req, res, next) => {
   try {
-    const { vaultId } = req.params;
+    const vaultId = getVaultId(req);
 
-    const pool = String(req.query.pool || "FAST_POOL").trim();
+    const pool = String(req.body.pool || "FAST_POOL").trim();
 
     if (!pool) {
       res.status(400).json({
@@ -321,7 +340,7 @@ export const allowContractCaller: Handler = async (req, res, next) => {
 // POST /:vaultId/revoke-delegation
 export const revokeDelegation: Handler = async (req, res, next) => {
   try {
-    const { vaultId } = req.params;
+    const vaultId = getVaultId(req);
 
     const tx = await apiService.executeAction(
       vaultId,
@@ -359,14 +378,14 @@ export const getTxStatusById: Handler = async (req, res, next) => {
 // POST /:vaultId/stacking/solo
 export const stackSolo: Handler = async (req, res, next) => {
   try {
-    const { vaultId } = req.params;
+    const vaultId = getVaultId(req);
 
-    const signerKey = String(req.query.signerKey || "").trim();
-    const signerSig65Hex = String(req.query.signerSig65Hex || "").trim();
-    const amountStr = String(req.query.amount || "");
-    const maxAmountStr = String(req.query.maxAmount || "");
-    const lockPeriodStr = String(req.query.lockPeriod || "1");
-    const authIdStr = String(req.query.authId);
+    const signerKey = String(req.body.signerKey || "").trim();
+    const signerSig65Hex = String(req.body.signerSig65Hex || "").trim();
+    const amountStr = String(req.body.amount || "");
+    const maxAmountStr = String(req.body.maxAmount || "");
+    const lockPeriodStr = String(req.body.lockPeriod || "1");
+    const authIdStr = String(req.body.authId || "");
 
     if (!amountStr || !maxAmountStr) {
       res.status(400).json({ error: "Bad Request: amount and maxAmount are required" });
@@ -421,13 +440,13 @@ export const stackSolo: Handler = async (req, res, next) => {
 // POST /:vaultId/stacking/solo/increase
 export const increaseStackedAmount: Handler = async (req, res, next) => {
   try {
-    const { vaultId } = req.params;
+    const vaultId = getVaultId(req);
 
-    const signerKey = String(req.query.signerKey || "").trim();
-    const signerSig65Hex = String(req.query.signerSig65Hex || "").trim();
-    const increaseByStr = String(req.query.increaseBy || "");
-    const maxAmountStr = String(req.query.maxAmount || "");
-    const authIdStr = String(req.query.authId || "");
+    const signerKey = String(req.body.signerKey || "").trim();
+    const signerSig65Hex = String(req.body.signerSig65Hex || "").trim();
+    const increaseByStr = String(req.body.increaseBy || "");
+    const maxAmountStr = String(req.body.maxAmount || "");
+    const authIdStr = String(req.body.authId || "");
 
     if (!signerKey || !signerSig65Hex || !increaseByStr || !maxAmountStr || !authIdStr) {
       res.status(400).json({
@@ -475,13 +494,13 @@ export const increaseStackedAmount: Handler = async (req, res, next) => {
 // POST /:vaultId/stacking/solo/extend
 export const extendStackingPeriod: Handler = async (req, res, next) => {
   try {
-    const { vaultId } = req.params;
+    const vaultId = getVaultId(req);
 
-    const signerKey = String(req.query.signerKey || "").trim();
-    const signerSig65Hex = String(req.query.signerSig65Hex || "").trim();
-    const extendCyclesStr = String(req.query.extendCycles || "");
-    const maxAmountStr = String(req.query.maxAmount || "");
-    const authIdStr = String(req.query.authId || "");
+    const signerKey = String(req.body.signerKey || "").trim();
+    const signerSig65Hex = String(req.body.signerSig65Hex || "").trim();
+    const extendCyclesStr = String(req.body.extendCycles || "");
+    const maxAmountStr = String(req.body.maxAmount || "");
+    const authIdStr = String(req.body.authId || "");
 
     if (!signerKey || !signerSig65Hex || !extendCyclesStr || !maxAmountStr || !authIdStr) {
       res.status(400).json({
