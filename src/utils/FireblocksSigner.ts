@@ -69,7 +69,6 @@ export class FireblocksSigner {
     txNote?: string,
     testnet: boolean = false,
   ): Promise<any> => {
-    //@ts-ignore
     try {
       if (typeof content !== "string") {
         throw new Error("Content for raw signing must be a hex string");
@@ -92,7 +91,7 @@ export class FireblocksSigner {
               testnet
                 ? derivationPath.coinTypeTestnet
                 : derivationPath.coinTypeMainnet,
-              vaultAccountId,
+              Number(vaultAccountId),
               derivationPath.change,
               derivationPath.addressIndex,
             ],
@@ -105,7 +104,6 @@ export class FireblocksSigner {
         await this.fireblocks.transactions.createTransaction({
           transactionRequest: transactionPayload,
         });
-      //@ts-ignore
 
       const txId = transactionResponse.data.id;
       if (!txId) {
