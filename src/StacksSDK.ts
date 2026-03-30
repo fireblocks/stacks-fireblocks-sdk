@@ -42,7 +42,6 @@ import {
   assertResultSuccess,
   concatSignature,
   getDecimalsFromFtInfo,
-  getPox4SignerSigDigest,
   getTokenInfo,
   isSafeToSubmit,
   microToStx,
@@ -55,7 +54,6 @@ import {
 } from "./utils/helpers";
 import { createMessageSignature } from "@stacks/transactions";
 import { StacksTransactionWire } from "@stacks/transactions";
-import { join } from "path/win32";
 
 export class StacksSDK {
   private fireblocksService: FireblocksService;
@@ -201,9 +199,7 @@ export class StacksSDK {
         return { success: false, error: "Transaction not found." };
       }
 
-      let txDetails: TransactionDetails;
-
-      txDetails = {
+      const txDetails: TransactionDetails = {
         tx_id: transaction.tx_id,
         tx_status: transaction.tx_status,
         tx_result: transaction.tx_result,
@@ -285,7 +281,7 @@ export class StacksSDK {
     }
 
     try {
-      let data: {
+      const data: {
         token: string;
         tokenContractName: string;
         tokenContractAddress: string;
@@ -309,7 +305,7 @@ export class StacksSDK {
           );
         }
 
-        let balance = {
+        const balance = {
           token: tokenName,
           tokenContractName: contractName,
           tokenContractAddress: contractAddress,

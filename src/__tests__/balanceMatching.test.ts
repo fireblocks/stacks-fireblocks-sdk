@@ -1,6 +1,5 @@
 import { getTokenInfo, parseAssetId } from "../utils/helpers";
 import { TokenType } from "../services/types";
-import { ftInfo } from "../utils/constants";
 
 describe("Balance Matching Logic", () => {
   describe("getTokenInfo", () => {

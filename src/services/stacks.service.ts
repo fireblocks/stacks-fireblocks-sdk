@@ -41,7 +41,6 @@ import {
   getDecimalsFromFtInfo,
   getTokenInfo,
   isCompressedSecp256k1PubKeyHex,
-  stxToMicro,
   untilBurnHeightForCycles,
   validateAddress,
 } from "../utils/helpers";
@@ -236,7 +235,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
 
       const payloadHex = serializePayload(payload);
 
-      const [low, medium, high] = await fetchFeeEstimateTransaction({
+      const [, medium] = await fetchFeeEstimateTransaction({
         payload: payloadHex,
         network: this.network,
       });
@@ -277,7 +276,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
 
       const payloadHex = serializePayload(payload);
 
-      const [low, medium, high] = await fetchFeeEstimateTransaction({
+      const [, medium] = await fetchFeeEstimateTransaction({
         payload: payloadHex,
         network: this.network,
       });

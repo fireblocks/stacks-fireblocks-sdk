@@ -136,12 +136,6 @@ export const getTransactionHistory: Handler = async (req, res, next) => {
       return;
     }
 
-    const order = req.query.order
-      ? String(req.query.order).toUpperCase() === "DESC"
-        ? "DESC"
-        : "ASC"
-      : undefined;
-
     const history = await apiService.executeAction(
       vaultId,
       ActionType.GET_TRANSACTIONS_HISTORY,
