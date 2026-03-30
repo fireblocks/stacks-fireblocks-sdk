@@ -57,7 +57,6 @@ export class FireblocksSigner {
             break;
         }
       }
-      while (tx.status !== TransactionStateEnum.Completed);
       return tx;
     } catch (error) {
       throw error;

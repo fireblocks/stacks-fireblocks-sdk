@@ -269,50 +269,40 @@ router.get(
  *     description: Initiates a transfer of native STX or a supported SIP-010 token.
  *     parameters:
  *       - $ref: '#/components/parameters/vaultId'
- *       - in: query
- *         name: recipientAddress
- *         required: true
- *         schema:
- *           type: string
- *         description: Recipient Stacks address
- *       - in: query
- *         name: amount
- *         required: true
- *         schema:
- *           type: number
- *         description: Human amount (e.g., 1.5 STX, or 0.1 sBTC)
- *       - in: query
- *         name: assetType
- *         required: true
- *         schema:
- *           type: string
- *           enum: [STX, sBTC, USDCx, Custom]
- *         description: Asset to transfer. Select "Custom" to specify a custom SIP-010 token.
- *       - in: query
- *         name: tokenContractAddress
- *         required: false
- *         schema:
- *           type: string
- *         description: Required when assetType is "Custom". The contract address of the SIP-010 token.
- *       - in: query
- *         name: tokenContractName
- *         required: false
- *         schema:
- *           type: string
- *         description: Required when assetType is "Custom". The contract name of the SIP-010 token.
- *       - in: query
- *         name: grossTransaction
- *         required: false
- *         schema:
- *           type: boolean
- *           default: false
- *         description: STX only — if true, fee is deducted from the entered amount.
- *       - in: query
- *         name: note
- *         required: false
- *         schema:
- *           type: string
- *         description: Optional note attached to Fireblocks signing request
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - recipientAddress
+ *               - amount
+ *               - assetType
+ *             properties:
+ *               recipientAddress:
+ *                 type: string
+ *                 description: Recipient Stacks address
+ *               amount:
+ *                 type: number
+ *                 description: Human amount (e.g., 1.5 STX, or 0.1 sBTC)
+ *               assetType:
+ *                 type: string
+ *                 enum: [STX, sBTC, USDCx, Custom]
+ *                 description: Asset to transfer. Select "Custom" to specify a custom SIP-010 token.
+ *               tokenContractAddress:
+ *                 type: string
+ *                 description: Required when assetType is "Custom". The contract address of the SIP-010 token.
+ *               tokenContractName:
+ *                 type: string
+ *                 description: Required when assetType is "Custom". The contract name of the SIP-010 token.
+ *               grossTransaction:
+ *                 type: boolean
+ *                 default: false
+ *                 description: STX only — if true, fee is deducted from the entered amount.
+ *               note:
+ *                 type: string
+ *                 description: Optional note attached to Fireblocks signing request
  *     responses:
  *       200:
  *         description: Transaction created successfully
@@ -338,28 +328,29 @@ router.post(
  *       check the pool's website for the minimum STX required.
  *     parameters:
  *       - $ref: '#/components/parameters/vaultId'
- *       - in: query
- *         name: amount
- *         required: true
- *         schema:
- *           type: number
- *         description: Human amount (e.g., 40 STX)
- *       - in: query
- *         name: pool
- *         required: true
- *         schema:
- *           type: string
- *           enum: [FAST_POOL]
- *         description: Pool to delegate to.
- *       - in: query
- *         name: lockPeriod
- *         required: false
- *         schema:
- *           type: number
- *           default: 1
- *           minimum: 1
- *           maximum: 12
- *         description: Number of cycles to stack (1-12). Default is 1.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - amount
+ *               - pool
+ *             properties:
+ *               amount:
+ *                 type: number
+ *                 description: Human amount (e.g., 40 STX)
+ *               pool:
+ *                 type: string
+ *                 enum: [FAST_POOL]
+ *                 description: Pool to delegate to.
+ *               lockPeriod:
+ *                 type: number
+ *                 default: 1
+ *                 minimum: 1
+ *                 maximum: 12
+ *                 description: Number of cycles to stack (1-12). Default is 1.
  *     responses:
  *       200:
  *         description: Delegated to pool successfully.
@@ -384,13 +375,19 @@ router.post(
  *       lock delegated STX on behalf of the account associated with the given vault ID.
  *     parameters:
  *       - $ref: '#/components/parameters/vaultId'
- *       - in: query
- *         name: pool
- *         required: true
- *         schema:
- *           type: string
- *           enum: [FAST_POOL]
- *         description: Pool to allow as contract caller.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - pool
+ *             properties:
+ *               pool:
+ *                 type: string
+ *                 enum: [FAST_POOL]
+ *                 description: Pool to allow as contract caller.
  *     responses:
  *       200:
  *         description: Pool allowed as contract caller successfully.
@@ -437,44 +434,40 @@ router.post(
  *       Initiates a solo stacking request using pox-4::stack-stx.
  *     parameters:
  *       - $ref: '#/components/parameters/vaultId'
- *       - in: query
- *         name: signerKey
- *         required: true
- *         schema:
- *           type: string
- *         description: The key of the running signer
- *       - in: query
- *         name: signerSig65Hex
- *         required: true
- *         schema:
- *           type: string
- *         description: The signature of the running signer key
- *       - in: query
- *         name: amount
- *         required: true
- *         schema:
- *           type: number
- *         description: Human STX amount to solo stack (e.g. 1000).
- *       - in: query
- *         name: maxAmount
- *         required: true
- *         schema:
- *           type: string
- *         description: Maximum amount in microSTX (integer string) used in the signer signature.
- *       - in: query
- *         name: lockPeriod
- *         required: true
- *         schema:
- *           type: number
- *           minimum: 1
- *           maximum: 12
- *         description: Number of cycles to lock (1-12).
- *       - in: query
- *         name: authId
- *         required: true
- *         schema:
- *           type: string
- *         description: Integer string (bigint) used for signer-sig replay protection (must be the same authId used to generate the signature).
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - signerKey
+ *               - signerSig65Hex
+ *               - amount
+ *               - maxAmount
+ *               - lockPeriod
+ *               - authId
+ *             properties:
+ *               signerKey:
+ *                 type: string
+ *                 description: The key of the running signer
+ *               signerSig65Hex:
+ *                 type: string
+ *                 description: The signature of the running signer key
+ *               amount:
+ *                 type: number
+ *                 description: Human STX amount to solo stack (e.g. 1000).
+ *               maxAmount:
+ *                 type: string
+ *                 description: Maximum amount in microSTX (integer string) used in the signer signature.
+ *               lockPeriod:
+ *                 type: number
+ *                 minimum: 1
+ *                 maximum: 12
+ *                 description: Number of cycles to lock (1-12).
+ *               authId:
+ *                 type: string
+ *                 description: Integer string (bigint) used for signer-sig replay protection (must be the same authId used to generate the signature).
  *     responses:
  *       200:
  *         description: Solo stacking transaction submitted
@@ -494,36 +487,34 @@ router.post("/:vaultId/stacking/solo", validateVaultId, controller.stackSolo);
  *       Increases the amount of STX in an existing solo stacking position using pox-4::stack-increase.
  *     parameters:
  *       - $ref: '#/components/parameters/vaultId'
- *       - in: query
- *         name: signerKey
- *         required: true
- *         schema:
- *           type: string
- *         description: The key of the running signer
- *       - in: query
- *         name: signerSig65Hex
- *         required: true
- *         schema:
- *           type: string
- *         description: The signature of the running signer key
- *       - in: query
- *         name: increaseBy
- *         required: true
- *         schema:
- *           type: number
- *         description: Human STX amount to add to the existing stack (e.g. 500).
- *       - in: query
- *         name: maxAmount
- *         required: true
- *         schema:
- *           type: string
- *         description: Maximum amount in microSTX (integer string) used in the signer signature.
- *       - in: query
- *         name: authId
- *         required: true
- *         schema:
- *           type: string
- *         description: Integer string (bigint) used for signer-sig replay protection (must be the same authId used to generate the signature).
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - signerKey
+ *               - signerSig65Hex
+ *               - increaseBy
+ *               - maxAmount
+ *               - authId
+ *             properties:
+ *               signerKey:
+ *                 type: string
+ *                 description: The key of the running signer
+ *               signerSig65Hex:
+ *                 type: string
+ *                 description: The signature of the running signer key
+ *               increaseBy:
+ *                 type: number
+ *                 description: Human STX amount to add to the existing stack (e.g. 500).
+ *               maxAmount:
+ *                 type: string
+ *                 description: Maximum amount in microSTX (integer string) used in the signer signature.
+ *               authId:
+ *                 type: string
+ *                 description: Integer string (bigint) used for signer-sig replay protection (must be the same authId used to generate the signature).
  *     responses:
  *       200:
  *         description: Increase stacked amount transaction submitted
@@ -543,38 +534,36 @@ router.post("/:vaultId/stacking/solo/increase", validateVaultId, controller.incr
  *       Extends the stacking period of an existing solo stacking position using pox-4::stack-extend.
  *     parameters:
  *       - $ref: '#/components/parameters/vaultId'
- *       - in: query
- *         name: signerKey
- *         required: true
- *         schema:
- *           type: string
- *         description: The key of the running signer
- *       - in: query
- *         name: signerSig65Hex
- *         required: true
- *         schema:
- *           type: string
- *         description: The signature of the running signer key
- *       - in: query
- *         name: extendCycles
- *         required: true
- *         schema:
- *           type: number
- *           minimum: 1
- *           maximum: 12
- *         description: Number of cycles to extend the stacking period by (1-12).
- *       - in: query
- *         name: maxAmount
- *         required: true
- *         schema:
- *           type: string
- *         description: Maximum amount in microSTX (integer string) used in the signer signature.
- *       - in: query
- *         name: authId
- *         required: true
- *         schema:
- *           type: string
- *         description: Integer string (bigint) used for signer-sig replay protection (must be the same authId used to generate the signature).
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - signerKey
+ *               - signerSig65Hex
+ *               - extendCycles
+ *               - maxAmount
+ *               - authId
+ *             properties:
+ *               signerKey:
+ *                 type: string
+ *                 description: The key of the running signer
+ *               signerSig65Hex:
+ *                 type: string
+ *                 description: The signature of the running signer key
+ *               extendCycles:
+ *                 type: number
+ *                 minimum: 1
+ *                 maximum: 12
+ *                 description: Number of cycles to extend the stacking period by (1-12).
+ *               maxAmount:
+ *                 type: string
+ *                 description: Maximum amount in microSTX (integer string) used in the signer signature.
+ *               authId:
+ *                 type: string
+ *                 description: Integer string (bigint) used for signer-sig replay protection (must be the same authId used to generate the signature).
  *     responses:
  *       200:
  *         description: Extend stacking period transaction submitted

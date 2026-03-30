@@ -43,6 +43,7 @@ import {
   concatSignature,
   getDecimalsFromFtInfo,
   getPox4SignerSigDigest,
+  getTokenInfo,
   isSafeToSubmit,
   microToStx,
   microToToken,
@@ -489,12 +490,17 @@ export class StacksSDK {
       }
 
       let balance;
-      // to do : refactor balance fetching logic for custom tokens
       if (type == TransactionType.FungibleToken) {
+        // For known tokens, match by contract name from tokenInfo
+        // For custom tokens, match by contract address
+        const tokenInfo = token !== TokenType.CUSTOM
+          ? getTokenInfo(token, this.testnet ? "testnet" : "mainnet")
+          : undefined;
+
         balance = (balanceResponse as GetFtBalancesResponse).data?.find(
           (b) =>
-            b.token === token ||
-            b.tokenContractAddress === customTokenContractAddress,
+            (tokenInfo && b.tokenContractName === tokenInfo.contractName) ||
+            (customTokenContractAddress && b.tokenContractAddress === customTokenContractAddress),
         )?.balance;
       } else {
         balance = (balanceResponse as GetNativeBalanceResponse).balance;
@@ -893,15 +899,17 @@ export class StacksSDK {
         note,
       );
 
-      if (!result || result.err) {
+      if (!result || result.error || !result.txid || result.reason) {
+        const errorAndReason =
+          result?.error && result?.reason
+            ? `${result.error} - ${result.reason}`
+            : result?.error || result?.reason || "unknown error";
         console.error(
-          `Transaction broadcast failed: ${
-            formatErrorMessage(result?.err) || "unknown error"
-          }`,
+          `FT transaction broadcast failed: ${formatErrorMessage(errorAndReason)}`,
         );
         return {
           success: false,
-          error: result?.err ? formatErrorMessage(result.err) : "unknown error",
+          error: formatErrorMessage(errorAndReason),
         };
       }
 

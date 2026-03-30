@@ -23,6 +23,7 @@ import {
   makeUnsignedContractCall,
   makeUnsignedSTXTokenTransfer,
   noneCV,
+  Pc,
   PostConditionMode,
   principalCV,
   publicKeyToAddress,
@@ -46,6 +47,7 @@ import {
 } from "../utils/helpers";
 import {
   api_constants,
+  helperConstants,
   pagination_defaults,
   poxInfo,
   stacks_info,
@@ -381,34 +383,46 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
         throw new Error(`Token ${token} is not supported on ${this.network}`);
       }
 
-      const unsignedTx =
-        type == TransactionType.FungibleToken
-          ? await makeUnsignedContractCall({
-              contractAddress:
-                token === TokenType.CUSTOM
-                  ? customTokenContractAddress
-                  : tokenInfo!.contractAddress,
-              contractName:
-                token === TokenType.CUSTOM
-                  ? customTokenContractName
-                  : tokenInfo!.contractName,
-              functionName: "transfer",
-              functionArgs: [
-                uintCV(amount),
-                principalCV(sender),
-                principalCV(recipient),
-                noneCV(),
-              ],
-              publicKey: senderPublicKey,
-              network: this.network,
-              postConditionMode: 1 as any,
-            })
-          : await makeUnsignedSTXTokenTransfer({
-              recipient,
-              amount,
-              publicKey: senderPublicKey,
-              network: this.network,
-            });
+      let unsignedTx: StacksTransactionWire;
+
+      if (type === TransactionType.FungibleToken) {
+        const ftContractAddress =
+          token === TokenType.CUSTOM
+            ? customTokenContractAddress!
+            : tokenInfo!.contractAddress;
+        const ftContractName =
+          token === TokenType.CUSTOM
+            ? customTokenContractName!
+            : tokenInfo!.contractName;
+
+        // Create post-condition: sender sends exactly `amount` of this token
+        const postCondition = Pc.principal(sender)
+          .willSendEq(amount)
+          .ft(`${ftContractAddress}.${ftContractName}`, ftContractName);
+
+        unsignedTx = await makeUnsignedContractCall({
+          contractAddress: ftContractAddress,
+          contractName: ftContractName,
+          functionName: "transfer",
+          functionArgs: [
+            uintCV(amount),
+            principalCV(sender),
+            principalCV(recipient),
+            noneCV(),
+          ],
+          publicKey: senderPublicKey,
+          network: this.network,
+          postConditionMode: PostConditionMode.Deny,
+          postConditions: [postCondition],
+        });
+      } else {
+        unsignedTx = await makeUnsignedSTXTokenTransfer({
+          recipient,
+          amount,
+          publicKey: senderPublicKey,
+          network: this.network,
+        });
+      }
 
       return unsignedTx;
     } catch (error) {
@@ -644,10 +658,106 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
   };
 
   /**
+   * Parses a raw list of Stacks API transaction items into typed Transaction objects.
+   */
+  private parseTransactionItems = async (
+    items: any[],
+    address: string,
+  ): Promise<Transaction[]> => {
+    const txs: Transaction[] = [];
+
+    for (const tx of items) {
+      const base = {
+        transaction_hash: tx.tx_id as string,
+        timestamp: tx.block_time_iso,
+        success: tx.tx_status === "success",
+      };
+
+      // Native STX transfers
+      if (tx.tx_type === "token_transfer" && tx.token_transfer) {
+        const amountMicro = BigInt(tx.token_transfer.amount || "0");
+        const amount = Number(amountMicro) / 1_000_000; // STX has 6 decimals
+
+        txs.push({
+          type: TransactionType.STX,
+          sender: tx.sender_address,
+          recipient: tx.token_transfer.recipient_address,
+          amount,
+          tokenName: undefined,
+          tokenContractAddress: undefined,
+          ...base,
+        });
+
+        continue;
+      }
+
+      // Fungible Token transfers
+      if (
+        tx.tx_type === "contract_call" &&
+        tx.contract_call &&
+        tx.contract_call.function_name === "transfer" &&
+        Array.isArray(tx.contract_call.function_args) &&
+        tx.contract_call.function_args.length >= 3
+      ) {
+        const [amountArg, senderArg, recipientArg] =
+          tx.contract_call.function_args;
+
+        const amountRepr = amountArg?.repr as string | undefined;
+        const senderRepr = senderArg?.repr as string | undefined;
+        const recipientRepr = recipientArg?.repr as string | undefined;
+
+        const rawAmount =
+          amountRepr && amountRepr.startsWith("u")
+            ? amountRepr.slice(1)
+            : "0";
+
+        const sender =
+          senderRepr && senderRepr.startsWith("'")
+            ? senderRepr.slice(1)
+            : tx.sender_address;
+
+        const recipient =
+          recipientRepr && recipientRepr.startsWith("'")
+            ? recipientRepr.slice(1)
+            : address;
+
+        const contractId = tx.contract_call.contract_id as string;
+        const contractName = contractId.split(".").slice(-1)[0];
+        const contractAddress = contractId.split(".")[0];
+        let decimals = getDecimalsFromFtInfo(contractId);
+
+        // if decimals is 0 => not found in ftInfo => custom token
+        if (decimals == 0) {
+          decimals = await this.fetchFtDecimals(contractAddress, contractName);
+        }
+
+        const amountInt = BigInt(rawAmount);
+        const amount =
+          decimals > 0 ? Number(amountInt) / 10 ** decimals : Number(amountInt);
+
+        txs.push({
+          type: TransactionType.FungibleToken,
+          tokenName: contractName,
+          tokenContractAddress: contractId,
+          sender,
+          recipient,
+          amount,
+          ...base,
+        });
+
+        continue;
+      }
+    }
+
+    return txs;
+  };
+
+  /**
    * Retrieves the transaction history for a given address.
+   * Automatically paginates through multiple Stacks API requests when limit > stacks_api_page_size.
    * @param address - The Stacks address to retrieve the transaction history for.
    * @param limit - The maximum number of transactions to retrieve.
-   * @param offset - The offset for pagination.
+   * @param offset - The starting offset for pagination.
    * @returns An array of transactions associated with the address.
    */
   public getTransactionHistory = async (
@@ -659,107 +769,34 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
       throw new Error("Invalid Stacks address");
     }
 
-    const response = await this.axiosClient.get(
-      `${this.stackBaseUrl}/extended/v1/address/${address}/transactions?limit=${limit}&offset=${offset}`,
-    );
-
-    if (!response || !response.data || response.status !== 200) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-
     try {
-      const items = (response.data.results || []) as any[];
-      const txs: Transaction[] = [];
+      const allTxs: Transaction[] = [];
+      let currentOffset = offset;
+      let remaining = limit;
 
-      for (const tx of items) {
-        const base = {
-          transaction_hash: tx.tx_id as string,
-          timestamp: tx.block_time_iso,
-          success: tx.tx_status === "success",
-        };
+      while (remaining > 0) {
+        const pageSize = Math.min(remaining, helperConstants.stacks_api_page_size);
+        const response = await this.axiosClient.get(
+          `${this.stackBaseUrl}/extended/v1/address/${address}/transactions?limit=${pageSize}&offset=${currentOffset}`,
+        );
 
-        // Native STX transfers
-        if (tx.tx_type === "token_transfer" && tx.token_transfer) {
-          const amountMicro = BigInt(tx.token_transfer.amount || "0");
-          const amount = Number(amountMicro) / 1_000_000; // STX has 6 decimals
-
-          txs.push({
-            type: TransactionType.STX,
-            sender: tx.sender_address,
-            recipient: tx.token_transfer.recipient_address,
-            amount,
-            tokenName: undefined,
-            tokenContractAddress: undefined,
-            ...base,
-          });
-
-          continue;
+        if (!response || !response.data || response.status !== 200) {
+          throw new Error(`HTTP ${response.status}`);
         }
 
-        // Fungible Token transfers
-        if (
-          tx.tx_type === "contract_call" &&
-          tx.contract_call &&
-          tx.contract_call.function_name === "transfer" &&
-          Array.isArray(tx.contract_call.function_args) &&
-          tx.contract_call.function_args.length >= 3
-        ) {
-          const [amountArg, senderArg, recipientArg] =
-            tx.contract_call.function_args;
+        const items = (response.data.results || []) as any[];
+        if (items.length === 0) break;
 
-          const amountRepr = amountArg?.repr as string | undefined;
-          const senderRepr = senderArg?.repr as string | undefined;
-          const recipientRepr = recipientArg?.repr as string | undefined;
+        const txs = await this.parseTransactionItems(items, address);
+        allTxs.push(...txs);
 
-          const rawAmount =
-            amountRepr && amountRepr.startsWith("u")
-              ? amountRepr.slice(1)
-              : "0";
+        if (items.length < pageSize) break; // no more data on the chain
 
-          const sender =
-            senderRepr && senderRepr.startsWith("'")
-              ? senderRepr.slice(1)
-              : tx.sender_address;
-
-          const recipient =
-            recipientRepr && recipientRepr.startsWith("'")
-              ? recipientRepr.slice(1)
-              : address;
-
-          const contractId = tx.contract_call.contract_id as string;
-          const contractName = contractId.split(".").slice(-1)[0];
-          const contractAddress = contractId.split(".")[0];
-          let decimals = getDecimalsFromFtInfo(contractId);
-
-          // if decimals is 0 => not found in ftInfo => custom token
-          if (decimals == 0) {
-            decimals = await this.fetchFtDecimals(
-              contractAddress,
-              contractName,
-            );
-          }
-
-          const amountInt = BigInt(rawAmount);
-          const amount =
-            decimals > 0
-              ? Number(amountInt) / 10 ** decimals
-              : Number(amountInt);
-
-          txs.push({
-            type: TransactionType.FungibleToken,
-            tokenName: contractName,
-            tokenContractAddress: contractId,
-            sender,
-            recipient,
-            amount,
-            ...base,
-          });
-
-          continue;
-        }
+        currentOffset += pageSize;
+        remaining -= pageSize;
       }
 
-      return txs;
+      return allTxs;
     } catch (error) {
       throw new Error(
         `Failed to fetch transaction history: ${formatErrorMessage(error)}`,
