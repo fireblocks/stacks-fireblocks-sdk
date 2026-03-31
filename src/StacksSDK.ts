@@ -23,8 +23,10 @@ import { FireblocksService } from "./services/fireblocks.service";
 import {
   CheckStatusData,
   CheckStatusResponse,
+  ContractCallTransaction,
   CreateTransactionResponse,
   FireblocksConfig,
+  GetContractCallHistoryResponse,
   GetFtBalancesResponse,
   GetNativeBalanceResponse,
   GetPoxInfoResponse,
@@ -53,11 +55,18 @@ import {
   validateAddress,
 } from "./utils/helpers";
 import {
+  ClarityValue,
   createMessageSignature,
+  deserializeTransaction,
+  encodeStructuredDataBytes,
+  noneCV,
+  PostConditionMode,
+  PostConditionWire,
+  principalCV,
+  serializeTransaction,
+  sigHashPreSign,
   StacksTransactionWire,
   uintCV,
-  principalCV,
-  noneCV,
 } from "@stacks/transactions";
 
 export class StacksSDK {
@@ -73,6 +82,7 @@ export class StacksSDK {
   private constructor(
     vaultAccountId: string | number,
     fireblocksConfig?: FireblocksConfig,
+    hiroApiKey?: string,
   ) {
     try {
       // Validate Fireblocks API credentials before initializing services
@@ -85,7 +95,7 @@ export class StacksSDK {
       }
       this.fireblocksService = new FireblocksService(fireblocksConfig);
       this.testnet = fireblocksConfig?.testnet || false;
-      this.chainService = new StacksService(this.testnet);
+      this.chainService = new StacksService(this.testnet, hiroApiKey);
     } catch (error) {
       throw new Error(
         `Failed to initialize services: ${formatErrorMessage(error)}`,
@@ -114,9 +124,10 @@ export class StacksSDK {
   public static create = async (
     vaultAccountId: string | number,
     fireblocksConfig?: FireblocksConfig,
+    hiroApiKey?: string,
   ): Promise<StacksSDK> => {
     try {
-      const instance = new StacksSDK(vaultAccountId, fireblocksConfig);
+      const instance = new StacksSDK(vaultAccountId, fireblocksConfig, hiroApiKey);
       instance.publicKey =
         await instance.fireblocksService.getPublicKeyByVaultID(vaultAccountId);
       instance.address = instance.chainService.formatAddress(
@@ -652,7 +663,8 @@ export class StacksSDK {
       | "revoke-delegate-stx"
       | "solo-stack"
       | "increase-stack-amount"
-      | "extend-stack-period",
+      | "extend-stack-period"
+      | "generic-contract-call",
     poolAddress?: string,
     poolContractName?: string,
     amount?: bigint,
@@ -663,6 +675,7 @@ export class StacksSDK {
     signerSig65Hex?: string,
     startBurnHeight?: number,
     authId?: bigint,
+    contractCallParams?: { contractAddress: string; contractName: string; functionName: string; functionArgs: ClarityValue[]; postConditions?: PostConditionWire[]; postConditionMode?: PostConditionMode },
     note?: string,
   ): Promise<any> => {
     try {
@@ -708,6 +721,12 @@ export class StacksSDK {
       ) {
         throw new Error(
           "Extend cycles, signer signature, signer key, auth ID and max amount must be provided for extend-stack-period",
+        );
+      }
+
+      if (functionName === "generic-contract-call" && !contractCallParams) {
+        throw new Error(
+          "Contract call parameters must be provided for generic-contract-call",
         );
       }
 
@@ -766,9 +785,20 @@ export class StacksSDK {
             signerKey!,
             this.btcRewardsAddress!,
             extendCycles!,
-            maxAmount!, 
+            maxAmount!,
             signerSig65Hex!,
             authId!,
+          );
+          break;
+        case "generic-contract-call":
+          transactionToSign = await this.chainService.makeContractCall(
+            this.publicKey,
+            contractCallParams!.contractAddress,
+            contractCallParams!.contractName,
+            contractCallParams!.functionName,
+            contractCallParams!.functionArgs,
+            contractCallParams!.postConditions,
+            contractCallParams!.postConditionMode,
           );
           break;
         default:
@@ -787,10 +817,12 @@ export class StacksSDK {
         transactionToSign.unsignedContractCall as any
       ).auth.spendingCondition.signature = createMessageSignature(signature);
 
+      const transaction = serializeTransaction(transactionToSign.unsignedContractCall);
+
       const result = await this.chainService.broadcastTransaction(
         transactionToSign.unsignedContractCall,
       );
-      return result;
+      return { ...result, transaction };
     } catch (error) {
       throw new Error(
         `Failed to build, sign or send contract call transaction: ${formatErrorMessage(
@@ -1549,7 +1581,7 @@ export class StacksSDK {
           error: `Failed to fetch POX info: empty response`,
         }
       }
-      
+
       return {
         success: true,
         data: poxResponse.data,
@@ -1559,6 +1591,202 @@ export class StacksSDK {
       return {
         success: false,
         error: `Failed to fetch POX info: ${formatErrorMessage(error)}`,
+      };
+    }
+  };
+
+  /**
+   * Makes a generic contract call to a given contract address and name with specified function and arguments.
+   * @param contractAddress - The address of the contract to call.
+   * @param contractName - The name of the contract to call.
+   * @param functionName - The name of the function to call on the contract.
+   * @param functionArgs - The arguments to pass to the contract function - must be an array of ClarityValue objects in the same order and types as the function parameters.
+   * @param postConditions - Optional post conditions for the transaction.
+   * @param postConditionMode - Optional post condition mode.
+   * @returns A response indicating success or failure of the transaction.
+   */
+  public makeContractCall = async (
+    contractAddress: string,
+    contractName: string,
+    functionName: string,
+    functionArgs: ClarityValue[],
+    postConditions?: PostConditionWire[],
+    postConditionMode?: PostConditionMode,
+  ): Promise<CreateTransactionResponse> => {
+    try {
+      if (!this.address || !this.publicKey || !this.vaultAccountId) {
+        throw new Error("Address, Public Key or Vault ID are not set");
+      }
+
+      console.log(`Making contract call to ${contractAddress}.${contractName} function ${functionName} with ${functionArgs.length} arg(s)`);
+
+      const result = await this.buildSignSendContractCall(
+        "generic-contract-call",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {contractAddress, contractName, functionName, functionArgs, postConditions, postConditionMode},
+      );
+
+      const assertResult = assertResultSuccess(result);
+      if (assertResult.success === false) {
+        return {
+          success: false,
+          error: `Failed to make contract call: ${assertResult.error}`,
+        };
+      }
+
+      console.log(`Successfully made contract call to ${contractAddress}.${contractName} function ${functionName}`);
+      return {
+        success: true,
+        txHash: result.txid,
+        transaction: result.transaction,
+      };
+    } catch (error) {
+      console.error(`Error making contract call: ${formatErrorMessage(error)}`);
+      return {
+        success: false,
+        error: `Failed to make contract call to ${contractAddress}.${contractName} function ${functionName}: ${formatErrorMessage(error)}`,
+      };
+    }
+  };
+
+  /**
+   * Signs an externally built transaction and returns the signed transaction hex.
+   * The caller is responsible for broadcasting the signed transaction.
+   */
+  public signExternalTransaction = async (
+    txHex: string,
+  ): Promise<{ success: boolean; txHex?: string; error?: string }> => {
+    try {
+      if (!this.publicKey || !this.vaultAccountId) {
+        throw new Error("Public key or vault ID are not set");
+      }
+
+      const txBytes = Buffer.from(txHex, 'hex');
+      const tx = deserializeTransaction(txBytes);
+
+      const sigHash = tx.signBegin();
+      const preSignSigHash = sigHashPreSign(
+        sigHash,
+        tx.auth.authType,
+        tx.auth.spendingCondition.fee,
+        tx.auth.spendingCondition.nonce,
+      );
+
+      const rawSignature = await this.fireblocksService.signTransaction(
+        preSignSigHash,
+        this.vaultAccountId.toString(),
+        '',
+      );
+
+      const signature = concatSignature(rawSignature.fullSig, rawSignature.v);
+      (tx as any).auth.spendingCondition.signature = createMessageSignature(signature);
+
+      const signedTxHex = serializeTransaction(tx);
+
+      return { success: true, txHex: signedTxHex };
+    } catch (error) {
+      return { success: false, error: formatErrorMessage(error) };
+    }
+  };
+
+  /**
+   * Signs a plain text message and returns the signature.
+   */
+  public signMessage = async (
+    message: string,
+  ): Promise<{ success: boolean; signature?: string; error?: string }> => {
+    try {
+      if (!this.vaultAccountId) {
+        throw new Error("Vault ID is not set");
+      }
+
+      const crypto = require('crypto');
+      const prefix = '\x17Stacks Signed Message:\n';
+      const hash = crypto.createHash('sha256').update(Buffer.from(prefix + message)).digest('hex');
+
+      const rawSignature = await this.fireblocksService.signTransaction(
+        hash,
+        this.vaultAccountId.toString(),
+        '',
+      );
+
+      const signature = concatSignature(rawSignature.fullSig, rawSignature.v);
+      return { success: true, signature };
+    } catch (error) {
+      return { success: false, error: formatErrorMessage(error) };
+    }
+  };
+
+  /**
+   * Signs a SIP-018 structured message and returns the signature.
+   * message and domain are hex-encoded serialized ClarityValues.
+   */
+  public signStructuredMessage = async (
+    message: string,
+    domain: string,
+  ): Promise<{ success: boolean; signature?: string; error?: string }> => {
+    try {
+      if (!this.vaultAccountId) {
+        throw new Error("Vault ID is not set");
+      }
+
+      const { deserializeCV } = require('@stacks/transactions');
+      const { sha256 } = require('@noble/hashes/sha256');
+
+      const messageCV = deserializeCV(Buffer.from(message, 'hex'));
+      const domainCV = deserializeCV(Buffer.from(domain, 'hex'));
+
+      const encoded = encodeStructuredDataBytes({ message: messageCV, domain: domainCV });
+      const hash = Buffer.from(sha256(encoded)).toString('hex');
+
+      const rawSignature = await this.fireblocksService.signTransaction(
+        hash,
+        this.vaultAccountId.toString(),
+        '',
+      );
+
+      const signature = concatSignature(rawSignature.fullSig, rawSignature.v);
+      return { success: true, signature };
+    } catch (error) {
+      return { success: false, error: formatErrorMessage(error) };
+    }
+  };
+
+  /**
+   * Fetches contract call transactions for the current account, excluding STX and FT transfers.
+   * @param limit - The maximum number of transactions to return (default is 50).
+   * @param offset - The offset for pagination (default is 0).
+   * @returns A promise that resolves to a {GetContractCallHistoryResponse}.
+   * @throws {Error} If the address is not set or if the request fails.
+   */
+  public getContractCallHistory = async (
+    limit: number = pagination_defaults.limit,
+    offset: number = pagination_defaults.page,
+  ): Promise<GetContractCallHistoryResponse> => {
+    if (!this.address) {
+      throw new Error("Stacks address is not set.");
+    }
+
+    try {
+      const txs = await this.chainService.getContractCallHistory(
+        this.address,
+        limit,
+        offset,
+      );
+      return { success: true, data: txs };
+    } catch (error) {
+      return {
+        success: false,
+        error: formatErrorMessage(error),
       };
     }
   };

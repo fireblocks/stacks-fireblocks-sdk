@@ -30,6 +30,7 @@ export type FireblocksConfig = {
 export type CreateTransactionResponse = {
   success: boolean;
   txHash?: string;
+  transaction?: any; // the serialized signed transaction
   error?: string;
 };
 
@@ -38,6 +39,12 @@ export type GetTransactionHistoryResponse = {
   data?: any[];
   error?: string;
 };
+
+export type GetTransactionHistoryParams = {
+  getCachedTransactions?: boolean;
+  limit?: number;
+  offset?: number;
+}
 
 export type GetPoxInfoResponse = {
   success: boolean;
@@ -69,6 +76,24 @@ export type Transaction = {
   transaction_hash: string;
   timestamp: any;
   success: boolean;
+};
+
+export type ContractCallTransaction = {
+  transaction_hash: string;
+  timestamp: any;
+  success: boolean;
+  sender: string;
+  contractId: string;
+  contractAddress: string;
+  contractName: string;
+  functionName: string;
+  functionArgs: { name: string; type: string; repr: string }[];
+};
+
+export type GetContractCallHistoryResponse = {
+  success: boolean;
+  data?: ContractCallTransaction[];
+  error?: string;
 };
 
 export type CheckStatusData = {

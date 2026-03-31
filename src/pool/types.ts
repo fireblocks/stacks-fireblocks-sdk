@@ -19,6 +19,7 @@ export interface ApiServiceConfig {
   basePath: BasePath | string;
   poolConfig?: Partial<PoolConfig>;
   testnet?: boolean;
+  chainApiKey?: string;
 }
 
 export enum ActionType {
@@ -40,6 +41,11 @@ export enum ActionType {
   GET_POX_INFO = "getPoxInfo",
   INCREASE_STACKED_AMOUNT = "increaseStackedAmount",
   EXTEND_STACKING_PERIOD = "extendStackingPeriod",
+  GET_CONTRACT_CALL_HISTORY = "getContractCallHistory",
+  MAKE_CONTRACT_CALL = "makeContractCall",
+  SIGN_TRANSACTION = "signExternalTransaction",
+  SIGN_MESSAGE = "signMessage",
+  SIGN_STRUCTURED_MESSAGE = "signStructuredMessage",
 }
 
 export interface SdkManagerMetrics {

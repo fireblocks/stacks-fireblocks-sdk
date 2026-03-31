@@ -5,32 +5,6 @@ import { StacksSDK } from "../StacksSDK";
 import { formatErrorMessage } from "../utils/errorHandling";
 import { SDKResponse } from "../services/types";
 
-// Configure the API Service once for all handlers
-const apiConfig: ApiServiceConfig = {
-  apiKey: process.env.FIREBLOCKS_API_KEY || "",
-  apiSecret: process.env.FIREBLOCKS_SECRET_KEY_PATH || "",
-  basePath: (process.env.FIREBLOCKS_BASE_PATH as BasePath) || BasePath.US,
-  testnet: (process.env.NETWORK ?? "").toLowerCase() === "testnet",
-  // Optional: customize pool size/timeouts here
-  poolConfig: {
-    maxPoolSize: parseInt(process.env.POOL_MAX_SIZE || "100"),
-    idleTimeoutMs: parseInt(process.env.POOL_IDLE_TIMEOUT_MS || "1800000"),
-    cleanupIntervalMs: parseInt(
-      process.env.POOL_CLEANUP_INTERVAL_MS || "300000",
-    ),
-  },
-};
-
-// Validate required environment variables
-if (apiConfig.apiKey === "") {
-  console.error("FIREBLOCKS_API_KEY is not set in environment variables");
-  throw new Error("InvalidEnvParams : FIREBLOCKS_API_KEY is required");
-}
-if (apiConfig.apiSecret === "") {
-  console.error("FIREBLOCKS_API_SECRET is not set in environment variables");
-  throw new Error("InvalidEnvParams : FIREBLOCKS_API_SECRET is required");
-}
-
 export class ApiService {
   private sdkManager: SdkManager;
 
@@ -43,7 +17,7 @@ export class ApiService {
       testnet: !!config.testnet,
     };
 
-    this.sdkManager = new SdkManager(baseConfig, config.poolConfig);
+    this.sdkManager = new SdkManager(baseConfig, config.chainApiKey, config.poolConfig);
   }
 
   /**
@@ -158,6 +132,28 @@ export class ApiService {
             params.authId,
           );
           break;
+        case ActionType.GET_CONTRACT_CALL_HISTORY:
+          result = await sdk.getContractCallHistory(params.limit, params.offset);
+          break;
+        case ActionType.MAKE_CONTRACT_CALL:
+          result = await sdk.makeContractCall(
+            params.contractAddress,
+            params.contractName,
+            params.functionName,
+            params.functionArgs,
+            params.postConditions,
+            params.postConditionMode,
+          );
+          break;
+        case ActionType.SIGN_TRANSACTION:
+          result = await sdk.signExternalTransaction(params.txHex);
+          break;
+        case ActionType.SIGN_MESSAGE:
+          result = await sdk.signMessage(params.message);
+          break;
+        case ActionType.SIGN_STRUCTURED_MESSAGE:
+          result = await sdk.signStructuredMessage(params.message, params.domain);
+          break;
         default:
           throw new Error(
             `InvalidType :
@@ -193,5 +189,3 @@ export class ApiService {
     return this.sdkManager.shutdown();
   };
 }
-
-export const apiServiceSingleton = new ApiService(apiConfig);

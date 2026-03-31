@@ -40,18 +40,19 @@ export function validateAmount(amount: string | number): boolean {
 /** Validate a Stacks account address with a network flag. */
 export function validateAddress(addr: string, testnet: boolean): boolean {
   if (testnet) {
-    if (!/^ST[A-Z0-9]+$/.test(addr)) return false;
+    if (!/^S[TN][A-Z0-9]+$/.test(addr)) return false;
   } else {
-    if (!/^SP[A-Z0-9]+$/.test(addr)) return false;
+    if (!/^S[PM][A-Z0-9]+$/.test(addr)) return false;
   }
 
   try {
     const [version, data] = c32addressDecode(addr) as [number, string];
 
-    // Expected version by network (single-sig accounts)
-    // ST → 26 (testnet), SP → 22 (mainnet)
-    const expectedVersion = testnet ? 26 : 22;
-    if (version !== expectedVersion) return false;
+    // Expected versions by network:
+    // Testnet: ST → 26, SN → 21
+    // Mainnet: SP → 22, SM → 20
+    const validVersions = testnet ? [26, 21] : [22, 20];
+    if (!validVersions.includes(version)) return false;
 
     // Payload must be 20 bytes (HASH160)
     return /^[0-9a-fA-F]{40}$/.test(data);

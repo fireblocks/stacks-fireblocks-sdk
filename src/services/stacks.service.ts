@@ -8,7 +8,7 @@
  */
 
 import axios, { AxiosInstance } from "axios";
-import { TokenType, Transaction, TransactionType } from "./types";
+import { ContractCallTransaction, TokenType, Transaction, TransactionType } from "./types";
 import { STACKS_TESTNET, STACKS_MAINNET, StacksNetwork } from "@stacks/network";
 import {
   broadcastTransaction,
@@ -25,6 +25,7 @@ import {
   noneCV,
   Pc,
   PostConditionMode,
+  PostConditionWire,
   principalCV,
   publicKeyToAddress,
   serializePayload,
@@ -57,8 +58,11 @@ export class StacksService {
   private stackBaseUrl: string;
   private network: StacksNetwork;
 
-  constructor(testnet: boolean = false) {
+  constructor(testnet: boolean = false, hiroApiKey?: string) {
     this.axiosClient = axios.create();
+    if (hiroApiKey) {
+      this.axiosClient.defaults.headers['x-hiro-api-key'] = hiroApiKey;
+    }
     this.stackBaseUrl = testnet
       ? api_constants.stacks_testnet_rpc
       : api_constants.stacks_mainnet_rpc;
@@ -456,10 +460,12 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
     contractName: string,
     functionName: string,
     functionArgs: ClarityValue[],
+    postConditions?: PostConditionWire[],
+    postConditionMode?: PostConditionMode,
   ): Promise<StacksTransactionWire> => {
     try {
       if (!validateAddress(contractAddress, this.network === STACKS_TESTNET)) {
-        throw new Error("Invalid recipient address");
+        throw new Error("Invalid contract address");
       }
 
       if (!isCompressedSecp256k1PubKeyHex(senderPublicKey)) {
@@ -477,7 +483,8 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
         functionArgs,
         publicKey: senderPublicKey,
         network: this.network,
-        postConditionMode: PostConditionMode.Deny,
+        postConditions: postConditions ?? [],
+        postConditionMode: postConditionMode ?? PostConditionMode.Deny,
       });
 
       return unsignedContractCall;
@@ -578,6 +585,8 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
     contractName: string,
     functionName: string,
     functionArgs: ClarityValue[],
+    postConditions?: PostConditionWire[],
+    postConditionMode?: PostConditionMode,
   ): Promise<{
     unsignedContractCall: StacksTransactionWire;
     preSignSigHash: string;
@@ -589,6 +598,8 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
         contractName,
         functionName,
         functionArgs,
+        postConditions,
+        postConditionMode,
       );
       const sigHash = unsignedContractCall.signBegin();
 
@@ -1163,6 +1174,134 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
       );
       throw new Error(
         `Failed to extend stacking period: ${formatErrorMessage(error)}`,
+      );
+    }
+  };
+
+  /**
+   * Serializes a generic contract call to a given contract address and name with specified function and arguments.
+   * @param senderPublicKey - The compressed secp256k1 public key in hex format of the transaction sender.
+   * @param contractAddress - The address of the contract to call.
+   * @param contractName - The name of the contract to call.
+   * @param functionName - The name of the function to call on the contract.
+   * @param functionArgs - The arguments to pass to the contract function - must be an array of ClarityValue objects in the same order and types as the function parameters.
+   * @returns the serialized unsigned contract call transaction and pre-signature hash.
+   */
+  public makeContractCall = async (
+    senderPublicKey: string,
+    contractAddress: string,
+    contractName: string,
+    functionName: string,
+    functionArgs: ClarityValue[],
+    postConditions?: PostConditionWire[],
+    postConditionMode?: PostConditionMode,
+  ): Promise<{
+    unsignedContractCall: StacksTransactionWire;
+    preSignSigHash: string;
+  }> => {
+    try {
+      if (!isCompressedSecp256k1PubKeyHex(senderPublicKey)) {
+        throw new Error("Invalid compressed secp256k1 public key hex format");
+      }
+
+      const serializedContractCall = await this.serializeContractCall(
+        senderPublicKey,
+        contractAddress,
+        contractName,
+        functionName,
+        functionArgs,
+        postConditions,
+        postConditionMode,
+      );
+
+      return serializedContractCall;
+    } catch (error) {
+      console.error(
+        "Error building contract call transaction:",
+        formatErrorMessage(error),
+      );
+      throw new Error(`Failed to make contract call: ${formatErrorMessage(error)}`);
+    }
+  };
+
+  /**
+   * Fetches contract call transactions for an address, excluding STX and FT transfers.
+   * @param address - The Stacks address to query.
+   * @param limit - The maximum number of transactions to retrieve.
+   * @param offset - The offset for pagination.
+   * @returns An array of contract call transactions.
+   */
+  public getContractCallHistory = async (
+    address: string,
+    limit: number = pagination_defaults.limit,
+    offset: number = pagination_defaults.page,
+  ): Promise<ContractCallTransaction[]> => {
+    if (!validateAddress(address, this.network === STACKS_TESTNET)) {
+      throw new Error("Invalid Stacks address");
+    }
+
+    try {
+      const allTxs: ContractCallTransaction[] = [];
+      let currentOffset = offset;
+
+      while (allTxs.length < limit) {
+        const pageSize = helperConstants.stacks_api_page_size;
+        const response = await this.axiosClient.get(
+          `${this.stackBaseUrl}/extended/v1/address/${address}/transactions?limit=${pageSize}&offset=${currentOffset}`,
+        );
+
+        if (!response || !response.data || response.status !== 200) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const items = (response.data.results || []) as any[];
+        if (items.length === 0) break;
+
+        for (const tx of items) {
+          if (tx.tx_type !== "contract_call" || !tx.contract_call) {
+            continue;
+          }
+
+          // Exclude FT transfers (contract_call with function_name === "transfer" and standard transfer args)
+          const fn = tx.contract_call.function_name as string;
+          const args = tx.contract_call.function_args;
+          if (fn === "transfer" && Array.isArray(args) && args.length >= 3) {
+            continue;
+          }
+
+          const contractId = tx.contract_call.contract_id as string;
+          const dotIdx = contractId.indexOf(".");
+          const contractAddress = dotIdx !== -1 ? contractId.substring(0, dotIdx) : contractId;
+          const contractName = dotIdx !== -1 ? contractId.substring(dotIdx + 1) : "";
+
+          allTxs.push({
+            transaction_hash: tx.tx_id as string,
+            timestamp: tx.block_time_iso,
+            success: tx.tx_status === "success",
+            sender: tx.sender_address as string,
+            contractId,
+            contractAddress,
+            contractName,
+            functionName: fn,
+            functionArgs: Array.isArray(args)
+              ? args.map((a: any) => ({
+                  name: a.name ?? "",
+                  type: a.type ?? "",
+                  repr: a.repr ?? "",
+                }))
+              : [],
+          });
+        }
+
+        if (items.length < pageSize) break; // no more data on the chain
+
+        currentOffset += pageSize;
+      }
+
+      return allTxs.slice(0, limit);
+    } catch (error) {
+      throw new Error(
+        `Failed to fetch contract call history: ${formatErrorMessage(error)}`,
       );
     }
   };

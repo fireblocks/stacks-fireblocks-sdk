@@ -9,9 +9,11 @@ export class SdkManager {
   private baseConfig: FireblocksConfig;
   private poolConfig: PoolConfig;
   private cleanupInterval: NodeJS.Timeout;
+  private chainApiKey?: string;
 
-  constructor(baseConfig: FireblocksConfig, poolConfig?: Partial<PoolConfig>) {
+  constructor(baseConfig: FireblocksConfig, chainApiKey?: string, poolConfig?: Partial<PoolConfig>) {
     this.baseConfig = baseConfig;
+    this.chainApiKey = chainApiKey;
     // Set default pool config values
     this.poolConfig = {
       maxPoolSize: poolConfig?.maxPoolSize || 100,
@@ -86,7 +88,7 @@ export class SdkManager {
   /**
    * Create a new SDK instance
    * @param vaultAccountId Vault account ID
-   * @returns New MovementFireblocksSDK instance
+   * @returns New StacksSDK instance
    */
   private createSdkInstance = async (
     vaultAccountId: string
@@ -97,7 +99,7 @@ export class SdkManager {
 
     try {
       console.log(`Creating new SDK instance for vault ${vaultAccountId}`);
-      const sdk = await StacksSDK.create(vaultAccountId, config);
+      const sdk = await StacksSDK.create(vaultAccountId, config, this.chainApiKey);
       return sdk;
     } catch (error) {
       console.error(`Failed to create SDK for vault ${vaultAccountId}:`, error);
