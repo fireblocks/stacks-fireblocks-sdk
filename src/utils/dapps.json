@@ -226,15 +226,6 @@
       "logo": "https://www.luganodes.com/favicon.ico",
       "category": "Staking",
       "tags": ["Stacking", "Institutional"]
-    },
-    {
-      "id": "google",
-      "name": "Google",
-      "url": "https://www.google.com",
-      "description": "Test",
-      "logo": "https://www.luganodes.com/favicon.ico",
-      "category": "testing",
-      "tags": ["Stacking", "Institutional"]
     }
   ]
 }
