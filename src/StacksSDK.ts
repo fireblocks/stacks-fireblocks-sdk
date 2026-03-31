@@ -52,8 +52,13 @@ import {
   tokenToMicro,
   validateAddress,
 } from "./utils/helpers";
-import { createMessageSignature } from "@stacks/transactions";
-import { StacksTransactionWire } from "@stacks/transactions";
+import {
+  createMessageSignature,
+  StacksTransactionWire,
+  uintCV,
+  principalCV,
+  noneCV,
+} from "@stacks/transactions";
 
 export class StacksSDK {
   private fireblocksService: FireblocksService;
@@ -62,7 +67,7 @@ export class StacksSDK {
   private address: string | undefined;
   private btcRewardsAddress: string | undefined;
   private publicKey: string | undefined;
-  private chachedTransactions: Transaction[] = [];
+  private cachedTransactions: Transaction[] = [];
   private testnet: boolean = false;
 
   private constructor(
@@ -345,7 +350,7 @@ export class StacksSDK {
   ): Promise<GetTransactionHistoryResponse> => {
     if (getCachedTransactions) {
       console.log("Using cached transactions");
-      return { success: true, data: this.chachedTransactions };
+      return { success: true, data: this.cachedTransactions };
     }
 
     if (!this.address) {
@@ -363,15 +368,15 @@ export class StacksSDK {
       );
 
       const existingHashes = new Set(
-        this.chachedTransactions.map((tx) => tx.transaction_hash),
+        this.cachedTransactions.map((tx) => tx.transaction_hash),
       );
 
       const newTransactions = txs.filter(
         (tx) => !existingHashes.has(tx.transaction_hash),
       );
 
-      this.chachedTransactions = [
-        ...this.chachedTransactions,
+      this.cachedTransactions = [
+        ...this.cachedTransactions,
         ...newTransactions,
       ];
       return { success: true, data: txs };
@@ -458,6 +463,43 @@ export class StacksSDK {
           microAmount,
         );
         fee = microToStx(microfee);
+      } else if (type == TransactionType.FungibleToken) {
+        // Estimate fee for FT contract call
+        const tokenInfo = token !== TokenType.CUSTOM
+          ? getTokenInfo(token, this.testnet ? "testnet" : "mainnet")
+          : undefined;
+        const ftContractAddress = tokenInfo?.contractAddress ?? customTokenContractAddress!;
+        const ftContractName = tokenInfo?.contractName ?? customTokenContractName!;
+
+        // Build SIP-010 transfer args for fee estimation
+        const functionArgs = [
+          uintCV(microAmount),
+          principalCV(this.address!),
+          principalCV(recipientAddress),
+          noneCV(),
+        ];
+
+        microfee = await this.chainService.estimateContractCallFee(
+          ftContractAddress,
+          ftContractName,
+          "transfer",
+          functionArgs,
+        );
+        fee = microToStx(microfee);
+      }
+
+      // For FT transfers, check STX balance covers gas fee
+      if (type == TransactionType.FungibleToken) {
+        const stxBalanceResponse = await this.getBalance();
+        if (!stxBalanceResponse.success) {
+          throw new Error("Could not fetch STX balance to check gas funds");
+        }
+        if (stxBalanceResponse.balance < fee) {
+          return {
+            validParams: false,
+            reason: `Insufficient STX for gas fee. Available: ${stxBalanceResponse.balance} STX, required: ${fee} STX`,
+          };
+        }
       }
 
       const balanceResponse =
@@ -644,7 +686,7 @@ export class StacksSDK {
 
       if (
         functionName === "solo-stack" &&
-        (!amount || !lockPeriod || !signerSig65Hex || !startBurnHeight || !signerKey || !maxAmount || !authId)
+        (!amount || !lockPeriod || !signerSig65Hex || !startBurnHeight || !signerKey || maxAmount == null || authId == null)
       ) {
         throw new Error(
           "Amount, lock period, signer signature, start burn height, signer key, max amount, and auth ID must be provided for solo-stack",
@@ -653,16 +695,16 @@ export class StacksSDK {
 
       if (
         functionName === "increase-stack-amount" &&
-        (!amount || !signerSig65Hex  || !signerKey || !authId || !maxAmount)
+        (!amount || !signerSig65Hex || !signerKey || authId == null || maxAmount == null)
       ) {
         throw new Error(
-          "Amount,signer signature, signer key, auth ID and max amount must be provided for increase-stack-amount",
+          "Amount, signer signature, signer key, auth ID and max amount must be provided for increase-stack-amount",
         );
       }
 
       if (
         functionName === "extend-stack-period" &&
-        (!extendCycles || !signerSig65Hex  || !signerKey || !authId || !maxAmount)
+        (!extendCycles || !signerSig65Hex || !signerKey || authId == null || maxAmount == null)
       ) {
         throw new Error(
           "Extend cycles, signer signature, signer key, auth ID and max amount must be provided for extend-stack-period",
