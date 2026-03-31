@@ -1,0 +1,231 @@
+{
+  "dapps": [
+    {
+      "id": "alex",
+      "name": "ALEX",
+      "url": "https://app.alexlab.co",
+      "description": "AMM DEX and DeFi protocol on Stacks",
+      "logo": "https://app.alexlab.co/favicon.png",
+      "category": "DEX",
+      "tags": ["DEX", "AMM", "Swap"]
+    },
+    {
+      "id": "bitflow",
+      "name": "Bitflow",
+      "url": "https://app.bitflow.finance",
+      "description": "Decentralized exchange and liquidity protocol on Stacks",
+      "logo": "https://app.bitflow.finance/favicon.ico",
+      "category": "DEX",
+      "tags": ["DEX", "Swap", "Liquidity"]
+    },
+    {
+      "id": "velar",
+      "name": "Velar",
+      "url": "https://app.velar.co",
+      "description": "Next-generation DeFi protocol",
+      "logo": "https://app.velar.com/favicon.png",
+      "category": "DEX",
+      "tags": ["DEX", "Liquidity"]
+    },
+    {
+      "id": "stackingdao-defi",
+      "name": "StackingDAO",
+      "url": "https://app.stackingdao.com/?stackingOption=stx",
+      "description": "Liquid stacking protocol on Stacks",
+      "logo": "https://app.stackingdao.com/favicon.ico",
+      "category": "Staking",
+      "tags": ["Liquid Stacking", "DeFi"]
+    },
+    {
+      "id": "zestprotocol",
+      "name": "Zest Protocol",
+      "url": "https://app.zestprotocol.com",
+      "description": "Bitcoin-native lending and borrowing on Stacks",
+      "logo": "https://app.zestprotocol.com/favicon.svg",
+      "category": "Lending",
+      "tags": ["Lending", "Borrowing", "Bitcoin"]
+    },
+    {
+      "id": "granite",
+      "name": "Granite",
+      "url": "https://app.granite.world",
+      "description": "Institutional DeFi lending on Stacks",
+      "logo": "https://app.granite.world/favicon.ico",
+      "category": "Lending",
+      "tags": ["Lending", "Institutional"]
+    },
+    {
+      "id": "hermetica",
+      "name": "Hermetica",
+      "url": "https://app.hermetica.fi",
+      "description": "Bitcoin-backed yield protocol on Stacks",
+      "logo": "https://app.hermetica.fi/favicon.ico",
+      "category": "Yield",
+      "tags": ["Yield", "Bitcoin", "USDh"]
+    },
+    {
+      "id": "sbtc",
+      "name": "sBTC",
+      "url": "https://sbtc.stacks.co",
+      "description": "Bridge Bitcoin to Stacks as sBTC",
+      "logo": "https://sbtc.stacks.co/favicon.ico",
+      "category": "Bridge",
+      "tags": ["Bridge", "sBTC", "Bitcoin"]
+    },
+    {
+      "id": "stacks-bridge",
+      "name": "Stacks Bridge",
+      "url": "https://bridge.stacks.co/usdc/eth/stx",
+      "description": "Bridge USDC and other assets to Stacks",
+      "logo": "https://bridge.stacks.co/favicon.ico",
+      "category": "Bridge",
+      "tags": ["Bridge", "USDC", "Cross-chain"]
+    },
+    {
+      "id": "arkadiko",
+      "name": "Arkadiko",
+      "url": "https://app.arkadiko.finance",
+      "description": "Decentralized liquidity protocol",
+      "logo": "https://app.arkadiko.finance/favicon.ico",
+      "category": "Lending",
+      "tags": ["Lending", "Stablecoin"]
+    },
+    {
+      "id": "stackswap",
+      "name": "Stackswap",
+      "url": "https://app.stackswap.org",
+      "description": "Community-driven DEX",
+      "logo": "https://app.stackswap.org/favicon.ico",
+      "category": "DEX",
+      "tags": ["DEX", "Community"]
+    },
+    {
+      "id": "gamma",
+      "name": "Gamma",
+      "url": "https://gamma.io/",
+      "description": "Bitcoin NFT marketplace on Stacks",
+      "logo": "https://gamma.io/favicon.ico",
+      "category": "NFT",
+      "tags": ["NFT", "Marketplace"]
+    },
+    {
+      "id": "stacks-dual-stacking",
+      "name": "Stacks Dual Stacking",
+      "url": "https://app.stacks.co/",
+      "description": "Stacks dual stacking protocol",
+      "logo": "https://app.stacks.co/favicon.ico",
+      "category": "Staking",
+      "tags": ["Stacking", "DeFi", "Yield"]
+    },
+    {
+      "id": "lisalab",
+      "name": "Lisa Lab",
+      "url": "https://app.lisalab.io",
+      "description": "Liquid stacking and DeFi protocol on Stacks",
+      "logo": "https://app.lisalab.io/favicon.png",
+      "category": "Yield",
+      "tags": ["Liquid Stacking", "Yield", "DeFi"]
+    },
+    {
+      "id": "charisma",
+      "name": "Charisma",
+      "url": "https://charisma.rocks",
+      "description": "DeFi and gaming protocol on Stacks",
+      "logo": "https://charisma.rocks/favicon.ico",
+      "category": "Yield",
+      "tags": ["DeFi", "Gaming", "Yield"]
+    },
+    {
+      "id": "stxcity",
+      "name": "STX.City",
+      "url": "https://stx.city",
+      "description": "Token launchpad and DEX on Stacks",
+      "logo": "https://stx.city/favicon.ico",
+      "category": "DEX",
+      "tags": ["DEX", "Launchpad", "Tokens"]
+    },
+    {
+      "id": "bnsv2",
+      "name": "BNS v2",
+      "url": "https://bnsv2.com",
+      "description": "Bitcoin Name System on Stacks",
+      "logo": "https://bnsv2.com/favicon.ico",
+      "category": "Other",
+      "tags": ["BNS", "Names", "Identity"]
+    },
+    {
+      "id": "stxtools",
+      "name": "STX Tools",
+      "url": "https://stxtools.io",
+      "description": "Analytics and tooling for the Stacks ecosystem",
+      "logo": "https://stxtools.io/favicon.ico",
+      "category": "Tools",
+      "tags": ["Analytics", "Tools", "Explorer"]
+    },
+    {
+      "id": "lunarcrush",
+      "name": "LunarCrush",
+      "url": "https://lunarcrush.com",
+      "description": "Crypto social analytics and market intelligence",
+      "logo": "https://lunarcrush.com/favicon.ico",
+      "category": "Tools",
+      "tags": ["Analytics", "Social", "Markets"]
+    }
+  ],
+  "stakingPools": [
+    {
+      "id": "fastpool",
+      "name": "FastPool",
+      "url": "https://fastpool.org/",
+      "description": "Fast and reliable Stacks stacking pool",
+      "logo": "https://fastpool.org/favicon.ico",
+      "category": "Staking",
+      "tags": ["Stacking", "Pool"]
+    },
+    {
+      "id": "xverse-portfolio",
+      "name": "Xverse Portfolio",
+      "url": "https://portfolio.xverse.app/",
+      "description": "Stacks portfolio and stacking management by Xverse",
+      "logo": "https://portfolio.xverse.app/favicon.ico",
+      "category": "Staking",
+      "tags": ["Stacking", "Portfolio"]
+    },
+    {
+      "id": "planbetter",
+      "name": "PlanBetter",
+      "url": "https://planbetter.com/",
+      "description": "Stacking pool and rewards optimizer",
+      "logo": "https://planbetter.com/favicon.ico",
+      "category": "Staking",
+      "tags": ["Stacking", "Pool"]
+    },
+    {
+      "id": "stackingdao",
+      "name": "StackingDAO",
+      "url": "https://app.stackingdao.com/?stackingOption=stx",
+      "description": "Liquid stacking protocol on Stacks",
+      "logo": "https://app.stackingdao.com/favicon.ico",
+      "category": "Staking",
+      "tags": ["Liquid Stacking", "DeFi"]
+    },
+    {
+      "id": "senseinode",
+      "name": "Senseinode",
+      "url": "https://www.senseinode.com/en-stake/stacks",
+      "description": "Professional node operator for Stacks stacking",
+      "logo": "https://www.senseinode.com/favicon.ico",
+      "category": "Staking",
+      "tags": ["Stacking", "Node Operator"]
+    },
+    {
+      "id": "luganodes",
+      "name": "Luganodes",
+      "url": "https://www.luganodes.com/blog/StacksSG",
+      "description": "Institutional-grade Stacks stacking service",
+      "logo": "https://www.luganodes.com/favicon.ico",
+      "category": "Staking",
+      "tags": ["Stacking", "Institutional"]
+    }
+  ]
+}
