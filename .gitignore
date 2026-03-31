@@ -4,12 +4,10 @@ node_modules
 .env
 *.log
 package-lock.json
-dist
 src/tests
 secrets
 .vscode
 .vscode/launch.json
-<<<<<<< HEAD
 .DS_Store
 CLAUDE.md
 *.md
