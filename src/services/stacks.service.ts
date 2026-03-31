@@ -828,6 +828,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
       return response;
     } catch (error) {
       console.error(`Error fetching pox info: ${formatErrorMessage(error)}`);
+      throw new Error(`Failed to fetch PoX info from network: ${formatErrorMessage(error)}`);
     }
   };
 
