@@ -29,6 +29,7 @@ jobs:
           FIREBLOCKS_API_KEY: ${{ secrets.FIREBLOCKS_API_KEY }}
           FIREBLOCKS_SECRET_KEY: ${{ secrets.FIREBLOCKS_SECRET_KEY }}
           STACKS_NETWORK: TESTNET
-          VAULT_A_ID: ${{ vars.VAULT_A_ID }}
-          VAULT_B_ID: ${{ vars.VAULT_B_ID }}
+          VAULT_A_ID: ${{ secrets.VAULT_A_ID }}
+          VAULT_B_ID: ${{ secrets.VAULT_B_ID }}
+
         run: npm run test:e2e
