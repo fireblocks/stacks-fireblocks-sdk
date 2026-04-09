@@ -544,7 +544,7 @@ export class StacksSDK {
         balance = (balanceResponse as GetNativeBalanceResponse).balance;
       }
 
-      if (amount + fee > balance) {
+      if ((type === TransactionType.FungibleToken ? amount : amount + fee) > balance) {  
         return {
           validParams: false,
           reason: `Insufficient funds. Available balance: ${balance}, required: ${amount}`,
