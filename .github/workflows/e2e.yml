@@ -31,4 +31,5 @@ jobs:
           STACKS_NETWORK: TESTNET
           VAULT_A_ID: ${{ secrets.VAULT_A_ID }}
           VAULT_B_ID: ${{ secrets.VAULT_B_ID }}
+
         run: npm run test:e2e
