@@ -63,6 +63,10 @@ describeE2E("E2E: STX Transfer", () => {
 
     const startTime = Date.now();
 
+    // Initial delay to allow tx to be indexed
+    console.log(`Waiting for transaction ${txId} to be indexed...`);
+    await new Promise((resolve) => setTimeout(resolve, 10000));
+
     while (Date.now() - startTime < timeoutMs) {
       const status = await sdk.getTxStatusById(txId);
 
