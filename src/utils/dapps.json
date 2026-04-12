@@ -4,7 +4,7 @@
       "id": "alex",
       "name": "ALEX",
       "url": "https://app.alexlab.co",
-      "description": "AMM DEX and DeFi protocol on Stacks",
+      "description": "ALEX is the largest DeFi protocol on Bitcoin via Stacks, offering an AMM DEX, orderbook, launchpad, and lending/borrowing markets secured by Bitcoin finality. Built by veteran quants, it provides a full suite of Bitcoin DeFi primitives including token swaps, liquidity pools, yield farming, and the XLink cross-chain bridge for moving assets between Bitcoin L1 and L2.",
       "logo": "https://app.alexlab.co/favicon.png",
       "category": "DEX",
       "tags": ["DEX", "AMM", "Swap"]
@@ -13,7 +13,7 @@
       "id": "bitflow",
       "name": "Bitflow",
       "url": "https://app.bitflow.finance",
-      "description": "Decentralized exchange and liquidity protocol on Stacks",
+      "description": "Bitflow is the premier decentralized exchange for Bitcoiners on Stacks, featuring a powerful DEX aggregator that guarantees the best swap rates by routing across all DEXs and liquidity pools on the network. It offers low-slippage stablecoin swaps, deep AMM liquidity pools, real BTC yield for liquidity providers, and multi-hop routing to ensure optimal trade execution.",
       "logo": "https://app.bitflow.finance/favicon.ico",
       "category": "DEX",
       "tags": ["DEX", "Swap", "Liquidity"]
@@ -22,7 +22,7 @@
       "id": "velar",
       "name": "Velar",
       "url": "https://app.velar.co",
-      "description": "Next-generation DeFi protocol",
+      "description": "Velar is a DeFi liquidity protocol on Bitcoin via Stacks, providing institutional-grade trading tools including an automated liquidity protocol with swap, liquidity pools, staking, farming, and an IDO launchpad. It is developing the world's first decentralized perpetual contracts exchange on Bitcoin with up to 20x leverage, using a layer-2 agnostic design to bring advanced DeFi capabilities to Bitcoin.",
       "logo": "https://app.velar.com/favicon.png",
       "category": "DEX",
       "tags": ["DEX", "Liquidity"]
@@ -31,7 +31,7 @@
       "id": "stackingdao-defi",
       "name": "StackingDAO",
       "url": "https://app.stackingdao.com/?stackingOption=stx",
-      "description": "Liquid stacking protocol on Stacks",
+      "description": "StackingDAO is the leading STX stacking infrastructure on Stacks, and the largest DeFi protocol on the network by TVL. It issues liquid stacking tokens — stSTX (auto-compounding STX yield) and stSTXbtc (sBTC streamed directly to your wallet) — allowing users to earn stacking rewards while keeping their STX liquid and deployable across the Stacks DeFi ecosystem.",
       "logo": "https://app.stackingdao.com/favicon.ico",
       "category": "Staking",
       "tags": ["Liquid Stacking", "DeFi"]
@@ -40,7 +40,7 @@
       "id": "zestprotocol",
       "name": "Zest Protocol",
       "url": "https://app.zestprotocol.com",
-      "description": "Bitcoin-native lending and borrowing on Stacks",
+      "description": "Zest Protocol is the leading Bitcoin lending and borrowing protocol on Stacks, enabling users to earn yield on assets like sBTC, STX, stSTX, and USDC, or take out overcollateralized loans against Bitcoin-backed collateral. Built on Aave v3's architecture in Clarity smart contracts and backed by Binance Labs, it aims to move Bitcoin lending fully on-chain with transparent, permissionless money markets.",
       "logo": "https://app.zestprotocol.com/favicon.svg",
       "category": "Lending",
       "tags": ["Lending", "Borrowing", "Bitcoin"]
@@ -49,7 +49,7 @@
       "id": "granite",
       "name": "Granite",
       "url": "https://app.granite.world",
-      "description": "Institutional DeFi lending on Stacks",
+      "description": "Granite is a Bitcoin liquidity protocol on Stacks that lets users borrow stablecoins against sBTC collateral with no rehypothecation risk — collateral is never lent out or reused. It pioneered \"soft liquidations\" that only liquidate the minimum required to restore solvency, protecting borrowers from the catastrophic all-or-nothing liquidations typical of other DeFi protocols.",
       "logo": "https://app.granite.world/favicon.ico",
       "category": "Lending",
       "tags": ["Lending", "Institutional"]
@@ -58,7 +58,7 @@
       "id": "hermetica",
       "name": "Hermetica",
       "url": "https://app.hermetica.fi",
-      "description": "Bitcoin-backed yield protocol on Stacks",
+      "description": "Hermetica is a Bitcoin-backed yield protocol on Stacks that issues USDh, the first Bitcoin-backed yield-bearing synthetic dollar, offering up to 25% APY through a delta-neutral strategy using BTC spot holdings and short perpetual futures positions. It also offers hBTC, a self-custodial Bitcoin yield vault targeting up to 8% APY, allowing users to deposit and withdraw native BTC while earning Bitcoin-denominated returns.",
       "logo": "https://app.hermetica.fi/favicon.ico",
       "category": "Yield",
       "tags": ["Yield", "Bitcoin", "USDh"]
@@ -67,7 +67,7 @@
       "id": "sbtc",
       "name": "sBTC",
       "url": "https://sbtc.stacks.co",
-      "description": "Bridge Bitcoin to Stacks as sBTC",
+      "description": "sBTC is a 1:1 Bitcoin-backed asset on Stacks that enables users to bridge their BTC onto the Stacks L2 to use in DeFi, dApps, and smart contracts, while retaining 100% Bitcoin finality. It is secured by a decentralized network of Stacks validators via threshold signatures, removing the need to trust any single custodian, and deposits can complete within a single Bitcoin block.",
       "logo": "https://sbtc.stacks.co/favicon.ico",
       "category": "Bridge",
       "tags": ["Bridge", "sBTC", "Bitcoin"]
@@ -76,7 +76,7 @@
       "id": "stacks-bridge",
       "name": "Stacks Bridge",
       "url": "https://bridge.stacks.co/usdc/eth/stx",
-      "description": "Bridge USDC and other assets to Stacks",
+      "description": "The Stacks Bridge is the official app for moving USDCx — a USDC-backed stablecoin issued through Circle's xReserve infrastructure — between Ethereum and Stacks. It is maintained by Stacks Labs and powered by Circle xReserve, providing cryptographic attestations for deposits and minting without relying on third-party bridges or wrapped assets.",
       "logo": "https://bridge.stacks.co/favicon.ico",
       "category": "Bridge",
       "tags": ["Bridge", "USDC", "Cross-chain"]
@@ -85,7 +85,7 @@
       "id": "arkadiko",
       "name": "Arkadiko",
       "url": "https://app.arkadiko.finance",
-      "description": "Decentralized liquidity protocol",
+      "description": "Arkadiko was the first DeFi protocol on Stacks, launched in October 2021, allowing users to collateralize STX tokens in vaults to mint USDA, a decentralized USD-pegged stablecoin. A distinctive feature is self-repaying loans, where the BTC stacking yield generated by locked STX gradually pays off the USDA debt over time without monthly payments.",
       "logo": "https://app.arkadiko.finance/favicon.ico",
       "category": "Lending",
       "tags": ["Lending", "Stablecoin"]
@@ -94,7 +94,7 @@
       "id": "stackswap",
       "name": "Stackswap",
       "url": "https://app.stackswap.org",
-      "description": "Community-driven DEX",
+      "description": "Stackswap is a community-driven DEX on Stacks offering token swaps and liquidity pools for the Stacks ecosystem. It provides a permissionless trading platform for Stacks-native assets with a focus on community governance and participation.",
       "logo": "https://app.stackswap.org/favicon.ico",
       "category": "DEX",
       "tags": ["DEX", "Community"]
@@ -103,7 +103,7 @@
       "id": "gamma",
       "name": "Gamma",
       "url": "https://gamma.io/",
-      "description": "Bitcoin NFT marketplace on Stacks",
+      "description": "Gamma is the leading Bitcoin NFT marketplace built on Stacks, enabling users to create, buy, sell, and discover Bitcoin Ordinals and Stacks NFTs. It provides a full creator suite including no-code NFT minting, collection management, and a curated marketplace with deep liquidity for Bitcoin-native digital collectibles.",
       "logo": "https://gamma.io/favicon.ico",
       "category": "NFT",
       "tags": ["NFT", "Marketplace"]
@@ -112,7 +112,7 @@
       "id": "stacks-dual-stacking",
       "name": "Stacks Dual Stacking",
       "url": "https://app.stacks.co/",
-      "description": "Stacks dual stacking protocol",
+      "description": "Stacks Dual Stacking is Stacks' official stacking application, allowing STX holders to participate in Proof of Transfer consensus and earn Bitcoin rewards by locking their tokens for two-week cycles. It supports delegated stacking for users who want to participate without running a signer node, providing direct access to native BTC yield from the Stacks network.",
       "logo": "https://app.stacks.co/favicon.ico",
       "category": "Staking",
       "tags": ["Stacking", "DeFi", "Yield"]
@@ -121,7 +121,7 @@
       "id": "lisalab",
       "name": "Lisa Lab",
       "url": "https://app.lisalab.io",
-      "description": "Liquid stacking and DeFi protocol on Stacks",
+      "description": "Lisa Lab is a liquid stacking protocol on Stacks created by ALEX, issuing LiSTX as a liquid representation of stacked STX that automatically accrues yield. It serves as the liquid stacking backend for FastPool and allows users to earn stacking rewards while keeping their assets deployable across DeFi protocols.",
       "logo": "https://app.lisalab.io/favicon.png",
       "category": "Yield",
       "tags": ["Liquid Stacking", "Yield", "DeFi"]
@@ -130,7 +130,7 @@
       "id": "charisma",
       "name": "Charisma",
       "url": "https://charisma.rocks",
-      "description": "DeFi and gaming protocol on Stacks",
+      "description": "Charisma is a DeFi and gaming protocol on Stacks that combines yield-generating mechanisms with on-chain game mechanics. It allows users to engage with the Stacks ecosystem through interactive protocols that blend decentralized finance with community-driven gaming experiences.",
       "logo": "https://charisma.rocks/favicon.ico",
       "category": "Yield",
       "tags": ["DeFi", "Gaming", "Yield"]
@@ -139,7 +139,7 @@
       "id": "stxcity",
       "name": "STX.City",
       "url": "https://stx.city",
-      "description": "Token launchpad and DEX on Stacks",
+      "description": "STX.City is a token launchpad and DEX on Stacks, providing a permissionless platform for new projects to launch and distribute tokens within the Stacks and Bitcoin DeFi ecosystem. It offers bonding curve mechanics and liquidity bootstrapping for new token launches alongside standard DEX trading functionality.",
       "logo": "https://stx.city/favicon.ico",
       "category": "DEX",
       "tags": ["DEX", "Launchpad", "Tokens"]
@@ -148,7 +148,7 @@
       "id": "bnsv2",
       "name": "BNS v2",
       "url": "https://bnsv2.com",
-      "description": "Bitcoin Name System on Stacks",
+      "description": "BNS v2 is the Bitcoin Name System on Stacks, providing decentralized, censorship-resistant human-readable names that map to Stacks addresses and on-chain identities. Names are registered as NFTs on-chain, enabling users to send transactions to readable .BTC names instead of raw addresses across the Stacks ecosystem.",
       "logo": "https://bnsv2.com/favicon.ico",
       "category": "Other",
       "tags": ["BNS", "Names", "Identity"]
@@ -157,7 +157,7 @@
       "id": "stxtools",
       "name": "STX Tools",
       "url": "https://stxtools.io",
-      "description": "Analytics and tooling for the Stacks ecosystem",
+      "description": "STX Tools is a comprehensive analytics and tooling platform for the Stacks ecosystem, offering portfolio tracking, transaction history, token analytics, and ecosystem-wide data dashboards. It provides developers and users with real-time insights into on-chain activity, DeFi metrics, and network statistics for the Stacks blockchain.",
       "logo": "https://stxtools.io/favicon.ico",
       "category": "Tools",
       "tags": ["Analytics", "Tools", "Explorer"]
@@ -166,7 +166,7 @@
       "id": "lunarcrush",
       "name": "LunarCrush",
       "url": "https://lunarcrush.com",
-      "description": "Crypto social analytics and market intelligence",
+      "description": "LunarCrush is a crypto social analytics and market intelligence platform that aggregates social media signals, sentiment data, and community activity across thousands of crypto assets. It helps traders and investors gauge community interest and social momentum to identify trends and emerging opportunities in the cryptocurrency market.",
       "logo": "https://lunarcrush.com/favicon.ico",
       "category": "Tools",
       "tags": ["Analytics", "Social", "Markets"]
@@ -177,7 +177,7 @@
       "id": "fastpool",
       "name": "FastPool",
       "url": "https://fastpool.org/",
-      "description": "Fast and reliable Stacks stacking pool",
+      "description": "FastPool (formerly Friedger Pool) is one of the oldest and most transparent community-run Stacks stacking pools, distributing BTC rewards proportionally to all delegating members at the end of each cycle. It is a self-service pool that gives users the choice to receive rewards in STX or sBTC, and also serves as a backend infrastructure provider for LISA liquid stacking.",
       "logo": "https://fastpool.org/favicon.ico",
       "category": "Staking",
       "tags": ["Stacking", "Pool"]
@@ -186,7 +186,7 @@
       "id": "xverse-portfolio",
       "name": "Xverse Portfolio",
       "url": "https://portfolio.xverse.app/",
-      "description": "Stacks portfolio and stacking management by Xverse",
+      "description": "Xverse Portfolio is a stacking and portfolio management dashboard by Xverse, the leading Bitcoin and Stacks wallet provider. It allows users to manage their STX stacking positions, track BTC rewards, monitor portfolio performance, and delegate to stacking pools directly from the Xverse ecosystem.",
       "logo": "https://portfolio.xverse.app/favicon.ico",
       "category": "Staking",
       "tags": ["Stacking", "Portfolio"]
@@ -195,7 +195,7 @@
       "id": "planbetter",
       "name": "PlanBetter",
       "url": "https://planbetter.com/",
-      "description": "Stacking pool and rewards optimizer",
+      "description": "PlanBetter is a Stacks stacking pool and rewards optimizer that helps STX holders maximize their Bitcoin yield through pooled stacking. It provides a streamlined interface for delegating STX, tracking cycle rewards, and optimizing participation across stacking cycles.",
       "logo": "https://planbetter.com/favicon.ico",
       "category": "Staking",
       "tags": ["Stacking", "Pool"]
@@ -204,7 +204,7 @@
       "id": "stackingdao",
       "name": "StackingDAO",
       "url": "https://app.stackingdao.com/?stackingOption=stx",
-      "description": "Liquid stacking protocol on Stacks",
+      "description": "StackingDAO is the largest DeFi protocol on Stacks and the premier liquid stacking infrastructure, offering three stacking services: stSTX for auto-compounding STX yield, stSTXbtc for sBTC streamed directly to your wallet, and native stacking with 0% fees. STX is delegated to enterprise-grade validators, and liquid tokens like stSTX are composable across the full Stacks DeFi ecosystem.",
       "logo": "https://app.stackingdao.com/favicon.ico",
       "category": "Staking",
       "tags": ["Liquid Stacking", "DeFi"]
@@ -213,7 +213,7 @@
       "id": "senseinode",
       "name": "Senseinode",
       "url": "https://www.senseinode.com/en-stake/stacks",
-      "description": "Professional node operator for Stacks stacking",
+      "description": "SenseiNode is a Latin America-based institutional-grade staking and node infrastructure provider supporting Stacks and 36+ other blockchain protocols, with over $1.5B in assets under management. Users can delegate STX to SenseiNode's pool operator address to participate in Stacks consensus and earn BTC rewards through a professionally managed, geo-distributed infrastructure.",
       "logo": "https://www.senseinode.com/favicon.ico",
       "category": "Staking",
       "tags": ["Stacking", "Node Operator"]
@@ -222,7 +222,7 @@
       "id": "luganodes",
       "name": "Luganodes",
       "url": "https://www.luganodes.com/blog/StacksSG",
-      "description": "Institutional-grade Stacks stacking service",
+      "description": "Luganodes is an institutional-grade blockchain infrastructure and staking provider offering Stacks stacking services for enterprises and large token holders. They operate enterprise-level Stacks signer nodes and provide white-glove stacking delegation services with a focus on high uptime, security, and reliable BTC reward distribution.",
       "logo": "https://www.luganodes.com/favicon.ico",
       "category": "Staking",
       "tags": ["Stacking", "Institutional"]
