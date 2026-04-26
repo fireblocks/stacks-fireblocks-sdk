@@ -170,6 +170,15 @@ export const createTransaction: Handler = async (req, res, next) => {
       ? String(req.body.tokenAssetName).trim()
       : undefined;
 
+    let nonce: number | undefined;
+    if (req.body.nonce !== undefined && req.body.nonce !== "") {
+      nonce = Number(req.body.nonce);
+      if (!Number.isInteger(nonce) || nonce < 0) {
+        res.status(400).json({ error: "Bad Request: nonce must be a non-negative integer" });
+        return;
+      }
+    }
+
     if (!recipientAddress || !amountStr || !assetUi) {
       res.status(400).json({
         error:
@@ -215,7 +224,7 @@ export const createTransaction: Handler = async (req, res, next) => {
       const tx = await apiService.executeAction(
         vaultId,
         ActionType.CREATE_NATIVE_TRANSACTION,
-        { recipientAddress, amount, grossTransaction, note },
+        { recipientAddress, amount, grossTransaction, note, nonce },
       );
       res.json(tx);
       return;
@@ -233,6 +242,7 @@ export const createTransaction: Handler = async (req, res, next) => {
         tokenContractName,
         tokenAssetName,
         note,
+        nonce,
       },
     );
     res.json(tx);
@@ -271,6 +281,15 @@ export const delegateToPool: Handler = async (req, res, next) => {
       return;
     }
 
+    let nonce: number | undefined;
+    if (req.body.nonce !== undefined && req.body.nonce !== "") {
+      nonce = Number(req.body.nonce);
+      if (!Number.isInteger(nonce) || nonce < 0) {
+        res.status(400).json({ error: "Bad Request: nonce must be a non-negative integer" });
+        return;
+      }
+    }
+
     // Map UI label -> Pool Type (enum value)
     const poolSelectionMap: Record<string, StackingPools> = {
       FAST_POOL: StackingPools.FAST_POOL,
@@ -285,11 +304,10 @@ export const delegateToPool: Handler = async (req, res, next) => {
     const poolAddress = poolInfo[poolType].poolAddress;
     const poolContractName = poolInfo[poolType].poolContractName;
 
-    // FT transfer
     const tx = await apiService.executeAction(
       vaultId,
       ActionType.DELEGATE_TO_POOL,
-      { poolAddress, poolContractName, amount, lockPeriod },
+      { poolAddress, poolContractName, amount, lockPeriod, nonce },
     );
     res.json(tx);
   } catch (err) {
@@ -311,6 +329,15 @@ export const allowContractCaller: Handler = async (req, res, next) => {
       return;
     }
 
+    let nonce: number | undefined;
+    if (req.body.nonce !== undefined && req.body.nonce !== "") {
+      nonce = Number(req.body.nonce);
+      if (!Number.isInteger(nonce) || nonce < 0) {
+        res.status(400).json({ error: "Bad Request: nonce must be a non-negative integer" });
+        return;
+      }
+    }
+
     // Map UI label -> Pool Type (enum value)
     const poolSelectionMap: Record<string, StackingPools> = {
       FAST_POOL: StackingPools.FAST_POOL,
@@ -325,11 +352,10 @@ export const allowContractCaller: Handler = async (req, res, next) => {
     const poolAddress = poolInfo[poolType].poolAddress;
     const poolContractName = poolInfo[poolType].poolContractName;
 
-    // FT transfer
     const tx = await apiService.executeAction(
       vaultId,
       ActionType.ALLOW_CONTRACT_CALLER,
-      { poolAddress, poolContractName },
+      { poolAddress, poolContractName, nonce },
     );
     res.json(tx);
   } catch (err) {
@@ -342,10 +368,19 @@ export const revokeDelegation: Handler = async (req, res, next) => {
   try {
     const vaultId = getVaultId(req);
 
+    let nonce: number | undefined;
+    if (req.body?.nonce !== undefined && req.body.nonce !== "") {
+      nonce = Number(req.body.nonce);
+      if (!Number.isInteger(nonce) || nonce < 0) {
+        res.status(400).json({ error: "Bad Request: nonce must be a non-negative integer" });
+        return;
+      }
+    }
+
     const tx = await apiService.executeAction(
       vaultId,
       ActionType.REVOKE_DELEGATION,
-      {},
+      { nonce },
     );
     res.json(tx);
   } catch (err) {
@@ -422,6 +457,15 @@ export const stackSolo: Handler = async (req, res, next) => {
     }
     const maxAmount = Number(maxAmountStr);
 
+    let nonce: number | undefined;
+    if (req.body.nonce !== undefined && req.body.nonce !== "") {
+      nonce = Number(req.body.nonce);
+      if (!Number.isInteger(nonce) || nonce < 0) {
+        res.status(400).json({ error: "Bad Request: nonce must be a non-negative integer" });
+        return;
+      }
+    }
+
     const tx = await apiService.executeAction(vaultId, ActionType.STACK_SOLO, {
       signerKey,
       signerSig65Hex,
@@ -429,6 +473,7 @@ export const stackSolo: Handler = async (req, res, next) => {
       maxAmount,
       lockPeriod,
       authId,
+      nonce,
     });
 
     res.json(tx);
@@ -477,12 +522,22 @@ export const increaseStackedAmount: Handler = async (req, res, next) => {
     }
     const maxAmount = BigInt(maxAmountStr);
 
+    let nonce: number | undefined;
+    if (req.body.nonce !== undefined && req.body.nonce !== "") {
+      nonce = Number(req.body.nonce);
+      if (!Number.isInteger(nonce) || nonce < 0) {
+        res.status(400).json({ error: "Bad Request: nonce must be a non-negative integer" });
+        return;
+      }
+    }
+
     const tx = await apiService.executeAction(vaultId, ActionType.INCREASE_STACKED_AMOUNT, {
       signerKey,
       signerSig65Hex,
       increaseBy,
       maxAmount,
       authId,
+      nonce,
     });
 
     res.json(tx);
@@ -533,12 +588,22 @@ export const extendStackingPeriod: Handler = async (req, res, next) => {
     }
     const maxAmount = Number(maxAmountStr);
 
+    let nonce: number | undefined;
+    if (req.body.nonce !== undefined && req.body.nonce !== "") {
+      nonce = Number(req.body.nonce);
+      if (!Number.isInteger(nonce) || nonce < 0) {
+        res.status(400).json({ error: "Bad Request: nonce must be a non-negative integer" });
+        return;
+      }
+    }
+
     const tx = await apiService.executeAction(vaultId, ActionType.EXTEND_STACKING_PERIOD, {
       signerKey,
       signerSig65Hex,
       extendCycles,
       maxAmount,
       authId,
+      nonce,
     });
 
     res.json(tx);

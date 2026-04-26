@@ -598,6 +598,7 @@ export class StacksSDK {
     customTokenContractName?: string,
     customTokenAssetName?: string,
     note?: string,
+    nonce?: bigint,
   ): Promise<any> => {
     try {
       const transactionToSign = await this.chainService.serializeTransaction(
@@ -610,6 +611,7 @@ export class StacksSDK {
         customTokenContractAddress,
         customTokenContractName,
         customTokenAssetName,
+        nonce,
       );
 
       const rawSignature = await this.fireblocksService.signTransaction(
@@ -664,6 +666,7 @@ export class StacksSDK {
     startBurnHeight?: number,
     authId?: bigint,
     note?: string,
+    nonce?: bigint,
   ): Promise<any> => {
     try {
       if (
@@ -722,6 +725,7 @@ export class StacksSDK {
             this.publicKey,
             poolAddress,
             poolContractName!,
+            nonce,
           );
           break;
         case "delegate-stx":
@@ -730,11 +734,13 @@ export class StacksSDK {
             poolAddress,
             amount!,
             lockPeriod!,
+            nonce,
           );
           break;
         case "revoke-delegate-stx":
           transactionToSign = await this.chainService.revokeStxDelegation(
             this.publicKey,
+            nonce,
           );
           break;
         case "solo-stack":
@@ -744,10 +750,11 @@ export class StacksSDK {
             amount,
             this.btcRewardsAddress,
             lockPeriod,
-            maxAmount, // maxAmount ( >= amount )
+            maxAmount,
             signerSig65Hex,
             startBurnHeight,
             authId,
+            nonce,
           );
           break;
         case "increase-stack-amount":
@@ -755,9 +762,10 @@ export class StacksSDK {
             this.publicKey,
             signerKey!,
             amount!,
-            maxAmount!, 
+            maxAmount!,
             signerSig65Hex!,
             authId!,
+            nonce,
           );
           break;
         case "extend-stack-period":
@@ -766,9 +774,10 @@ export class StacksSDK {
             signerKey!,
             this.btcRewardsAddress!,
             extendCycles!,
-            maxAmount!, 
+            maxAmount!,
             signerSig65Hex!,
             authId!,
+            nonce,
           );
           break;
         default:
@@ -815,6 +824,7 @@ export class StacksSDK {
     amount: number,
     grossTransaction: boolean = false,
     note?: string,
+    nonce?: number,
   ): Promise<CreateTransactionResponse> => {
     if (!this.address || !this.publicKey || !this.vaultAccountId) {
       throw new Error("Address, Public Key or Vault ID are not set");
@@ -846,6 +856,7 @@ export class StacksSDK {
         undefined, // customTokenContractName
         undefined, // customTokenAssetName
         note,
+        nonce !== undefined ? BigInt(nonce) : undefined,
       );
 
       if (!result || result.error || !result.txid || result.reason) {
@@ -893,6 +904,7 @@ export class StacksSDK {
     customTokenContractName?: string,
     customTokenAssetName?: string,
     note?: string,
+    nonce?: number,
   ): Promise<CreateTransactionResponse> => {
     if (!this.address || !this.publicKey || !this.vaultAccountId) {
       throw new Error("Address, Public Key or Vault ID are not set");
@@ -940,6 +952,7 @@ export class StacksSDK {
         customTokenContractName,
         customTokenAssetName,
         note,
+        nonce !== undefined ? BigInt(nonce) : undefined,
       );
 
       if (!result || result.error || !result.txid || result.reason) {
@@ -981,7 +994,8 @@ export class StacksSDK {
     poolsAddress: string,
     poolContractName: string,
     amount: number,
-    lockPeriod: number, // Number of cycles
+    lockPeriod: number,
+    nonce?: number,
   ): Promise<CreateTransactionResponse> => {
     if (this.testnet) {
       console.log(`[WARNING] delegateToPool is not supported on testnet.`);
@@ -1023,6 +1037,13 @@ export class StacksSDK {
         stxToMicro(amount),
         undefined,
         lockPeriod,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        nonce !== undefined ? BigInt(nonce) : undefined,
       );
 
       const assertDelegateResult = assertResultSuccess(delegateResult);
@@ -1060,6 +1081,7 @@ export class StacksSDK {
   public allowContractCaller = async (
     poolsAddress: string,
     poolContractName: string,
+    nonce?: number,
   ): Promise<CreateTransactionResponse> => {
     if (this.testnet) {
       console.log(`[WARNING] allowContractCaller is not supported on testnet.`);
@@ -1083,6 +1105,16 @@ export class StacksSDK {
         "allow-contract-caller",
         poolsAddress,
         poolContractName,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        nonce !== undefined ? BigInt(nonce) : undefined,
       );
 
       const assertAllowCallerResult = assertResultSuccess(allowCallerResult);
@@ -1118,7 +1150,7 @@ export class StacksSDK {
    * @throws {Error} If the address, public key, or vault ID are not set, or if the process fails.
    */
 
-  public revokeDelegation = async (): Promise<CreateTransactionResponse> => {
+  public revokeDelegation = async (nonce?: number): Promise<CreateTransactionResponse> => {
     if (this.testnet) {
       console.log(`[WARNING] revokeDelegation is not supported on testnet.`);
       return {
@@ -1137,6 +1169,18 @@ export class StacksSDK {
       // Revoke any existing delegations.
       const revokeResult = await this.buildSignSendContractCall(
         "revoke-delegate-stx",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        nonce !== undefined ? BigInt(nonce) : undefined,
       );
 
       const assertDelegateResult = assertResultSuccess(revokeResult);
@@ -1329,8 +1373,9 @@ export class StacksSDK {
     signerSig65Hex: string,
     amount: number,
     maxAmount: number,
-    lockPeriod: number, // Number of cycles
+    lockPeriod: number,
     authId: bigint,
+    nonce?: number,
   ): Promise<CreateTransactionResponse> => {
     try {
       if (!this.address || !this.publicKey || !this.vaultAccountId) {
@@ -1364,6 +1409,8 @@ export class StacksSDK {
         signerSig65Hex,
         startBurnHeight,
         authId,
+        undefined,
+        nonce !== undefined ? BigInt(nonce) : undefined,
       );
 
       const assertResult = assertResultSuccess(result);
@@ -1412,6 +1459,7 @@ export class StacksSDK {
     increaseBy: number,
     maxAmount: number,
     authId: bigint,
+    nonce?: number,
   ): Promise<CreateTransactionResponse> => {
     try {
       if (!this.address || !this.publicKey || !this.vaultAccountId) {
@@ -1432,6 +1480,8 @@ export class StacksSDK {
         signerSig65Hex,
         undefined,
         authId,
+        undefined,
+        nonce !== undefined ? BigInt(nonce) : undefined,
       );
 
       const assertResult = assertResultSuccess(result);
@@ -1480,6 +1530,7 @@ export class StacksSDK {
     extendCycles: number,
     maxAmount: number,
     authId: bigint,
+    nonce?: number,
   ): Promise<CreateTransactionResponse> => {
     try {
       if (!this.address || !this.publicKey || !this.vaultAccountId) {
@@ -1500,6 +1551,8 @@ export class StacksSDK {
         signerSig65Hex,
         undefined,
         authId,
+        undefined,
+        nonce !== undefined ? BigInt(nonce) : undefined,
       );
 
       const assertResult = assertResultSuccess(result);

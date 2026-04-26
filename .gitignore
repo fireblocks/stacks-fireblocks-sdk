@@ -9,9 +9,9 @@ src/tests
 secrets
 .vscode
 .vscode/launch.json
-<<<<<<< HEAD
 .DS_Store
 CLAUDE.md
 *.md
 !README.md
+.env*
 

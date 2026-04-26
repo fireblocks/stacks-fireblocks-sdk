@@ -306,6 +306,14 @@ router.get(
  *               note:
  *                 type: string
  *                 description: Optional note attached to Fireblocks signing request
+ *               nonce:
+ *                 type: integer
+ *                 minimum: 0
+ *                 description: >
+ *                   Optional transaction nonce override. If omitted, the SDK auto-fetches
+ *                   the current account nonce from the network (default behavior).
+ *                   Only set this for advanced use cases such as nonce management or
+ *                   transaction replacement.
  *     responses:
  *       200:
  *         description: Transaction created successfully
@@ -354,6 +362,12 @@ router.post(
  *                 minimum: 1
  *                 maximum: 12
  *                 description: Number of cycles to stack (1-12). Default is 1.
+ *               nonce:
+ *                 type: integer
+ *                 minimum: 0
+ *                 description: >
+ *                   Optional transaction nonce override. If omitted, the SDK auto-fetches
+ *                   the current account nonce from the network (default behavior).
  *     responses:
  *       200:
  *         description: Delegated to pool successfully.
@@ -391,6 +405,12 @@ router.post(
  *                 type: string
  *                 enum: [FAST_POOL]
  *                 description: Pool to allow as contract caller.
+ *               nonce:
+ *                 type: integer
+ *                 minimum: 0
+ *                 description: >
+ *                   Optional transaction nonce override. If omitted, the SDK auto-fetches
+ *                   the current account nonce from the network (default behavior).
  *     responses:
  *       200:
  *         description: Pool allowed as contract caller successfully.
@@ -414,6 +434,19 @@ router.post(
  *       Revokes any existing STX delegations for the account associated with the given vault ID.
  *     parameters:
  *       - $ref: '#/components/parameters/vaultId'
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               nonce:
+ *                 type: integer
+ *                 minimum: 0
+ *                 description: >
+ *                   Optional transaction nonce override. If omitted, the SDK auto-fetches
+ *                   the current account nonce from the network (default behavior).
  *     responses:
  *       200:
  *         description: Delegation revoked successfully.
@@ -471,6 +504,12 @@ router.post(
  *               authId:
  *                 type: string
  *                 description: Integer string (bigint) used for signer-sig replay protection (must be the same authId used to generate the signature).
+ *               nonce:
+ *                 type: integer
+ *                 minimum: 0
+ *                 description: >
+ *                   Optional transaction nonce override. If omitted, the SDK auto-fetches
+ *                   the current account nonce from the network (default behavior).
  *     responses:
  *       200:
  *         description: Solo stacking transaction submitted
@@ -518,6 +557,12 @@ router.post("/:vaultId/stacking/solo", validateVaultId, controller.stackSolo);
  *               authId:
  *                 type: string
  *                 description: Integer string (bigint) used for signer-sig replay protection (must be the same authId used to generate the signature).
+ *               nonce:
+ *                 type: integer
+ *                 minimum: 0
+ *                 description: >
+ *                   Optional transaction nonce override. If omitted, the SDK auto-fetches
+ *                   the current account nonce from the network (default behavior).
  *     responses:
  *       200:
  *         description: Increase stacked amount transaction submitted
@@ -567,6 +612,12 @@ router.post("/:vaultId/stacking/solo/increase", validateVaultId, controller.incr
  *               authId:
  *                 type: string
  *                 description: Integer string (bigint) used for signer-sig replay protection (must be the same authId used to generate the signature).
+ *               nonce:
+ *                 type: integer
+ *                 minimum: 0
+ *                 description: >
+ *                   Optional transaction nonce override. If omitted, the SDK auto-fetches
+ *                   the current account nonce from the network (default behavior).
  *     responses:
  *       200:
  *         description: Extend stacking period transaction submitted

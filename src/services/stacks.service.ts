@@ -352,6 +352,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
     customTokenContractAddress?: string,
     customTokenContractName?: string,
     customTokenAssetName?: string,
+    nonce?: bigint,
   ): Promise<StacksTransactionWire> => {
     try {
       if (!validateAddress(recipient, this.network === STACKS_TESTNET)) {
@@ -419,6 +420,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
           network: this.network,
           postConditionMode: PostConditionMode.Deny,
           postConditions: [postCondition],
+          ...(nonce !== undefined ? { nonce } : {}),
         });
       } else {
         unsignedTx = await makeUnsignedSTXTokenTransfer({
@@ -426,6 +428,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
           amount,
           publicKey: senderPublicKey,
           network: this.network,
+          ...(nonce !== undefined ? { nonce } : {}),
         });
       }
 
@@ -456,6 +459,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
     contractName: string,
     functionName: string,
     functionArgs: ClarityValue[],
+    nonce?: bigint,
   ): Promise<StacksTransactionWire> => {
     try {
       if (!validateAddress(contractAddress, this.network === STACKS_TESTNET)) {
@@ -478,6 +482,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
         publicKey: senderPublicKey,
         network: this.network,
         postConditionMode: PostConditionMode.Deny,
+        ...(nonce !== undefined ? { nonce } : {}),
       });
 
       return unsignedContractCall;
@@ -512,6 +517,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
     customTokenContractAddress?: string,
     customTokenContractName?: string,
     customTokenAssetName?: string,
+    nonce?: bigint,
   ): Promise<{
     unsignedTx: StacksTransactionWire;
     preSignSigHash: string;
@@ -541,6 +547,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
         customTokenContractAddress,
         customTokenContractName,
         customTokenAssetName,
+        nonce,
       );
       const sigHash = unsignedTx.signBegin();
 
@@ -578,6 +585,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
     contractName: string,
     functionName: string,
     functionArgs: ClarityValue[],
+    nonce?: bigint,
   ): Promise<{
     unsignedContractCall: StacksTransactionWire;
     preSignSigHash: string;
@@ -589,6 +597,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
         contractName,
         functionName,
         functionArgs,
+        nonce,
       );
       const sigHash = unsignedContractCall.signBegin();
 
@@ -844,7 +853,8 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
     senderPublicKey: string,
     delegateTo: string,
     amount: bigint,
-    lockPeriod: number, // Number of cycles
+    lockPeriod: number,
+    nonce?: bigint,
   ): Promise<{
     unsignedContractCall: StacksTransactionWire;
     preSignSigHash: string;
@@ -882,6 +892,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
           someCV(uintCV(until_burn_ht)),
           noneCV(),
         ],
+        nonce,
       );
 
       return serializedContractCall;
@@ -903,6 +914,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
    */
   public revokeStxDelegation = async (
     senderPublicKey: string,
+    nonce?: bigint,
   ): Promise<{
     unsignedContractCall: StacksTransactionWire;
     preSignSigHash: string;
@@ -920,6 +932,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
         poxName,
         "revoke-delegate-stx",
         [],
+        nonce,
       );
 
       return serializedContractCall;
@@ -946,6 +959,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
     senderPublicKey: string,
     poolAddress: string,
     poolContractName: string,
+    nonce?: bigint,
   ): Promise<{
     unsignedContractCall: StacksTransactionWire;
     preSignSigHash: string;
@@ -971,6 +985,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
         poxName,
         "allow-contract-caller",
         [contractPrincipalCV(poolAddress, poolContractName), noneCV()],
+        nonce,
       );
 
       return serializedContractCall;
@@ -1006,6 +1021,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
     signerSig65Hex: string,
     startBurnHeight: number,
     authId: bigint,
+    nonce?: bigint,
   ): Promise<{
     unsignedContractCall: StacksTransactionWire;
     preSignSigHash: string;
@@ -1038,6 +1054,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
           uintCV(maxAmountUstx),
           uintCV(authId),
         ],
+        nonce,
       );
 
       return serializedContractCall;
@@ -1067,6 +1084,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
     maxAmountUstx: bigint,
     signerSig65Hex: string,
     authId: bigint,
+    nonce?: bigint,
   ): Promise<{
     unsignedContractCall: StacksTransactionWire;
     preSignSigHash: string;
@@ -1091,6 +1109,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
           uintCV(maxAmountUstx),                                 // max-amount
           uintCV(authId),                                        // auth-id
         ],
+        nonce,
       );
 
       return serializedContractCall;
@@ -1123,6 +1142,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
     maxAmountUstx: bigint,
     signerSig65Hex: string,
     authId: bigint,
+    nonce?: bigint,
   ): Promise<{
     unsignedContractCall: StacksTransactionWire;
     preSignSigHash: string;
@@ -1147,12 +1167,13 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
           tupleCV({                                              // 2. pox-addr
           version: bufferCV(Uint8Array.from([version])),
           hashbytes: bufferCV(hashbytes),
-          }),                                    
+          }),
           someCV(bufferCV(Buffer.from(signerSig65Hex, "hex"))), // signer-sig
           bufferCV(Buffer.from(signerKey, "hex")),              // signer-key
           uintCV(maxAmountUstx),                                 // max-amount
           uintCV(authId),                                        // auth-id
         ],
+        nonce,
       );
 
       return serializedContractCall;
