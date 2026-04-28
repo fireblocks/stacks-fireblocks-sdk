@@ -113,6 +113,32 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
   };
 
   /**
+   * Fetches the next expected nonce for a given Stacks address.
+   * Returns the confirmed on-chain nonce only — pending mempool transactions
+   * are not reflected. Use this as the starting point for nonce sequencing.
+   * @param address - The Stacks address to query.
+   * @returns - The next nonce to use for a new transaction.
+   */
+  public getAccountNonce = async (address: string): Promise<number> => {
+    try {
+      const response = await this.axiosClient.get(
+        `${this.stackBaseUrl}/v2/accounts/${address}?proof=0`,
+      );
+
+      if (!response || !response.data || response.status !== 200) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      return response.data.nonce as number;
+    } catch (error) {
+      console.error(`Error fetching account nonce: ${formatErrorMessage(error)}`);
+      throw new Error(
+        `Failed to fetch account nonce for address ${address}: ${formatErrorMessage(error)}`,
+      );
+    }
+  };
+
+  /**
    * Makes a call to the Stacks balances endpoint for a given address.
    * @param address - The Stacks address to query balances for.
    * @returns - The response from the balances endpoint.
@@ -353,6 +379,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
     customTokenContractName?: string,
     customTokenAssetName?: string,
     nonce?: bigint,
+    fee?: bigint,
   ): Promise<StacksTransactionWire> => {
     try {
       if (!validateAddress(recipient, this.network === STACKS_TESTNET)) {
@@ -421,6 +448,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
           postConditionMode: PostConditionMode.Deny,
           postConditions: [postCondition],
           ...(nonce !== undefined ? { nonce } : {}),
+          ...(fee !== undefined ? { fee } : {}),
         });
       } else {
         unsignedTx = await makeUnsignedSTXTokenTransfer({
@@ -429,6 +457,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
           publicKey: senderPublicKey,
           network: this.network,
           ...(nonce !== undefined ? { nonce } : {}),
+          ...(fee !== undefined ? { fee } : {}),
         });
       }
 
@@ -518,6 +547,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
     customTokenContractName?: string,
     customTokenAssetName?: string,
     nonce?: bigint,
+    fee?: bigint,
   ): Promise<{
     unsignedTx: StacksTransactionWire;
     preSignSigHash: string;
@@ -548,6 +578,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
         customTokenContractName,
         customTokenAssetName,
         nonce,
+        fee,
       );
       const sigHash = unsignedTx.signBegin();
 

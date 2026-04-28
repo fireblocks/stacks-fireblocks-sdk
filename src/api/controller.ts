@@ -80,6 +80,21 @@ export const getPublicKey: Handler = async (req, res, next) => {
   }
 };
 
+// GET /:vaultId/nonce
+export const getAccountNonce: Handler = async (req, res, next) => {
+  try {
+    const vaultId = getVaultId(req);
+    const nonce = await apiService.executeAction(
+      vaultId,
+      ActionType.GET_ACCOUNT_NONCE,
+      {},
+    );
+    res.json(nonce);
+  } catch (err) {
+    next(err);
+  }
+};
+
 // GET /:vaultId/balance
 export const getBalance: Handler = async (req, res, next) => {
   try {
@@ -179,6 +194,15 @@ export const createTransaction: Handler = async (req, res, next) => {
       }
     }
 
+    let fee: number | undefined;
+    if (req.body.fee !== undefined && req.body.fee !== "") {
+      fee = Number(req.body.fee);
+      if (!Number.isFinite(fee) || fee <= 0) {
+        res.status(400).json({ error: "Bad Request: fee must be a positive number (STX)" });
+        return;
+      }
+    }
+
     if (!recipientAddress || !amountStr || !assetUi) {
       res.status(400).json({
         error:
@@ -224,7 +248,7 @@ export const createTransaction: Handler = async (req, res, next) => {
       const tx = await apiService.executeAction(
         vaultId,
         ActionType.CREATE_NATIVE_TRANSACTION,
-        { recipientAddress, amount, grossTransaction, note, nonce },
+        { recipientAddress, amount, grossTransaction, note, nonce, fee },
       );
       res.json(tx);
       return;
@@ -622,6 +646,68 @@ export const getPoxInfo: Handler = async (req, res, next) => {
   }
 };
 
+
+// POST /:vaultId/replace-transaction
+export const replaceTransaction: Handler = async (req, res, next) => {
+  try {
+    const vaultId = getVaultId(req);
+
+    const originalTxId = String(req.body.originalTxId || "").trim();
+    const newFeeStr = String(req.body.newFee || "");
+    const newRecipient = req.body.newRecipient
+      ? String(req.body.newRecipient).trim()
+      : undefined;
+    const newAmountStr = req.body.newAmount !== undefined
+      ? String(req.body.newAmount)
+      : undefined;
+
+    if (!originalTxId || !newFeeStr) {
+      res.status(400).json({
+        error: "Bad Request: originalTxId and newFee are required",
+      });
+      return;
+    }
+
+    const newFee = Number(newFeeStr);
+    if (!Number.isFinite(newFee) || newFee <= 0) {
+      res.status(400).json({ error: "Bad Request: newFee must be a positive number (STX)" });
+      return;
+    }
+
+    let newAmount: number | undefined;
+    if (newAmountStr !== undefined) {
+      newAmount = Number(newAmountStr);
+      if (!Number.isFinite(newAmount) || newAmount <= 0) {
+        res.status(400).json({ error: "Bad Request: newAmount must be a positive number (STX)" });
+        return;
+      }
+    }
+
+    let nonceOverride: number | undefined;
+    if (req.body.nonceOverride !== undefined && req.body.nonceOverride !== "") {
+      nonceOverride = Number(req.body.nonceOverride);
+      if (!Number.isInteger(nonceOverride) || nonceOverride < 0) {
+        res.status(400).json({ error: "Bad Request: nonceOverride must be a non-negative integer" });
+        return;
+      }
+      if (!newRecipient || newAmount === undefined) {
+        res.status(400).json({
+          error: "Bad Request: newRecipient and newAmount are required when nonceOverride is provided",
+        });
+        return;
+      }
+    }
+
+    const tx = await apiService.executeAction(
+      vaultId,
+      ActionType.REPLACE_TRANSACTION,
+      { originalTxId, newFee, newRecipient, newAmount, nonceOverride },
+    );
+    res.json(tx);
+  } catch (err) {
+    next(err);
+  }
+};
 
 // GET /metrics
 export const getPoolMetrics: Handler = async (req, res, next) => {

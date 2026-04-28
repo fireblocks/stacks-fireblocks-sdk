@@ -109,6 +109,7 @@ export class ApiService {
             params.grossTransaction,
             params.note,
             params.nonce,
+            params.fee,
           );
           break;
         case ActionType.CREATE_FT_TRANSACTION:
@@ -164,6 +165,18 @@ export class ApiService {
             params.authId,
             params.nonce,
           );
+          break;
+        case ActionType.REPLACE_TRANSACTION:
+          result = await sdk.replaceTransaction(
+            params.originalTxId,
+            params.newFee,
+            params.newRecipient,
+            params.newAmount,
+            params.nonceOverride,
+          );
+          break;
+        case ActionType.GET_ACCOUNT_NONCE:
+          result = await sdk.getAccountNonce();
           break;
         default:
           throw new Error(

@@ -167,6 +167,42 @@ router.get(
  router.get("/poxInfo", controller.getPoxInfo);
 
 
+// Nonce
+/**
+ * @openapi
+ * /{vaultId}/nonce:
+ *   get:
+ *     summary: Get current account nonce
+ *     description: >
+ *       Returns the next expected nonce for this vault's Stacks address,
+ *       derived from the confirmed on-chain state.
+ *
+ *       **Note**: pending mempool transactions are not reflected. If you have
+ *       unconfirmed transactions in flight, the next safe nonce is this value
+ *       plus the number of pending transactions.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *     responses:
+ *       200:
+ *         description: Nonce fetched successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 nonce:
+ *                   type: integer
+ *                   description: Next nonce to use for a new transaction.
+ *                   example: 5
+ *       400:
+ *         description: vaultId missing
+ *       500:
+ *         description: Internal server error
+ */
+router.get("/:vaultId/nonce", validateVaultId, controller.getAccountNonce);
+
 // Balance endpoints
 /**
  * @openapi
@@ -314,6 +350,12 @@ router.get(
  *                   the current account nonce from the network (default behavior).
  *                   Only set this for advanced use cases such as nonce management or
  *                   transaction replacement.
+ *               fee:
+ *                 type: number
+ *                 description: >
+ *                   STX only — optional fee override in STX (e.g. 0.0001). If omitted,
+ *                   the SDK estimates the fee automatically. Set a deliberately low value
+ *                   to test replace-by-fee flows.
  *     responses:
  *       200:
  *         description: Transaction created successfully
@@ -627,6 +669,70 @@ router.post("/:vaultId/stacking/solo/increase", validateVaultId, controller.incr
  *         description: Internal server error
  */
 router.post("/:vaultId/stacking/solo/extend", validateVaultId, controller.extendStackingPeriod);
+
+/**
+ * @openapi
+ * /{vaultId}/replace-transaction:
+ *   post:
+ *     summary: Replace a stuck pending STX transaction (bump fee)
+ *     description: >
+ *       Replaces a pending native STX token_transfer transaction that is stuck in the mempool
+ *       by submitting a new transaction with the **same nonce** but a higher fee.
+ *       The Stacks node will evict the original transaction in favour of this one.
+ *
+ *       **Limitations**:
+ *         - Only native STX token_transfer transactions are supported (not FT or contract calls).
+ *         - The new fee must be higher than the original fee or the node may reject the replacement.
+ *         - The original transaction must still be in "pending" status.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - originalTxId
+ *               - newFee
+ *             properties:
+ *               originalTxId:
+ *                 type: string
+ *                 description: Transaction ID of the pending transaction to replace.
+ *               newFee:
+ *                 type: number
+ *                 description: New fee in STX. Must be higher than the original fee.
+ *               newRecipient:
+ *                 type: string
+ *                 description: >
+ *                   Optional new recipient Stacks address. Defaults to the original recipient.
+ *               newAmount:
+ *                 type: number
+ *                 description: >
+ *                   Optional new transfer amount in STX.
+ *                   Defaults to the original amount. Required when nonceOverride is set.
+ *               nonceOverride:
+ *                 type: integer
+ *                 minimum: 0
+ *                 description: >
+ *                   Provide the nonce directly to skip the transaction lookup.
+ *                   Use this when the original transaction is not visible to the Hiro
+ *                   indexer — for example, a future-nonce transaction that was accepted
+ *                   by the node but does not appear in the explorer or getTxStatusById.
+ *                   When set, newRecipient and newAmount are required.
+ *     responses:
+ *       200:
+ *         description: Replacement transaction submitted successfully.
+ *       400:
+ *         description: Invalid input or transaction cannot be replaced.
+ *       500:
+ *         description: Internal server error
+ */
+router.post(
+  "/:vaultId/replace-transaction",
+  validateVaultId,
+  controller.replaceTransaction,
+);
 
 // Pool metrics
 /**

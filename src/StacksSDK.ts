@@ -25,6 +25,7 @@ import {
   CheckStatusResponse,
   CreateTransactionResponse,
   FireblocksConfig,
+  GetAccountNonceResponse,
   GetFtBalancesResponse,
   GetNativeBalanceResponse,
   GetPoxInfoResponse,
@@ -181,6 +182,27 @@ export class StacksSDK {
         success: false,
         error: formatErrorMessage(error),
       };
+    }
+  };
+
+  /**
+   * Retrieves the next expected nonce for this vault's Stacks address.
+   *
+   * Returns the confirmed on-chain nonce — pending mempool transactions are not
+   * reflected. If you have unconfirmed transactions in flight, the actual next
+   * safe nonce is this value plus the number of pending transactions.
+   *
+   * @returns A promise that resolves to a {GetAccountNonceResponse}.
+   */
+  public getAccountNonce = async (): Promise<GetAccountNonceResponse> => {
+    if (!this.address) {
+      throw new Error("Stacks address is not set.");
+    }
+    try {
+      const nonce = await this.chainService.getAccountNonce(this.address);
+      return { success: true, nonce };
+    } catch (error) {
+      return { success: false, error: formatErrorMessage(error) };
     }
   };
 
@@ -599,6 +621,7 @@ export class StacksSDK {
     customTokenAssetName?: string,
     note?: string,
     nonce?: bigint,
+    feeUstx?: bigint,
   ): Promise<any> => {
     try {
       const transactionToSign = await this.chainService.serializeTransaction(
@@ -612,6 +635,7 @@ export class StacksSDK {
         customTokenContractName,
         customTokenAssetName,
         nonce,
+        feeUstx,
       );
 
       const rawSignature = await this.fireblocksService.signTransaction(
@@ -825,6 +849,7 @@ export class StacksSDK {
     grossTransaction: boolean = false,
     note?: string,
     nonce?: number,
+    fee?: number,
   ): Promise<CreateTransactionResponse> => {
     if (!this.address || !this.publicKey || !this.vaultAccountId) {
       throw new Error("Address, Public Key or Vault ID are not set");
@@ -857,6 +882,7 @@ export class StacksSDK {
         undefined, // customTokenAssetName
         note,
         nonce !== undefined ? BigInt(nonce) : undefined,
+        fee !== undefined ? stxToMicro(fee) : undefined,
       );
 
       if (!result || result.error || !result.txid || result.reason) {
@@ -1586,6 +1612,140 @@ export class StacksSDK {
     }
   };
 
+
+  /**
+   * Replaces a pending STX transaction with a new one using the same nonce but a higher fee.
+   * This is useful when a transaction is stuck in the mempool due to a low fee.
+   * Only native STX token_transfer transactions are supported.
+   * @param originalTxId - The transaction ID of the transaction to replace.
+   * @param newFee - The new fee in STX. Must be higher than the original fee.
+   * @param newRecipient - Optional new recipient address. Defaults to the original recipient.
+   * @param newAmount - Optional new amount in STX. Defaults to the original amount.
+   * @param nonceOverride - Provide the nonce directly to skip the transaction lookup.
+   *   Required when the original tx is not visible to the Hiro indexer (e.g. future-nonce
+   *   transactions). When set, newRecipient and newAmount must also be provided.
+   * @returns A promise that resolves to a {CreateTransactionResponse}.
+   */
+  public replaceTransaction = async (
+    originalTxId: string,
+    newFee: number,
+    newRecipient?: string,
+    newAmount?: number,
+    nonceOverride?: number,
+  ): Promise<CreateTransactionResponse> => {
+    if (!this.address || !this.publicKey || !this.vaultAccountId) {
+      throw new Error("Address, Public Key or Vault ID are not set");
+    }
+
+    try {
+      let nonce: bigint;
+      let recipient: string;
+      let amountUstx: bigint;
+
+      if (nonceOverride !== undefined) {
+        // ── Override path: nonce is known, tx may not be visible to the indexer ──
+        if (!newRecipient || newAmount === undefined) {
+          return {
+            success: false,
+            error: "newRecipient and newAmount are required when nonceOverride is provided",
+          };
+        }
+        if (!validateAddress(newRecipient, this.testnet)) {
+          return { success: false, error: "Invalid recipient address" };
+        }
+        nonce = BigInt(nonceOverride);
+        recipient = newRecipient;
+        amountUstx = stxToMicro(newAmount);
+      } else {
+        // ── Lookup path: resolve nonce, recipient and amount from the original tx ──
+        const originalTxResponse = await this.getTxStatusById(originalTxId);
+
+        if (!originalTxResponse.success || !originalTxResponse.data) {
+          return { success: false, error: "Could not fetch original transaction details" };
+        }
+
+        if (originalTxResponse.data.tx_status !== "pending") {
+          return {
+            success: false,
+            error: `Can only replace pending transactions. Current status: ${originalTxResponse.data.tx_status}`,
+          };
+        }
+
+        const fullTx = originalTxResponse.data.full_tx_details;
+
+        if (fullTx?.tx_type !== "token_transfer") {
+          return {
+            success: false,
+            error: `Only native STX token_transfer transactions can be replaced. Got: ${fullTx?.tx_type}`,
+          };
+        }
+
+        if (fullTx.sender_address !== this.address) {
+          return {
+            success: false,
+            error: "Transaction sender does not match this vault account address",
+          };
+        }
+
+        nonce = BigInt(fullTx.nonce);
+        recipient = newRecipient ?? fullTx.token_transfer.recipient_address;
+        amountUstx = newAmount !== undefined
+          ? stxToMicro(newAmount)
+          : BigInt(fullTx.token_transfer.amount);
+
+        if (!validateAddress(recipient, this.testnet)) {
+          return { success: false, error: "Invalid recipient address" };
+        }
+      }
+
+      const feeBigInt = stxToMicro(newFee);
+
+      // Build and serialize with the nonce + fee baked in before hash computation.
+      // Passing fee here is critical — serializeTransaction computes preSignSigHash from the
+      // fee on the spending condition, so the fee must be set before signing, not after.
+      const transactionToSign = await this.chainService.serializeTransaction(
+        this.address,
+        this.publicKey,
+        recipient,
+        amountUstx,
+        TransactionType.STX,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        nonce,
+        feeBigInt,
+      );
+
+      const rawSignature = await this.fireblocksService.signTransaction(
+        transactionToSign.preSignSigHash,
+        this.vaultAccountId.toString(),
+      );
+
+      const signature = concatSignature(rawSignature.fullSig, rawSignature.v);
+      (transactionToSign.unsignedTx as any).auth.spendingCondition.signature =
+        createMessageSignature(signature);
+
+      const result = await this.chainService.broadcastTransaction(transactionToSign.unsignedTx);
+
+      if (!result || result.error || !result.txid || result.reason) {
+        const errorAndReason =
+          result?.error && result?.reason
+            ? `${result.error} - ${result.reason}`
+            : result?.error || result?.reason || "unknown error";
+        return { success: false, error: formatErrorMessage(errorAndReason) };
+      }
+
+      console.log(`Replaced transaction ${originalTxId} with ${result.txid}`);
+      return { success: true, txHash: result.txid };
+    } catch (error) {
+      console.error(`Error replacing transaction: ${formatErrorMessage(error)}`);
+      return {
+        success: false,
+        error: `Failed to replace transaction: ${formatErrorMessage(error)}`,
+      };
+    }
+  };
 
    /**
    * fetches current pox info from blockchain.

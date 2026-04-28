@@ -40,6 +40,8 @@ export enum ActionType {
   GET_POX_INFO = "getPoxInfo",
   INCREASE_STACKED_AMOUNT = "increaseStackedAmount",
   EXTEND_STACKING_PERIOD = "extendStackingPeriod",
+  REPLACE_TRANSACTION = "replaceTransaction",
+  GET_ACCOUNT_NONCE = "getAccountNonce",
 }
 
 export interface SdkManagerMetrics {
