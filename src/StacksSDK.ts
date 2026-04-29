@@ -678,80 +678,58 @@ export class StacksSDK {
     }
   };
 
-  /**
-   *  Builds, signs, and sends the delegate-stx or allow-contract-caller contract calls.
-   * @param poolAddress - The address of the stacking pool.
-   * @param functionName - The contract function name to call ("delegate-stx" or "allow-contract-caller").
-   * @param poolContractName - The contract name of the stacking pool.
-   * @param amount - The amount of STX to delegate in micro units.
-   * @param lockPeriod - The lock period in cycles.
-   * @returns - A promise that resolves to the transaction broadcast result.
-   */
-  private buildSignSendContractCall = async (
+  private buildSignSendContractCall = async (options: {
     functionName:
       | "delegate-stx"
       | "allow-contract-caller"
       | "revoke-delegate-stx"
       | "solo-stack"
       | "increase-stack-amount"
-      | "extend-stack-period",
-    poolAddress?: string,
-    poolContractName?: string,
-    amount?: bigint,
-    maxAmount?: bigint,
-    lockPeriod?: number,
-    extendCycles?: number,
-    signerKey?: string,
-    signerSig65Hex?: string,
-    startBurnHeight?: number,
-    authId?: bigint,
-    note?: string,
-    nonce?: bigint,
-  ): Promise<any> => {
+      | "extend-stack-period";
+    poolAddress?: string;
+    poolContractName?: string;
+    amount?: bigint;
+    maxAmount?: bigint;
+    lockPeriod?: number;
+    extendCycles?: number;
+    signerKey?: string;
+    signerSig65Hex?: string;
+    startBurnHeight?: number;
+    authId?: bigint;
+    note?: string;
+    nonce?: bigint;
+  }): Promise<any> => {
+    const {
+      functionName, poolAddress, poolContractName, amount, maxAmount,
+      lockPeriod, extendCycles, signerKey, signerSig65Hex, startBurnHeight,
+      authId, note, nonce,
+    } = options;
+
     try {
-      if (
-        functionName === "allow-contract-caller" &&
-        (!poolContractName || !poolAddress)
-      ) {
-        throw new Error(
-          "Pool contract name and address must be provided for allow-contract-caller",
-        );
+      if (functionName === "allow-contract-caller" && (!poolContractName || !poolAddress)) {
+        throw new Error("Pool contract name and address must be provided for allow-contract-caller");
       }
 
-      if (
-        functionName === "delegate-stx" &&
-        (!amount || !lockPeriod || !poolAddress)
-      ) {
-        throw new Error(
-          "Amount, lock period, and pool address must be provided for delegate-stx",
-        );
+      if (functionName === "delegate-stx" && (!amount || !lockPeriod || !poolAddress)) {
+        throw new Error("Amount, lock period, and pool address must be provided for delegate-stx");
       }
 
-      if (
-        functionName === "solo-stack" &&
+      if (functionName === "solo-stack" &&
         (!amount || !lockPeriod || !signerSig65Hex || !startBurnHeight || !signerKey || maxAmount == null || authId == null)
       ) {
-        throw new Error(
-          "Amount, lock period, signer signature, start burn height, signer key, max amount, and auth ID must be provided for solo-stack",
-        );
+        throw new Error("Amount, lock period, signer signature, start burn height, signer key, max amount, and auth ID must be provided for solo-stack");
       }
 
-      if (
-        functionName === "increase-stack-amount" &&
+      if (functionName === "increase-stack-amount" &&
         (!amount || !signerSig65Hex || !signerKey || authId == null || maxAmount == null)
       ) {
-        throw new Error(
-          "Amount, signer signature, signer key, auth ID and max amount must be provided for increase-stack-amount",
-        );
+        throw new Error("Amount, signer signature, signer key, auth ID and max amount must be provided for increase-stack-amount");
       }
 
-      if (
-        functionName === "extend-stack-period" &&
+      if (functionName === "extend-stack-period" &&
         (!extendCycles || !signerSig65Hex || !signerKey || authId == null || maxAmount == null)
       ) {
-        throw new Error(
-          "Extend cycles, signer signature, signer key, auth ID and max amount must be provided for extend-stack-period",
-        );
+        throw new Error("Extend cycles, signer signature, signer key, auth ID and max amount must be provided for extend-stack-period");
       }
 
       const resolvedNonce = await this.resolveNonce(nonce);
@@ -764,62 +742,34 @@ export class StacksSDK {
       switch (functionName) {
         case "allow-contract-caller":
           transactionToSign = await this.chainService.allowPoxContractCaller(
-            this.publicKey,
-            poolAddress,
-            poolContractName!,
-            resolvedNonce,
+            this.publicKey, poolAddress, poolContractName!, resolvedNonce,
           );
           break;
         case "delegate-stx":
           transactionToSign = await this.chainService.delegateStx(
-            this.publicKey,
-            poolAddress,
-            amount!,
-            lockPeriod!,
-            resolvedNonce,
+            this.publicKey, poolAddress, amount!, lockPeriod!, resolvedNonce,
           );
           break;
         case "revoke-delegate-stx":
           transactionToSign = await this.chainService.revokeStxDelegation(
-            this.publicKey,
-            resolvedNonce,
+            this.publicKey, resolvedNonce,
           );
           break;
         case "solo-stack":
           transactionToSign = await this.chainService.soloStack(
-            this.publicKey,
-            signerKey,
-            amount,
-            this.btcRewardsAddress,
-            lockPeriod,
-            maxAmount,
-            signerSig65Hex,
-            startBurnHeight,
-            authId,
-            resolvedNonce,
+            this.publicKey, signerKey, amount, this.btcRewardsAddress,
+            lockPeriod, maxAmount, signerSig65Hex, startBurnHeight, authId, resolvedNonce,
           );
           break;
         case "increase-stack-amount":
           transactionToSign = await this.chainService.increaseStackedStx(
-            this.publicKey,
-            signerKey!,
-            amount!,
-            maxAmount!,
-            signerSig65Hex!,
-            authId!,
-            resolvedNonce,
+            this.publicKey, signerKey!, amount!, maxAmount!, signerSig65Hex!, authId!, resolvedNonce,
           );
           break;
         case "extend-stack-period":
           transactionToSign = await this.chainService.extendStackingPeriod(
-            this.publicKey,
-            signerKey!,
-            this.btcRewardsAddress!,
-            extendCycles!,
-            maxAmount!,
-            signerSig65Hex!,
-            authId!,
-            resolvedNonce,
+            this.publicKey, signerKey!, this.btcRewardsAddress!, extendCycles!,
+            maxAmount!, signerSig65Hex!, authId!, resolvedNonce,
           );
           break;
         default:
@@ -827,26 +777,17 @@ export class StacksSDK {
       }
 
       const rawSignature = await this.fireblocksService.signTransaction(
-        transactionToSign.preSignSigHash,
-        this.vaultAccountId.toString(),
-        note || "",
+        transactionToSign.preSignSigHash, this.vaultAccountId.toString(), note || "",
       );
 
       const signature = concatSignature(rawSignature.fullSig, rawSignature.v);
+      (transactionToSign.unsignedContractCall as any).auth.spendingCondition.signature =
+        createMessageSignature(signature);
 
-      (
-        transactionToSign.unsignedContractCall as any
-      ).auth.spendingCondition.signature = createMessageSignature(signature);
-
-      const result = await this.chainService.broadcastTransaction(
-        transactionToSign.unsignedContractCall,
-      );
-      return result;
+      return await this.chainService.broadcastTransaction(transactionToSign.unsignedContractCall);
     } catch (error) {
       throw new Error(
-        `Failed to build, sign or send contract call transaction: ${formatErrorMessage(
-          error,
-        )}`,
+        `Failed to build, sign or send contract call transaction: ${formatErrorMessage(error)}`,
       );
     }
   };
@@ -1074,21 +1015,14 @@ export class StacksSDK {
       );
 
       // Delegate STX to pool address
-      const delegateResult = await this.buildSignSendContractCall(
-        "delegate-stx",
-        poolsAddress,
+      const delegateResult = await this.buildSignSendContractCall({
+        functionName: "delegate-stx",
+        poolAddress: poolsAddress,
         poolContractName,
-        stxToMicro(amount),
-        undefined,
+        amount: stxToMicro(amount),
         lockPeriod,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
         nonce,
-      );
+      });
 
       const assertDelegateResult = assertResultSuccess(delegateResult);
       if (assertDelegateResult.success === false) {
@@ -1145,21 +1079,12 @@ export class StacksSDK {
 
     try {
       // Allow contract caller
-      const allowCallerResult = await this.buildSignSendContractCall(
-        "allow-contract-caller",
-        poolsAddress,
+      const allowCallerResult = await this.buildSignSendContractCall({
+        functionName: "allow-contract-caller",
+        poolAddress: poolsAddress,
         poolContractName,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
         nonce,
-      );
+      });
 
       const assertAllowCallerResult = assertResultSuccess(allowCallerResult);
       if (assertAllowCallerResult.success === false) {
@@ -1211,21 +1136,10 @@ export class StacksSDK {
 
     try {
       // Revoke any existing delegations.
-      const revokeResult = await this.buildSignSendContractCall(
-        "revoke-delegate-stx",
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
+      const revokeResult = await this.buildSignSendContractCall({
+        functionName: "revoke-delegate-stx",
         nonce,
-      );
+      });
 
       const assertDelegateResult = assertResultSuccess(revokeResult);
       if (assertDelegateResult.success === false) {
@@ -1441,21 +1355,17 @@ export class StacksSDK {
 
       const startBurnHeight = pox.current_burnchain_block_height;
 
-      const result = await this.buildSignSendContractCall(
-        "solo-stack",
-        undefined,
-        undefined,
-        stxToMicro(amount),
-        stxToMicro(maxAmount),
+      const result = await this.buildSignSendContractCall({
+        functionName: "solo-stack",
+        amount: stxToMicro(amount),
+        maxAmount: stxToMicro(maxAmount),
         lockPeriod,
-        undefined,
         signerKey,
         signerSig65Hex,
         startBurnHeight,
         authId,
-        undefined,
         nonce,
-      );
+      });
 
       const assertResult = assertResultSuccess(result);
       if (assertResult.success === false) {
@@ -1512,21 +1422,15 @@ export class StacksSDK {
 
       console.log(`Increasing stacked amount by ${increaseBy} STX`);
       
-      const result = await this.buildSignSendContractCall(
-        "increase-stack-amount",
-        undefined,
-        undefined,
-        stxToMicro(increaseBy),
-        stxToMicro(maxAmount),
-        undefined,
-        undefined,
+      const result = await this.buildSignSendContractCall({
+        functionName: "increase-stack-amount",
+        amount: stxToMicro(increaseBy),
+        maxAmount: stxToMicro(maxAmount),
         signerKey,
         signerSig65Hex,
-        undefined,
         authId,
-        undefined,
         nonce,
-      );
+      });
 
       const assertResult = assertResultSuccess(result);
       if (assertResult.success === false) {
@@ -1583,21 +1487,15 @@ export class StacksSDK {
 
       console.log(`Extending stacking period by ${extendCycles} cycles`);
       
-      const result = await this.buildSignSendContractCall(
-        "extend-stack-period",
-        undefined,
-        undefined,
-        undefined,
-        stxToMicro(maxAmount),
-        undefined,
+      const result = await this.buildSignSendContractCall({
+        functionName: "extend-stack-period",
+        maxAmount: stxToMicro(maxAmount),
         extendCycles,
         signerKey,
         signerSig65Hex,
-        undefined,
         authId,
-        undefined,
         nonce,
-      );
+      });
 
       const assertResult = assertResultSuccess(result);
       if (assertResult.success === false) {
