@@ -20,7 +20,6 @@ import {
   cvToValue,
   fetchCallReadOnlyFunction,
   fetchFeeEstimateTransaction,
-  hexToCV,
   makeUnsignedContractCall,
   makeUnsignedSTXTokenTransfer,
   noneCV,
