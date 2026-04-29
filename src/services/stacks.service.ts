@@ -126,9 +126,9 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
    * @param address - The Stacks address to query.
    */
   public getAccountNonce = async (address: string): Promise<{
-    confirmedNonce: number;
+    confirmedNonce: bigint;
     pendingTxCount: number;
-    nextAvailable: number;
+    nextAvailable: bigint;
   }> => {
     try {
       const [nonceResponse, mempoolResponse] = await Promise.all([
@@ -142,9 +142,9 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
         throw new Error(`HTTP ${nonceResponse.status}`);
       }
 
-      const confirmedNonce = nonceResponse.data.nonce as number;
+      const confirmedNonce = BigInt(nonceResponse.data.nonce);
       const pending: any[] = mempoolResponse.data?.results ?? [];
-      const pendingNonces = new Set(pending.map((tx: any) => tx.nonce as number));
+      const pendingNonces = new Set(pending.map((tx: any) => BigInt(tx.nonce)));
 
       let nextAvailable = confirmedNonce;
       while (pendingNonces.has(nextAvailable)) {

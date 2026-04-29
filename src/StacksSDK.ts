@@ -614,7 +614,7 @@ export class StacksSDK {
   private resolveNonce = async (nonce?: bigint): Promise<bigint> => {
     if (nonce !== undefined) return nonce;
     const { nextAvailable } = await this.chainService.getAccountNonce(this.address!);
-    return BigInt(nextAvailable);
+    return nextAvailable;
   };
 
   /**
@@ -866,7 +866,7 @@ export class StacksSDK {
     amount: number,
     grossTransaction: boolean = false,
     note?: string,
-    nonce?: number,
+    nonce?: bigint,
     fee?: number,
   ): Promise<CreateTransactionResponse> => {
     if (!this.address || !this.publicKey || !this.vaultAccountId) {
@@ -899,7 +899,7 @@ export class StacksSDK {
         undefined, // customTokenContractName
         undefined, // customTokenAssetName
         note,
-        nonce !== undefined ? BigInt(nonce) : undefined,
+        nonce,
         fee !== undefined ? stxToMicro(fee) : undefined,
       );
 
@@ -948,7 +948,7 @@ export class StacksSDK {
     customTokenContractName?: string,
     customTokenAssetName?: string,
     note?: string,
-    nonce?: number,
+    nonce?: bigint,
   ): Promise<CreateTransactionResponse> => {
     if (!this.address || !this.publicKey || !this.vaultAccountId) {
       throw new Error("Address, Public Key or Vault ID are not set");
@@ -996,7 +996,7 @@ export class StacksSDK {
         customTokenContractName,
         customTokenAssetName,
         note,
-        nonce !== undefined ? BigInt(nonce) : undefined,
+        nonce,
       );
 
       if (!result || result.error || !result.txid || result.reason) {
@@ -1039,7 +1039,7 @@ export class StacksSDK {
     poolContractName: string,
     amount: number,
     lockPeriod: number,
-    nonce?: number,
+    nonce?: bigint,
   ): Promise<CreateTransactionResponse> => {
     if (this.testnet) {
       console.log(`[WARNING] delegateToPool is not supported on testnet.`);
@@ -1087,7 +1087,7 @@ export class StacksSDK {
         undefined,
         undefined,
         undefined,
-        nonce !== undefined ? BigInt(nonce) : undefined,
+        nonce,
       );
 
       const assertDelegateResult = assertResultSuccess(delegateResult);
@@ -1125,7 +1125,7 @@ export class StacksSDK {
   public allowContractCaller = async (
     poolsAddress: string,
     poolContractName: string,
-    nonce?: number,
+    nonce?: bigint,
   ): Promise<CreateTransactionResponse> => {
     if (this.testnet) {
       console.log(`[WARNING] allowContractCaller is not supported on testnet.`);
@@ -1158,7 +1158,7 @@ export class StacksSDK {
         undefined,
         undefined,
         undefined,
-        nonce !== undefined ? BigInt(nonce) : undefined,
+        nonce,
       );
 
       const assertAllowCallerResult = assertResultSuccess(allowCallerResult);
@@ -1194,7 +1194,7 @@ export class StacksSDK {
    * @throws {Error} If the address, public key, or vault ID are not set, or if the process fails.
    */
 
-  public revokeDelegation = async (nonce?: number): Promise<CreateTransactionResponse> => {
+  public revokeDelegation = async (nonce?: bigint): Promise<CreateTransactionResponse> => {
     if (this.testnet) {
       console.log(`[WARNING] revokeDelegation is not supported on testnet.`);
       return {
@@ -1224,7 +1224,7 @@ export class StacksSDK {
         undefined,
         undefined,
         undefined,
-        nonce !== undefined ? BigInt(nonce) : undefined,
+        nonce,
       );
 
       const assertDelegateResult = assertResultSuccess(revokeResult);
@@ -1419,7 +1419,7 @@ export class StacksSDK {
     maxAmount: number,
     lockPeriod: number,
     authId: bigint,
-    nonce?: number,
+    nonce?: bigint,
   ): Promise<CreateTransactionResponse> => {
     try {
       if (!this.address || !this.publicKey || !this.vaultAccountId) {
@@ -1454,7 +1454,7 @@ export class StacksSDK {
         startBurnHeight,
         authId,
         undefined,
-        nonce !== undefined ? BigInt(nonce) : undefined,
+        nonce,
       );
 
       const assertResult = assertResultSuccess(result);
@@ -1503,7 +1503,7 @@ export class StacksSDK {
     increaseBy: number,
     maxAmount: number,
     authId: bigint,
-    nonce?: number,
+    nonce?: bigint,
   ): Promise<CreateTransactionResponse> => {
     try {
       if (!this.address || !this.publicKey || !this.vaultAccountId) {
@@ -1525,7 +1525,7 @@ export class StacksSDK {
         undefined,
         authId,
         undefined,
-        nonce !== undefined ? BigInt(nonce) : undefined,
+        nonce,
       );
 
       const assertResult = assertResultSuccess(result);
@@ -1574,7 +1574,7 @@ export class StacksSDK {
     extendCycles: number,
     maxAmount: number,
     authId: bigint,
-    nonce?: number,
+    nonce?: bigint,
   ): Promise<CreateTransactionResponse> => {
     try {
       if (!this.address || !this.publicKey || !this.vaultAccountId) {
@@ -1596,7 +1596,7 @@ export class StacksSDK {
         undefined,
         authId,
         undefined,
-        nonce !== undefined ? BigInt(nonce) : undefined,
+        nonce,
       );
 
       const assertResult = assertResultSuccess(result);
@@ -1648,7 +1648,7 @@ export class StacksSDK {
     newFee: number,
     newRecipient?: string,
     newAmount?: number,
-    nonceOverride?: number,
+    nonceOverride?: bigint,
   ): Promise<CreateTransactionResponse> => {
     if (!this.address || !this.publicKey || !this.vaultAccountId) {
       throw new Error("Address, Public Key or Vault ID are not set");
@@ -1670,7 +1670,7 @@ export class StacksSDK {
           return { success: false, error: "Invalid recipient address" };
         }
 
-        const nonce = BigInt(nonceOverride);
+        const nonce = nonceOverride;
         const amountUstx = stxToMicro(newAmount);
 
         const transactionToSign = await this.chainService.serializeTransaction(
