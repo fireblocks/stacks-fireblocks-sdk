@@ -1,8 +1,9 @@
-import express from "express";
+import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import router from "./api/router";
 import { swaggerUi, specs } from "./utils/swagger";
+import { ValidationError } from "./utils/validation";
 
 // Load environment variables
 dotenv.config();
@@ -21,6 +22,15 @@ app.get("/api-docs-json", (req, res) => {
 
 // Apply routes
 app.use("/api", router);
+
+// Validation error middleware — must be registered after routes
+app.use((err: Error, _req: Request, res: Response, next: NextFunction) => {
+  if (err instanceof ValidationError) {
+    res.status(400).json({ error: `Bad Request: ${err.message}` });
+    return;
+  }
+  next(err);
+});
 
 // Start the server only if this file is run directly (not imported)
 const PORT = process.env.PORT || 3000;

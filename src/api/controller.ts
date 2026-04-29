@@ -4,6 +4,7 @@ import { ActionType } from "../pool/types";
 import { StackingPools, TokenType } from "../services/types";
 import { validateAmount } from "../utils/helpers";
 import { helperConstants, poolInfo } from "../utils/constants";
+import { parseOptionalFee, parseOptionalNonce } from "../utils/validation";
 
 const apiService = apiServiceSingleton;
 
@@ -189,24 +190,8 @@ export const createTransaction: Handler = async (req, res, next) => {
       ? String(req.body.tokenAssetName).trim()
       : undefined;
 
-    let nonce: bigint | undefined;
-    if (req.body.nonce !== undefined && req.body.nonce !== "") {
-      const nonceNum = Number(req.body.nonce);
-      if (!Number.isInteger(nonceNum) || nonceNum < 0) {
-        res.status(400).json({ error: "Bad Request: nonce must be a non-negative integer" });
-        return;
-      }
-      nonce = BigInt(nonceNum);
-    }
-
-    let fee: number | undefined;
-    if (req.body.fee !== undefined && req.body.fee !== "") {
-      fee = Number(req.body.fee);
-      if (!Number.isFinite(fee) || fee <= 0) {
-        res.status(400).json({ error: "Bad Request: fee must be a positive number (STX)" });
-        return;
-      }
-    }
+    const nonce = parseOptionalNonce(req.body.nonce);
+    const fee = parseOptionalFee(req.body.fee);
 
     if (!recipientAddress || !amountStr || !assetUi) {
       res.status(400).json({
@@ -310,15 +295,7 @@ export const delegateToPool: Handler = async (req, res, next) => {
       return;
     }
 
-    let nonce: bigint | undefined;
-    if (req.body.nonce !== undefined && req.body.nonce !== "") {
-      const nonceNum = Number(req.body.nonce);
-      if (!Number.isInteger(nonceNum) || nonceNum < 0) {
-        res.status(400).json({ error: "Bad Request: nonce must be a non-negative integer" });
-        return;
-      }
-      nonce = BigInt(nonceNum);
-    }
+    const nonce = parseOptionalNonce(req.body.nonce);
 
     // Map UI label -> Pool Type (enum value)
     const poolSelectionMap: Record<string, StackingPools> = {
@@ -359,15 +336,7 @@ export const allowContractCaller: Handler = async (req, res, next) => {
       return;
     }
 
-    let nonce: bigint | undefined;
-    if (req.body.nonce !== undefined && req.body.nonce !== "") {
-      const nonceNum = Number(req.body.nonce);
-      if (!Number.isInteger(nonceNum) || nonceNum < 0) {
-        res.status(400).json({ error: "Bad Request: nonce must be a non-negative integer" });
-        return;
-      }
-      nonce = BigInt(nonceNum);
-    }
+    const nonce = parseOptionalNonce(req.body.nonce);
 
     // Map UI label -> Pool Type (enum value)
     const poolSelectionMap: Record<string, StackingPools> = {
@@ -399,15 +368,7 @@ export const revokeDelegation: Handler = async (req, res, next) => {
   try {
     const vaultId = getVaultId(req);
 
-    let nonce: bigint | undefined;
-    if (req.body?.nonce !== undefined && req.body.nonce !== "") {
-      const nonceNum = Number(req.body.nonce);
-      if (!Number.isInteger(nonceNum) || nonceNum < 0) {
-        res.status(400).json({ error: "Bad Request: nonce must be a non-negative integer" });
-        return;
-      }
-      nonce = BigInt(nonceNum);
-    }
+    const nonce = parseOptionalNonce(req.body?.nonce);
 
     const tx = await apiService.executeAction(
       vaultId,
@@ -489,15 +450,7 @@ export const stackSolo: Handler = async (req, res, next) => {
     }
     const maxAmount = Number(maxAmountStr);
 
-    let nonce: bigint | undefined;
-    if (req.body.nonce !== undefined && req.body.nonce !== "") {
-      const nonceNum = Number(req.body.nonce);
-      if (!Number.isInteger(nonceNum) || nonceNum < 0) {
-        res.status(400).json({ error: "Bad Request: nonce must be a non-negative integer" });
-        return;
-      }
-      nonce = BigInt(nonceNum);
-    }
+    const nonce = parseOptionalNonce(req.body.nonce);
 
     const tx = await apiService.executeAction(vaultId, ActionType.STACK_SOLO, {
       signerKey,
@@ -555,15 +508,7 @@ export const increaseStackedAmount: Handler = async (req, res, next) => {
     }
     const maxAmount = BigInt(maxAmountStr);
 
-    let nonce: bigint | undefined;
-    if (req.body.nonce !== undefined && req.body.nonce !== "") {
-      const nonceNum = Number(req.body.nonce);
-      if (!Number.isInteger(nonceNum) || nonceNum < 0) {
-        res.status(400).json({ error: "Bad Request: nonce must be a non-negative integer" });
-        return;
-      }
-      nonce = BigInt(nonceNum);
-    }
+    const nonce = parseOptionalNonce(req.body.nonce);
 
     const tx = await apiService.executeAction(vaultId, ActionType.INCREASE_STACKED_AMOUNT, {
       signerKey,
@@ -622,15 +567,7 @@ export const extendStackingPeriod: Handler = async (req, res, next) => {
     }
     const maxAmount = Number(maxAmountStr);
 
-    let nonce: bigint | undefined;
-    if (req.body.nonce !== undefined && req.body.nonce !== "") {
-      const nonceNum = Number(req.body.nonce);
-      if (!Number.isInteger(nonceNum) || nonceNum < 0) {
-        res.status(400).json({ error: "Bad Request: nonce must be a non-negative integer" });
-        return;
-      }
-      nonce = BigInt(nonceNum);
-    }
+    const nonce = parseOptionalNonce(req.body.nonce);
 
     const tx = await apiService.executeAction(vaultId, ActionType.EXTEND_STACKING_PERIOD, {
       signerKey,
@@ -664,44 +601,23 @@ export const replaceTransaction: Handler = async (req, res, next) => {
     const vaultId = getVaultId(req);
 
     const originalTxId = String(req.body.originalTxId || "").trim();
-    const newFeeStr = String(req.body.newFee || "");
     const newRecipient = req.body.newRecipient
       ? String(req.body.newRecipient).trim()
       : undefined;
-    const newAmountStr = req.body.newAmount !== undefined
-      ? String(req.body.newAmount)
-      : undefined;
 
-    if (!originalTxId || !newFeeStr) {
+    if (!originalTxId || req.body.newFee === undefined || req.body.newFee === "") {
       res.status(400).json({
         error: "Bad Request: originalTxId and newFee are required",
       });
       return;
     }
 
-    const newFee = Number(newFeeStr);
-    if (!Number.isFinite(newFee) || newFee <= 0) {
-      res.status(400).json({ error: "Bad Request: newFee must be a positive number (STX)" });
-      return;
-    }
+    const newFee = parseOptionalFee(req.body.newFee)!;
 
-    let newAmount: number | undefined;
-    if (newAmountStr !== undefined) {
-      newAmount = Number(newAmountStr);
-      if (!Number.isFinite(newAmount) || newAmount <= 0) {
-        res.status(400).json({ error: "Bad Request: newAmount must be a positive number (STX)" });
-        return;
-      }
-    }
+    const newAmount = parseOptionalFee(req.body.newAmount);
+    const nonceOverride = parseOptionalNonce(req.body.nonceOverride);
 
-    let nonceOverride: bigint | undefined;
-    if (req.body.nonceOverride !== undefined && req.body.nonceOverride !== "") {
-      const nonceOverrideNum = Number(req.body.nonceOverride);
-      if (!Number.isInteger(nonceOverrideNum) || nonceOverrideNum < 0) {
-        res.status(400).json({ error: "Bad Request: nonceOverride must be a non-negative integer" });
-        return;
-      }
-      nonceOverride = BigInt(nonceOverrideNum);
+    if (nonceOverride !== undefined) {
       if (!newRecipient || newAmount === undefined) {
         res.status(400).json({
           error: "Bad Request: newRecipient and newAmount are required when nonceOverride is provided",
