@@ -36,7 +36,7 @@ import {
   TransactionDetails,
   TransactionType,
 } from "./services/types";
-import { pagination_defaults, POX4_ERRORS} from "./utils/constants";
+import { pagination_defaults, POX4_ERRORS, RBF_MIN_FEE_MULTIPLIER } from "./utils/constants";
 import { formatErrorMessage } from "./utils/errorHandling";
 import { validateApiCredentials } from "./utils/fireblocks.utils";
 import {
@@ -55,6 +55,7 @@ import {
 } from "./utils/helpers";
 import {
   createMessageSignature,
+  hexToCV,
   StacksTransactionWire,
   uintCV,
   principalCV,
@@ -186,11 +187,13 @@ export class StacksSDK {
   };
 
   /**
-   * Retrieves the next expected nonce for this vault's Stacks address.
+   * Returns nonce information for this vault's Stacks address, accounting for
+   * pending mempool transactions.
    *
-   * Returns the confirmed on-chain nonce — pending mempool transactions are not
-   * reflected. If you have unconfirmed transactions in flight, the actual next
-   * safe nonce is this value plus the number of pending transactions.
+   * - confirmedNonce: next nonce per confirmed on-chain state.
+   * - pendingTxCount: number of this address's transactions in the mempool.
+   * - nextAvailable: first nonce not already taken by a pending tx (gap-aware).
+   *   Use this value when submitting a new transaction.
    *
    * @returns A promise that resolves to a {GetAccountNonceResponse}.
    */
@@ -199,8 +202,8 @@ export class StacksSDK {
       throw new Error("Stacks address is not set.");
     }
     try {
-      const nonce = await this.chainService.getAccountNonce(this.address);
-      return { success: true, nonce };
+      const result = await this.chainService.getAccountNonce(this.address);
+      return { success: true, ...result };
     } catch (error) {
       return { success: false, error: formatErrorMessage(error) };
     }
@@ -603,6 +606,18 @@ export class StacksSDK {
   };
 
   /**
+   * Resolves the nonce to use for a transaction. If an explicit nonce is
+   * provided it is returned as-is. Otherwise the gap-aware nextAvailable
+   * value from getAccountNonce() is used, keeping our auto-nonce consistent
+   * with what GET /:vaultId/nonce reports.
+   */
+  private resolveNonce = async (nonce?: bigint): Promise<bigint> => {
+    if (nonce !== undefined) return nonce;
+    const { nextAvailable } = await this.chainService.getAccountNonce(this.address!);
+    return BigInt(nextAvailable);
+  };
+
+  /**
    *  Builds, signs, and sends an STX or fungible token transfer transaction.
    * @param recipientAddress - The address of the recipient.
    * @param microAmount - The amount to transfer in micro units.
@@ -624,6 +639,7 @@ export class StacksSDK {
     feeUstx?: bigint,
   ): Promise<any> => {
     try {
+      const resolvedNonce = await this.resolveNonce(nonce);
       const transactionToSign = await this.chainService.serializeTransaction(
         this.address,
         this.publicKey,
@@ -634,7 +650,7 @@ export class StacksSDK {
         customTokenContractAddress,
         customTokenContractName,
         customTokenAssetName,
-        nonce,
+        resolvedNonce,
         feeUstx,
       );
 
@@ -738,6 +754,8 @@ export class StacksSDK {
         );
       }
 
+      const resolvedNonce = await this.resolveNonce(nonce);
+
       let transactionToSign: {
         unsignedContractCall: StacksTransactionWire;
         preSignSigHash: string;
@@ -749,7 +767,7 @@ export class StacksSDK {
             this.publicKey,
             poolAddress,
             poolContractName!,
-            nonce,
+            resolvedNonce,
           );
           break;
         case "delegate-stx":
@@ -758,13 +776,13 @@ export class StacksSDK {
             poolAddress,
             amount!,
             lockPeriod!,
-            nonce,
+            resolvedNonce,
           );
           break;
         case "revoke-delegate-stx":
           transactionToSign = await this.chainService.revokeStxDelegation(
             this.publicKey,
-            nonce,
+            resolvedNonce,
           );
           break;
         case "solo-stack":
@@ -778,7 +796,7 @@ export class StacksSDK {
             signerSig65Hex,
             startBurnHeight,
             authId,
-            nonce,
+            resolvedNonce,
           );
           break;
         case "increase-stack-amount":
@@ -789,7 +807,7 @@ export class StacksSDK {
             maxAmount!,
             signerSig65Hex!,
             authId!,
-            nonce,
+            resolvedNonce,
           );
           break;
         case "extend-stack-period":
@@ -801,7 +819,7 @@ export class StacksSDK {
             maxAmount!,
             signerSig65Hex!,
             authId!,
-            nonce,
+            resolvedNonce,
           );
           break;
         default:
@@ -1615,15 +1633,14 @@ export class StacksSDK {
 
   /**
    * Replaces a pending STX transaction with a new one using the same nonce but a higher fee.
-   * This is useful when a transaction is stuck in the mempool due to a low fee.
-   * Only native STX token_transfer transactions are supported.
+   * Supports both native STX token_transfer and contract_call transactions.
    * @param originalTxId - The transaction ID of the transaction to replace.
-   * @param newFee - The new fee in STX. Must be higher than the original fee.
-   * @param newRecipient - Optional new recipient address. Defaults to the original recipient.
-   * @param newAmount - Optional new amount in STX. Defaults to the original amount.
-   * @param nonceOverride - Provide the nonce directly to skip the transaction lookup.
-   *   Required when the original tx is not visible to the Hiro indexer (e.g. future-nonce
-   *   transactions). When set, newRecipient and newAmount must also be provided.
+   * @param newFee - The new fee in STX. Must be at least RBF_MIN_FEE_MULTIPLIER × the original.
+   * @param newRecipient - For token_transfer only: optional new recipient. Defaults to original.
+   * @param newAmount - For token_transfer only: optional new amount in STX. Defaults to original.
+   * @param nonceOverride - Bypasses the Hiro indexer lookup. Use when the original tx is a
+   *   future-nonce tx not visible in the explorer. When set, newRecipient and newAmount are
+   *   required (only STX transfers supported on this path).
    * @returns A promise that resolves to a {CreateTransactionResponse}.
    */
   public replaceTransaction = async (
@@ -1638,12 +1655,11 @@ export class StacksSDK {
     }
 
     try {
-      let nonce: bigint;
-      let recipient: string;
-      let amountUstx: bigint;
+      const feeBigInt = stxToMicro(newFee);
 
       if (nonceOverride !== undefined) {
         // ── Override path: nonce is known, tx may not be visible to the indexer ──
+        // Only STX transfers are supported here — no original tx to reconstruct args from.
         if (!newRecipient || newAmount === undefined) {
           return {
             success: false,
@@ -1653,80 +1669,118 @@ export class StacksSDK {
         if (!validateAddress(newRecipient, this.testnet)) {
           return { success: false, error: "Invalid recipient address" };
         }
-        nonce = BigInt(nonceOverride);
-        recipient = newRecipient;
-        amountUstx = stxToMicro(newAmount);
-      } else {
-        // ── Lookup path: resolve nonce, recipient and amount from the original tx ──
-        const originalTxResponse = await this.getTxStatusById(originalTxId);
 
-        if (!originalTxResponse.success || !originalTxResponse.data) {
-          return { success: false, error: "Could not fetch original transaction details" };
+        const nonce = BigInt(nonceOverride);
+        const amountUstx = stxToMicro(newAmount);
+
+        const transactionToSign = await this.chainService.serializeTransaction(
+          this.address, this.publicKey, newRecipient, amountUstx,
+          TransactionType.STX, undefined, undefined, undefined, undefined,
+          nonce, feeBigInt,
+        );
+
+        const rawSignature = await this.fireblocksService.signTransaction(
+          transactionToSign.preSignSigHash, this.vaultAccountId.toString(),
+        );
+        const signature = concatSignature(rawSignature.fullSig, rawSignature.v);
+        (transactionToSign.unsignedTx as any).auth.spendingCondition.signature =
+          createMessageSignature(signature);
+
+        const result = await this.chainService.broadcastTransaction(transactionToSign.unsignedTx);
+        if (!result || result.error || !result.txid || result.reason) {
+          const msg = result?.error && result?.reason
+            ? `${result.error} - ${result.reason}`
+            : result?.error || result?.reason || "unknown error";
+          return { success: false, error: formatErrorMessage(msg) };
         }
+        console.log(`Replaced transaction ${originalTxId} with ${result.txid}`);
+        return { success: true, txHash: result.txid };
+      }
 
-        if (originalTxResponse.data.tx_status !== "pending") {
-          return {
-            success: false,
-            error: `Can only replace pending transactions. Current status: ${originalTxResponse.data.tx_status}`,
-          };
-        }
+      // ── Lookup path: reconstruct any pending tx type with higher fee ──────────
+      const originalTxResponse = await this.getTxStatusById(originalTxId);
 
-        const fullTx = originalTxResponse.data.full_tx_details;
+      if (!originalTxResponse.success || !originalTxResponse.data) {
+        return { success: false, error: "Could not fetch original transaction details" };
+      }
 
-        if (fullTx?.tx_type !== "token_transfer") {
-          return {
-            success: false,
-            error: `Only native STX token_transfer transactions can be replaced. Got: ${fullTx?.tx_type}`,
-          };
-        }
+      if (originalTxResponse.data.tx_status !== "pending") {
+        return {
+          success: false,
+          error: `Can only replace pending transactions. Current status: ${originalTxResponse.data.tx_status}`,
+        };
+      }
 
-        if (fullTx.sender_address !== this.address) {
-          return {
-            success: false,
-            error: "Transaction sender does not match this vault account address",
-          };
-        }
+      const fullTx = originalTxResponse.data.full_tx_details;
 
-        nonce = BigInt(fullTx.nonce);
-        recipient = newRecipient ?? fullTx.token_transfer.recipient_address;
-        amountUstx = newAmount !== undefined
+      if (fullTx?.tx_type !== "token_transfer" && fullTx?.tx_type !== "contract_call") {
+        return {
+          success: false,
+          error: `Cannot replace tx of type "${fullTx?.tx_type}". Only token_transfer and contract_call are supported.`,
+        };
+      }
+
+      if (fullTx.sender_address !== this.address) {
+        return {
+          success: false,
+          error: "Transaction sender does not match this vault account address",
+        };
+      }
+
+      // Fee check: new fee must be at least RBF_MIN_FEE_MULTIPLIER × original
+      const originalFeeUstx = BigInt(fullTx.fee_rate);
+      const minFeeUstx = (originalFeeUstx * BigInt(Math.round(RBF_MIN_FEE_MULTIPLIER * 100))) / BigInt(100);
+      if (feeBigInt < minFeeUstx) {
+        return {
+          success: false,
+          error: `New fee (${newFee} STX) must be at least ${RBF_MIN_FEE_MULTIPLIER}x the original fee (${microToStx(originalFeeUstx)} STX). Minimum required: ${microToStx(minFeeUstx)} STX`,
+        };
+      }
+
+      const nonce = BigInt(fullTx.nonce);
+      let unsignedTxWire: any;
+      let preSignSigHash: string;
+
+      if (fullTx.tx_type === "token_transfer") {
+        const recipient = newRecipient ?? fullTx.token_transfer.recipient_address;
+        const amountUstx = newAmount !== undefined
           ? stxToMicro(newAmount)
           : BigInt(fullTx.token_transfer.amount);
 
         if (!validateAddress(recipient, this.testnet)) {
           return { success: false, error: "Invalid recipient address" };
         }
+
+        const serialized = await this.chainService.serializeTransaction(
+          this.address, this.publicKey, recipient, amountUstx,
+          TransactionType.STX, undefined, undefined, undefined, undefined,
+          nonce, feeBigInt,
+        );
+        unsignedTxWire = serialized.unsignedTx;
+        preSignSigHash = serialized.preSignSigHash;
+      } else {
+        // contract_call — reconstruct with identical args, same nonce, higher fee
+        const [contractAddress, contractName] = fullTx.contract_call.contract_id.split(".");
+        const functionName = fullTx.contract_call.function_name;
+        const functionArgs = (fullTx.contract_call.function_args as any[]).map(
+          (arg: { hex: string }) => hexToCV(arg.hex),
+        );
+
+        const serialized = await this.chainService.serializeContractCall(
+          this.publicKey, contractAddress, contractName, functionName, functionArgs,
+          nonce, feeBigInt,
+        );
+        unsignedTxWire = serialized.unsignedContractCall;
+        preSignSigHash = serialized.preSignSigHash;
       }
 
-      const feeBigInt = stxToMicro(newFee);
-
-      // Build and serialize with the nonce + fee baked in before hash computation.
-      // Passing fee here is critical — serializeTransaction computes preSignSigHash from the
-      // fee on the spending condition, so the fee must be set before signing, not after.
-      const transactionToSign = await this.chainService.serializeTransaction(
-        this.address,
-        this.publicKey,
-        recipient,
-        amountUstx,
-        TransactionType.STX,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        nonce,
-        feeBigInt,
-      );
-
       const rawSignature = await this.fireblocksService.signTransaction(
-        transactionToSign.preSignSigHash,
-        this.vaultAccountId.toString(),
+        preSignSigHash, this.vaultAccountId.toString(),
       );
-
       const signature = concatSignature(rawSignature.fullSig, rawSignature.v);
-      (transactionToSign.unsignedTx as any).auth.spendingCondition.signature =
-        createMessageSignature(signature);
+      unsignedTxWire.auth.spendingCondition.signature = createMessageSignature(signature);
 
-      const result = await this.chainService.broadcastTransaction(transactionToSign.unsignedTx);
+      const result = await this.chainService.broadcastTransaction(unsignedTxWire);
 
       if (!result || result.error || !result.txid || result.reason) {
         const errorAndReason =

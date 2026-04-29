@@ -346,35 +346,42 @@ const revokeResponse = await sdk.revokeDelegation();
 ### **Nonce Management**
 
 ```typescript
-// Query the confirmed on-chain nonce for this vault's address.
-// Pending mempool transactions are NOT reflected — if you have unconfirmed
-// transactions in flight, the next safe nonce is this value plus the number
-// of pending transactions.
+// Returns confirmed nonce, pending tx count, and the next safe nonce to use.
+// nextAvailable is gap-aware: if pending nonces are [5, 6, 9], it returns 7
+// (the first gap) rather than 10, so your tx confirms as soon as possible.
 const nonceResponse = await sdk.getAccountNonce();
 if (nonceResponse.success) {
-  console.log("Confirmed nonce:", nonceResponse.nonce);
+  console.log("Confirmed nonce:", nonceResponse.confirmedNonce);
+  console.log("Pending txs:    ", nonceResponse.pendingTxCount);
+  console.log("Use this nonce: ", nonceResponse.nextAvailable);
 }
 ```
 
-All transaction methods (`createNativeTransaction`, `createFTTransaction`, `delegateToPool`, `allowContractCaller`, `revokeDelegation`, `stackSolo`, `increaseStackedAmount`, `extendStackingPeriod`) accept an optional `nonce?: number` parameter as their last argument. When omitted, the nonce is estimated automatically.
+All transaction methods (`createNativeTransaction`, `createFTTransaction`, `delegateToPool`, `allowContractCaller`, `revokeDelegation`, `stackSolo`, `increaseStackedAmount`, `extendStackingPeriod`) accept an optional `nonce?: number` parameter as their last argument. When omitted, the SDK automatically uses `nextAvailable` from `getAccountNonce()` — the same gap-aware value the nonce endpoint returns — so auto-nonce and manual nonce are always consistent.
 
 ### **Replace a Stuck Transaction**
 
-If a transaction is stuck in the mempool due to a low fee, you can replace it by submitting a new transaction with the same nonce and a higher fee.
+If a transaction is stuck in the mempool due to a low fee, you can replace it by submitting a new transaction with the same nonce and a higher fee. Both native STX transfers and contract calls (PoX operations, etc.) are supported.
 
 ```typescript
-// Replace a pending transaction visible to the Hiro indexer
+// Replace any pending transaction visible to the Hiro indexer.
+// The original tx is looked up automatically — same nonce, same args, higher fee.
 const replacement = await sdk.replaceTransaction(
   "0xabc123...", // original tx ID
-  0.01,          // new fee in STX (must be higher than original)
-  // optionally override recipient/amount:
-  // "ST2CY5V39NHDPWSXMW9QDT3HC3GD6Q6XX4CFRK9AG",
-  // 10.5,
+  0.01,          // new fee in STX (must be ≥ RBF_MIN_FEE_MULTIPLIER × original fee)
 );
 
-// Replace a future-nonce transaction not visible to the Hiro indexer.
-// nonceOverride bypasses the indexer lookup — newRecipient and newAmount
-// are required in this case.
+// For token_transfer only: optionally change recipient or amount
+const replacement = await sdk.replaceTransaction(
+  "0xabc123...",
+  0.01,
+  "ST2CY5V39NHDPWSXMW9QDT3HC3GD6Q6XX4CFRK9AG", // newRecipient
+  10.5,  // newAmount in STX
+);
+
+// Replace a future-nonce STX transfer not visible to the Hiro indexer.
+// nonceOverride bypasses the indexer lookup. Only STX transfers are supported
+// on this path since contract call args cannot be inferred.
 const replacement = await sdk.replaceTransaction(
   "0xabc123...",
   0.01,
@@ -388,7 +395,7 @@ if (replacement.success) {
 }
 ```
 
-> **Note:** Only native STX `token_transfer` transactions can be replaced. The new fee must be higher than the original or the node will reject the replacement.
+> The minimum fee bump is controlled by `RBF_MIN_FEE_MULTIPLIER` in `constants.ts` (default `1.25`). The fee check only applies on the lookup path where the original fee is known.
 
 ### **Transaction Status Monitoring**
 
@@ -435,7 +442,7 @@ history.forEach((tx) => {
 | GET    | `/api/:vaultId/address`             | Fetch the Stacks address associated with the given vault                   |
 | GET    | `/api/:vaultId/publicKey`           | Retrieve the public key for the vault account                              |
 | GET    | `/api/:vaultId/btc-rewards-address` | Get the BTC rewards address associated with the given vault (for stacking) |
-| GET    | `/api/:vaultId/nonce`               | Get the confirmed on-chain nonce for this vault's Stacks address           |
+| GET    | `/api/:vaultId/nonce`               | Get confirmed nonce, pending tx count, and next available nonce (gap-aware) |
 
 ### **Balance Endpoints**
 
@@ -590,6 +597,12 @@ curl -X 'POST' \
 
 ```bash
 curl http://localhost:3000/api/123/nonce
+# → {
+#     "success": true,
+#     "confirmedNonce": 5,
+#     "pendingTxCount": 2,
+#     "nextAvailable": 7
+#   }
 ```
 
 ### **Transfer STX with Nonce Override**

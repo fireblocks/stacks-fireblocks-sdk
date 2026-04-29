@@ -126,7 +126,9 @@ export type PoolInfo = {
 
 export type GetAccountNonceResponse = {
   success: boolean;
-  nonce?: number;
+  confirmedNonce?: number;
+  pendingTxCount?: number;
+  nextAvailable?: number;
   error?: string;
 };
 

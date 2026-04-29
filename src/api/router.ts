@@ -172,14 +172,15 @@ router.get(
  * @openapi
  * /{vaultId}/nonce:
  *   get:
- *     summary: Get current account nonce
+ *     summary: Get account nonce
  *     description: >
- *       Returns the next expected nonce for this vault's Stacks address,
- *       derived from the confirmed on-chain state.
+ *       Returns nonce information for this vault's Stacks address, accounting
+ *       for pending mempool transactions.
  *
- *       **Note**: pending mempool transactions are not reflected. If you have
- *       unconfirmed transactions in flight, the next safe nonce is this value
- *       plus the number of pending transactions.
+ *       - **confirmedNonce**: next nonce per confirmed on-chain state.
+ *       - **pendingTxCount**: number of this address's transactions currently in the mempool.
+ *       - **nextAvailable**: first nonce not already taken by a pending tx (gap-aware).
+ *         Use this when submitting a new transaction.
  *     parameters:
  *       - $ref: '#/components/parameters/vaultId'
  *     responses:
@@ -192,10 +193,18 @@ router.get(
  *               properties:
  *                 success:
  *                   type: boolean
- *                 nonce:
+ *                 confirmedNonce:
  *                   type: integer
- *                   description: Next nonce to use for a new transaction.
+ *                   description: Next nonce per confirmed on-chain state.
  *                   example: 5
+ *                 pendingTxCount:
+ *                   type: integer
+ *                   description: Number of pending mempool transactions from this address.
+ *                   example: 2
+ *                 nextAvailable:
+ *                   type: integer
+ *                   description: First gap-free nonce to use for a new transaction.
+ *                   example: 7
  *       400:
  *         description: vaultId missing
  *       500:
@@ -674,16 +683,20 @@ router.post("/:vaultId/stacking/solo/extend", validateVaultId, controller.extend
  * @openapi
  * /{vaultId}/replace-transaction:
  *   post:
- *     summary: Replace a stuck pending STX transaction (bump fee)
+ *     summary: Replace a stuck pending transaction (bump fee)
  *     description: >
- *       Replaces a pending native STX token_transfer transaction that is stuck in the mempool
- *       by submitting a new transaction with the **same nonce** but a higher fee.
- *       The Stacks node will evict the original transaction in favour of this one.
+ *       Replaces a pending transaction that is stuck in the mempool by submitting a new one
+ *       with the **same nonce** but a higher fee. The Stacks node will evict the original.
+ *
+ *       Supported transaction types: `token_transfer` and `contract_call`.
+ *       The original transaction is looked up automatically — args are reconstructed from
+ *       the Hiro indexer response, so only the fee (and optionally recipient/amount for
+ *       token_transfer) need to be provided.
  *
  *       **Limitations**:
- *         - Only native STX token_transfer transactions are supported (not FT or contract calls).
- *         - The new fee must be higher than the original fee or the node may reject the replacement.
- *         - The original transaction must still be in "pending" status.
+ *         - The new fee must be at least `RBF_MIN_FEE_MULTIPLIER` × the original fee (default 1.25×).
+ *         - The original transaction must be in "pending" status (visible to the Hiro indexer).
+ *         - `nonceOverride` path only supports STX token_transfer (contract args cannot be inferred).
  *     parameters:
  *       - $ref: '#/components/parameters/vaultId'
  *     requestBody:

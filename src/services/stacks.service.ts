@@ -20,6 +20,7 @@ import {
   cvToValue,
   fetchCallReadOnlyFunction,
   fetchFeeEstimateTransaction,
+  hexToCV,
   makeUnsignedContractCall,
   makeUnsignedSTXTokenTransfer,
   noneCV,
@@ -113,23 +114,45 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
   };
 
   /**
-   * Fetches the next expected nonce for a given Stacks address.
-   * Returns the confirmed on-chain nonce only — pending mempool transactions
-   * are not reflected. Use this as the starting point for nonce sequencing.
+   * Returns nonce information for the given address, accounting for pending mempool transactions.
+   *
+   * - confirmedNonce: the next nonce per on-chain confirmed state.
+   * - pendingTxCount: number of this address's transactions currently in the mempool.
+   * - nextAvailable: the first nonce not already taken by a pending tx (gap-aware).
+   *   Use this when submitting a new transaction that should confirm as soon as possible.
+   *
+   * Note: if a pending tx is evicted from the mempool (e.g. fee too low), its nonce is freed
+   * but nextAvailable will remain elevated until the confirmed nonce catches up.
+   *
    * @param address - The Stacks address to query.
-   * @returns - The next nonce to use for a new transaction.
    */
-  public getAccountNonce = async (address: string): Promise<number> => {
+  public getAccountNonce = async (address: string): Promise<{
+    confirmedNonce: number;
+    pendingTxCount: number;
+    nextAvailable: number;
+  }> => {
     try {
-      const response = await this.axiosClient.get(
-        `${this.stackBaseUrl}/v2/accounts/${address}?proof=0`,
-      );
+      const [nonceResponse, mempoolResponse] = await Promise.all([
+        this.axiosClient.get(`${this.stackBaseUrl}/v2/accounts/${address}?proof=0`),
+        this.axiosClient.get(
+          `${this.stackBaseUrl}/extended/v1/tx/mempool?sender_address=${address}&limit=50`,
+        ),
+      ]);
 
-      if (!response || !response.data || response.status !== 200) {
-        throw new Error(`HTTP ${response.status}`);
+      if (!nonceResponse?.data || nonceResponse.status !== 200) {
+        throw new Error(`HTTP ${nonceResponse.status}`);
       }
 
-      return response.data.nonce as number;
+      const confirmedNonce = nonceResponse.data.nonce as number;
+      const pending: any[] = mempoolResponse.data?.results ?? [];
+      const pendingNonces = new Set(pending.map((tx: any) => tx.nonce as number));
+
+      let nextAvailable = confirmedNonce;
+      while (pendingNonces.has(nextAvailable)) {
+        nextAvailable++;
+      }
+
+      return { confirmedNonce, pendingTxCount: pending.length, nextAvailable };
     } catch (error) {
       console.error(`Error fetching account nonce: ${formatErrorMessage(error)}`);
       throw new Error(
@@ -617,6 +640,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
     functionName: string,
     functionArgs: ClarityValue[],
     nonce?: bigint,
+    fee?: bigint,
   ): Promise<{
     unsignedContractCall: StacksTransactionWire;
     preSignSigHash: string;
@@ -630,6 +654,11 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
         functionArgs,
         nonce,
       );
+
+      if (fee !== undefined) {
+        (unsignedContractCall as any).auth.spendingCondition.fee = fee;
+      }
+
       const sigHash = unsignedContractCall.signBegin();
 
       const preSignSigHash = sigHashPreSign(
