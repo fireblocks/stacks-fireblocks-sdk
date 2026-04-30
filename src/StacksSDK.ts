@@ -1581,6 +1581,17 @@ export class StacksSDK {
         const nonce = nonceOverride;
         const amountUstx = stxToMicro(newAmount);
 
+        const balance = await this.getBalance();
+        if (balance.success) {
+          const totalRequired = microToStx(amountUstx + feeBigInt);
+          if (balance.balance !== undefined && totalRequired > balance.balance) {
+            return {
+              success: false,
+              error: `Insufficient balance. Required: ${totalRequired} STX, Available: ${balance.balance} STX`,
+            };
+          }
+        }
+
         const transactionToSign = await this.chainService.serializeTransaction(
           this.address, this.publicKey, newRecipient, amountUstx,
           TransactionType.STX, undefined, undefined, undefined, undefined,
@@ -1659,6 +1670,17 @@ export class StacksSDK {
           return { success: false, error: "Invalid recipient address" };
         }
 
+        const balanceCheck = await this.getBalance();
+        if (balanceCheck.success) {
+          const totalRequired = microToStx(amountUstx + feeBigInt);
+          if (balanceCheck.balance !== undefined && totalRequired > balanceCheck.balance) {
+            return {
+              success: false,
+              error: `Insufficient balance. Required: ${totalRequired} STX, Available: ${balanceCheck.balance} STX`,
+            };
+          }
+        }
+
         const serialized = await this.chainService.serializeTransaction(
           this.address, this.publicKey, recipient, amountUstx,
           TransactionType.STX, undefined, undefined, undefined, undefined,
@@ -1673,6 +1695,17 @@ export class StacksSDK {
         const functionArgs = (fullTx.contract_call.function_args as any[]).map(
           (arg: { hex: string }) => hexToCV(arg.hex),
         );
+
+        const balanceCheck = await this.getBalance();
+        if (balanceCheck.success) {
+          const feeStx = microToStx(feeBigInt);
+          if (balanceCheck.balance !== undefined && feeStx > balanceCheck.balance) {
+            return {
+              success: false,
+              error: `Insufficient balance for fee. Required: ${feeStx} STX, Available: ${balanceCheck.balance} STX`,
+            };
+          }
+        }
 
         const serialized = await this.chainService.serializeContractCall(
           this.publicKey, contractAddress, contractName, functionName, functionArgs,
