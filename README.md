@@ -34,6 +34,8 @@ It's designed to simplify integration with Fireblocks for secure Stacks transact
 - **Fireblocks raw signing support**
 - **Native STX transfers**: Send STX with optional gross transactions (fee deduction from recipient)
 - **Fungible token transfers**: Support for SIP-010 token transfers (sBTC, USDC, etc.)
+- **Nonce management**: Optional nonce override on every transaction method; query confirmed on-chain nonce via `getAccountNonce()`
+- **Replace-by-fee**: Replace a stuck pending STX transaction with a higher-fee one using the same nonce
 - **Stacking functionality**:
   - Solo stacking 
   - Pool delegation and stacking
@@ -227,6 +229,16 @@ const grossTransfer = await sdk.createNativeTransaction(
   10.5,
   true, // fee will be deducted from the 10.5 STX
 );
+
+// With explicit nonce and fee override
+const transfer = await sdk.createNativeTransaction(
+  "ST2CY5V39NHDPWSXMW9QDT3HC3GD6Q6XX4CFRK9AG",
+  10.5,
+  false,
+  undefined, // note
+  7,    // nonce override (integer)
+  0.01, // fee in STX (overrides auto-estimation)
+);
 ```
 
 ### **Transfer Fungible Tokens**
@@ -331,6 +343,60 @@ const allowCallerResponse = await sdk.allowContractCaller(
 const revokeResponse = await sdk.revokeDelegation();
 ```
 
+### **Nonce Management**
+
+```typescript
+// Returns confirmed nonce, pending tx count, and the next safe nonce to use.
+// nextAvailable is gap-aware: if pending nonces are [5, 6, 9], it returns 7
+// (the first gap) rather than 10, so your tx confirms as soon as possible.
+const nonceResponse = await sdk.getAccountNonce();
+if (nonceResponse.success) {
+  console.log("Confirmed nonce:", nonceResponse.confirmedNonce);
+  console.log("Pending txs:    ", nonceResponse.pendingTxCount);
+  console.log("Use this nonce: ", nonceResponse.nextAvailable);
+}
+```
+
+All transaction methods (`createNativeTransaction`, `createFTTransaction`, `delegateToPool`, `allowContractCaller`, `revokeDelegation`, `stackSolo`, `increaseStackedAmount`, `extendStackingPeriod`) accept an optional `nonce?: number` parameter as their last argument. When omitted, the SDK automatically uses `nextAvailable` from `getAccountNonce()` — the same gap-aware value the nonce endpoint returns — so auto-nonce and manual nonce are always consistent.
+
+### **Replace a Stuck Transaction**
+
+If a transaction is stuck in the mempool due to a low fee, you can replace it by submitting a new transaction with the same nonce and a higher fee. Both native STX transfers and contract calls (PoX operations, etc.) are supported.
+
+```typescript
+// Replace any pending transaction visible to the Hiro indexer.
+// The original tx is looked up automatically — same nonce, same args, higher fee.
+const replacement = await sdk.replaceTransaction(
+  "0xabc123...", // original tx ID
+  0.01,          // new fee in STX (must be ≥ RBF_MIN_FEE_MULTIPLIER × original fee)
+);
+
+// For token_transfer only: optionally change recipient or amount
+const replacement = await sdk.replaceTransaction(
+  "0xabc123...",
+  0.01,
+  "ST2CY5V39NHDPWSXMW9QDT3HC3GD6Q6XX4CFRK9AG", // newRecipient
+  10.5,  // newAmount in STX
+);
+
+// Replace a future-nonce STX transfer not visible to the Hiro indexer.
+// nonceOverride bypasses the indexer lookup. Only STX transfers are supported
+// on this path since contract call args cannot be inferred.
+const replacement = await sdk.replaceTransaction(
+  "0xabc123...",
+  0.01,
+  "ST2CY5V39NHDPWSXMW9QDT3HC3GD6Q6XX4CFRK9AG", // newRecipient (required)
+  10.5,  // newAmount in STX (required)
+  7,     // nonceOverride
+);
+
+if (replacement.success) {
+  console.log("Replacement tx hash:", replacement.txHash);
+}
+```
+
+> The minimum fee bump is controlled by `RBF_MIN_FEE_MULTIPLIER` in `constants.ts` (default `1.25`). The fee check only applies on the lookup path where the original fee is known.
+
 ### **Transaction Status Monitoring**
 
 ```typescript
@@ -376,6 +442,7 @@ history.forEach((tx) => {
 | GET    | `/api/:vaultId/address`             | Fetch the Stacks address associated with the given vault                   |
 | GET    | `/api/:vaultId/publicKey`           | Retrieve the public key for the vault account                              |
 | GET    | `/api/:vaultId/btc-rewards-address` | Get the BTC rewards address associated with the given vault (for stacking) |
+| GET    | `/api/:vaultId/nonce`               | Get confirmed nonce, pending tx count, and next available nonce (gap-aware) |
 
 ### **Balance Endpoints**
 
@@ -386,22 +453,37 @@ history.forEach((tx) => {
 
 ### **Transaction Endpoints**
 
-| Method | Route                              | Description                                             |
-| ------ | ---------------------------------- | ------------------------------------------------------- |
-| GET    | `/api/:vaultId/transactions`       | List recent transactions for this vault                 |
-| GET    | `/api/transactions/:txId`          | Get detailed transaction status with error code mapping |
-| POST   | `/api/:vaultId/transfer`           | Transfer STX or Fungible Tokens to another address      |
+| Method | Route                                   | Description                                                                  |
+| ------ | --------------------------------------- | ---------------------------------------------------------------------------- |
+| GET    | `/api/:vaultId/transactions`            | List recent transactions for this vault                                      |
+| GET    | `/api/transactions/:txId`               | Get detailed transaction status with error code mapping                      |
+| POST   | `/api/:vaultId/transfer`                | Transfer STX or Fungible Tokens to another address                           |
+| POST   | `/api/:vaultId/replace-transaction`     | Replace a stuck pending STX transaction with a higher-fee one (same nonce)   |
+
+`/transfer` accepts optional `nonce` (integer) and `fee` (STX, for STX transfers only) body fields to override the auto-estimated values.
+
+`/replace-transaction` body fields:
+
+| Field           | Type    | Required | Description                                                                  |
+| --------------- | ------- | -------- | ---------------------------------------------------------------------------- |
+| `originalTxId`  | string  | Yes      | Transaction ID of the pending transaction to replace                         |
+| `newFee`        | number  | Yes      | New fee in STX — must be higher than the original                            |
+| `newRecipient`  | string  | No       | New recipient address. Defaults to the original recipient                    |
+| `newAmount`     | number  | No       | New transfer amount in STX. Defaults to the original amount                  |
+| `nonceOverride` | integer | No       | Nonce to use directly, bypassing the Hiro indexer lookup. Required when the original tx is a future-nonce tx not visible in the explorer. When set, `newRecipient` and `newAmount` are also required. |
 
 ### **Stacking Endpoints**
 
-| Method | Route                                               | Description                                       |
-| ------ | --------------------------------------------------- | ------------------------------------------------- |
-| GET    | `/api/:vaultId/check-status`                        | Check account stacking status and delegation info |
-| GET    | `/api/poxInfo`                                      | Fetch current PoX info from blockchain            |
-| POST   | `/api/:vaultId/stacking/solo`                       | Solo stack STX with automatic signer signature    |
-| POST   | `/api/:vaultId/stacking/pool/delegate`              | Delegate amonunt of STX to a stacking pool        |
-| POST   | `/api/:vaultId/stacking/pool/allow-contract-caller` | Allow a pool contract to lock your STX            |
-| POST   | `/api/:vaultId/revoke-delegation`                   | Revoke any active STX delegation                  |
+| Method | Route                                               | Description                                          |
+| ------ | --------------------------------------------------- | ---------------------------------------------------- |
+| GET    | `/api/:vaultId/check-status`                        | Check account stacking status and delegation info    |
+| GET    | `/api/poxInfo`                                      | Fetch current PoX info from blockchain               |
+| POST   | `/api/:vaultId/stacking/solo`                       | Solo stack STX                                       |
+| POST   | `/api/:vaultId/stacking/solo/increase`              | Increase the STX amount of an existing solo position |
+| POST   | `/api/:vaultId/stacking/solo/extend`                | Extend the lock period of an existing solo position  |
+| POST   | `/api/:vaultId/stacking/pool/delegate`              | Delegate amount of STX to a stacking pool            |
+| POST   | `/api/:vaultId/stacking/pool/allow-contract-caller` | Allow a pool contract to lock your STX               |
+| POST   | `/api/:vaultId/revoke-delegation`                   | Revoke any active STX delegation                     |
 
 ### **Utility Endpoints**
 
@@ -510,6 +592,57 @@ curl -X 'POST' \
 ```
 
 > **Note:** `tokenAssetName` is the name from the contract's `define-fungible-token` declaration, which may differ from `tokenContractName`.
+
+### **Get Account Nonce**
+
+```bash
+curl http://localhost:3000/api/123/nonce
+# → {
+#     "success": true,
+#     "confirmedNonce": 5,
+#     "pendingTxCount": 2,
+#     "nextAvailable": 7
+#   }
+```
+
+### **Transfer STX with Nonce Override**
+
+```bash
+curl -X POST http://localhost:3000/api/123/transfer \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "recipientAddress": "ST2CY5V39NHDPWSXMW9QDT3HC3GD6Q6XX4CFRK9AG",
+    "amount": 10.5,
+    "assetType": "STX",
+    "nonce": 7,
+    "fee": 0.01
+  }'
+```
+
+### **Replace a Stuck Transaction**
+
+```bash
+curl -X POST http://localhost:3000/api/123/replace-transaction \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "originalTxId": "0xabc123...",
+    "newFee": 0.01
+  }'
+```
+
+For a future-nonce transaction not visible in the explorer, provide `nonceOverride` with the exact nonce, plus `newRecipient` and `newAmount`:
+
+```bash
+curl -X POST http://localhost:3000/api/123/replace-transaction \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "originalTxId": "0xabc123...",
+    "newFee": 0.01,
+    "newRecipient": "ST2CY5V39NHDPWSXMW9QDT3HC3GD6Q6XX4CFRK9AG",
+    "newAmount": 10.5,
+    "nonceOverride": 7
+  }'
+```
 
 ### **Solo Stack STX**
 ```bash

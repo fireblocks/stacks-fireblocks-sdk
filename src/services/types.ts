@@ -124,8 +124,17 @@ export type PoolInfo = {
   poolContractName: string;
 };
 
+export type GetAccountNonceResponse = {
+  success: boolean;
+  confirmedNonce?: bigint;
+  pendingTxCount?: number;
+  nextAvailable?: bigint;
+  error?: string;
+};
+
 export type SDKResponse =
   | GetNativeBalanceResponse
   | string
   | CreateTransactionResponse
-  | GetTransactionHistoryResponse;
+  | GetTransactionHistoryResponse
+  | GetAccountNonceResponse;

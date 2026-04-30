@@ -4,6 +4,7 @@ import { ActionType } from "../pool/types";
 import { StackingPools, TokenType } from "../services/types";
 import { validateAmount } from "../utils/helpers";
 import { helperConstants, poolInfo } from "../utils/constants";
+import { parseOptionalFee, parseOptionalNonce } from "../utils/validation";
 
 const apiService = apiServiceSingleton;
 
@@ -75,6 +76,25 @@ export const getPublicKey: Handler = async (req, res, next) => {
       {},
     );
     res.json({ publicKey: pubKey });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// GET /:vaultId/nonce
+export const getAccountNonce: Handler = async (req, res, next) => {
+  try {
+    const vaultId = getVaultId(req);
+    const result = await apiService.executeAction(
+      vaultId,
+      ActionType.GET_ACCOUNT_NONCE,
+      {},
+    ) as any;
+    res.json({
+      ...result,
+      ...(result.confirmedNonce !== undefined && { confirmedNonce: result.confirmedNonce.toString() }),
+      ...(result.nextAvailable !== undefined && { nextAvailable: result.nextAvailable.toString() }),
+    });
   } catch (err) {
     next(err);
   }
@@ -170,6 +190,9 @@ export const createTransaction: Handler = async (req, res, next) => {
       ? String(req.body.tokenAssetName).trim()
       : undefined;
 
+    const nonce = parseOptionalNonce(req.body.nonce);
+    const fee = parseOptionalFee(req.body.fee);
+
     if (!recipientAddress || !amountStr || !assetUi) {
       res.status(400).json({
         error:
@@ -215,7 +238,7 @@ export const createTransaction: Handler = async (req, res, next) => {
       const tx = await apiService.executeAction(
         vaultId,
         ActionType.CREATE_NATIVE_TRANSACTION,
-        { recipientAddress, amount, grossTransaction, note },
+        { recipientAddress, amount, grossTransaction, note, nonce, fee },
       );
       res.json(tx);
       return;
@@ -233,6 +256,7 @@ export const createTransaction: Handler = async (req, res, next) => {
         tokenContractName,
         tokenAssetName,
         note,
+        nonce,
       },
     );
     res.json(tx);
@@ -271,6 +295,8 @@ export const delegateToPool: Handler = async (req, res, next) => {
       return;
     }
 
+    const nonce = parseOptionalNonce(req.body.nonce);
+
     // Map UI label -> Pool Type (enum value)
     const poolSelectionMap: Record<string, StackingPools> = {
       FAST_POOL: StackingPools.FAST_POOL,
@@ -285,11 +311,10 @@ export const delegateToPool: Handler = async (req, res, next) => {
     const poolAddress = poolInfo[poolType].poolAddress;
     const poolContractName = poolInfo[poolType].poolContractName;
 
-    // FT transfer
     const tx = await apiService.executeAction(
       vaultId,
       ActionType.DELEGATE_TO_POOL,
-      { poolAddress, poolContractName, amount, lockPeriod },
+      { poolAddress, poolContractName, amount, lockPeriod, nonce },
     );
     res.json(tx);
   } catch (err) {
@@ -311,6 +336,8 @@ export const allowContractCaller: Handler = async (req, res, next) => {
       return;
     }
 
+    const nonce = parseOptionalNonce(req.body.nonce);
+
     // Map UI label -> Pool Type (enum value)
     const poolSelectionMap: Record<string, StackingPools> = {
       FAST_POOL: StackingPools.FAST_POOL,
@@ -325,11 +352,10 @@ export const allowContractCaller: Handler = async (req, res, next) => {
     const poolAddress = poolInfo[poolType].poolAddress;
     const poolContractName = poolInfo[poolType].poolContractName;
 
-    // FT transfer
     const tx = await apiService.executeAction(
       vaultId,
       ActionType.ALLOW_CONTRACT_CALLER,
-      { poolAddress, poolContractName },
+      { poolAddress, poolContractName, nonce },
     );
     res.json(tx);
   } catch (err) {
@@ -342,10 +368,12 @@ export const revokeDelegation: Handler = async (req, res, next) => {
   try {
     const vaultId = getVaultId(req);
 
+    const nonce = parseOptionalNonce(req.body?.nonce);
+
     const tx = await apiService.executeAction(
       vaultId,
       ActionType.REVOKE_DELEGATION,
-      {},
+      { nonce },
     );
     res.json(tx);
   } catch (err) {
@@ -422,6 +450,8 @@ export const stackSolo: Handler = async (req, res, next) => {
     }
     const maxAmount = Number(maxAmountStr);
 
+    const nonce = parseOptionalNonce(req.body.nonce);
+
     const tx = await apiService.executeAction(vaultId, ActionType.STACK_SOLO, {
       signerKey,
       signerSig65Hex,
@@ -429,6 +459,7 @@ export const stackSolo: Handler = async (req, res, next) => {
       maxAmount,
       lockPeriod,
       authId,
+      nonce,
     });
 
     res.json(tx);
@@ -477,12 +508,15 @@ export const increaseStackedAmount: Handler = async (req, res, next) => {
     }
     const maxAmount = BigInt(maxAmountStr);
 
+    const nonce = parseOptionalNonce(req.body.nonce);
+
     const tx = await apiService.executeAction(vaultId, ActionType.INCREASE_STACKED_AMOUNT, {
       signerKey,
       signerSig65Hex,
       increaseBy,
       maxAmount,
       authId,
+      nonce,
     });
 
     res.json(tx);
@@ -533,12 +567,15 @@ export const extendStackingPeriod: Handler = async (req, res, next) => {
     }
     const maxAmount = Number(maxAmountStr);
 
+    const nonce = parseOptionalNonce(req.body.nonce);
+
     const tx = await apiService.executeAction(vaultId, ActionType.EXTEND_STACKING_PERIOD, {
       signerKey,
       signerSig65Hex,
       extendCycles,
       maxAmount,
       authId,
+      nonce,
     });
 
     res.json(tx);
@@ -557,6 +594,48 @@ export const getPoxInfo: Handler = async (req, res, next) => {
   }
 };
 
+
+// POST /:vaultId/replace-transaction
+export const replaceTransaction: Handler = async (req, res, next) => {
+  try {
+    const vaultId = getVaultId(req);
+
+    const originalTxId = String(req.body.originalTxId || "").trim();
+    const newRecipient = req.body.newRecipient
+      ? String(req.body.newRecipient).trim()
+      : undefined;
+
+    if (!originalTxId || req.body.newFee === undefined || req.body.newFee === "") {
+      res.status(400).json({
+        error: "Bad Request: originalTxId and newFee are required",
+      });
+      return;
+    }
+
+    const newFee = parseOptionalFee(req.body.newFee)!;
+
+    const newAmount = parseOptionalFee(req.body.newAmount);
+    const nonceOverride = parseOptionalNonce(req.body.nonceOverride);
+
+    if (nonceOverride !== undefined) {
+      if (!newRecipient || newAmount === undefined) {
+        res.status(400).json({
+          error: "Bad Request: newRecipient and newAmount are required when nonceOverride is provided",
+        });
+        return;
+      }
+    }
+
+    const tx = await apiService.executeAction(
+      vaultId,
+      ActionType.REPLACE_TRANSACTION,
+      { originalTxId, newFee, newRecipient, newAmount, nonceOverride },
+    );
+    res.json(tx);
+  } catch (err) {
+    next(err);
+  }
+};
 
 // GET /metrics
 export const getPoolMetrics: Handler = async (req, res, next) => {
