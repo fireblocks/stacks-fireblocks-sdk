@@ -63,6 +63,10 @@ describeE2E("E2E: STX Transfer", () => {
 
     const startTime = Date.now();
 
+    // Initial delay to allow tx to be indexed
+    console.log(`Waiting for transaction ${txId} to be indexed...`);
+    await new Promise((resolve) => setTimeout(resolve, 10000));
+
     while (Date.now() - startTime < timeoutMs) {
       const status = await sdk.getTxStatusById(txId);
 
@@ -74,6 +78,11 @@ describeE2E("E2E: STX Transfer", () => {
       }
 
       if (!status.success) {
+        if (status.error?.includes("404")) {
+          console.log(`Transaction ${txId} not yet indexed, waiting...`);
+          await new Promise((resolve) => setTimeout(resolve, TX_POLL_INTERVAL));
+          continue;
+        }
         throw new Error(`Failed to get tx status: ${status.error}`);
       }
 
