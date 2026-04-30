@@ -1545,8 +1545,9 @@ export class StacksSDK {
    * @param newFee - The new fee in STX. Must be at least RBF_MIN_FEE_MULTIPLIER × the original.
    * @param newRecipient - For token_transfer only: optional new recipient. Defaults to original.
    * @param newAmount - For token_transfer only: optional new amount in STX. Defaults to original.
-   * @param nonceOverride - Optional nonce override (bigint). Bypasses the Hiro indexer lookup.
-   *   Use when the original tx is a future-nonce tx not visible in the explorer. When set,
+   * @param nonceOverride - Optional nonce override (bigint). Bypasses the Hiro indexer lookup
+   *   and skips ownership validation of the original transaction. Use only when you are certain
+   *   of the nonce value and the original tx is not visible in the explorer. When set,
    *   newRecipient and newAmount are required (only STX transfers supported on this path).
    * @returns A promise that resolves to a {CreateTransactionResponse}.
    */
