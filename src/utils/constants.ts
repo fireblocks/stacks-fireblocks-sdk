@@ -25,6 +25,9 @@ export const helperConstants = {
 // Applied only on the lookup path (when the original tx is visible to the indexer).
 export const RBF_MIN_FEE_MULTIPLIER = 1.25;
 
+// Maximum fee accepted by the SDK in STX. Guards against typos (e.g. 100 instead of 0.001).
+export const MAX_FEE_STX = 10;
+
 export const api_constants = {
   stacks_mainnet_rpc: "https://api.hiro.so",
   stacks_testnet_rpc: "https://api.testnet.hiro.so",

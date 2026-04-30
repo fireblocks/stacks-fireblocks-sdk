@@ -1,3 +1,5 @@
+import { MAX_FEE_STX } from "./constants";
+
 export class ValidationError extends Error {
   constructor(message: string) {
     super(message);
@@ -19,6 +21,9 @@ export function parseOptionalFee(value: unknown): number | undefined {
   const fee = Number(value);
   if (!Number.isFinite(fee) || fee <= 0) {
     throw new ValidationError("fee must be a positive number (STX)");
+  }
+  if (fee > MAX_FEE_STX) {
+    throw new ValidationError(`fee ${fee} STX exceeds the safety limit of ${MAX_FEE_STX} STX`);
   }
   return fee;
 }

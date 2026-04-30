@@ -795,9 +795,11 @@ export class StacksSDK {
   /**
    * Creates a native coin transaction to transfer funds to a recipient address.
    * @param recipientAddress - The address of the recipient.
-   * @param amount - The amount to transfer in native coin.
+   * @param amount - Amount to transfer in STX (number, e.g. 1.5 for 1.5 STX). Converted to microSTX internally.
    * @param grossTransaction - Optional flag indicating if the transaction is gross, if so fee will be deducted from recipient (default is false).
    * @param note - Optional note to be attached to the transaction in raw signing.
+   * @param nonce - Optional nonce override (bigint). Defaults to next available gap-aware nonce.
+   * @param fee - Optional fee in STX (number). Defaults to network estimate.
    * @returns A promise that resolves to a {CreateTransactionResponse}.
    * @throws {Error} If the address, public key, or vault ID are not set, or if the transaction creation fails.
    */
@@ -874,9 +876,10 @@ export class StacksSDK {
   /**
    * Creates a fungible token transaction to transfer funds to a recipient address.
    * @param recipientAddress - The address of the recipient.
-   * @param amount - The amount to transfer in native coin.
+   * @param amount - Amount to transfer in STX (number). Converted to microSTX internally.
    * @param token - The type of fungible token to transfer.
    * @param note - Optional note to be attached to the transaction in raw signing.
+   * @param nonce - Optional nonce override (bigint). Defaults to next available gap-aware nonce.
    * @returns A promise that resolves to a {CreateTransactionResponse}.
    * @throws {Error} If the address, public key, or vault ID are not set, or if the transaction creation fails.
    */
@@ -969,8 +972,9 @@ export class StacksSDK {
    * Delegate STX to a stacking pool.
    * @param poolsAddress - The address of the stacking pool.
    * @param poolContractName - The contract name of the stacking pool.
-   * @param amount - The amount of STX to stack.
+   * @param amount - Amount of STX to delegate (number). Converted to microSTX internally.
    * @param lockPeriod - The lock period in cycles.
+   * @param nonce - Optional nonce override (bigint). Defaults to next available gap-aware nonce.
    * @returns A promise that resolves to a {CreateTransactionResponse}.
    * @throws {Error} If the address, public key, or vault ID are not set, or if the delegate process fails.
    */
@@ -1052,6 +1056,7 @@ export class StacksSDK {
    * Allows a stacking pool to lock delegated STX on behalf of the delegator.
    * @param poolsAddress - The address of the stacking pool.
    * @param poolContractName - The contract name of the stacking pool.
+   * @param nonce - Optional nonce override (bigint). Defaults to next available gap-aware nonce.
    * @returns A promise that resolves to a {CreateTransactionResponse}.
    * @throws {Error} If the address, public key, or vault ID are not set, or if the process fails.
    */
@@ -1115,6 +1120,7 @@ export class StacksSDK {
 
   /**
    * Revoke any STX delegation to any address for this account.
+   * @param nonce - Optional nonce override (bigint). Defaults to next available gap-aware nonce.
    * @returns A promise that resolves to a {CreateTransactionResponse}.
    * @throws {Error} If the address, public key, or vault ID are not set, or if the process fails.
    */
@@ -1320,10 +1326,11 @@ export class StacksSDK {
    * Solo stacks a specified amount of STX for a given lock period.
    * @param signerKey - The signer's compressed public key (hex).
    * @param signerSig65Hex - 65-byte signer signature (hex).
-   * @param amount - The amount of STX to stack.
-   * @param maxAmount - The maximum authorized amount of STX to stack (must be >= amount).
+   * @param amount - Amount of STX to stack (number). Converted to microSTX internally.
+   * @param maxAmount - Maximum authorized STX amount, must be >= amount (number). Converted to microSTX internally.
    * @param lockPeriod - The number of cycles to lock the STX.
-   * @param authId - Authorization ID for the transaction.
+   * @param authId - Authorization ID for the transaction (bigint).
+   * @param nonce - Optional nonce override (bigint). Defaults to next available gap-aware nonce.
    * @returns A response indicating success or failure of the transaction.
    */
   public stackSolo = async (
@@ -1402,9 +1409,10 @@ export class StacksSDK {
    * Increases the stacked amount of an existing solo stacking position.
    * @param signerKey - The signer's compressed public key (hex).
    * @param signerSig65Hex - 65-byte signer signature (hex).
-   * @param increaseBy - The amount of STX to add to the existing stack.
-   * @param maxAmount - The new maximum amount of the stack after increase.
-   * @param authId - Authorization ID for the transaction.
+   * @param increaseBy - Amount of STX to add to the existing stack (number). Converted to microSTX internally.
+   * @param maxAmount - New maximum authorized STX amount after increase (number). Converted to microSTX internally.
+   * @param authId - Authorization ID for the transaction (bigint).
+   * @param nonce - Optional nonce override (bigint). Defaults to next available gap-aware nonce.
    * @returns A response indicating success or failure of the transaction.
    */
   public increaseStackedAmount = async (
@@ -1467,9 +1475,10 @@ export class StacksSDK {
    * Extends the stacking period of an existing solo stacking position.
    * @param signerKey - The signer's compressed public key (hex).
    * @param signerSig65Hex - 65-byte signer signature (hex).
-   * @param increaseBy - The amount of STX to add to the existing stack.
-   * @param maxAmount - Maximum amount authorized for the stack
-   * @param authId - Authorization ID for the transaction.
+   * @param increaseBy - Number of additional cycles to extend the stacking period.
+   * @param maxAmount - Maximum authorized STX amount for the extension (number). Converted to microSTX internally.
+   * @param authId - Authorization ID for the transaction (bigint).
+   * @param nonce - Optional nonce override (bigint). Defaults to next available gap-aware nonce.
    * @returns A response indicating success or failure of the transaction.
    */
   public extendStackingPeriod = async (
@@ -1536,9 +1545,9 @@ export class StacksSDK {
    * @param newFee - The new fee in STX. Must be at least RBF_MIN_FEE_MULTIPLIER × the original.
    * @param newRecipient - For token_transfer only: optional new recipient. Defaults to original.
    * @param newAmount - For token_transfer only: optional new amount in STX. Defaults to original.
-   * @param nonceOverride - Bypasses the Hiro indexer lookup. Use when the original tx is a
-   *   future-nonce tx not visible in the explorer. When set, newRecipient and newAmount are
-   *   required (only STX transfers supported on this path).
+   * @param nonceOverride - Optional nonce override (bigint). Bypasses the Hiro indexer lookup.
+   *   Use when the original tx is a future-nonce tx not visible in the explorer. When set,
+   *   newRecipient and newAmount are required (only STX transfers supported on this path).
    * @returns A promise that resolves to a {CreateTransactionResponse}.
    */
   public replaceTransaction = async (
