@@ -58,6 +58,43 @@ class StacksService {
             }
         };
         /**
+         * Returns nonce information for the given address, accounting for pending mempool transactions.
+         *
+         * - confirmedNonce: the next nonce per on-chain confirmed state.
+         * - pendingTxCount: number of this address's transactions currently in the mempool.
+         * - nextAvailable: the first nonce not already taken by a pending tx (gap-aware).
+         *   Use this when submitting a new transaction that should confirm as soon as possible.
+         *
+         * Note: if a pending tx is evicted from the mempool (e.g. fee too low), its nonce is freed
+         * but nextAvailable will remain elevated until the confirmed nonce catches up.
+         *
+         * @param address - The Stacks address to query.
+         */
+        this.getAccountNonce = async (address) => {
+            var _a, _b;
+            try {
+                const [nonceResponse, mempoolResponse] = await Promise.all([
+                    this.axiosClient.get(`${this.stackBaseUrl}/v2/accounts/${address}?proof=0`),
+                    this.axiosClient.get(`${this.stackBaseUrl}/extended/v1/tx/mempool?sender_address=${address}&limit=50`),
+                ]);
+                if (!(nonceResponse === null || nonceResponse === void 0 ? void 0 : nonceResponse.data) || nonceResponse.status !== 200) {
+                    throw new Error(`HTTP ${nonceResponse.status}`);
+                }
+                const confirmedNonce = BigInt(nonceResponse.data.nonce);
+                const pending = (_b = (_a = mempoolResponse.data) === null || _a === void 0 ? void 0 : _a.results) !== null && _b !== void 0 ? _b : [];
+                const pendingNonces = new Set(pending.map((tx) => BigInt(tx.nonce)));
+                let nextAvailable = confirmedNonce;
+                while (pendingNonces.has(nextAvailable)) {
+                    nextAvailable++;
+                }
+                return { confirmedNonce, pendingTxCount: pending.length, nextAvailable };
+            }
+            catch (error) {
+                console.error(`Error fetching account nonce: ${(0, errorHandling_1.formatErrorMessage)(error)}`);
+                throw new Error(`Failed to fetch account nonce for address ${address}: ${(0, errorHandling_1.formatErrorMessage)(error)}`);
+            }
+        };
+        /**
          * Makes a call to the Stacks balances endpoint for a given address.
          * @param address - The Stacks address to query balances for.
          * @returns - The response from the balances endpoint.
@@ -215,7 +252,7 @@ class StacksService {
          * @param token - The type of fungible token (required if type is FungibleToken).
          * @returns - The unsigned Stacks transaction.
          */
-        this.buildUnsignedTransaction = async (sender, senderPublicKey, recipient, amount, type = types_1.TransactionType.STX, token, customTokenContractAddress, customTokenContractName, customTokenAssetName) => {
+        this.buildUnsignedTransaction = async (sender, senderPublicKey, recipient, amount, type = types_1.TransactionType.STX, token, customTokenContractAddress, customTokenContractName, customTokenAssetName, nonce, fee) => {
             try {
                 if (!(0, helpers_1.validateAddress)(recipient, this.network === network_1.STACKS_TESTNET)) {
                     throw new Error("Invalid recipient address");
@@ -252,29 +289,16 @@ class StacksService {
                     const postCondition = transactions_1.Pc.principal(sender)
                         .willSendEq(amount)
                         .ft(`${ftContractAddress}.${ftContractName}`, ftAssetName);
-                    unsignedTx = await (0, transactions_1.makeUnsignedContractCall)({
-                        contractAddress: ftContractAddress,
-                        contractName: ftContractName,
-                        functionName: "transfer",
-                        functionArgs: [
+                    unsignedTx = await (0, transactions_1.makeUnsignedContractCall)(Object.assign(Object.assign({ contractAddress: ftContractAddress, contractName: ftContractName, functionName: "transfer", functionArgs: [
                             (0, transactions_1.uintCV)(amount),
                             (0, transactions_1.principalCV)(sender),
                             (0, transactions_1.principalCV)(recipient),
                             (0, transactions_1.noneCV)(),
-                        ],
-                        publicKey: senderPublicKey,
-                        network: this.network,
-                        postConditionMode: transactions_1.PostConditionMode.Deny,
-                        postConditions: [postCondition],
-                    });
+                        ], publicKey: senderPublicKey, network: this.network, postConditionMode: transactions_1.PostConditionMode.Deny, postConditions: [postCondition] }, (nonce !== undefined ? { nonce } : {})), (fee !== undefined ? { fee } : {})));
                 }
                 else {
-                    unsignedTx = await (0, transactions_1.makeUnsignedSTXTokenTransfer)({
-                        recipient,
-                        amount,
-                        publicKey: senderPublicKey,
-                        network: this.network,
-                    });
+                    unsignedTx = await (0, transactions_1.makeUnsignedSTXTokenTransfer)(Object.assign(Object.assign({ recipient,
+                        amount, publicKey: senderPublicKey, network: this.network }, (nonce !== undefined ? { nonce } : {})), (fee !== undefined ? { fee } : {})));
                 }
                 return unsignedTx;
             }
@@ -292,7 +316,7 @@ class StacksService {
          * @param functionArgs - The arguments to pass to the function.
          * @returns - The unsigned Stacks contract call transaction.
          */
-        this.buildUnsignedContractCall = async (senderPublicKey, contractAddress, contractName, functionName, functionArgs, postConditions, postConditionMode) => {
+        this.buildUnsignedContractCall = async (senderPublicKey, contractAddress, contractName, functionName, functionArgs, nonce, postConditions, postConditionMode) => {
             try {
                 if (!(0, helpers_1.validateAddress)(contractAddress, this.network === network_1.STACKS_TESTNET)) {
                     throw new Error("Invalid contract address");
@@ -303,16 +327,10 @@ class StacksService {
                 if (!contractName || !functionName) {
                     throw new Error("Contract name and function name must be provided");
                 }
-                const unsignedContractCall = await (0, transactions_1.makeUnsignedContractCall)({
-                    contractAddress,
+                const unsignedContractCall = await (0, transactions_1.makeUnsignedContractCall)(Object.assign({ contractAddress,
                     contractName,
                     functionName,
-                    functionArgs,
-                    publicKey: senderPublicKey,
-                    network: this.network,
-                    postConditions: postConditions !== null && postConditions !== void 0 ? postConditions : [],
-                    postConditionMode: postConditionMode !== null && postConditionMode !== void 0 ? postConditionMode : transactions_1.PostConditionMode.Deny,
-                });
+                    functionArgs, publicKey: senderPublicKey, network: this.network, postConditions: postConditions !== null && postConditions !== void 0 ? postConditions : [], postConditionMode: postConditionMode !== null && postConditionMode !== void 0 ? postConditionMode : transactions_1.PostConditionMode.Deny }, (nonce !== undefined ? { nonce } : {})));
                 return unsignedContractCall;
             }
             catch (error) {
@@ -330,7 +348,7 @@ class StacksService {
          * @param token - The type of fungible token (required if type is FungibleToken).
          * @returns - The serialized unsigned Stacks transaction and pre-signature hash.
          */
-        this.serializeTransaction = async (sender, senderPublicKey, recipient, amount, type = types_1.TransactionType.STX, token, customTokenContractAddress, customTokenContractName, customTokenAssetName) => {
+        this.serializeTransaction = async (sender, senderPublicKey, recipient, amount, type = types_1.TransactionType.STX, token, customTokenContractAddress, customTokenContractName, customTokenAssetName, nonce, fee) => {
             try {
                 if (type == types_1.TransactionType.FungibleToken && !token) {
                     throw new Error("Token type must be provided for FungibleToken transactions");
@@ -340,7 +358,7 @@ class StacksService {
                         throw new Error("Custom token contract address, name, and asset name must be provided for CUSTOM token type");
                     }
                 }
-                const unsignedTx = await this.buildUnsignedTransaction(sender, senderPublicKey, recipient, amount, type, token, customTokenContractAddress, customTokenContractName, customTokenAssetName);
+                const unsignedTx = await this.buildUnsignedTransaction(sender, senderPublicKey, recipient, amount, type, token, customTokenContractAddress, customTokenContractName, customTokenAssetName, nonce, fee);
                 const sigHash = unsignedTx.signBegin();
                 const preSignSigHash = (0, transactions_1.sigHashPreSign)(sigHash, unsignedTx.auth.authType, unsignedTx.auth.spendingCondition.fee, unsignedTx.auth.spendingCondition.nonce);
                 return { unsignedTx, preSignSigHash };
@@ -359,9 +377,12 @@ class StacksService {
          * @param functionArgs - The arguments to pass to the function.
          * @returns - The serialized unsigned Stacks contract call transaction and pre-signature hash.
          */
-        this.serializeContractCall = async (senderPublicKey, contractAddress, contractName, functionName, functionArgs, postConditions, postConditionMode) => {
+        this.serializeContractCall = async (senderPublicKey, contractAddress, contractName, functionName, functionArgs, nonce, fee, postConditions, postConditionMode) => {
             try {
-                const unsignedContractCall = await this.buildUnsignedContractCall(senderPublicKey, contractAddress, contractName, functionName, functionArgs, postConditions, postConditionMode);
+                const unsignedContractCall = await this.buildUnsignedContractCall(senderPublicKey, contractAddress, contractName, functionName, functionArgs, nonce, postConditions, postConditionMode);
+                if (fee !== undefined) {
+                    unsignedContractCall.auth.spendingCondition.fee = fee;
+                }
                 const sigHash = unsignedContractCall.signBegin();
                 const preSignSigHash = (0, transactions_1.sigHashPreSign)(sigHash, unsignedContractCall.auth.authType, unsignedContractCall.auth.spendingCondition.fee, unsignedContractCall.auth.spendingCondition.nonce);
                 return { unsignedContractCall, preSignSigHash };
@@ -524,7 +545,7 @@ class StacksService {
          * @param lockPeriod - Number of cycles to lock the delegation for.
          * @returns - The unsigned delegate STX transaction.
          */
-        this.delegateStx = async (senderPublicKey, delegateTo, amount, lockPeriod) => {
+        this.delegateStx = async (senderPublicKey, delegateTo, amount, lockPeriod, nonce) => {
             try {
                 if (!(0, helpers_1.validateAddress)(delegateTo, this.network === network_1.STACKS_TESTNET)) {
                     throw new Error("Invalid delegateTo address");
@@ -543,7 +564,7 @@ class StacksService {
                     (0, transactions_1.standardPrincipalCV)(delegateTo),
                     (0, transactions_1.someCV)((0, transactions_1.uintCV)(until_burn_ht)),
                     (0, transactions_1.noneCV)(),
-                ]);
+                ], nonce);
                 return serializedContractCall;
             }
             catch (error) {
@@ -556,13 +577,13 @@ class StacksService {
          * @param senderPublicKey - The sender's compressed secp256k1 public key in hex format.
          * @returns - The unsigned revoke delegation transaction.
          */
-        this.revokeStxDelegation = async (senderPublicKey) => {
+        this.revokeStxDelegation = async (senderPublicKey, nonce) => {
             try {
                 if (!(0, helpers_1.isCompressedSecp256k1PubKeyHex)(senderPublicKey)) {
                     throw new Error("Invalid compressed secp256k1 public key hex format");
                 }
                 const { contractAddress: poxAddr, contractName: poxName } = await this.getPoxContractInfo();
-                const serializedContractCall = await this.serializeContractCall(senderPublicKey, poxAddr, poxName, "revoke-delegate-stx", []);
+                const serializedContractCall = await this.serializeContractCall(senderPublicKey, poxAddr, poxName, "revoke-delegate-stx", [], nonce);
                 return serializedContractCall;
             }
             catch (error) {
@@ -578,7 +599,7 @@ class StacksService {
          * @param lockPeriod - Number of cycles to lock the delegation for.
          * @returns - The unsigned delegate STX transaction.
          */
-        this.allowPoxContractCaller = async (senderPublicKey, poolAddress, poolContractName) => {
+        this.allowPoxContractCaller = async (senderPublicKey, poolAddress, poolContractName, nonce) => {
             try {
                 if (!(0, helpers_1.validateAddress)(poolAddress, this.network === network_1.STACKS_TESTNET)) {
                     throw new Error("Invalid pool address");
@@ -590,7 +611,7 @@ class StacksService {
                     throw new Error("Pool contract name must be provided");
                 }
                 const { contractAddress: poxAddr, contractName: poxName } = await this.getPoxContractInfo();
-                const serializedContractCall = await this.serializeContractCall(senderPublicKey, poxAddr, poxName, "allow-contract-caller", [(0, transactions_1.contractPrincipalCV)(poolAddress, poolContractName), (0, transactions_1.noneCV)()]);
+                const serializedContractCall = await this.serializeContractCall(senderPublicKey, poxAddr, poxName, "allow-contract-caller", [(0, transactions_1.contractPrincipalCV)(poolAddress, poolContractName), (0, transactions_1.noneCV)()], nonce);
                 return serializedContractCall;
             }
             catch (error) {
@@ -609,7 +630,7 @@ class StacksService {
          * @param authId
          * @returns the unsigned solo stack transaction.
          */
-        this.soloStack = async (senderPublicKey, signerKey, amountUstx, btcRewardAddress, lockPeriod, maxAmountUstx, signerSig65Hex, startBurnHeight, authId) => {
+        this.soloStack = async (senderPublicKey, signerKey, amountUstx, btcRewardAddress, lockPeriod, maxAmountUstx, signerSig65Hex, startBurnHeight, authId, nonce) => {
             try {
                 if (!(0, helpers_1.isCompressedSecp256k1PubKeyHex)(senderPublicKey)) {
                     throw new Error("Invalid compressed secp256k1 public key hex format");
@@ -628,7 +649,7 @@ class StacksService {
                     (0, transactions_1.bufferCV)(Buffer.from(signerKey, "hex")),
                     (0, transactions_1.uintCV)(maxAmountUstx),
                     (0, transactions_1.uintCV)(authId),
-                ]);
+                ], nonce);
                 return serializedContractCall;
             }
             catch (error) {
@@ -646,7 +667,7 @@ class StacksService {
          * @param authId - Random integer for replay protection (must match signature)
          * @returns the unsigned stack-increase transaction.
          */
-        this.increaseStackedStx = async (senderPublicKey, signerKey, increaseBy, maxAmountUstx, signerSig65Hex, authId) => {
+        this.increaseStackedStx = async (senderPublicKey, signerKey, increaseBy, maxAmountUstx, signerSig65Hex, authId, nonce) => {
             try {
                 if (!(0, helpers_1.isCompressedSecp256k1PubKeyHex)(senderPublicKey)) {
                     throw new Error("Invalid compressed secp256k1 public key hex format");
@@ -658,7 +679,7 @@ class StacksService {
                     (0, transactions_1.bufferCV)(Buffer.from(signerKey, "hex")), // signer-key
                     (0, transactions_1.uintCV)(maxAmountUstx), // max-amount
                     (0, transactions_1.uintCV)(authId), // auth-id
-                ]);
+                ], nonce);
                 return serializedContractCall;
             }
             catch (error) {
@@ -676,7 +697,7 @@ class StacksService {
        * @param authId - Random integer for replay protection (must match signature)
        * @returns the unsigned stack-extend transaction.
        */
-        this.extendStackingPeriod = async (senderPublicKey, signerKey, btcRewardAddress, extendCycles, maxAmountUstx, signerSig65Hex, authId) => {
+        this.extendStackingPeriod = async (senderPublicKey, signerKey, btcRewardAddress, extendCycles, maxAmountUstx, signerSig65Hex, authId, nonce) => {
             try {
                 if (!(0, helpers_1.isCompressedSecp256k1PubKeyHex)(senderPublicKey)) {
                     throw new Error("Invalid compressed secp256k1 public key hex format");
@@ -693,7 +714,7 @@ class StacksService {
                     (0, transactions_1.bufferCV)(Buffer.from(signerKey, "hex")), // signer-key
                     (0, transactions_1.uintCV)(maxAmountUstx), // max-amount
                     (0, transactions_1.uintCV)(authId), // auth-id
-                ]);
+                ], nonce);
                 return serializedContractCall;
             }
             catch (error) {
@@ -715,7 +736,7 @@ class StacksService {
                 if (!(0, helpers_1.isCompressedSecp256k1PubKeyHex)(senderPublicKey)) {
                     throw new Error("Invalid compressed secp256k1 public key hex format");
                 }
-                const serializedContractCall = await this.serializeContractCall(senderPublicKey, contractAddress, contractName, functionName, functionArgs, postConditions, postConditionMode);
+                const serializedContractCall = await this.serializeContractCall(senderPublicKey, contractAddress, contractName, functionName, functionArgs, undefined, undefined, postConditions, postConditionMode);
                 return serializedContractCall;
             }
             catch (error) {

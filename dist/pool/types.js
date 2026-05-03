@@ -26,4 +26,6 @@ var ActionType;
     ActionType["SIGN_TRANSACTION"] = "signExternalTransaction";
     ActionType["SIGN_MESSAGE"] = "signMessage";
     ActionType["SIGN_STRUCTURED_MESSAGE"] = "signStructuredMessage";
+    ActionType["REPLACE_TRANSACTION"] = "replaceTransaction";
+    ActionType["GET_ACCOUNT_NONCE"] = "getAccountNonce";
 })(ActionType || (exports.ActionType = ActionType = {}));

@@ -46,6 +46,8 @@ export enum ActionType {
   SIGN_TRANSACTION = "signExternalTransaction",
   SIGN_MESSAGE = "signMessage",
   SIGN_STRUCTURED_MESSAGE = "signStructuredMessage",
+  REPLACE_TRANSACTION = "replaceTransaction",
+  GET_ACCOUNT_NONCE = "getAccountNonce",
 }
 
 export interface SdkManagerMetrics {

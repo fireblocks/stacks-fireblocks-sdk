@@ -22,28 +22,28 @@ class ApiService {
                         result = await sdk.getBtcRewardsAddress();
                         break;
                     case types_1.ActionType.REVOKE_DELEGATION:
-                        result = await sdk.revokeDelegation();
+                        result = await sdk.revokeDelegation(params.nonce);
                         break;
                     case types_1.ActionType.CHECK_STATUS:
                         result = await sdk.checkStatus();
                         break;
                     case types_1.ActionType.STACK_SOLO:
-                        result = await sdk.stackSolo(params.signerKey, params.signerSig65Hex, params.amount, params.maxAmount, params.lockPeriod, params.authId);
+                        result = await sdk.stackSolo(params.signerKey, params.signerSig65Hex, params.amount, params.maxAmount, params.lockPeriod, params.authId, params.nonce);
                         break;
                     case types_1.ActionType.GET_TX_STATUS_BY_ID:
                         result = await sdk.getTxStatusById(params.txId);
                         break;
                     case types_1.ActionType.DELEGATE_TO_POOL:
-                        result = await sdk.delegateToPool(params.poolAddress, params.poolContractName, params.amount, params.lockPeriod);
+                        result = await sdk.delegateToPool(params.poolAddress, params.poolContractName, params.amount, params.lockPeriod, params.nonce);
                         break;
                     case types_1.ActionType.ALLOW_CONTRACT_CALLER:
-                        result = await sdk.allowContractCaller(params.poolAddress, params.poolContractName);
+                        result = await sdk.allowContractCaller(params.poolAddress, params.poolContractName, params.nonce);
                         break;
                     case types_1.ActionType.CREATE_NATIVE_TRANSACTION:
-                        result = await sdk.createNativeTransaction(params.recipientAddress, params.amount, params.grossTransaction, params.note);
+                        result = await sdk.createNativeTransaction(params.recipientAddress, params.amount, params.grossTransaction, params.note, params.nonce, params.fee);
                         break;
                     case types_1.ActionType.CREATE_FT_TRANSACTION:
-                        result = await sdk.createFTTransaction(params.recipientAddress, params.amount, params.tokenType, params.tokenContractAddress, params.tokenContractName, params.tokenAssetName, params.note);
+                        result = await sdk.createFTTransaction(params.recipientAddress, params.amount, params.tokenType, params.tokenContractAddress, params.tokenContractName, params.tokenAssetName, params.note, params.nonce);
                         break;
                     case types_1.ActionType.GET_BALANCE:
                         result = await sdk.getBalance();
@@ -64,10 +64,13 @@ class ApiService {
                         result = await sdk.getPoxInfo();
                         break;
                     case types_1.ActionType.INCREASE_STACKED_AMOUNT:
-                        result = await sdk.increaseStackedAmount(params.signerKey, params.signerSig65Hex, params.increaseBy, params.maxAmount, params.authId);
+                        result = await sdk.increaseStackedAmount(params.signerKey, params.signerSig65Hex, params.increaseBy, params.maxAmount, params.authId, params.nonce);
                         break;
                     case types_1.ActionType.EXTEND_STACKING_PERIOD:
-                        result = await sdk.extendStackingPeriod(params.signerKey, params.signerSig65Hex, params.extendCycles, params.maxAmount, params.authId);
+                        result = await sdk.extendStackingPeriod(params.signerKey, params.signerSig65Hex, params.extendCycles, params.maxAmount, params.authId, params.nonce);
+                        break;
+                    case types_1.ActionType.REPLACE_TRANSACTION:
+                        result = await sdk.replaceTransaction(params.originalTxId, params.newFee, params.newRecipient, params.newAmount, params.nonceOverride);
                         break;
                     case types_1.ActionType.GET_CONTRACT_CALL_HISTORY:
                         result = await sdk.getContractCallHistory(params.limit, params.offset);
@@ -83,6 +86,9 @@ class ApiService {
                         break;
                     case types_1.ActionType.SIGN_STRUCTURED_MESSAGE:
                         result = await sdk.signStructuredMessage(params.message, params.domain);
+                        break;
+                    case types_1.ActionType.GET_ACCOUNT_NONCE:
+                        result = await sdk.getAccountNonce();
                         break;
                     default:
                         throw new Error(`InvalidType :

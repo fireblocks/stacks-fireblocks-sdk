@@ -83,6 +83,29 @@ class StacksSDK {
             }
         };
         /**
+         * Returns nonce information for this vault's Stacks address, accounting for
+         * pending mempool transactions.
+         *
+         * - confirmedNonce: next nonce per confirmed on-chain state.
+         * - pendingTxCount: number of this address's transactions in the mempool.
+         * - nextAvailable: first nonce not already taken by a pending tx (gap-aware).
+         *   Use this value when submitting a new transaction.
+         *
+         * @returns A promise that resolves to a {GetAccountNonceResponse}.
+         */
+        this.getAccountNonce = async () => {
+            if (!this.address) {
+                throw new Error("Stacks address is not set.");
+            }
+            try {
+                const result = await this.chainService.getAccountNonce(this.address);
+                return Object.assign({ success: true }, result);
+            }
+            catch (error) {
+                return { success: false, error: (0, errorHandling_1.formatErrorMessage)(error) };
+            }
+        };
+        /**
          * Retrieves the status of a transaction by its ID.
          * @param txId - The transaction ID.
          * @returns A promise that resolves to a {GetTransactionStatusResponse} containing the transaction status information.
@@ -341,7 +364,7 @@ class StacksSDK {
                 else {
                     balance = balanceResponse.balance;
                 }
-                if (amount + fee > balance) {
+                if ((type === types_1.TransactionType.FungibleToken ? amount : amount + fee) > balance) {
                     return {
                         validParams: false,
                         reason: `Insufficient funds. Available balance: ${balance}, required: ${amount}`,
@@ -363,6 +386,18 @@ class StacksSDK {
             }
         };
         /**
+         * Resolves the nonce to use for a transaction. If an explicit nonce is
+         * provided it is returned as-is. Otherwise the gap-aware nextAvailable
+         * value from getAccountNonce() is used, keeping our auto-nonce consistent
+         * with what GET /:vaultId/nonce reports.
+         */
+        this.resolveNonce = async (nonce) => {
+            if (nonce !== undefined)
+                return nonce;
+            const { nextAvailable } = await this.chainService.getAccountNonce(this.address);
+            return nextAvailable;
+        };
+        /**
          *  Builds, signs, and sends an STX or fungible token transfer transaction.
          * @param recipientAddress - The address of the recipient.
          * @param microAmount - The amount to transfer in micro units.
@@ -371,9 +406,10 @@ class StacksSDK {
          * @param note - Optional note to be attached to the transaction in raw signing.
          * @returns - A promise that resolves to the transaction broadcast result.
          */
-        this.buildSignSendTransfer = async (recipientAddress, microAmount, type = types_1.TransactionType.STX, token, customTokenContractAddress, customTokenContractName, customTokenAssetName, note) => {
+        this.buildSignSendTransfer = async (recipientAddress, microAmount, type = types_1.TransactionType.STX, token, customTokenContractAddress, customTokenContractName, customTokenAssetName, note, nonce, feeUstx) => {
             try {
-                const transactionToSign = await this.chainService.serializeTransaction(this.address, this.publicKey, recipientAddress, microAmount, type, token, customTokenContractAddress, customTokenContractName, customTokenAssetName);
+                const resolvedNonce = await this.resolveNonce(nonce);
+                const transactionToSign = await this.chainService.serializeTransaction(this.address, this.publicKey, recipientAddress, microAmount, type, token, customTokenContractAddress, customTokenContractName, customTokenAssetName, resolvedNonce, feeUstx);
                 const rawSignature = await this.fireblocksService.signTransaction(transactionToSign.preSignSigHash, this.vaultAccountId.toString(), note || "");
                 const signature = (0, helpers_1.concatSignature)(rawSignature.fullSig, rawSignature.v);
                 transactionToSign.unsignedTx.auth.spendingCondition.signature =
@@ -385,23 +421,13 @@ class StacksSDK {
                 throw new Error(`Failed to build, sign or send transaction: ${(0, errorHandling_1.formatErrorMessage)(error)}`);
             }
         };
-        /**
-         *  Builds, signs, and sends the delegate-stx or allow-contract-caller contract calls.
-         * @param poolAddress - The address of the stacking pool.
-         * @param functionName - The contract function name to call ("delegate-stx" or "allow-contract-caller").
-         * @param poolContractName - The contract name of the stacking pool.
-         * @param amount - The amount of STX to delegate in micro units.
-         * @param lockPeriod - The lock period in cycles.
-         * @returns - A promise that resolves to the transaction broadcast result.
-         */
-        this.buildSignSendContractCall = async (functionName, poolAddress, poolContractName, amount, maxAmount, lockPeriod, extendCycles, signerKey, signerSig65Hex, startBurnHeight, authId, contractCallParams, note) => {
+        this.buildSignSendContractCall = async (options) => {
+            const { functionName, poolAddress, poolContractName, amount, maxAmount, lockPeriod, extendCycles, signerKey, signerSig65Hex, startBurnHeight, authId, contractCallParams, note, nonce, } = options;
             try {
-                if (functionName === "allow-contract-caller" &&
-                    (!poolContractName || !poolAddress)) {
+                if (functionName === "allow-contract-caller" && (!poolContractName || !poolAddress)) {
                     throw new Error("Pool contract name and address must be provided for allow-contract-caller");
                 }
-                if (functionName === "delegate-stx" &&
-                    (!amount || !lockPeriod || !poolAddress)) {
+                if (functionName === "delegate-stx" && (!amount || !lockPeriod || !poolAddress)) {
                     throw new Error("Amount, lock period, and pool address must be provided for delegate-stx");
                 }
                 if (functionName === "solo-stack" &&
@@ -416,29 +442,29 @@ class StacksSDK {
                     (!extendCycles || !signerSig65Hex || !signerKey || authId == null || maxAmount == null)) {
                     throw new Error("Extend cycles, signer signature, signer key, auth ID and max amount must be provided for extend-stack-period");
                 }
+                const resolvedNonce = await this.resolveNonce(nonce);
                 if (functionName === "generic-contract-call" && !contractCallParams) {
                     throw new Error("Contract call parameters must be provided for generic-contract-call");
                 }
                 let transactionToSign;
                 switch (functionName) {
                     case "allow-contract-caller":
-                        transactionToSign = await this.chainService.allowPoxContractCaller(this.publicKey, poolAddress, poolContractName);
+                        transactionToSign = await this.chainService.allowPoxContractCaller(this.publicKey, poolAddress, poolContractName, resolvedNonce);
                         break;
                     case "delegate-stx":
-                        transactionToSign = await this.chainService.delegateStx(this.publicKey, poolAddress, amount, lockPeriod);
+                        transactionToSign = await this.chainService.delegateStx(this.publicKey, poolAddress, amount, lockPeriod, resolvedNonce);
                         break;
                     case "revoke-delegate-stx":
-                        transactionToSign = await this.chainService.revokeStxDelegation(this.publicKey);
+                        transactionToSign = await this.chainService.revokeStxDelegation(this.publicKey, resolvedNonce);
                         break;
                     case "solo-stack":
-                        transactionToSign = await this.chainService.soloStack(this.publicKey, signerKey, amount, this.btcRewardsAddress, lockPeriod, maxAmount, // maxAmount ( >= amount )
-                        signerSig65Hex, startBurnHeight, authId);
+                        transactionToSign = await this.chainService.soloStack(this.publicKey, signerKey, amount, this.btcRewardsAddress, lockPeriod, maxAmount, signerSig65Hex, startBurnHeight, authId, resolvedNonce);
                         break;
                     case "increase-stack-amount":
-                        transactionToSign = await this.chainService.increaseStackedStx(this.publicKey, signerKey, amount, maxAmount, signerSig65Hex, authId);
+                        transactionToSign = await this.chainService.increaseStackedStx(this.publicKey, signerKey, amount, maxAmount, signerSig65Hex, authId, resolvedNonce);
                         break;
                     case "extend-stack-period":
-                        transactionToSign = await this.chainService.extendStackingPeriod(this.publicKey, signerKey, this.btcRewardsAddress, extendCycles, maxAmount, signerSig65Hex, authId);
+                        transactionToSign = await this.chainService.extendStackingPeriod(this.publicKey, signerKey, this.btcRewardsAddress, extendCycles, maxAmount, signerSig65Hex, authId, resolvedNonce);
                         break;
                     case "generic-contract-call":
                         transactionToSign = await this.chainService.makeContractCall(this.publicKey, contractCallParams.contractAddress, contractCallParams.contractName, contractCallParams.functionName, contractCallParams.functionArgs, contractCallParams.postConditions, contractCallParams.postConditionMode);
@@ -448,7 +474,8 @@ class StacksSDK {
                 }
                 const rawSignature = await this.fireblocksService.signTransaction(transactionToSign.preSignSigHash, this.vaultAccountId.toString(), note || "");
                 const signature = (0, helpers_1.concatSignature)(rawSignature.fullSig, rawSignature.v);
-                transactionToSign.unsignedContractCall.auth.spendingCondition.signature = (0, transactions_1.createMessageSignature)(signature);
+                transactionToSign.unsignedContractCall.auth.spendingCondition.signature =
+                    (0, transactions_1.createMessageSignature)(signature);
                 const transaction = (0, transactions_1.serializeTransaction)(transactionToSign.unsignedContractCall);
                 const result = await this.chainService.broadcastTransaction(transactionToSign.unsignedContractCall);
                 return Object.assign(Object.assign({}, result), { transaction });
@@ -460,13 +487,15 @@ class StacksSDK {
         /**
          * Creates a native coin transaction to transfer funds to a recipient address.
          * @param recipientAddress - The address of the recipient.
-         * @param amount - The amount to transfer in native coin.
+         * @param amount - Amount to transfer in STX (number, e.g. 1.5 for 1.5 STX). Converted to microSTX internally.
          * @param grossTransaction - Optional flag indicating if the transaction is gross, if so fee will be deducted from recipient (default is false).
          * @param note - Optional note to be attached to the transaction in raw signing.
+         * @param nonce - Optional nonce override (bigint). Defaults to next available gap-aware nonce.
+         * @param fee - Optional fee in STX (number). Defaults to network estimate.
          * @returns A promise that resolves to a {CreateTransactionResponse}.
          * @throws {Error} If the address, public key, or vault ID are not set, or if the transaction creation fails.
          */
-        this.createNativeTransaction = async (recipientAddress, amount, grossTransaction = false, note) => {
+        this.createNativeTransaction = async (recipientAddress, amount, grossTransaction = false, note, nonce, fee) => {
             if (!this.address || !this.publicKey || !this.vaultAccountId) {
                 throw new Error("Address, Public Key or Vault ID are not set");
             }
@@ -483,7 +512,7 @@ class StacksSDK {
                 undefined, // customTokenContractAddress
                 undefined, // customTokenContractName
                 undefined, // customTokenAssetName
-                note);
+                note, nonce, fee !== undefined ? (0, helpers_1.stxToMicro)(fee) : undefined);
                 if (!result || result.error || !result.txid || result.reason) {
                     const errorAndReason = result.error && result.reason
                         ? `${result.error} - ${result.reason}`
@@ -508,13 +537,14 @@ class StacksSDK {
         /**
          * Creates a fungible token transaction to transfer funds to a recipient address.
          * @param recipientAddress - The address of the recipient.
-         * @param amount - The amount to transfer in native coin.
+         * @param amount - Amount to transfer in STX (number). Converted to microSTX internally.
          * @param token - The type of fungible token to transfer.
          * @param note - Optional note to be attached to the transaction in raw signing.
+         * @param nonce - Optional nonce override (bigint). Defaults to next available gap-aware nonce.
          * @returns A promise that resolves to a {CreateTransactionResponse}.
          * @throws {Error} If the address, public key, or vault ID are not set, or if the transaction creation fails.
          */
-        this.createFTTransaction = async (recipientAddress, amount, token, customTokenContractAddress, customTokenContractName, customTokenAssetName, note) => {
+        this.createFTTransaction = async (recipientAddress, amount, token, customTokenContractAddress, customTokenContractName, customTokenAssetName, note, nonce) => {
             if (!this.address || !this.publicKey || !this.vaultAccountId) {
                 throw new Error("Address, Public Key or Vault ID are not set");
             }
@@ -538,7 +568,7 @@ class StacksSDK {
                     };
                 }
                 const microAmount = paramsValidationResponse.finalAmount;
-                const result = await this.buildSignSendTransfer(recipientAddress, microAmount, types_1.TransactionType.FungibleToken, token, customTokenContractAddress, customTokenContractName, customTokenAssetName, note);
+                const result = await this.buildSignSendTransfer(recipientAddress, microAmount, types_1.TransactionType.FungibleToken, token, customTokenContractAddress, customTokenContractName, customTokenAssetName, note, nonce);
                 if (!result || result.error || !result.txid || result.reason) {
                     const errorAndReason = (result === null || result === void 0 ? void 0 : result.error) && (result === null || result === void 0 ? void 0 : result.reason)
                         ? `${result.error} - ${result.reason}`
@@ -562,12 +592,13 @@ class StacksSDK {
          * Delegate STX to a stacking pool.
          * @param poolsAddress - The address of the stacking pool.
          * @param poolContractName - The contract name of the stacking pool.
-         * @param amount - The amount of STX to stack.
+         * @param amount - Amount of STX to delegate (number). Converted to microSTX internally.
          * @param lockPeriod - The lock period in cycles.
+         * @param nonce - Optional nonce override (bigint). Defaults to next available gap-aware nonce.
          * @returns A promise that resolves to a {CreateTransactionResponse}.
          * @throws {Error} If the address, public key, or vault ID are not set, or if the delegate process fails.
          */
-        this.delegateToPool = async (poolsAddress, poolContractName, amount, lockPeriod) => {
+        this.delegateToPool = async (poolsAddress, poolContractName, amount, lockPeriod, nonce) => {
             var _b;
             if (this.testnet) {
                 console.log(`[WARNING] delegateToPool is not supported on testnet.`);
@@ -595,7 +626,14 @@ class StacksSDK {
                 }
                 console.log(`Delegating ${amount} STX to pool: ${poolsAddress} for ${lockPeriod} cycles`);
                 // Delegate STX to pool address
-                const delegateResult = await this.buildSignSendContractCall("delegate-stx", poolsAddress, poolContractName, (0, helpers_1.stxToMicro)(amount), undefined, lockPeriod);
+                const delegateResult = await this.buildSignSendContractCall({
+                    functionName: "delegate-stx",
+                    poolAddress: poolsAddress,
+                    poolContractName,
+                    amount: (0, helpers_1.stxToMicro)(amount),
+                    lockPeriod,
+                    nonce,
+                });
                 const assertDelegateResult = (0, helpers_1.assertResultSuccess)(delegateResult);
                 if (assertDelegateResult.success === false) {
                     return {
@@ -621,10 +659,11 @@ class StacksSDK {
          * Allows a stacking pool to lock delegated STX on behalf of the delegator.
          * @param poolsAddress - The address of the stacking pool.
          * @param poolContractName - The contract name of the stacking pool.
+         * @param nonce - Optional nonce override (bigint). Defaults to next available gap-aware nonce.
          * @returns A promise that resolves to a {CreateTransactionResponse}.
          * @throws {Error} If the address, public key, or vault ID are not set, or if the process fails.
          */
-        this.allowContractCaller = async (poolsAddress, poolContractName) => {
+        this.allowContractCaller = async (poolsAddress, poolContractName, nonce) => {
             if (this.testnet) {
                 console.log(`[WARNING] allowContractCaller is not supported on testnet.`);
                 return {
@@ -638,7 +677,12 @@ class StacksSDK {
             console.log(`Allowing ${poolsAddress}.${poolContractName} as PoX contract caller on behalf of ${this.address}`);
             try {
                 // Allow contract caller
-                const allowCallerResult = await this.buildSignSendContractCall("allow-contract-caller", poolsAddress, poolContractName);
+                const allowCallerResult = await this.buildSignSendContractCall({
+                    functionName: "allow-contract-caller",
+                    poolAddress: poolsAddress,
+                    poolContractName,
+                    nonce,
+                });
                 const assertAllowCallerResult = (0, helpers_1.assertResultSuccess)(allowCallerResult);
                 if (assertAllowCallerResult.success === false) {
                     return {
@@ -662,10 +706,11 @@ class StacksSDK {
         };
         /**
          * Revoke any STX delegation to any address for this account.
+         * @param nonce - Optional nonce override (bigint). Defaults to next available gap-aware nonce.
          * @returns A promise that resolves to a {CreateTransactionResponse}.
          * @throws {Error} If the address, public key, or vault ID are not set, or if the process fails.
          */
-        this.revokeDelegation = async () => {
+        this.revokeDelegation = async (nonce) => {
             if (this.testnet) {
                 console.log(`[WARNING] revokeDelegation is not supported on testnet.`);
                 return {
@@ -679,7 +724,10 @@ class StacksSDK {
             console.log(`Revoking STX delegations from address: ${this.address}`);
             try {
                 // Revoke any existing delegations.
-                const revokeResult = await this.buildSignSendContractCall("revoke-delegate-stx");
+                const revokeResult = await this.buildSignSendContractCall({
+                    functionName: "revoke-delegate-stx",
+                    nonce,
+                });
                 const assertDelegateResult = (0, helpers_1.assertResultSuccess)(revokeResult);
                 if (assertDelegateResult.success === false) {
                     return {
@@ -827,14 +875,14 @@ class StacksSDK {
          * Solo stacks a specified amount of STX for a given lock period.
          * @param signerKey - The signer's compressed public key (hex).
          * @param signerSig65Hex - 65-byte signer signature (hex).
-         * @param amount - The amount of STX to stack.
-         * @param maxAmount - The maximum authorized amount of STX to stack (must be >= amount).
+         * @param amount - Amount of STX to stack (number). Converted to microSTX internally.
+         * @param maxAmount - Maximum authorized STX amount, must be >= amount (number). Converted to microSTX internally.
          * @param lockPeriod - The number of cycles to lock the STX.
-         * @param authId - Authorization ID for the transaction.
+         * @param authId - Authorization ID for the transaction (bigint).
+         * @param nonce - Optional nonce override (bigint). Defaults to next available gap-aware nonce.
          * @returns A response indicating success or failure of the transaction.
          */
-        this.stackSolo = async (signerKey, signerSig65Hex, amount, maxAmount, lockPeriod, // Number of cycles
-        authId) => {
+        this.stackSolo = async (signerKey, signerSig65Hex, amount, maxAmount, lockPeriod, authId, nonce) => {
             var _b, _c;
             try {
                 if (!this.address || !this.publicKey || !this.vaultAccountId) {
@@ -851,7 +899,17 @@ class StacksSDK {
                     };
                 }
                 const startBurnHeight = pox.current_burnchain_block_height;
-                const result = await this.buildSignSendContractCall("solo-stack", undefined, undefined, (0, helpers_1.stxToMicro)(amount), (0, helpers_1.stxToMicro)(maxAmount), lockPeriod, undefined, signerKey, signerSig65Hex, startBurnHeight, authId);
+                const result = await this.buildSignSendContractCall({
+                    functionName: "solo-stack",
+                    amount: (0, helpers_1.stxToMicro)(amount),
+                    maxAmount: (0, helpers_1.stxToMicro)(maxAmount),
+                    lockPeriod,
+                    signerKey,
+                    signerSig65Hex,
+                    startBurnHeight,
+                    authId,
+                    nonce,
+                });
                 const assertResult = (0, helpers_1.assertResultSuccess)(result);
                 if (assertResult.success === false) {
                     return {
@@ -885,19 +943,28 @@ class StacksSDK {
          * Increases the stacked amount of an existing solo stacking position.
          * @param signerKey - The signer's compressed public key (hex).
          * @param signerSig65Hex - 65-byte signer signature (hex).
-         * @param increaseBy - The amount of STX to add to the existing stack.
-         * @param maxAmount - The new maximum amount of the stack after increase.
-         * @param authId - Authorization ID for the transaction.
+         * @param increaseBy - Amount of STX to add to the existing stack (number). Converted to microSTX internally.
+         * @param maxAmount - New maximum authorized STX amount after increase (number). Converted to microSTX internally.
+         * @param authId - Authorization ID for the transaction (bigint).
+         * @param nonce - Optional nonce override (bigint). Defaults to next available gap-aware nonce.
          * @returns A response indicating success or failure of the transaction.
          */
-        this.increaseStackedAmount = async (signerKey, signerSig65Hex, increaseBy, maxAmount, authId) => {
+        this.increaseStackedAmount = async (signerKey, signerSig65Hex, increaseBy, maxAmount, authId, nonce) => {
             var _b, _c;
             try {
                 if (!this.address || !this.publicKey || !this.vaultAccountId) {
                     throw new Error("Address, Public Key or Vault ID are not set");
                 }
                 console.log(`Increasing stacked amount by ${increaseBy} STX`);
-                const result = await this.buildSignSendContractCall("increase-stack-amount", undefined, undefined, (0, helpers_1.stxToMicro)(increaseBy), (0, helpers_1.stxToMicro)(maxAmount), undefined, undefined, signerKey, signerSig65Hex, undefined, authId);
+                const result = await this.buildSignSendContractCall({
+                    functionName: "increase-stack-amount",
+                    amount: (0, helpers_1.stxToMicro)(increaseBy),
+                    maxAmount: (0, helpers_1.stxToMicro)(maxAmount),
+                    signerKey,
+                    signerSig65Hex,
+                    authId,
+                    nonce,
+                });
                 const assertResult = (0, helpers_1.assertResultSuccess)(result);
                 if (assertResult.success === false) {
                     return {
@@ -931,19 +998,28 @@ class StacksSDK {
         * Extends the stacking period of an existing solo stacking position.
         * @param signerKey - The signer's compressed public key (hex).
         * @param signerSig65Hex - 65-byte signer signature (hex).
-        * @param increaseBy - The amount of STX to add to the existing stack.
-        * @param maxAmount - Maximum amount authorized for the stack
-        * @param authId - Authorization ID for the transaction.
+        * @param increaseBy - Number of additional cycles to extend the stacking period.
+        * @param maxAmount - Maximum authorized STX amount for the extension (number). Converted to microSTX internally.
+        * @param authId - Authorization ID for the transaction (bigint).
+        * @param nonce - Optional nonce override (bigint). Defaults to next available gap-aware nonce.
         * @returns A response indicating success or failure of the transaction.
         */
-        this.extendStackingPeriod = async (signerKey, signerSig65Hex, extendCycles, maxAmount, authId) => {
+        this.extendStackingPeriod = async (signerKey, signerSig65Hex, extendCycles, maxAmount, authId, nonce) => {
             var _b, _c;
             try {
                 if (!this.address || !this.publicKey || !this.vaultAccountId) {
                     throw new Error("Address, Public Key or Vault ID are not set");
                 }
                 console.log(`Extending stacking period by ${extendCycles} cycles`);
-                const result = await this.buildSignSendContractCall("extend-stack-period", undefined, undefined, undefined, (0, helpers_1.stxToMicro)(maxAmount), undefined, extendCycles, signerKey, signerSig65Hex, undefined, authId);
+                const result = await this.buildSignSendContractCall({
+                    functionName: "extend-stack-period",
+                    maxAmount: (0, helpers_1.stxToMicro)(maxAmount),
+                    extendCycles,
+                    signerKey,
+                    signerSig65Hex,
+                    authId,
+                    nonce,
+                });
                 const assertResult = (0, helpers_1.assertResultSuccess)(result);
                 if (assertResult.success === false) {
                     return {
@@ -970,6 +1046,162 @@ class StacksSDK {
                 return {
                     success: false,
                     error: `Failed to extend stacking period: ${(0, errorHandling_1.formatErrorMessage)(error)}`,
+                };
+            }
+        };
+        /**
+         * Replaces a pending STX transaction with a new one using the same nonce but a higher fee.
+         * Supports both native STX token_transfer and contract_call transactions.
+         * @param originalTxId - The transaction ID of the transaction to replace.
+         * @param newFee - The new fee in STX. Must be at least RBF_MIN_FEE_MULTIPLIER × the original.
+         * @param newRecipient - For token_transfer only: optional new recipient. Defaults to original.
+         * @param newAmount - For token_transfer only: optional new amount in STX. Defaults to original.
+         * @param nonceOverride - Optional nonce override (bigint). Bypasses the Hiro indexer lookup
+         *   and skips ownership validation of the original transaction. Use only when you are certain
+         *   of the nonce value and the original tx is not visible in the explorer. When set,
+         *   newRecipient and newAmount are required (only STX transfers supported on this path).
+         * @returns A promise that resolves to a {CreateTransactionResponse}.
+         */
+        this.replaceTransaction = async (originalTxId, newFee, newRecipient, newAmount, nonceOverride) => {
+            if (!this.address || !this.publicKey || !this.vaultAccountId) {
+                throw new Error("Address, Public Key or Vault ID are not set");
+            }
+            try {
+                const feeBigInt = (0, helpers_1.stxToMicro)(newFee);
+                if (nonceOverride !== undefined) {
+                    // ── Override path: nonce is known, tx may not be visible to the indexer ──
+                    // Only STX transfers are supported here — no original tx to reconstruct args from.
+                    if (!newRecipient || newAmount === undefined) {
+                        return {
+                            success: false,
+                            error: "newRecipient and newAmount are required when nonceOverride is provided",
+                        };
+                    }
+                    if (!(0, helpers_1.validateAddress)(newRecipient, this.testnet)) {
+                        return { success: false, error: "Invalid recipient address" };
+                    }
+                    const nonce = nonceOverride;
+                    const amountUstx = (0, helpers_1.stxToMicro)(newAmount);
+                    const balance = await this.getBalance();
+                    if (balance.success) {
+                        const totalRequired = (0, helpers_1.microToStx)(amountUstx + feeBigInt);
+                        if (balance.balance !== undefined && totalRequired > balance.balance) {
+                            return {
+                                success: false,
+                                error: `Insufficient balance. Required: ${totalRequired} STX, Available: ${balance.balance} STX`,
+                            };
+                        }
+                    }
+                    const transactionToSign = await this.chainService.serializeTransaction(this.address, this.publicKey, newRecipient, amountUstx, types_1.TransactionType.STX, undefined, undefined, undefined, undefined, nonce, feeBigInt);
+                    const rawSignature = await this.fireblocksService.signTransaction(transactionToSign.preSignSigHash, this.vaultAccountId.toString());
+                    const signature = (0, helpers_1.concatSignature)(rawSignature.fullSig, rawSignature.v);
+                    transactionToSign.unsignedTx.auth.spendingCondition.signature =
+                        (0, transactions_1.createMessageSignature)(signature);
+                    const result = await this.chainService.broadcastTransaction(transactionToSign.unsignedTx);
+                    if (!result || result.error || !result.txid || result.reason) {
+                        const msg = (result === null || result === void 0 ? void 0 : result.error) && (result === null || result === void 0 ? void 0 : result.reason)
+                            ? `${result.error} - ${result.reason}`
+                            : (result === null || result === void 0 ? void 0 : result.error) || (result === null || result === void 0 ? void 0 : result.reason) || "unknown error";
+                        return { success: false, error: (0, errorHandling_1.formatErrorMessage)(msg) };
+                    }
+                    console.log(`Replaced transaction ${originalTxId} with ${result.txid}`);
+                    return { success: true, txHash: result.txid };
+                }
+                // ── Lookup path: reconstruct any pending tx type with higher fee ──────────
+                const originalTxResponse = await this.getTxStatusById(originalTxId);
+                if (!originalTxResponse.success || !originalTxResponse.data) {
+                    return { success: false, error: "Could not fetch original transaction details" };
+                }
+                if (originalTxResponse.data.tx_status !== "pending") {
+                    return {
+                        success: false,
+                        error: `Can only replace pending transactions. Current status: ${originalTxResponse.data.tx_status}`,
+                    };
+                }
+                const fullTx = originalTxResponse.data.full_tx_details;
+                if ((fullTx === null || fullTx === void 0 ? void 0 : fullTx.tx_type) !== "token_transfer" && (fullTx === null || fullTx === void 0 ? void 0 : fullTx.tx_type) !== "contract_call") {
+                    return {
+                        success: false,
+                        error: `Cannot replace tx of type "${fullTx === null || fullTx === void 0 ? void 0 : fullTx.tx_type}". Only token_transfer and contract_call are supported.`,
+                    };
+                }
+                if (fullTx.sender_address !== this.address) {
+                    return {
+                        success: false,
+                        error: "Transaction sender does not match this vault account address",
+                    };
+                }
+                // Fee check: new fee must be at least RBF_MIN_FEE_MULTIPLIER × original
+                const originalFeeUstx = BigInt(fullTx.fee_rate);
+                const minFeeUstx = (originalFeeUstx * BigInt(Math.round(constants_1.RBF_MIN_FEE_MULTIPLIER * 100))) / BigInt(100);
+                if (feeBigInt < minFeeUstx) {
+                    return {
+                        success: false,
+                        error: `New fee (${newFee} STX) must be at least ${constants_1.RBF_MIN_FEE_MULTIPLIER}x the original fee (${(0, helpers_1.microToStx)(originalFeeUstx)} STX). Minimum required: ${(0, helpers_1.microToStx)(minFeeUstx)} STX`,
+                    };
+                }
+                const nonce = BigInt(fullTx.nonce);
+                let unsignedTxWire;
+                let preSignSigHash;
+                if (fullTx.tx_type === "token_transfer") {
+                    const recipient = newRecipient !== null && newRecipient !== void 0 ? newRecipient : fullTx.token_transfer.recipient_address;
+                    const amountUstx = newAmount !== undefined
+                        ? (0, helpers_1.stxToMicro)(newAmount)
+                        : BigInt(fullTx.token_transfer.amount);
+                    if (!(0, helpers_1.validateAddress)(recipient, this.testnet)) {
+                        return { success: false, error: "Invalid recipient address" };
+                    }
+                    const balanceCheck = await this.getBalance();
+                    if (balanceCheck.success) {
+                        const totalRequired = (0, helpers_1.microToStx)(amountUstx + feeBigInt);
+                        if (balanceCheck.balance !== undefined && totalRequired > balanceCheck.balance) {
+                            return {
+                                success: false,
+                                error: `Insufficient balance. Required: ${totalRequired} STX, Available: ${balanceCheck.balance} STX`,
+                            };
+                        }
+                    }
+                    const serialized = await this.chainService.serializeTransaction(this.address, this.publicKey, recipient, amountUstx, types_1.TransactionType.STX, undefined, undefined, undefined, undefined, nonce, feeBigInt);
+                    unsignedTxWire = serialized.unsignedTx;
+                    preSignSigHash = serialized.preSignSigHash;
+                }
+                else {
+                    // contract_call — reconstruct with identical args, same nonce, higher fee
+                    const [contractAddress, contractName] = fullTx.contract_call.contract_id.split(".");
+                    const functionName = fullTx.contract_call.function_name;
+                    const functionArgs = fullTx.contract_call.function_args.map((arg) => (0, transactions_1.hexToCV)(arg.hex));
+                    const balanceCheck = await this.getBalance();
+                    if (balanceCheck.success) {
+                        const feeStx = (0, helpers_1.microToStx)(feeBigInt);
+                        if (balanceCheck.balance !== undefined && feeStx > balanceCheck.balance) {
+                            return {
+                                success: false,
+                                error: `Insufficient balance for fee. Required: ${feeStx} STX, Available: ${balanceCheck.balance} STX`,
+                            };
+                        }
+                    }
+                    const serialized = await this.chainService.serializeContractCall(this.publicKey, contractAddress, contractName, functionName, functionArgs, nonce, feeBigInt);
+                    unsignedTxWire = serialized.unsignedContractCall;
+                    preSignSigHash = serialized.preSignSigHash;
+                }
+                const rawSignature = await this.fireblocksService.signTransaction(preSignSigHash, this.vaultAccountId.toString());
+                const signature = (0, helpers_1.concatSignature)(rawSignature.fullSig, rawSignature.v);
+                unsignedTxWire.auth.spendingCondition.signature = (0, transactions_1.createMessageSignature)(signature);
+                const result = await this.chainService.broadcastTransaction(unsignedTxWire);
+                if (!result || result.error || !result.txid || result.reason) {
+                    const errorAndReason = (result === null || result === void 0 ? void 0 : result.error) && (result === null || result === void 0 ? void 0 : result.reason)
+                        ? `${result.error} - ${result.reason}`
+                        : (result === null || result === void 0 ? void 0 : result.error) || (result === null || result === void 0 ? void 0 : result.reason) || "unknown error";
+                    return { success: false, error: (0, errorHandling_1.formatErrorMessage)(errorAndReason) };
+                }
+                console.log(`Replaced transaction ${originalTxId} with ${result.txid}`);
+                return { success: true, txHash: result.txid };
+            }
+            catch (error) {
+                console.error(`Error replacing transaction: ${(0, errorHandling_1.formatErrorMessage)(error)}`);
+                return {
+                    success: false,
+                    error: `Failed to replace transaction: ${(0, errorHandling_1.formatErrorMessage)(error)}`,
                 };
             }
         };
@@ -1016,7 +1248,10 @@ class StacksSDK {
                     throw new Error("Address, Public Key or Vault ID are not set");
                 }
                 console.log(`Making contract call to ${contractAddress}.${contractName} function ${functionName} with ${functionArgs.length} arg(s)`);
-                const result = await this.buildSignSendContractCall("generic-contract-call", undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, { contractAddress, contractName, functionName, functionArgs, postConditions, postConditionMode });
+                const result = await this.buildSignSendContractCall({
+                    functionName: "generic-contract-call",
+                    contractCallParams: { contractAddress, contractName, functionName, functionArgs, postConditions, postConditionMode },
+                });
                 const assertResult = (0, helpers_1.assertResultSuccess)(result);
                 if (assertResult.success === false) {
                     return {

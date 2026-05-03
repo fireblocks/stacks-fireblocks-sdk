@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.POX4_ERRORS = exports.poxInfo = exports.poolInfo = exports.ftInfo = exports.pagination_defaults = exports.stacks_info = exports.api_constants = exports.helperConstants = exports.derivationPath = void 0;
+exports.POX4_ERRORS = exports.poxInfo = exports.poolInfo = exports.ftInfo = exports.pagination_defaults = exports.stacks_info = exports.api_constants = exports.MAX_FEE_STX = exports.RBF_MIN_FEE_MULTIPLIER = exports.helperConstants = exports.derivationPath = void 0;
 const types_1 = require("../services/types");
 exports.derivationPath = {
     purpose: 44,
@@ -14,6 +14,12 @@ exports.helperConstants = {
     stacks_api_page_size: 50, // Hard maximum per single Stacks API request
     stacks_api_max_limit: 200, // Maximum limit accepted from callers; service paginates internally when limit > stacks_api_page_size
 };
+// Minimum fee multiplier for replace-by-fee (RBF) transactions.
+// The new fee must be at least this multiple of the original fee.
+// Applied only on the lookup path (when the original tx is visible to the indexer).
+exports.RBF_MIN_FEE_MULTIPLIER = 1.25;
+// Maximum fee accepted by the SDK in STX. Guards against typos (e.g. 100 instead of 0.001).
+exports.MAX_FEE_STX = 10;
 exports.api_constants = {
     stacks_mainnet_rpc: "https://api.hiro.so",
     stacks_testnet_rpc: "https://api.testnet.hiro.so",
