@@ -26,6 +26,7 @@ const stacks_service_1 = require("./services/stacks.service");
 const fireblocks_service_1 = require("./services/fireblocks.service");
 const types_1 = require("./services/types");
 const constants_1 = require("./utils/constants");
+const validation_1 = require("./utils/validation");
 const errorHandling_1 = require("./utils/errorHandling");
 const fireblocks_utils_1 = require("./utils/fireblocks.utils");
 const helpers_1 = require("./utils/helpers");
@@ -392,10 +393,14 @@ class StacksSDK {
          * with what GET /:vaultId/nonce reports.
          */
         this.resolveNonce = async (nonce) => {
-            if (nonce !== undefined)
+            const nonceInfo = await this.chainService.getAccountNonce(this.address);
+            if (nonce !== undefined) {
+                if (nonce < nonceInfo.confirmedNonce) {
+                    throw new validation_1.ValidationError(`Nonce ${nonce} is below the confirmed nonce (${nonceInfo.confirmedNonce}). This transaction would be rejected.`);
+                }
                 return nonce;
-            const { nextAvailable } = await this.chainService.getAccountNonce(this.address);
-            return nextAvailable;
+            }
+            return nonceInfo.nextAvailable;
         };
         /**
          *  Builds, signs, and sends an STX or fungible token transfer transaction.
@@ -407,10 +412,14 @@ class StacksSDK {
          * @returns - A promise that resolves to the transaction broadcast result.
          */
         this.buildSignSendTransfer = async (recipientAddress, microAmount, type = types_1.TransactionType.STX, token, customTokenContractAddress, customTokenContractName, customTokenAssetName, note, nonce, feeUstx) => {
+            var _b;
             try {
                 const resolvedNonce = await this.resolveNonce(nonce);
                 const transactionToSign = await this.chainService.serializeTransaction(this.address, this.publicKey, recipientAddress, microAmount, type, token, customTokenContractAddress, customTokenContractName, customTokenAssetName, resolvedNonce, feeUstx);
-                const rawSignature = await this.fireblocksService.signTransaction(transactionToSign.preSignSigHash, this.vaultAccountId.toString(), note || "");
+                const defaultNote = type === types_1.TransactionType.FungibleToken
+                    ? `Transferring ${(0, helpers_1.microToStx)(microAmount)} ${(_b = customTokenContractName !== null && customTokenContractName !== void 0 ? customTokenContractName : token) !== null && _b !== void 0 ? _b : "token"} to ${recipientAddress}`
+                    : `Transferring ${(0, helpers_1.microToStx)(microAmount)} STX to ${recipientAddress}`;
+                const rawSignature = await this.fireblocksService.signTransaction(transactionToSign.preSignSigHash, this.vaultAccountId.toString(), note || defaultNote);
                 const signature = (0, helpers_1.concatSignature)(rawSignature.fullSig, rawSignature.v);
                 transactionToSign.unsignedTx.auth.spendingCondition.signature =
                     (0, transactions_1.createMessageSignature)(signature);
@@ -418,6 +427,8 @@ class StacksSDK {
                 return result;
             }
             catch (error) {
+                if (error instanceof validation_1.ValidationError)
+                    return { success: false, error: error.message };
                 throw new Error(`Failed to build, sign or send transaction: ${(0, errorHandling_1.formatErrorMessage)(error)}`);
             }
         };
@@ -472,7 +483,10 @@ class StacksSDK {
                     default:
                         throw new Error(`Unknown contract call function: ${functionName}`);
                 }
-                const rawSignature = await this.fireblocksService.signTransaction(transactionToSign.preSignSigHash, this.vaultAccountId.toString(), note || "");
+                const defaultNote = poolAddress && poolContractName
+                    ? `Calling ${functionName} on ${poolAddress}.${poolContractName}`
+                    : `Calling ${functionName}`;
+                const rawSignature = await this.fireblocksService.signTransaction(transactionToSign.preSignSigHash, this.vaultAccountId.toString(), note || defaultNote);
                 const signature = (0, helpers_1.concatSignature)(rawSignature.fullSig, rawSignature.v);
                 transactionToSign.unsignedContractCall.auth.spendingCondition.signature =
                     (0, transactions_1.createMessageSignature)(signature);
@@ -481,6 +495,8 @@ class StacksSDK {
                 return Object.assign(Object.assign({}, result), { transaction });
             }
             catch (error) {
+                if (error instanceof validation_1.ValidationError)
+                    return { success: false, error: error.message };
                 throw new Error(`Failed to build, sign or send contract call transaction: ${(0, errorHandling_1.formatErrorMessage)(error)}`);
             }
         };
@@ -879,10 +895,11 @@ class StacksSDK {
          * @param maxAmount - Maximum authorized STX amount, must be >= amount (number). Converted to microSTX internally.
          * @param lockPeriod - The number of cycles to lock the STX.
          * @param authId - Authorization ID for the transaction (bigint).
+         * @param note - Optional note shown in Fireblocks console during raw signing.
          * @param nonce - Optional nonce override (bigint). Defaults to next available gap-aware nonce.
          * @returns A response indicating success or failure of the transaction.
          */
-        this.stackSolo = async (signerKey, signerSig65Hex, amount, maxAmount, lockPeriod, authId, nonce) => {
+        this.stackSolo = async (signerKey, signerSig65Hex, amount, maxAmount, lockPeriod, authId, note, nonce) => {
             var _b, _c;
             try {
                 if (!this.address || !this.publicKey || !this.vaultAccountId) {
@@ -908,6 +925,7 @@ class StacksSDK {
                     signerSig65Hex,
                     startBurnHeight,
                     authId,
+                    note,
                     nonce,
                 });
                 const assertResult = (0, helpers_1.assertResultSuccess)(result);
@@ -946,10 +964,11 @@ class StacksSDK {
          * @param increaseBy - Amount of STX to add to the existing stack (number). Converted to microSTX internally.
          * @param maxAmount - New maximum authorized STX amount after increase (number). Converted to microSTX internally.
          * @param authId - Authorization ID for the transaction (bigint).
+         * @param note - Optional note shown in Fireblocks console during raw signing.
          * @param nonce - Optional nonce override (bigint). Defaults to next available gap-aware nonce.
          * @returns A response indicating success or failure of the transaction.
          */
-        this.increaseStackedAmount = async (signerKey, signerSig65Hex, increaseBy, maxAmount, authId, nonce) => {
+        this.increaseStackedAmount = async (signerKey, signerSig65Hex, increaseBy, maxAmount, authId, note, nonce) => {
             var _b, _c;
             try {
                 if (!this.address || !this.publicKey || !this.vaultAccountId) {
@@ -963,6 +982,7 @@ class StacksSDK {
                     signerKey,
                     signerSig65Hex,
                     authId,
+                    note,
                     nonce,
                 });
                 const assertResult = (0, helpers_1.assertResultSuccess)(result);
@@ -1001,10 +1021,11 @@ class StacksSDK {
         * @param increaseBy - Number of additional cycles to extend the stacking period.
         * @param maxAmount - Maximum authorized STX amount for the extension (number). Converted to microSTX internally.
         * @param authId - Authorization ID for the transaction (bigint).
+        * @param note - Optional note shown in Fireblocks console during raw signing.
         * @param nonce - Optional nonce override (bigint). Defaults to next available gap-aware nonce.
         * @returns A response indicating success or failure of the transaction.
         */
-        this.extendStackingPeriod = async (signerKey, signerSig65Hex, extendCycles, maxAmount, authId, nonce) => {
+        this.extendStackingPeriod = async (signerKey, signerSig65Hex, extendCycles, maxAmount, authId, note, nonce) => {
             var _b, _c;
             try {
                 if (!this.address || !this.publicKey || !this.vaultAccountId) {
@@ -1018,6 +1039,7 @@ class StacksSDK {
                     signerKey,
                     signerSig65Hex,
                     authId,
+                    note,
                     nonce,
                 });
                 const assertResult = (0, helpers_1.assertResultSuccess)(result);
@@ -1060,9 +1082,10 @@ class StacksSDK {
          *   and skips ownership validation of the original transaction. Use only when you are certain
          *   of the nonce value and the original tx is not visible in the explorer. When set,
          *   newRecipient and newAmount are required (only STX transfers supported on this path).
+         * @param note - Optional note shown in Fireblocks console during raw signing.
          * @returns A promise that resolves to a {CreateTransactionResponse}.
          */
-        this.replaceTransaction = async (originalTxId, newFee, newRecipient, newAmount, nonceOverride) => {
+        this.replaceTransaction = async (originalTxId, newFee, newRecipient, newAmount, nonceOverride, note) => {
             if (!this.address || !this.publicKey || !this.vaultAccountId) {
                 throw new Error("Address, Public Key or Vault ID are not set");
             }
@@ -1082,6 +1105,13 @@ class StacksSDK {
                     }
                     const nonce = nonceOverride;
                     const amountUstx = (0, helpers_1.stxToMicro)(newAmount);
+                    const nonceInfo = await this.chainService.getAccountNonce(this.address);
+                    if (nonce < nonceInfo.confirmedNonce) {
+                        return {
+                            success: false,
+                            error: `nonceOverride (${nonce}) is below the confirmed nonce (${nonceInfo.confirmedNonce}). This transaction would be rejected.`,
+                        };
+                    }
                     const balance = await this.getBalance();
                     if (balance.success) {
                         const totalRequired = (0, helpers_1.microToStx)(amountUstx + feeBigInt);
@@ -1093,7 +1123,7 @@ class StacksSDK {
                         }
                     }
                     const transactionToSign = await this.chainService.serializeTransaction(this.address, this.publicKey, newRecipient, amountUstx, types_1.TransactionType.STX, undefined, undefined, undefined, undefined, nonce, feeBigInt);
-                    const rawSignature = await this.fireblocksService.signTransaction(transactionToSign.preSignSigHash, this.vaultAccountId.toString());
+                    const rawSignature = await this.fireblocksService.signTransaction(transactionToSign.preSignSigHash, this.vaultAccountId.toString(), note);
                     const signature = (0, helpers_1.concatSignature)(rawSignature.fullSig, rawSignature.v);
                     transactionToSign.unsignedTx.auth.spendingCondition.signature =
                         (0, transactions_1.createMessageSignature)(signature);
@@ -1184,7 +1214,7 @@ class StacksSDK {
                     unsignedTxWire = serialized.unsignedContractCall;
                     preSignSigHash = serialized.preSignSigHash;
                 }
-                const rawSignature = await this.fireblocksService.signTransaction(preSignSigHash, this.vaultAccountId.toString());
+                const rawSignature = await this.fireblocksService.signTransaction(preSignSigHash, this.vaultAccountId.toString(), note);
                 const signature = (0, helpers_1.concatSignature)(rawSignature.fullSig, rawSignature.v);
                 unsignedTxWire.auth.spendingCondition.signature = (0, transactions_1.createMessageSignature)(signature);
                 const result = await this.chainService.broadcastTransaction(unsignedTxWire);
