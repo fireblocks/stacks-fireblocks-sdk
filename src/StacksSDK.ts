@@ -654,10 +654,14 @@ export class StacksSDK {
         feeUstx,
       );
 
+      const defaultNote = type === TransactionType.FungibleToken
+        ? `Transferring ${microToStx(microAmount)} ${customTokenContractName ?? token ?? "token"} to ${recipientAddress}`
+        : `Transferring ${microToStx(microAmount)} STX to ${recipientAddress}`;
+
       const rawSignature = await this.fireblocksService.signTransaction(
         transactionToSign.preSignSigHash,
         this.vaultAccountId.toString(),
-        note || "",
+        note || defaultNote,
       );
 
       const signature = concatSignature(rawSignature.fullSig, rawSignature.v);
@@ -776,8 +780,12 @@ export class StacksSDK {
           throw new Error(`Unknown contract call function: ${functionName}`);
       }
 
+      const defaultNote = poolAddress && poolContractName
+        ? `Calling ${functionName} on ${poolAddress}.${poolContractName}`
+        : `Calling ${functionName}`;
+
       const rawSignature = await this.fireblocksService.signTransaction(
-        transactionToSign.preSignSigHash, this.vaultAccountId.toString(), note || "",
+        transactionToSign.preSignSigHash, this.vaultAccountId.toString(), note || defaultNote,
       );
 
       const signature = concatSignature(rawSignature.fullSig, rawSignature.v);
