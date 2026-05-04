@@ -1383,6 +1383,7 @@ export class StacksSDK {
    * @param maxAmount - Maximum authorized STX amount, must be >= amount (number). Converted to microSTX internally.
    * @param lockPeriod - The number of cycles to lock the STX.
    * @param authId - Authorization ID for the transaction (bigint).
+   * @param note - Optional note shown in Fireblocks console during raw signing.
    * @param nonce - Optional nonce override (bigint). Defaults to next available gap-aware nonce.
    * @returns A response indicating success or failure of the transaction.
    */
@@ -1393,6 +1394,7 @@ export class StacksSDK {
     maxAmount: number,
     lockPeriod: number,
     authId: bigint,
+    note?: string,
     nonce?: bigint,
   ): Promise<CreateTransactionResponse> => {
     try {
@@ -1424,6 +1426,7 @@ export class StacksSDK {
         signerSig65Hex,
         startBurnHeight,
         authId,
+        note,
         nonce,
       });
 
@@ -1465,6 +1468,7 @@ export class StacksSDK {
    * @param increaseBy - Amount of STX to add to the existing stack (number). Converted to microSTX internally.
    * @param maxAmount - New maximum authorized STX amount after increase (number). Converted to microSTX internally.
    * @param authId - Authorization ID for the transaction (bigint).
+   * @param note - Optional note shown in Fireblocks console during raw signing.
    * @param nonce - Optional nonce override (bigint). Defaults to next available gap-aware nonce.
    * @returns A response indicating success or failure of the transaction.
    */
@@ -1474,6 +1478,7 @@ export class StacksSDK {
     increaseBy: number,
     maxAmount: number,
     authId: bigint,
+    note?: string,
     nonce?: bigint,
   ): Promise<CreateTransactionResponse> => {
     try {
@@ -1490,6 +1495,7 @@ export class StacksSDK {
         signerKey,
         signerSig65Hex,
         authId,
+        note,
         nonce,
       });
 
@@ -1531,6 +1537,7 @@ export class StacksSDK {
    * @param increaseBy - Number of additional cycles to extend the stacking period.
    * @param maxAmount - Maximum authorized STX amount for the extension (number). Converted to microSTX internally.
    * @param authId - Authorization ID for the transaction (bigint).
+   * @param note - Optional note shown in Fireblocks console during raw signing.
    * @param nonce - Optional nonce override (bigint). Defaults to next available gap-aware nonce.
    * @returns A response indicating success or failure of the transaction.
    */
@@ -1540,6 +1547,7 @@ export class StacksSDK {
     extendCycles: number,
     maxAmount: number,
     authId: bigint,
+    note?: string,
     nonce?: bigint,
   ): Promise<CreateTransactionResponse> => {
     try {
@@ -1556,6 +1564,7 @@ export class StacksSDK {
         signerKey,
         signerSig65Hex,
         authId,
+        note,
         nonce,
       });
 
@@ -1602,6 +1611,7 @@ export class StacksSDK {
    *   and skips ownership validation of the original transaction. Use only when you are certain
    *   of the nonce value and the original tx is not visible in the explorer. When set,
    *   newRecipient and newAmount are required (only STX transfers supported on this path).
+   * @param note - Optional note shown in Fireblocks console during raw signing.
    * @returns A promise that resolves to a {CreateTransactionResponse}.
    */
   public replaceTransaction = async (
@@ -1610,6 +1620,7 @@ export class StacksSDK {
     newRecipient?: string,
     newAmount?: number,
     nonceOverride?: bigint,
+    note?: string,
   ): Promise<CreateTransactionResponse> => {
     if (!this.address || !this.publicKey || !this.vaultAccountId) {
       throw new Error("Address, Public Key or Vault ID are not set");
@@ -1660,7 +1671,7 @@ export class StacksSDK {
         );
 
         const rawSignature = await this.fireblocksService.signTransaction(
-          transactionToSign.preSignSigHash, this.vaultAccountId.toString(),
+          transactionToSign.preSignSigHash, this.vaultAccountId.toString(), note,
         );
         const signature = concatSignature(rawSignature.fullSig, rawSignature.v);
         (transactionToSign.unsignedTx as any).auth.spendingCondition.signature =
@@ -1777,7 +1788,7 @@ export class StacksSDK {
       }
 
       const rawSignature = await this.fireblocksService.signTransaction(
-        preSignSigHash, this.vaultAccountId.toString(),
+        preSignSigHash, this.vaultAccountId.toString(), note,
       );
       const signature = concatSignature(rawSignature.fullSig, rawSignature.v);
       unsignedTxWire.auth.spendingCondition.signature = createMessageSignature(signature);
