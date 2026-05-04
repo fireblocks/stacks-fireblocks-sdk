@@ -668,7 +668,7 @@ export class StacksSDK {
       const rawSignature = await this.fireblocksService.signTransaction(
         transactionToSign.preSignSigHash,
         this.vaultAccountId.toString(),
-        note || "",
+        note || `Transferring ${microAmount} ${token ? token : "STX"} to ${recipientAddress}`,
       );
 
       const signature = concatSignature(rawSignature.fullSig, rawSignature.v);
