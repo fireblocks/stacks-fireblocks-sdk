@@ -37,6 +37,7 @@ import {
   TransactionType,
 } from "./services/types";
 import { pagination_defaults, POX4_ERRORS, RBF_MIN_FEE_MULTIPLIER } from "./utils/constants";
+import { ValidationError } from "./utils/validation";
 import { formatErrorMessage } from "./utils/errorHandling";
 import { validateApiCredentials } from "./utils/fireblocks.utils";
 import {
@@ -612,9 +613,16 @@ export class StacksSDK {
    * with what GET /:vaultId/nonce reports.
    */
   private resolveNonce = async (nonce?: bigint): Promise<bigint> => {
-    if (nonce !== undefined) return nonce;
-    const { nextAvailable } = await this.chainService.getAccountNonce(this.address!);
-    return nextAvailable;
+    const nonceInfo = await this.chainService.getAccountNonce(this.address!);
+    if (nonce !== undefined) {
+      if (nonce < nonceInfo.confirmedNonce) {
+        throw new ValidationError(
+          `Nonce ${nonce} is below the confirmed nonce (${nonceInfo.confirmedNonce}). This transaction would be rejected.`,
+        );
+      }
+      return nonce;
+    }
+    return nonceInfo.nextAvailable;
   };
 
   /**
@@ -674,6 +682,7 @@ export class StacksSDK {
       );
       return result;
     } catch (error) {
+      if (error instanceof ValidationError) return { success: false, error: error.message };
       throw new Error(
         `Failed to build, sign or send transaction: ${formatErrorMessage(
           error,
@@ -794,6 +803,7 @@ export class StacksSDK {
 
       return await this.chainService.broadcastTransaction(transactionToSign.unsignedContractCall);
     } catch (error) {
+      if (error instanceof ValidationError) return { success: false, error: error.message };
       throw new Error(
         `Failed to build, sign or send contract call transaction: ${formatErrorMessage(error)}`,
       );
@@ -1588,6 +1598,14 @@ export class StacksSDK {
 
         const nonce = nonceOverride;
         const amountUstx = stxToMicro(newAmount);
+
+        const nonceInfo = await this.chainService.getAccountNonce(this.address);
+        if (nonce < nonceInfo.confirmedNonce) {
+          return {
+            success: false,
+            error: `nonceOverride (${nonce}) is below the confirmed nonce (${nonceInfo.confirmedNonce}). This transaction would be rejected.`,
+          };
+        }
 
         const balance = await this.getBalance();
         if (balance.success) {
