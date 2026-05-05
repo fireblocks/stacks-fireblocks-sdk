@@ -36,7 +36,7 @@ import {
   TransactionDetails,
   TransactionType,
 } from "./services/types";
-import { pagination_defaults, POX4_ERRORS, RBF_MIN_FEE_MULTIPLIER } from "./utils/constants";
+import { helperConstants, pagination_defaults, POX4_ERRORS, RBF_MIN_FEE_MULTIPLIER } from "./utils/constants";
 import { ValidationError } from "./utils/validation";
 import { formatErrorMessage } from "./utils/errorHandling";
 import { validateApiCredentials } from "./utils/fireblocks.utils";
@@ -373,6 +373,8 @@ export class StacksSDK {
     getCachedTransactions: boolean = true, // Must be manually set to false to fetch fresh transactions
     limit: number = pagination_defaults.limit,
     offset: number = pagination_defaults.page,
+    fetchAll: boolean = false,
+    fetchPending: boolean = false,
   ): Promise<GetTransactionHistoryResponse> => {
     if (getCachedTransactions) {
       console.log("Using cached transactions");
@@ -387,24 +389,43 @@ export class StacksSDK {
     }
 
     try {
-      const txs = await this.chainService.getTransactionHistory(
-        this.address,
-        limit,
-        offset,
+      const pageSize = helperConstants.stacks_api_page_size;
+
+      const fetchPages = async (
+        fetcher: (o: number) => Promise<any[]>,
+      ): Promise<any[]> => {
+        const all: any[] = [];
+        let currentOffset = offset;
+        while (true) {
+          const page = await fetcher(currentOffset);
+          all.push(...page);
+          if (page.length < pageSize) break;
+          if (!fetchAll && all.length >= limit) break;
+          currentOffset += pageSize;
+        }
+        return fetchAll ? all : all.slice(0, limit);
+      };
+
+      const confirmedTxs = await fetchPages((o) =>
+        this.chainService.getTransactionHistory(this.address!, pageSize, o),
       );
+
+      const pendingTxs = fetchPending
+        ? await fetchPages((o) =>
+            this.chainService.getMempoolTransactions(this.address!, pageSize, o),
+          )
+        : [];
+
+      const txs = [...pendingTxs, ...confirmedTxs];
 
       const existingHashes = new Set(
         this.cachedTransactions.map((tx) => tx.transaction_hash),
       );
-
-      const newTransactions = txs.filter(
+      const newConfirmed = confirmedTxs.filter(
         (tx) => !existingHashes.has(tx.transaction_hash),
       );
+      this.cachedTransactions = [...this.cachedTransactions, ...newConfirmed];
 
-      this.cachedTransactions = [
-        ...this.cachedTransactions,
-        ...newTransactions,
-      ];
       return { success: true, data: txs };
     } catch (error) {
       return {

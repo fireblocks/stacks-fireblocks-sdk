@@ -69,6 +69,7 @@ export type Transaction = {
   transaction_hash: string;
   timestamp: any;
   success: boolean;
+  pending?: boolean;
 };
 
 export type CheckStatusData = {
