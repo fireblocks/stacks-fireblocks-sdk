@@ -52,7 +52,7 @@ class ApiService {
                         result = await sdk.getFtBalances();
                         break;
                     case types_1.ActionType.GET_TRANSACTIONS_HISTORY:
-                        result = await sdk.getTransactionHistory(params.getCachedTransactions, params.limit, params.offset);
+                        result = await sdk.getTransactionHistory(params.getCachedTransactions, params.limit, params.offset, params.fetchAll, params.fetchPending);
                         break;
                     case types_1.ActionType.GET_ACCOUNT_ADDRESS:
                         result = await sdk.getAddress();

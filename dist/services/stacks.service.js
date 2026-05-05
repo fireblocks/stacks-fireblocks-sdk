@@ -430,14 +430,10 @@ class StacksService {
         /**
          * Parses a raw list of Stacks API transaction items into typed Transaction objects.
          */
-        this.parseTransactionItems = async (items, address) => {
+        this.parseTransactionItems = async (items, address, isPending = false) => {
             const txs = [];
             for (const tx of items) {
-                const base = {
-                    transaction_hash: tx.tx_id,
-                    timestamp: tx.block_time_iso,
-                    success: tx.tx_status === "success",
-                };
+                const base = Object.assign({ transaction_hash: tx.tx_id, timestamp: tx.block_time_iso, success: tx.tx_status === "success" }, (isPending ? { pending: true } : {}));
                 // Native STX transfers
                 if (tx.tx_type === "token_transfer" && tx.token_transfer) {
                     const amountMicro = BigInt(tx.token_transfer.amount || "0");
@@ -483,41 +479,53 @@ class StacksService {
             return txs;
         };
         /**
-         * Retrieves the transaction history for a given address.
-         * Automatically paginates through multiple Stacks API requests when limit > stacks_api_page_size.
-         * @param address - The Stacks address to retrieve the transaction history for.
-         * @param limit - The maximum number of transactions to retrieve.
-         * @param offset - The starting offset for pagination.
-         * @returns An array of transactions associated with the address.
+         * Fetches one page of confirmed transactions for a given address.
+         * Pagination is handled by the caller.
+         * @param address - The Stacks address.
+         * @param limit - Page size (max 50).
+         * @param offset - Page offset.
+         * @returns An array of parsed transactions for this page.
          */
-        this.getTransactionHistory = async (address, limit = constants_1.pagination_defaults.limit, offset = constants_1.pagination_defaults.page) => {
+        this.getTransactionHistory = async (address, limit = constants_1.helperConstants.stacks_api_page_size, offset = constants_1.pagination_defaults.page) => {
             if (!(0, helpers_1.validateAddress)(address, this.network === network_1.STACKS_TESTNET)) {
                 throw new Error("Invalid Stacks address");
             }
             try {
-                const allTxs = [];
-                let currentOffset = offset;
-                let remaining = limit;
-                while (remaining > 0) {
-                    const pageSize = Math.min(remaining, constants_1.helperConstants.stacks_api_page_size);
-                    const response = await this.axiosClient.get(`${this.stackBaseUrl}/extended/v1/address/${address}/transactions?limit=${pageSize}&offset=${currentOffset}`);
-                    if (!response || !response.data || response.status !== 200) {
-                        throw new Error(`HTTP ${response.status}`);
-                    }
-                    const items = (response.data.results || []);
-                    if (items.length === 0)
-                        break;
-                    const txs = await this.parseTransactionItems(items, address);
-                    allTxs.push(...txs);
-                    if (items.length < pageSize)
-                        break; // no more data on the chain
-                    currentOffset += pageSize;
-                    remaining -= pageSize;
+                const pageSize = Math.min(limit, constants_1.helperConstants.stacks_api_page_size);
+                const response = await this.axiosClient.get(`${this.stackBaseUrl}/extended/v1/address/${address}/transactions?limit=${pageSize}&offset=${offset}`);
+                if (!response || !response.data || response.status !== 200) {
+                    throw new Error(`HTTP ${response.status}`);
                 }
-                return allTxs;
+                const items = (response.data.results || []);
+                return await this.parseTransactionItems(items, address);
             }
             catch (error) {
                 throw new Error(`Failed to fetch transaction history: ${(0, errorHandling_1.formatErrorMessage)(error)}`);
+            }
+        };
+        /**
+         * Fetches one page of pending (mempool) transactions for a given address.
+         * Pagination is handled by the caller.
+         * @param address - The Stacks address.
+         * @param limit - Page size (max 50).
+         * @param offset - Page offset.
+         * @returns An array of parsed pending transactions for this page.
+         */
+        this.getMempoolTransactions = async (address, limit = constants_1.helperConstants.stacks_api_page_size, offset = constants_1.pagination_defaults.page) => {
+            if (!(0, helpers_1.validateAddress)(address, this.network === network_1.STACKS_TESTNET)) {
+                throw new Error("Invalid Stacks address");
+            }
+            try {
+                const pageSize = Math.min(limit, constants_1.helperConstants.stacks_api_page_size);
+                const response = await this.axiosClient.get(`${this.stackBaseUrl}/extended/v1/tx/mempool?sender_address=${address}&limit=${pageSize}&offset=${offset}`);
+                if (!response || !response.data || response.status !== 200) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                const items = (response.data.results || []);
+                return await this.parseTransactionItems(items, address, true);
+            }
+            catch (error) {
+                throw new Error(`Failed to fetch mempool transactions: ${(0, errorHandling_1.formatErrorMessage)(error)}`);
             }
         };
         /**

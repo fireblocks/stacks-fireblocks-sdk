@@ -230,7 +230,7 @@ class StacksSDK {
          * @throws {Error} If the address is not set or if the transaction history retrieval fails.
          */
         this.getTransactionHistory = async (getCachedTransactions = true, // Must be manually set to false to fetch fresh transactions
-        limit = constants_1.pagination_defaults.limit, offset = constants_1.pagination_defaults.page) => {
+        limit = constants_1.pagination_defaults.limit, offset = constants_1.pagination_defaults.page, fetchAll = false, fetchPending = false) => {
             if (getCachedTransactions) {
                 console.log("Using cached transactions");
                 return { success: true, data: this.cachedTransactions };
@@ -240,13 +240,29 @@ class StacksSDK {
                 throw new Error("Stacks address is not set.");
             }
             try {
-                const txs = await this.chainService.getTransactionHistory(this.address, limit, offset);
+                const pageSize = constants_1.helperConstants.stacks_api_page_size;
+                const fetchPages = async (fetcher) => {
+                    const all = [];
+                    let currentOffset = offset;
+                    while (true) {
+                        const page = await fetcher(currentOffset);
+                        all.push(...page);
+                        if (page.length < pageSize)
+                            break;
+                        if (!fetchAll && all.length >= limit)
+                            break;
+                        currentOffset += pageSize;
+                    }
+                    return fetchAll ? all : all.slice(0, limit);
+                };
+                const confirmedTxs = await fetchPages((o) => this.chainService.getTransactionHistory(this.address, pageSize, o));
+                const pendingTxs = fetchPending
+                    ? await fetchPages((o) => this.chainService.getMempoolTransactions(this.address, pageSize, o))
+                    : [];
+                const txs = [...pendingTxs, ...confirmedTxs];
                 const existingHashes = new Set(this.cachedTransactions.map((tx) => tx.transaction_hash));
-                const newTransactions = txs.filter((tx) => !existingHashes.has(tx.transaction_hash));
-                this.cachedTransactions = [
-                    ...this.cachedTransactions,
-                    ...newTransactions,
-                ];
+                const newConfirmed = confirmedTxs.filter((tx) => !existingHashes.has(tx.transaction_hash));
+                this.cachedTransactions = [...this.cachedTransactions, ...newConfirmed];
                 return { success: true, data: txs };
             }
             catch (error) {
