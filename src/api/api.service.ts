@@ -135,6 +135,8 @@ export class ApiService {
             params.getCachedTransactions,
             params.limit,
             params.offset,
+            params.fetchAll,
+            params.fetchPending,
           );
           break;
         case ActionType.GET_ACCOUNT_ADDRESS:

@@ -140,13 +140,15 @@ export const getTransactionHistory: Handler = async (req, res, next) => {
         ? true
         : false;
 
-    // Parse limit; service paginates internally so limit can exceed the 50-per-request Stacks API cap
+    const fetchAll = String(req.query.fetchAll).toLowerCase() === "true";
+    const fetchPending = String(req.query.fetchPending).toLowerCase() === "true";
+
     let limit = req.query.limit ? Number(req.query.limit) : helperConstants.stacks_api_max_limit;
     if (!Number.isInteger(limit) || limit <= 0) {
       res.status(400).json({ error: "Bad Request: limit must be a positive integer" });
       return;
     }
-    if (limit > helperConstants.stacks_api_max_limit) {
+    if (!fetchAll && limit > helperConstants.stacks_api_max_limit) {
       limit = helperConstants.stacks_api_max_limit;
     }
 
@@ -159,7 +161,7 @@ export const getTransactionHistory: Handler = async (req, res, next) => {
     const history = await apiService.executeAction(
       vaultId,
       ActionType.GET_TRANSACTIONS_HISTORY,
-      { getCachedTransactions, limit, offset },
+      { getCachedTransactions, limit, offset, fetchAll, fetchPending },
     );
 
     res.json(history);

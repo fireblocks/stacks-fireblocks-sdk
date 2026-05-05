@@ -285,6 +285,20 @@ router.get("/:vaultId/ft-balances", validateVaultId, controller.getFtBalances);
  *           type: number
  *         description: Offset for pagination.
  *       - in: query
+ *         name: fetchAll
+ *         required: false
+ *         schema:
+ *           type: boolean
+ *           default: false
+ *         description: If true, fetches all confirmed transactions ignoring limit.
+ *       - in: query
+ *         name: fetchPending
+ *         required: false
+ *         schema:
+ *           type: boolean
+ *           default: false
+ *         description: If true, also fetches pending (mempool) transactions and prepends them to the result.
+ *       - in: query
  *         name: order
  *         required: false
  *         schema:
