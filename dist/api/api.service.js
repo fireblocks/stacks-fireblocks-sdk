@@ -40,7 +40,7 @@ class ApiService {
                         result = await sdk.allowContractCaller(params.poolAddress, params.poolContractName, params.nonce);
                         break;
                     case types_1.ActionType.CREATE_NATIVE_TRANSACTION:
-                        result = await sdk.createNativeTransaction(params.recipientAddress, params.amount, params.grossTransaction, params.note, params.nonce, params.fee);
+                        result = await sdk.createNativeTransaction(params.recipientAddress, params.amount, params.grossTransaction, params.note, params.nonce, params.fee, params.memo);
                         break;
                     case types_1.ActionType.CREATE_FT_TRANSACTION:
                         result = await sdk.createFTTransaction(params.recipientAddress, params.amount, params.tokenType, params.tokenContractAddress, params.tokenContractName, params.tokenAssetName, params.note, params.nonce);

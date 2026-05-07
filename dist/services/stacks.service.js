@@ -252,7 +252,7 @@ class StacksService {
          * @param token - The type of fungible token (required if type is FungibleToken).
          * @returns - The unsigned Stacks transaction.
          */
-        this.buildUnsignedTransaction = async (sender, senderPublicKey, recipient, amount, type = types_1.TransactionType.STX, token, customTokenContractAddress, customTokenContractName, customTokenAssetName, nonce, fee) => {
+        this.buildUnsignedTransaction = async (sender, senderPublicKey, recipient, amount, type = types_1.TransactionType.STX, token, customTokenContractAddress, customTokenContractName, customTokenAssetName, nonce, fee, memo) => {
             try {
                 if (!(0, helpers_1.validateAddress)(recipient, this.network === network_1.STACKS_TESTNET)) {
                     throw new Error("Invalid recipient address");
@@ -297,8 +297,8 @@ class StacksService {
                         ], publicKey: senderPublicKey, network: this.network, postConditionMode: transactions_1.PostConditionMode.Deny, postConditions: [postCondition] }, (nonce !== undefined ? { nonce } : {})), (fee !== undefined ? { fee } : {})));
                 }
                 else {
-                    unsignedTx = await (0, transactions_1.makeUnsignedSTXTokenTransfer)(Object.assign(Object.assign({ recipient,
-                        amount, publicKey: senderPublicKey, network: this.network }, (nonce !== undefined ? { nonce } : {})), (fee !== undefined ? { fee } : {})));
+                    unsignedTx = await (0, transactions_1.makeUnsignedSTXTokenTransfer)(Object.assign(Object.assign(Object.assign({ recipient,
+                        amount, publicKey: senderPublicKey, network: this.network }, (nonce !== undefined ? { nonce } : {})), (fee !== undefined ? { fee } : {})), (memo !== undefined ? { memo } : {})));
                 }
                 return unsignedTx;
             }
@@ -348,7 +348,7 @@ class StacksService {
          * @param token - The type of fungible token (required if type is FungibleToken).
          * @returns - The serialized unsigned Stacks transaction and pre-signature hash.
          */
-        this.serializeTransaction = async (sender, senderPublicKey, recipient, amount, type = types_1.TransactionType.STX, token, customTokenContractAddress, customTokenContractName, customTokenAssetName, nonce, fee) => {
+        this.serializeTransaction = async (sender, senderPublicKey, recipient, amount, type = types_1.TransactionType.STX, token, customTokenContractAddress, customTokenContractName, customTokenAssetName, nonce, fee, memo) => {
             try {
                 if (type == types_1.TransactionType.FungibleToken && !token) {
                     throw new Error("Token type must be provided for FungibleToken transactions");
@@ -358,7 +358,7 @@ class StacksService {
                         throw new Error("Custom token contract address, name, and asset name must be provided for CUSTOM token type");
                     }
                 }
-                const unsignedTx = await this.buildUnsignedTransaction(sender, senderPublicKey, recipient, amount, type, token, customTokenContractAddress, customTokenContractName, customTokenAssetName, nonce, fee);
+                const unsignedTx = await this.buildUnsignedTransaction(sender, senderPublicKey, recipient, amount, type, token, customTokenContractAddress, customTokenContractName, customTokenAssetName, nonce, fee, memo);
                 const sigHash = unsignedTx.signBegin();
                 const preSignSigHash = (0, transactions_1.sigHashPreSign)(sigHash, unsignedTx.auth.authType, unsignedTx.auth.spendingCondition.fee, unsignedTx.auth.spendingCondition.nonce);
                 return { unsignedTx, preSignSigHash };

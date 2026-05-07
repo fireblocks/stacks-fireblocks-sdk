@@ -427,11 +427,11 @@ class StacksSDK {
          * @param note - Optional note to be attached to the transaction in raw signing.
          * @returns - A promise that resolves to the transaction broadcast result.
          */
-        this.buildSignSendTransfer = async (recipientAddress, microAmount, type = types_1.TransactionType.STX, token, customTokenContractAddress, customTokenContractName, customTokenAssetName, note, nonce, feeUstx) => {
+        this.buildSignSendTransfer = async (recipientAddress, microAmount, type = types_1.TransactionType.STX, token, customTokenContractAddress, customTokenContractName, customTokenAssetName, note, nonce, feeUstx, memo) => {
             var _b;
             try {
                 const resolvedNonce = await this.resolveNonce(nonce);
-                const transactionToSign = await this.chainService.serializeTransaction(this.address, this.publicKey, recipientAddress, microAmount, type, token, customTokenContractAddress, customTokenContractName, customTokenAssetName, resolvedNonce, feeUstx);
+                const transactionToSign = await this.chainService.serializeTransaction(this.address, this.publicKey, recipientAddress, microAmount, type, token, customTokenContractAddress, customTokenContractName, customTokenAssetName, resolvedNonce, feeUstx, memo);
                 const defaultNote = type === types_1.TransactionType.FungibleToken
                     ? `Transferring ${(0, helpers_1.microToStx)(microAmount)} ${(_b = customTokenContractName !== null && customTokenContractName !== void 0 ? customTokenContractName : token) !== null && _b !== void 0 ? _b : "token"} to ${recipientAddress}`
                     : `Transferring ${(0, helpers_1.microToStx)(microAmount)} STX to ${recipientAddress}`;
@@ -527,7 +527,7 @@ class StacksSDK {
          * @returns A promise that resolves to a {CreateTransactionResponse}.
          * @throws {Error} If the address, public key, or vault ID are not set, or if the transaction creation fails.
          */
-        this.createNativeTransaction = async (recipientAddress, amount, grossTransaction = false, note, nonce, fee) => {
+        this.createNativeTransaction = async (recipientAddress, amount, grossTransaction = false, note, nonce, fee, memo) => {
             if (!this.address || !this.publicKey || !this.vaultAccountId) {
                 throw new Error("Address, Public Key or Vault ID are not set");
             }
@@ -544,7 +544,7 @@ class StacksSDK {
                 undefined, // customTokenContractAddress
                 undefined, // customTokenContractName
                 undefined, // customTokenAssetName
-                note, nonce, fee !== undefined ? (0, helpers_1.stxToMicro)(fee) : undefined);
+                note, nonce, fee !== undefined ? (0, helpers_1.stxToMicro)(fee) : undefined, memo);
                 if (!result || result.error || !result.txid || result.reason) {
                     const errorAndReason = result.error && result.reason
                         ? `${result.error} - ${result.reason}`
