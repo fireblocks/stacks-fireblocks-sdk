@@ -677,6 +677,7 @@ export class StacksSDK {
     note?: string,
     nonce?: bigint,
     feeUstx?: bigint,
+    memo?: string,
   ): Promise<any> => {
     try {
       const resolvedNonce = await this.resolveNonce(nonce);
@@ -692,6 +693,7 @@ export class StacksSDK {
         customTokenAssetName,
         resolvedNonce,
         feeUstx,
+        memo,
       );
 
       const defaultNote = type === TransactionType.FungibleToken
@@ -885,6 +887,7 @@ export class StacksSDK {
     note?: string,
     nonce?: bigint,
     fee?: number,
+    memo?: string,
   ): Promise<CreateTransactionResponse> => {
     if (!this.address || !this.publicKey || !this.vaultAccountId) {
       throw new Error("Address, Public Key or Vault ID are not set");
@@ -918,6 +921,7 @@ export class StacksSDK {
         note,
         nonce,
         fee !== undefined ? stxToMicro(fee) : undefined,
+        memo,
       );
 
       if (!result || result.error || !result.txid || result.reason) {

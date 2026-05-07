@@ -84,6 +84,7 @@ export class ApiService {
             params.note,
             params.nonce,
             params.fee,
+            params.memo,
           );
           break;
         case ActionType.CREATE_FT_TRANSACTION:
