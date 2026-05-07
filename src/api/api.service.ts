@@ -85,6 +85,7 @@ export class ApiService {
             params.nonce,
             params.fee,
             params.memo,
+            params.externalId,
           );
           break;
         case ActionType.CREATE_FT_TRANSACTION:
@@ -97,6 +98,7 @@ export class ApiService {
             params.tokenAssetName,
             params.note,
             params.nonce,
+            params.externalId,
           );
           break;
         case ActionType.ESTIMATE_FEE:
