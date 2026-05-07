@@ -1351,11 +1351,12 @@ class StacksSDK {
                 if (!this.vaultAccountId) {
                     throw new Error("Vault ID is not set");
                 }
-                const crypto = require('crypto');
-                const prefix = '\x17Stacks Signed Message:\n';
-                const hash = crypto.createHash('sha256').update(Buffer.from(prefix + message)).digest('hex');
+                const { hashMessage } = require('@stacks/encryption');
+                const { bytesToHex } = require('@stacks/common');
+                const hash = bytesToHex(hashMessage(message));
                 const rawSignature = await this.fireblocksService.signTransaction(hash, this.vaultAccountId.toString(), '');
-                const signature = (0, helpers_1.concatSignature)(rawSignature.fullSig, rawSignature.v);
+                const vHex = rawSignature.v === 0 ? '00' : '01';
+                const signature = rawSignature.fullSig + vHex;
                 return { success: true, signature };
             }
             catch (error) {
