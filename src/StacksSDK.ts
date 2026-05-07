@@ -457,6 +457,40 @@ export class StacksSDK {
    * @returns A promise that resolves to an object indicating if parameters are valid, the final amount, and reason if invalid.
    * @throws {Error} If parameter validation fails.
    */
+  public estimateFee = async (
+    recipientAddress: string,
+    amount: number,
+    type: TransactionType = TransactionType.STX,
+    token?: TokenType,
+    customTokenContractAddress?: string,
+    customTokenContractName?: string,
+  ): Promise<{ success: boolean; fee?: number; microfee?: number; error?: string }> => {
+    try {
+      if (!this.address || !this.publicKey || !this.vaultAccountId) {
+        throw new Error('Address, Public Key or Vault ID are not set');
+      }
+      const microAmount = type === TransactionType.FungibleToken
+        ? stxToMicro(amount)
+        : stxToMicro(amount);
+
+      let microfee = 0;
+      if (type === TransactionType.STX) {
+        microfee = await this.chainService.estimateTxFee(recipientAddress, microAmount);
+      } else if (type === TransactionType.FungibleToken) {
+        const tokenInfo = token !== TokenType.CUSTOM
+          ? getTokenInfo(token, this.testnet ? 'testnet' : 'mainnet')
+          : undefined;
+        const ftContractAddress = tokenInfo?.contractAddress ?? customTokenContractAddress!;
+        const ftContractName = tokenInfo?.contractName ?? customTokenContractName!;
+        const functionArgs = [uintCV(microAmount), principalCV(this.address), principalCV(recipientAddress), noneCV()];
+        microfee = await this.chainService.estimateContractCallFee(ftContractAddress, ftContractName, 'transfer', functionArgs);
+      }
+      return { success: true, fee: microToStx(microfee), microfee };
+    } catch (error) {
+      return { success: false, error: formatErrorMessage(error) };
+    }
+  };
+
   private checkParamsAndAdjustAmount = async (
     recipientAddress: string,
     amount: number,

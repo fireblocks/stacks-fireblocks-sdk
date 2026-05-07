@@ -99,6 +99,16 @@ export class ApiService {
             params.nonce,
           );
           break;
+        case ActionType.ESTIMATE_FEE:
+          result = await sdk.estimateFee(
+            params.recipientAddress,
+            params.amount,
+            params.type,
+            params.token,
+            params.customTokenContractAddress,
+            params.customTokenContractName,
+          );
+          break;
         case ActionType.GET_BALANCE:
           result = await sdk.getBalance();
           break;

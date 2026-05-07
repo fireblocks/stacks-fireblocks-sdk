@@ -48,6 +48,7 @@ export enum ActionType {
   SIGN_STRUCTURED_MESSAGE = "signStructuredMessage",
   REPLACE_TRANSACTION = "replaceTransaction",
   GET_ACCOUNT_NONCE = "getAccountNonce",
+  ESTIMATE_FEE = "estimateFee",
 }
 
 export interface SdkManagerMetrics {
