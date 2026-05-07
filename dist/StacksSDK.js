@@ -455,7 +455,7 @@ class StacksSDK {
          * @param note - Optional note to be attached to the transaction in raw signing.
          * @returns - A promise that resolves to the transaction broadcast result.
          */
-        this.buildSignSendTransfer = async (recipientAddress, microAmount, type = types_1.TransactionType.STX, token, customTokenContractAddress, customTokenContractName, customTokenAssetName, note, nonce, feeUstx, memo) => {
+        this.buildSignSendTransfer = async (recipientAddress, microAmount, type = types_1.TransactionType.STX, token, customTokenContractAddress, customTokenContractName, customTokenAssetName, note, nonce, feeUstx, memo, externalId) => {
             var _b;
             try {
                 const resolvedNonce = await this.resolveNonce(nonce);
@@ -463,7 +463,7 @@ class StacksSDK {
                 const defaultNote = type === types_1.TransactionType.FungibleToken
                     ? `Transferring ${(0, helpers_1.microToStx)(microAmount)} ${(_b = customTokenContractName !== null && customTokenContractName !== void 0 ? customTokenContractName : token) !== null && _b !== void 0 ? _b : "token"} to ${recipientAddress}`
                     : `Transferring ${(0, helpers_1.microToStx)(microAmount)} STX to ${recipientAddress}`;
-                const rawSignature = await this.fireblocksService.signTransaction(transactionToSign.preSignSigHash, this.vaultAccountId.toString(), note || defaultNote);
+                const rawSignature = await this.fireblocksService.signTransaction(transactionToSign.preSignSigHash, this.vaultAccountId.toString(), note || defaultNote, externalId);
                 const signature = (0, helpers_1.concatSignature)(rawSignature.fullSig, rawSignature.v);
                 transactionToSign.unsignedTx.auth.spendingCondition.signature =
                     (0, transactions_1.createMessageSignature)(signature);
@@ -477,7 +477,7 @@ class StacksSDK {
             }
         };
         this.buildSignSendContractCall = async (options) => {
-            const { functionName, poolAddress, poolContractName, amount, maxAmount, lockPeriod, extendCycles, signerKey, signerSig65Hex, startBurnHeight, authId, contractCallParams, note, nonce, } = options;
+            const { functionName, poolAddress, poolContractName, amount, maxAmount, lockPeriod, extendCycles, signerKey, signerSig65Hex, startBurnHeight, authId, contractCallParams, note, nonce, externalId, } = options;
             try {
                 if (functionName === "allow-contract-caller" && (!poolContractName || !poolAddress)) {
                     throw new Error("Pool contract name and address must be provided for allow-contract-caller");
@@ -530,7 +530,7 @@ class StacksSDK {
                 const defaultNote = poolAddress && poolContractName
                     ? `Calling ${functionName} on ${poolAddress}.${poolContractName}`
                     : `Calling ${functionName}`;
-                const rawSignature = await this.fireblocksService.signTransaction(transactionToSign.preSignSigHash, this.vaultAccountId.toString(), note || defaultNote);
+                const rawSignature = await this.fireblocksService.signTransaction(transactionToSign.preSignSigHash, this.vaultAccountId.toString(), note || defaultNote, externalId);
                 const signature = (0, helpers_1.concatSignature)(rawSignature.fullSig, rawSignature.v);
                 transactionToSign.unsignedContractCall.auth.spendingCondition.signature =
                     (0, transactions_1.createMessageSignature)(signature);
@@ -555,7 +555,7 @@ class StacksSDK {
          * @returns A promise that resolves to a {CreateTransactionResponse}.
          * @throws {Error} If the address, public key, or vault ID are not set, or if the transaction creation fails.
          */
-        this.createNativeTransaction = async (recipientAddress, amount, grossTransaction = false, note, nonce, fee, memo) => {
+        this.createNativeTransaction = async (recipientAddress, amount, grossTransaction = false, note, nonce, fee, memo, externalId) => {
             if (!this.address || !this.publicKey || !this.vaultAccountId) {
                 throw new Error("Address, Public Key or Vault ID are not set");
             }
@@ -572,7 +572,7 @@ class StacksSDK {
                 undefined, // customTokenContractAddress
                 undefined, // customTokenContractName
                 undefined, // customTokenAssetName
-                note, nonce, fee !== undefined ? (0, helpers_1.stxToMicro)(fee) : undefined, memo);
+                note, nonce, fee !== undefined ? (0, helpers_1.stxToMicro)(fee) : undefined, memo, externalId);
                 if (!result || result.error || !result.txid || result.reason) {
                     const errorAndReason = result.error && result.reason
                         ? `${result.error} - ${result.reason}`
@@ -604,7 +604,7 @@ class StacksSDK {
          * @returns A promise that resolves to a {CreateTransactionResponse}.
          * @throws {Error} If the address, public key, or vault ID are not set, or if the transaction creation fails.
          */
-        this.createFTTransaction = async (recipientAddress, amount, token, customTokenContractAddress, customTokenContractName, customTokenAssetName, note, nonce) => {
+        this.createFTTransaction = async (recipientAddress, amount, token, customTokenContractAddress, customTokenContractName, customTokenAssetName, note, nonce, externalId) => {
             if (!this.address || !this.publicKey || !this.vaultAccountId) {
                 throw new Error("Address, Public Key or Vault ID are not set");
             }
@@ -628,7 +628,9 @@ class StacksSDK {
                     };
                 }
                 const microAmount = paramsValidationResponse.finalAmount;
-                const result = await this.buildSignSendTransfer(recipientAddress, microAmount, types_1.TransactionType.FungibleToken, token, customTokenContractAddress, customTokenContractName, customTokenAssetName, note, nonce);
+                const result = await this.buildSignSendTransfer(recipientAddress, microAmount, types_1.TransactionType.FungibleToken, token, customTokenContractAddress, customTokenContractName, customTokenAssetName, note, nonce, undefined, // feeUstx
+                undefined, // memo
+                externalId);
                 if (!result || result.error || !result.txid || result.reason) {
                     const errorAndReason = (result === null || result === void 0 ? void 0 : result.error) && (result === null || result === void 0 ? void 0 : result.reason)
                         ? `${result.error} - ${result.reason}`
@@ -658,7 +660,7 @@ class StacksSDK {
          * @returns A promise that resolves to a {CreateTransactionResponse}.
          * @throws {Error} If the address, public key, or vault ID are not set, or if the delegate process fails.
          */
-        this.delegateToPool = async (poolsAddress, poolContractName, amount, lockPeriod, nonce) => {
+        this.delegateToPool = async (poolsAddress, poolContractName, amount, lockPeriod, nonce, externalId) => {
             var _b;
             if (this.testnet) {
                 console.log(`[WARNING] delegateToPool is not supported on testnet.`);
@@ -693,6 +695,7 @@ class StacksSDK {
                     amount: (0, helpers_1.stxToMicro)(amount),
                     lockPeriod,
                     nonce,
+                    externalId,
                 });
                 const assertDelegateResult = (0, helpers_1.assertResultSuccess)(delegateResult);
                 if (assertDelegateResult.success === false) {
@@ -723,7 +726,7 @@ class StacksSDK {
          * @returns A promise that resolves to a {CreateTransactionResponse}.
          * @throws {Error} If the address, public key, or vault ID are not set, or if the process fails.
          */
-        this.allowContractCaller = async (poolsAddress, poolContractName, nonce) => {
+        this.allowContractCaller = async (poolsAddress, poolContractName, nonce, externalId) => {
             if (this.testnet) {
                 console.log(`[WARNING] allowContractCaller is not supported on testnet.`);
                 return {
@@ -742,6 +745,7 @@ class StacksSDK {
                     poolAddress: poolsAddress,
                     poolContractName,
                     nonce,
+                    externalId,
                 });
                 const assertAllowCallerResult = (0, helpers_1.assertResultSuccess)(allowCallerResult);
                 if (assertAllowCallerResult.success === false) {
@@ -770,7 +774,7 @@ class StacksSDK {
          * @returns A promise that resolves to a {CreateTransactionResponse}.
          * @throws {Error} If the address, public key, or vault ID are not set, or if the process fails.
          */
-        this.revokeDelegation = async (nonce) => {
+        this.revokeDelegation = async (nonce, externalId) => {
             if (this.testnet) {
                 console.log(`[WARNING] revokeDelegation is not supported on testnet.`);
                 return {
@@ -787,6 +791,7 @@ class StacksSDK {
                 const revokeResult = await this.buildSignSendContractCall({
                     functionName: "revoke-delegate-stx",
                     nonce,
+                    externalId,
                 });
                 const assertDelegateResult = (0, helpers_1.assertResultSuccess)(revokeResult);
                 if (assertDelegateResult.success === false) {
@@ -943,7 +948,7 @@ class StacksSDK {
          * @param nonce - Optional nonce override (bigint). Defaults to next available gap-aware nonce.
          * @returns A response indicating success or failure of the transaction.
          */
-        this.stackSolo = async (signerKey, signerSig65Hex, amount, maxAmount, lockPeriod, authId, note, nonce) => {
+        this.stackSolo = async (signerKey, signerSig65Hex, amount, maxAmount, lockPeriod, authId, note, nonce, externalId) => {
             var _b, _c;
             try {
                 if (!this.address || !this.publicKey || !this.vaultAccountId) {
@@ -971,6 +976,7 @@ class StacksSDK {
                     authId,
                     note,
                     nonce,
+                    externalId,
                 });
                 const assertResult = (0, helpers_1.assertResultSuccess)(result);
                 if (assertResult.success === false) {
@@ -1012,7 +1018,7 @@ class StacksSDK {
          * @param nonce - Optional nonce override (bigint). Defaults to next available gap-aware nonce.
          * @returns A response indicating success or failure of the transaction.
          */
-        this.increaseStackedAmount = async (signerKey, signerSig65Hex, increaseBy, maxAmount, authId, note, nonce) => {
+        this.increaseStackedAmount = async (signerKey, signerSig65Hex, increaseBy, maxAmount, authId, note, nonce, externalId) => {
             var _b, _c;
             try {
                 if (!this.address || !this.publicKey || !this.vaultAccountId) {
@@ -1028,6 +1034,7 @@ class StacksSDK {
                     authId,
                     note,
                     nonce,
+                    externalId,
                 });
                 const assertResult = (0, helpers_1.assertResultSuccess)(result);
                 if (assertResult.success === false) {
@@ -1069,7 +1076,7 @@ class StacksSDK {
         * @param nonce - Optional nonce override (bigint). Defaults to next available gap-aware nonce.
         * @returns A response indicating success or failure of the transaction.
         */
-        this.extendStackingPeriod = async (signerKey, signerSig65Hex, extendCycles, maxAmount, authId, note, nonce) => {
+        this.extendStackingPeriod = async (signerKey, signerSig65Hex, extendCycles, maxAmount, authId, note, nonce, externalId) => {
             var _b, _c;
             try {
                 if (!this.address || !this.publicKey || !this.vaultAccountId) {
@@ -1085,6 +1092,7 @@ class StacksSDK {
                     authId,
                     note,
                     nonce,
+                    externalId,
                 });
                 const assertResult = (0, helpers_1.assertResultSuccess)(result);
                 if (assertResult.success === false) {
@@ -1129,7 +1137,7 @@ class StacksSDK {
          * @param note - Optional note shown in Fireblocks console during raw signing.
          * @returns A promise that resolves to a {CreateTransactionResponse}.
          */
-        this.replaceTransaction = async (originalTxId, newFee, newRecipient, newAmount, nonceOverride, note) => {
+        this.replaceTransaction = async (originalTxId, newFee, newRecipient, newAmount, nonceOverride, note, externalId) => {
             if (!this.address || !this.publicKey || !this.vaultAccountId) {
                 throw new Error("Address, Public Key or Vault ID are not set");
             }
@@ -1167,7 +1175,7 @@ class StacksSDK {
                         }
                     }
                     const transactionToSign = await this.chainService.serializeTransaction(this.address, this.publicKey, newRecipient, amountUstx, types_1.TransactionType.STX, undefined, undefined, undefined, undefined, nonce, feeBigInt);
-                    const rawSignature = await this.fireblocksService.signTransaction(transactionToSign.preSignSigHash, this.vaultAccountId.toString(), note);
+                    const rawSignature = await this.fireblocksService.signTransaction(transactionToSign.preSignSigHash, this.vaultAccountId.toString(), note, externalId);
                     const signature = (0, helpers_1.concatSignature)(rawSignature.fullSig, rawSignature.v);
                     transactionToSign.unsignedTx.auth.spendingCondition.signature =
                         (0, transactions_1.createMessageSignature)(signature);
@@ -1258,7 +1266,7 @@ class StacksSDK {
                     unsignedTxWire = serialized.unsignedContractCall;
                     preSignSigHash = serialized.preSignSigHash;
                 }
-                const rawSignature = await this.fireblocksService.signTransaction(preSignSigHash, this.vaultAccountId.toString(), note);
+                const rawSignature = await this.fireblocksService.signTransaction(preSignSigHash, this.vaultAccountId.toString(), note, externalId);
                 const signature = (0, helpers_1.concatSignature)(rawSignature.fullSig, rawSignature.v);
                 unsignedTxWire.auth.spendingCondition.signature = (0, transactions_1.createMessageSignature)(signature);
                 const result = await this.chainService.broadcastTransaction(unsignedTxWire);
@@ -1316,7 +1324,7 @@ class StacksSDK {
          * @param postConditionMode - Optional post condition mode.
          * @returns A response indicating success or failure of the transaction.
          */
-        this.makeContractCall = async (contractAddress, contractName, functionName, functionArgs, postConditions, postConditionMode) => {
+        this.makeContractCall = async (contractAddress, contractName, functionName, functionArgs, postConditions, postConditionMode, externalId) => {
             try {
                 if (!this.address || !this.publicKey || !this.vaultAccountId) {
                     throw new Error("Address, Public Key or Vault ID are not set");
@@ -1325,6 +1333,7 @@ class StacksSDK {
                 const result = await this.buildSignSendContractCall({
                     functionName: "generic-contract-call",
                     contractCallParams: { contractAddress, contractName, functionName, functionArgs, postConditions, postConditionMode },
+                    externalId,
                 });
                 const assertResult = (0, helpers_1.assertResultSuccess)(result);
                 if (assertResult.success === false) {
@@ -1352,7 +1361,7 @@ class StacksSDK {
          * Signs an externally built transaction and returns the signed transaction hex.
          * The caller is responsible for broadcasting the signed transaction.
          */
-        this.signExternalTransaction = async (txHex) => {
+        this.signExternalTransaction = async (txHex, externalId) => {
             try {
                 if (!this.publicKey || !this.vaultAccountId) {
                     throw new Error("Public key or vault ID are not set");
@@ -1361,7 +1370,7 @@ class StacksSDK {
                 const tx = (0, transactions_1.deserializeTransaction)(txBytes);
                 const sigHash = tx.signBegin();
                 const preSignSigHash = (0, transactions_1.sigHashPreSign)(sigHash, tx.auth.authType, tx.auth.spendingCondition.fee, tx.auth.spendingCondition.nonce);
-                const rawSignature = await this.fireblocksService.signTransaction(preSignSigHash, this.vaultAccountId.toString(), '');
+                const rawSignature = await this.fireblocksService.signTransaction(preSignSigHash, this.vaultAccountId.toString(), '', externalId);
                 const signature = (0, helpers_1.concatSignature)(rawSignature.fullSig, rawSignature.v);
                 tx.auth.spendingCondition.signature = (0, transactions_1.createMessageSignature)(signature);
                 const signedTxHex = (0, transactions_1.serializeTransaction)(tx);
@@ -1374,7 +1383,7 @@ class StacksSDK {
         /**
          * Signs a plain text message and returns the signature.
          */
-        this.signMessage = async (message) => {
+        this.signMessage = async (message, externalId) => {
             try {
                 if (!this.vaultAccountId) {
                     throw new Error("Vault ID is not set");
@@ -1382,7 +1391,7 @@ class StacksSDK {
                 const { hashMessage } = require('@stacks/encryption');
                 const { bytesToHex } = require('@stacks/common');
                 const hash = bytesToHex(hashMessage(message));
-                const rawSignature = await this.fireblocksService.signTransaction(hash, this.vaultAccountId.toString(), '');
+                const rawSignature = await this.fireblocksService.signTransaction(hash, this.vaultAccountId.toString(), '', externalId);
                 const vHex = rawSignature.v === 0 ? '00' : '01';
                 const signature = rawSignature.fullSig + vHex;
                 return { success: true, signature };
@@ -1395,7 +1404,7 @@ class StacksSDK {
          * Signs a SIP-018 structured message and returns the signature.
          * message and domain are hex-encoded serialized ClarityValues.
          */
-        this.signStructuredMessage = async (message, domain) => {
+        this.signStructuredMessage = async (message, domain, externalId) => {
             try {
                 if (!this.vaultAccountId) {
                     throw new Error("Vault ID is not set");
@@ -1406,7 +1415,7 @@ class StacksSDK {
                 const domainCV = deserializeCV(Buffer.from(domain, 'hex'));
                 const encoded = (0, transactions_1.encodeStructuredDataBytes)({ message: messageCV, domain: domainCV });
                 const hash = Buffer.from(sha256(encoded)).toString('hex');
-                const rawSignature = await this.fireblocksService.signTransaction(hash, this.vaultAccountId.toString(), '');
+                const rawSignature = await this.fireblocksService.signTransaction(hash, this.vaultAccountId.toString(), '', externalId);
                 const signature = (0, helpers_1.concatSignature)(rawSignature.fullSig, rawSignature.v);
                 return { success: true, signature };
             }

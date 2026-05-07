@@ -1,15 +1,17 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.FireblocksSigner = void 0;
+const crypto_1 = require("crypto");
 const ts_sdk_1 = require("@fireblocks/ts-sdk");
 const constants_1 = require("./constants");
 const errorHandling_1 = require("./errorHandling");
 class FireblocksSigner {
     constructor(fireblocks) {
         this.fireblocks = fireblocks;
-        this.createTransactionPayload = () => {
+        this.createTransactionPayload = (externalTxId) => {
             return {
                 note: "raw signing for stacks-fireblocks-sdk",
+                externalTxId,
                 source: {
                     type: ts_sdk_1.TransferPeerPathType.VaultAccount,
                 },
@@ -44,13 +46,13 @@ class FireblocksSigner {
             }
             return tx;
         };
-        this.rawSign = async (content, vaultAccountId, txNote, testnet = false) => {
+        this.rawSign = async (content, vaultAccountId, txNote, testnet = false, externalId) => {
             try {
                 if (typeof content !== "string") {
                     throw new Error("Content for raw signing must be a hex string");
                 }
                 const hexContent = content.startsWith("0x") ? content.slice(2) : content;
-                const transactionPayload = this.createTransactionPayload();
+                const transactionPayload = this.createTransactionPayload(externalId !== null && externalId !== void 0 ? externalId : (0, crypto_1.randomUUID)());
                 if (txNote) {
                     transactionPayload.note = txNote;
                 }

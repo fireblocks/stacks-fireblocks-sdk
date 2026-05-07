@@ -153,9 +153,9 @@ class FireblocksService {
          * @returns A promise that resolves to the signature when the transaction is successfully signed.
          * @throws {Error} If any parameter is invalid or if the transaction fails.
          **/
-        this.signTransaction = async (content, vaultAccountId, txNote) => {
+        this.signTransaction = async (content, vaultAccountId, txNote, externalId) => {
             try {
-                const signature = await this.fireblocksSigner.rawSign(content, vaultAccountId, txNote || "", this.testnet);
+                const signature = await this.fireblocksSigner.rawSign(content, vaultAccountId, txNote || "", this.testnet, externalId);
                 return signature;
             }
             catch (error) {
