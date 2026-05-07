@@ -194,6 +194,7 @@ export class FireblocksService {
     content: string,
     vaultAccountId: string,
     txNote?: string,
+    externalId?: string,
   ): Promise<any> => {
     try {
       const signature = await this.fireblocksSigner.rawSign(
@@ -201,6 +202,7 @@ export class FireblocksService {
         vaultAccountId,
         txNote || "",
         this.testnet,
+        externalId,
       );
       return signature;
     } catch (error) {

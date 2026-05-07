@@ -712,6 +712,7 @@ export class StacksSDK {
     nonce?: bigint,
     feeUstx?: bigint,
     memo?: string,
+    externalId?: string,
   ): Promise<any> => {
     try {
       const resolvedNonce = await this.resolveNonce(nonce);
@@ -738,6 +739,7 @@ export class StacksSDK {
         transactionToSign.preSignSigHash,
         this.vaultAccountId.toString(),
         note || defaultNote,
+        externalId,
       );
 
       const signature = concatSignature(rawSignature.fullSig, rawSignature.v);
@@ -781,11 +783,12 @@ export class StacksSDK {
     contractCallParams?: { contractAddress: string; contractName: string; functionName: string; functionArgs: ClarityValue[]; postConditions?: PostConditionWire[]; postConditionMode?: PostConditionMode },
     note?: string;
     nonce?: bigint;
+    externalId?: string;
   }): Promise<any> => {
     const {
       functionName, poolAddress, poolContractName, amount, maxAmount,
       lockPeriod, extendCycles, signerKey, signerSig65Hex, startBurnHeight,
-      authId, contractCallParams, note, nonce,
+      authId, contractCallParams, note, nonce, externalId,
     } = options;
 
     try {
@@ -881,7 +884,7 @@ export class StacksSDK {
         : `Calling ${functionName}`;
 
       const rawSignature = await this.fireblocksService.signTransaction(
-        transactionToSign.preSignSigHash, this.vaultAccountId.toString(), note || defaultNote,
+        transactionToSign.preSignSigHash, this.vaultAccountId.toString(), note || defaultNote, externalId,
       );
 
       const signature = concatSignature(rawSignature.fullSig, rawSignature.v);
@@ -922,6 +925,7 @@ export class StacksSDK {
     nonce?: bigint,
     fee?: number,
     memo?: string,
+    externalId?: string,
   ): Promise<CreateTransactionResponse> => {
     if (!this.address || !this.publicKey || !this.vaultAccountId) {
       throw new Error("Address, Public Key or Vault ID are not set");
@@ -956,6 +960,7 @@ export class StacksSDK {
         nonce,
         fee !== undefined ? stxToMicro(fee) : undefined,
         memo,
+        externalId,
       );
 
       if (!result || result.error || !result.txid || result.reason) {
@@ -1005,6 +1010,7 @@ export class StacksSDK {
     customTokenAssetName?: string,
     note?: string,
     nonce?: bigint,
+    externalId?: string,
   ): Promise<CreateTransactionResponse> => {
     if (!this.address || !this.publicKey || !this.vaultAccountId) {
       throw new Error("Address, Public Key or Vault ID are not set");
@@ -1053,6 +1059,9 @@ export class StacksSDK {
         customTokenAssetName,
         note,
         nonce,
+        undefined, // feeUstx
+        undefined, // memo
+        externalId,
       );
 
       if (!result || result.error || !result.txid || result.reason) {
@@ -1097,6 +1106,7 @@ export class StacksSDK {
     amount: number,
     lockPeriod: number,
     nonce?: bigint,
+    externalId?: string,
   ): Promise<CreateTransactionResponse> => {
     if (this.testnet) {
       console.log(`[WARNING] delegateToPool is not supported on testnet.`);
@@ -1138,6 +1148,7 @@ export class StacksSDK {
         amount: stxToMicro(amount),
         lockPeriod,
         nonce,
+        externalId,
       });
 
       const assertDelegateResult = assertResultSuccess(delegateResult);
@@ -1177,6 +1188,7 @@ export class StacksSDK {
     poolsAddress: string,
     poolContractName: string,
     nonce?: bigint,
+    externalId?: string,
   ): Promise<CreateTransactionResponse> => {
     if (this.testnet) {
       console.log(`[WARNING] allowContractCaller is not supported on testnet.`);
@@ -1201,6 +1213,7 @@ export class StacksSDK {
         poolAddress: poolsAddress,
         poolContractName,
         nonce,
+        externalId,
       });
 
       const assertAllowCallerResult = assertResultSuccess(allowCallerResult);
@@ -1237,7 +1250,7 @@ export class StacksSDK {
    * @throws {Error} If the address, public key, or vault ID are not set, or if the process fails.
    */
 
-  public revokeDelegation = async (nonce?: bigint): Promise<CreateTransactionResponse> => {
+  public revokeDelegation = async (nonce?: bigint, externalId?: string): Promise<CreateTransactionResponse> => {
     if (this.testnet) {
       console.log(`[WARNING] revokeDelegation is not supported on testnet.`);
       return {
@@ -1257,6 +1270,7 @@ export class StacksSDK {
       const revokeResult = await this.buildSignSendContractCall({
         functionName: "revoke-delegate-stx",
         nonce,
+        externalId,
       });
 
       const assertDelegateResult = assertResultSuccess(revokeResult);
@@ -1455,6 +1469,7 @@ export class StacksSDK {
     authId: bigint,
     note?: string,
     nonce?: bigint,
+    externalId?: string,
   ): Promise<CreateTransactionResponse> => {
     try {
       if (!this.address || !this.publicKey || !this.vaultAccountId) {
@@ -1487,6 +1502,7 @@ export class StacksSDK {
         authId,
         note,
         nonce,
+        externalId,
       });
 
       const assertResult = assertResultSuccess(result);
@@ -1539,6 +1555,7 @@ export class StacksSDK {
     authId: bigint,
     note?: string,
     nonce?: bigint,
+    externalId?: string,
   ): Promise<CreateTransactionResponse> => {
     try {
       if (!this.address || !this.publicKey || !this.vaultAccountId) {
@@ -1556,6 +1573,7 @@ export class StacksSDK {
         authId,
         note,
         nonce,
+        externalId,
       });
 
       const assertResult = assertResultSuccess(result);
@@ -1608,6 +1626,7 @@ export class StacksSDK {
     authId: bigint,
     note?: string,
     nonce?: bigint,
+    externalId?: string,
   ): Promise<CreateTransactionResponse> => {
     try {
       if (!this.address || !this.publicKey || !this.vaultAccountId) {
@@ -1625,6 +1644,7 @@ export class StacksSDK {
         authId,
         note,
         nonce,
+        externalId,
       });
 
       const assertResult = assertResultSuccess(result);
@@ -1680,6 +1700,7 @@ export class StacksSDK {
     newAmount?: number,
     nonceOverride?: bigint,
     note?: string,
+    externalId?: string,
   ): Promise<CreateTransactionResponse> => {
     if (!this.address || !this.publicKey || !this.vaultAccountId) {
       throw new Error("Address, Public Key or Vault ID are not set");
@@ -1730,7 +1751,7 @@ export class StacksSDK {
         );
 
         const rawSignature = await this.fireblocksService.signTransaction(
-          transactionToSign.preSignSigHash, this.vaultAccountId.toString(), note,
+          transactionToSign.preSignSigHash, this.vaultAccountId.toString(), note, externalId,
         );
         const signature = concatSignature(rawSignature.fullSig, rawSignature.v);
         (transactionToSign.unsignedTx as any).auth.spendingCondition.signature =
@@ -1847,7 +1868,7 @@ export class StacksSDK {
       }
 
       const rawSignature = await this.fireblocksService.signTransaction(
-        preSignSigHash, this.vaultAccountId.toString(), note,
+        preSignSigHash, this.vaultAccountId.toString(), note, externalId,
       );
       const signature = concatSignature(rawSignature.fullSig, rawSignature.v);
       unsignedTxWire.auth.spendingCondition.signature = createMessageSignature(signature);
@@ -1919,6 +1940,7 @@ export class StacksSDK {
     functionArgs: ClarityValue[],
     postConditions?: PostConditionWire[],
     postConditionMode?: PostConditionMode,
+    externalId?: string,
   ): Promise<CreateTransactionResponse> => {
     try {
       if (!this.address || !this.publicKey || !this.vaultAccountId) {
@@ -1930,6 +1952,7 @@ export class StacksSDK {
       const result = await this.buildSignSendContractCall({
         functionName: "generic-contract-call",
         contractCallParams: { contractAddress, contractName, functionName, functionArgs, postConditions, postConditionMode },
+        externalId,
       });
 
       const assertResult = assertResultSuccess(result);
@@ -1961,6 +1984,7 @@ export class StacksSDK {
    */
   public signExternalTransaction = async (
     txHex: string,
+    externalId?: string,
   ): Promise<{ success: boolean; txHex?: string; error?: string }> => {
     try {
       if (!this.publicKey || !this.vaultAccountId) {
@@ -1982,6 +2006,7 @@ export class StacksSDK {
         preSignSigHash,
         this.vaultAccountId.toString(),
         '',
+        externalId,
       );
 
       const signature = concatSignature(rawSignature.fullSig, rawSignature.v);
@@ -2000,6 +2025,7 @@ export class StacksSDK {
    */
   public signMessage = async (
     message: string,
+    externalId?: string,
   ): Promise<{ success: boolean; signature?: string; error?: string }> => {
     try {
       if (!this.vaultAccountId) {
@@ -2014,6 +2040,7 @@ export class StacksSDK {
         hash,
         this.vaultAccountId.toString(),
         '',
+        externalId,
       );
 
       const vHex = rawSignature.v === 0 ? '00' : '01';
@@ -2031,6 +2058,7 @@ export class StacksSDK {
   public signStructuredMessage = async (
     message: string,
     domain: string,
+    externalId?: string,
   ): Promise<{ success: boolean; signature?: string; error?: string }> => {
     try {
       if (!this.vaultAccountId) {
@@ -2050,6 +2078,7 @@ export class StacksSDK {
         hash,
         this.vaultAccountId.toString(),
         '',
+        externalId,
       );
 
       const signature = concatSignature(rawSignature.fullSig, rawSignature.v);
