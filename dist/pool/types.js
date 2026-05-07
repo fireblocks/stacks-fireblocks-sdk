@@ -28,4 +28,5 @@ var ActionType;
     ActionType["SIGN_STRUCTURED_MESSAGE"] = "signStructuredMessage";
     ActionType["REPLACE_TRANSACTION"] = "replaceTransaction";
     ActionType["GET_ACCOUNT_NONCE"] = "getAccountNonce";
+    ActionType["ESTIMATE_FEE"] = "estimateFee";
 })(ActionType || (exports.ActionType = ActionType = {}));

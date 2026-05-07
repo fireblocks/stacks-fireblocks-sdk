@@ -45,6 +45,9 @@ class ApiService {
                     case types_1.ActionType.CREATE_FT_TRANSACTION:
                         result = await sdk.createFTTransaction(params.recipientAddress, params.amount, params.tokenType, params.tokenContractAddress, params.tokenContractName, params.tokenAssetName, params.note, params.nonce);
                         break;
+                    case types_1.ActionType.ESTIMATE_FEE:
+                        result = await sdk.estimateFee(params.recipientAddress, params.amount, params.type, params.token, params.customTokenContractAddress, params.customTokenContractName);
+                        break;
                     case types_1.ActionType.GET_BALANCE:
                         result = await sdk.getBalance();
                         break;

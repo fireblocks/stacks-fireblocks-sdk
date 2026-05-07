@@ -283,6 +283,34 @@ class StacksSDK {
          * @returns A promise that resolves to an object indicating if parameters are valid, the final amount, and reason if invalid.
          * @throws {Error} If parameter validation fails.
          */
+        this.estimateFee = async (recipientAddress, amount, type = types_1.TransactionType.STX, token, customTokenContractAddress, customTokenContractName) => {
+            var _b, _c;
+            try {
+                if (!this.address || !this.publicKey || !this.vaultAccountId) {
+                    throw new Error('Address, Public Key or Vault ID are not set');
+                }
+                const microAmount = type === types_1.TransactionType.FungibleToken
+                    ? (0, helpers_1.stxToMicro)(amount)
+                    : (0, helpers_1.stxToMicro)(amount);
+                let microfee = 0;
+                if (type === types_1.TransactionType.STX) {
+                    microfee = await this.chainService.estimateTxFee(recipientAddress, microAmount);
+                }
+                else if (type === types_1.TransactionType.FungibleToken) {
+                    const tokenInfo = token !== types_1.TokenType.CUSTOM
+                        ? (0, helpers_1.getTokenInfo)(token, this.testnet ? 'testnet' : 'mainnet')
+                        : undefined;
+                    const ftContractAddress = (_b = tokenInfo === null || tokenInfo === void 0 ? void 0 : tokenInfo.contractAddress) !== null && _b !== void 0 ? _b : customTokenContractAddress;
+                    const ftContractName = (_c = tokenInfo === null || tokenInfo === void 0 ? void 0 : tokenInfo.contractName) !== null && _c !== void 0 ? _c : customTokenContractName;
+                    const functionArgs = [(0, transactions_1.uintCV)(microAmount), (0, transactions_1.principalCV)(this.address), (0, transactions_1.principalCV)(recipientAddress), (0, transactions_1.noneCV)()];
+                    microfee = await this.chainService.estimateContractCallFee(ftContractAddress, ftContractName, 'transfer', functionArgs);
+                }
+                return { success: true, fee: (0, helpers_1.microToStx)(microfee), microfee };
+            }
+            catch (error) {
+                return { success: false, error: (0, errorHandling_1.formatErrorMessage)(error) };
+            }
+        };
         this.checkParamsAndAdjustAmount = async (recipientAddress, amount, grossTransaction = false, type = types_1.TransactionType.STX, token, customTokenContractAddress, customTokenContractName) => {
             var _b, _c, _d, _e;
             try {
