@@ -73,7 +73,7 @@ class ApiService {
                         result = await sdk.extendStackingPeriod(params.signerKey, params.signerSig65Hex, params.extendCycles, params.maxAmount, params.authId, params.nonce);
                         break;
                     case types_1.ActionType.REPLACE_TRANSACTION:
-                        result = await sdk.replaceTransaction(params.originalTxId, params.newFee, params.newRecipient, params.newAmount, params.nonceOverride);
+                        result = await sdk.replaceTransaction(params.newFee, params.originalTxId, params.newRecipient, params.newAmount, params.nonceOverride);
                         break;
                     case types_1.ActionType.GET_CONTRACT_CALL_HISTORY:
                         result = await sdk.getContractCallHistory(params.limit, params.offset);

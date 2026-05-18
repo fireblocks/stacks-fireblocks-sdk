@@ -1124,25 +1124,35 @@ class StacksSDK {
             }
         };
         /**
-         * Replaces a pending STX transaction with a new one using the same nonce but a higher fee.
-         * Supports both native STX token_transfer and contract_call transactions.
-         * @param originalTxId - The transaction ID of the transaction to replace.
-         * @param newFee - The new fee in STX. Must be at least RBF_MIN_FEE_MULTIPLIER × the original.
-         * @param newRecipient - For token_transfer only: optional new recipient. Defaults to original.
-         * @param newAmount - For token_transfer only: optional new amount in STX. Defaults to original.
-         * @param nonceOverride - Optional nonce override (bigint). Bypasses the Hiro indexer lookup
-         *   and skips ownership validation of the original transaction. Use only when you are certain
-         *   of the nonce value and the original tx is not visible in the explorer. When set,
-         *   newRecipient and newAmount are required (only STX transfers supported on this path).
+         * Replaces a pending transaction with a higher fee (replace-by-fee / RBF).
+         *
+         * Two mutually exclusive modes — provide one, not both:
+         *   - `originalTxId` only: tx is visible in the explorer. SDK looks it up, reads its nonce,
+         *     and reconstructs it. Works for token_transfer and contract_call. `newFee` must be
+         *     at least RBF_MIN_FEE_MULTIPLIER × the original. `newRecipient`/`newAmount` are optional
+         *     overrides for token_transfer only.
+         *   - `nonceOverride` only: tx is NOT visible in the explorer. SDK skips lookup entirely.
+         *     `originalTxId` is unused — omit it. Only STX transfers supported. `newRecipient` and
+         *     `newAmount` are required since there is nothing to reconstruct.
+         *
+         * @param originalTxId - TX ID to look up and replace. Required unless using nonceOverride.
+         * @param newFee - New fee in STX. Must be > 0 and ≤ MAX_FEE_STX.
+         * @param newRecipient - New recipient (token_transfer only). Optional on lookup path, required on override path.
+         * @param newAmount - New amount in STX (token_transfer only). Optional on lookup path, required on override path.
+         * @param nonceOverride - Nonce of the stuck tx. Use only when the tx is not visible in the explorer.
          * @param note - Optional note shown in Fireblocks console during raw signing.
          * @returns A promise that resolves to a {CreateTransactionResponse}.
          */
-        this.replaceTransaction = async (originalTxId, newFee, newRecipient, newAmount, nonceOverride, note, externalId) => {
+        this.replaceTransaction = async (newFee, originalTxId, newRecipient, newAmount, nonceOverride, note, externalId) => {
             if (!this.address || !this.publicKey || !this.vaultAccountId) {
                 throw new Error("Address, Public Key or Vault ID are not set");
             }
             try {
+                (0, validation_1.parseOptionalFee)(newFee);
                 const feeBigInt = (0, helpers_1.stxToMicro)(newFee);
+                if (!originalTxId && nonceOverride === undefined) {
+                    return { success: false, error: "Either originalTxId or nonceOverride must be provided" };
+                }
                 if (nonceOverride !== undefined) {
                     // ── Override path: nonce is known, tx may not be visible to the indexer ──
                     // Only STX transfers are supported here — no original tx to reconstruct args from.
@@ -1222,6 +1232,12 @@ class StacksSDK {
                         error: `New fee (${newFee} STX) must be at least ${constants_1.RBF_MIN_FEE_MULTIPLIER}x the original fee (${(0, helpers_1.microToStx)(originalFeeUstx)} STX). Minimum required: ${(0, helpers_1.microToStx)(minFeeUstx)} STX`,
                     };
                 }
+                if (fullTx.tx_type === "contract_call" && (newRecipient !== undefined || newAmount !== undefined)) {
+                    return {
+                        success: false,
+                        error: "newRecipient and newAmount can only be changed for native STX transfers. This transaction is a contract_call.",
+                    };
+                }
                 const nonce = BigInt(fullTx.nonce);
                 let unsignedTxWire;
                 let preSignSigHash;
@@ -1280,6 +1296,9 @@ class StacksSDK {
                 return { success: true, txHash: result.txid };
             }
             catch (error) {
+                if (error instanceof validation_1.ValidationError) {
+                    return { success: false, error: error.message };
+                }
                 console.error(`Error replacing transaction: ${(0, errorHandling_1.formatErrorMessage)(error)}`);
                 return {
                     success: false,
