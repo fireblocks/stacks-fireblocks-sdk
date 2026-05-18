@@ -157,8 +157,8 @@ export class ApiService {
           break;
         case ActionType.REPLACE_TRANSACTION:
           result = await sdk.replaceTransaction(
-            params.originalTxId,
             params.newFee,
+            params.originalTxId,
             params.newRecipient,
             params.newAmount,
             params.nonceOverride,

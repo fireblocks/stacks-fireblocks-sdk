@@ -39,7 +39,7 @@ import {
   TransactionType,
 } from "./services/types";
 import { helperConstants, pagination_defaults, POX4_ERRORS, RBF_MIN_FEE_MULTIPLIER } from "./utils/constants";
-import { ValidationError } from "./utils/validation";
+import { parseOptionalFee, ValidationError } from "./utils/validation";
 import { formatErrorMessage } from "./utils/errorHandling";
 import { validateApiCredentials } from "./utils/fireblocks.utils";
 import {
@@ -1680,22 +1680,28 @@ export class StacksSDK {
 
 
   /**
-   * Replaces a pending STX transaction with a new one using the same nonce but a higher fee.
-   * Supports both native STX token_transfer and contract_call transactions.
-   * @param originalTxId - The transaction ID of the transaction to replace.
-   * @param newFee - The new fee in STX. Must be at least RBF_MIN_FEE_MULTIPLIER × the original.
-   * @param newRecipient - For token_transfer only: optional new recipient. Defaults to original.
-   * @param newAmount - For token_transfer only: optional new amount in STX. Defaults to original.
-   * @param nonceOverride - Optional nonce override (bigint). Bypasses the Hiro indexer lookup
-   *   and skips ownership validation of the original transaction. Use only when you are certain
-   *   of the nonce value and the original tx is not visible in the explorer. When set,
-   *   newRecipient and newAmount are required (only STX transfers supported on this path).
+   * Replaces a pending transaction with a higher fee (replace-by-fee / RBF).
+   *
+   * Two mutually exclusive modes — provide one, not both:
+   *   - `originalTxId` only: tx is visible in the explorer. SDK looks it up, reads its nonce,
+   *     and reconstructs it. Works for token_transfer and contract_call. `newFee` must be
+   *     at least RBF_MIN_FEE_MULTIPLIER × the original. `newRecipient`/`newAmount` are optional
+   *     overrides for token_transfer only.
+   *   - `nonceOverride` only: tx is NOT visible in the explorer. SDK skips lookup entirely.
+   *     `originalTxId` is unused — omit it. Only STX transfers supported. `newRecipient` and
+   *     `newAmount` are required since there is nothing to reconstruct.
+   *
+   * @param originalTxId - TX ID to look up and replace. Required unless using nonceOverride.
+   * @param newFee - New fee in STX. Must be > 0 and ≤ MAX_FEE_STX.
+   * @param newRecipient - New recipient (token_transfer only). Optional on lookup path, required on override path.
+   * @param newAmount - New amount in STX (token_transfer only). Optional on lookup path, required on override path.
+   * @param nonceOverride - Nonce of the stuck tx. Use only when the tx is not visible in the explorer.
    * @param note - Optional note shown in Fireblocks console during raw signing.
    * @returns A promise that resolves to a {CreateTransactionResponse}.
    */
   public replaceTransaction = async (
-    originalTxId: string,
     newFee: number,
+    originalTxId?: string,
     newRecipient?: string,
     newAmount?: number,
     nonceOverride?: bigint,
@@ -1707,7 +1713,12 @@ export class StacksSDK {
     }
 
     try {
+      parseOptionalFee(newFee);
       const feeBigInt = stxToMicro(newFee);
+
+      if (!originalTxId && nonceOverride === undefined) {
+        return { success: false, error: "Either originalTxId or nonceOverride must be provided" };
+      }
 
       if (nonceOverride !== undefined) {
         // ── Override path: nonce is known, tx may not be visible to the indexer ──
@@ -1769,7 +1780,7 @@ export class StacksSDK {
       }
 
       // ── Lookup path: reconstruct any pending tx type with higher fee ──────────
-      const originalTxResponse = await this.getTxStatusById(originalTxId);
+      const originalTxResponse = await this.getTxStatusById(originalTxId!);
 
       if (!originalTxResponse.success || !originalTxResponse.data) {
         return { success: false, error: "Could not fetch original transaction details" };
@@ -1805,6 +1816,13 @@ export class StacksSDK {
         return {
           success: false,
           error: `New fee (${newFee} STX) must be at least ${RBF_MIN_FEE_MULTIPLIER}x the original fee (${microToStx(originalFeeUstx)} STX). Minimum required: ${microToStx(minFeeUstx)} STX`,
+        };
+      }
+
+      if (fullTx.tx_type === "contract_call" && (newRecipient !== undefined || newAmount !== undefined)) {
+        return {
+          success: false,
+          error: "newRecipient and newAmount can only be changed for native STX transfers. This transaction is a contract_call.",
         };
       }
 
@@ -1886,6 +1904,9 @@ export class StacksSDK {
       console.log(`Replaced transaction ${originalTxId} with ${result.txid}`);
       return { success: true, txHash: result.txid };
     } catch (error) {
+      if (error instanceof ValidationError) {
+        return { success: false, error: error.message };
+      }
       console.error(`Error replacing transaction: ${formatErrorMessage(error)}`);
       return {
         success: false,
