@@ -182,6 +182,8 @@ export const createTransaction: Handler = async (req, res, next) => {
       req.body.grossTransaction === true ||
       String(req.body.grossTransaction || "false").toLowerCase() === "true";
     const note = req.body.note ? String(req.body.note) : undefined;
+    const memo = req.body.memo ? String(req.body.memo) : undefined;
+    const externalId = req.body.externalId ? String(req.body.externalId) : undefined;
     const tokenContractAddress = req.body.tokenContractAddress
       ? String(req.body.tokenContractAddress).trim()
       : undefined;
@@ -240,7 +242,7 @@ export const createTransaction: Handler = async (req, res, next) => {
       const tx = await apiService.executeAction(
         vaultId,
         ActionType.CREATE_NATIVE_TRANSACTION,
-        { recipientAddress, amount, grossTransaction, note, nonce, fee },
+        { recipientAddress, amount, grossTransaction, note, nonce, fee, memo, externalId },
       );
       res.json(tx);
       return;
@@ -259,6 +261,7 @@ export const createTransaction: Handler = async (req, res, next) => {
         tokenAssetName,
         note,
         nonce,
+        externalId,
       },
     );
     res.json(tx);
@@ -602,22 +605,26 @@ export const replaceTransaction: Handler = async (req, res, next) => {
   try {
     const vaultId = getVaultId(req);
 
-    const originalTxId = String(req.body.originalTxId || "").trim();
-    const newRecipient = req.body.newRecipient
-      ? String(req.body.newRecipient).trim()
-      : undefined;
+    const originalTxId = req.body.originalTxId ? String(req.body.originalTxId).trim() : undefined;
+    const newRecipient = req.body.newRecipient ? String(req.body.newRecipient).trim() : undefined;
+    const note = req.body.note ? String(req.body.note) : undefined;
+    const externalId = req.body.externalId ? String(req.body.externalId) : undefined;
 
-    if (!originalTxId || req.body.newFee === undefined || req.body.newFee === "") {
-      res.status(400).json({
-        error: "Bad Request: originalTxId and newFee are required",
-      });
+    if (req.body.newFee === undefined || req.body.newFee === "") {
+      res.status(400).json({ error: "Bad Request: newFee is required" });
       return;
     }
 
     const newFee = parseOptionalFee(req.body.newFee)!;
-
     const newAmount = parseOptionalFee(req.body.newAmount);
     const nonceOverride = parseOptionalNonce(req.body.nonceOverride);
+
+    if (!originalTxId && nonceOverride === undefined) {
+      res.status(400).json({
+        error: "Bad Request: either originalTxId or nonceOverride must be provided",
+      });
+      return;
+    }
 
     if (nonceOverride !== undefined) {
       if (!newRecipient || newAmount === undefined) {
@@ -631,7 +638,7 @@ export const replaceTransaction: Handler = async (req, res, next) => {
     const tx = await apiService.executeAction(
       vaultId,
       ActionType.REPLACE_TRANSACTION,
-      { originalTxId, newFee, newRecipient, newAmount, nonceOverride },
+      { originalTxId, newFee, newRecipient, newAmount, nonceOverride, note, externalId },
     );
     res.json(tx);
   } catch (err) {

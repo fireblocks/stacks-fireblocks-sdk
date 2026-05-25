@@ -402,6 +402,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
     customTokenAssetName?: string,
     nonce?: bigint,
     fee?: bigint,
+    memo?: string,
   ): Promise<StacksTransactionWire> => {
     try {
       if (!validateAddress(recipient, this.network === STACKS_TESTNET)) {
@@ -480,6 +481,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
           network: this.network,
           ...(nonce !== undefined ? { nonce } : {}),
           ...(fee !== undefined ? { fee } : {}),
+          ...(memo !== undefined ? { memo } : {}),
         });
       }
 
@@ -570,6 +572,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
     customTokenAssetName?: string,
     nonce?: bigint,
     fee?: bigint,
+    memo?: string,
   ): Promise<{
     unsignedTx: StacksTransactionWire;
     preSignSigHash: string;
@@ -601,6 +604,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
         customTokenAssetName,
         nonce,
         fee,
+        memo,
       );
       const sigHash = unsignedTx.signBegin();
 

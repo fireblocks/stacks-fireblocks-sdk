@@ -110,6 +110,8 @@ export class ApiService {
             params.note,
             params.nonce,
             params.fee,
+            params.memo,
+            params.externalId,
           );
           break;
         case ActionType.CREATE_FT_TRANSACTION:
@@ -122,6 +124,7 @@ export class ApiService {
             params.tokenAssetName,
             params.note,
             params.nonce,
+            params.externalId,
           );
           break;
         case ActionType.GET_BALANCE:
@@ -170,8 +173,8 @@ export class ApiService {
           break;
         case ActionType.REPLACE_TRANSACTION:
           result = await sdk.replaceTransaction(
-            params.originalTxId,
             params.newFee,
+            params.originalTxId,
             params.newRecipient,
             params.newAmount,
             params.nonceOverride,

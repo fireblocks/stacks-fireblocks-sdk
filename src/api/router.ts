@@ -365,6 +365,12 @@ router.get(
  *               note:
  *                 type: string
  *                 description: Optional note attached to Fireblocks signing request
+ *               memo:
+ *                 type: string
+ *                 description: STX only — optional on-chain memo included in the transaction.
+ *               externalId:
+ *                 type: string
+ *                 description: Optional idempotency key passed to Fireblocks as externalTxId for deduplication.
  *               nonce:
  *                 type: integer
  *                 minimum: 0

@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import {
   Fireblocks,
   TransactionOperation,
@@ -14,9 +15,10 @@ import { formatErrorMessage } from "./errorHandling";
 export class FireblocksSigner {
   constructor(public fireblocks: Fireblocks) {}
 
-  createTransactionPayload = (): TransactionRequest => {
+  createTransactionPayload = (externalTxId: string): TransactionRequest => {
     return {
       note: "raw signing for stacks-fireblocks-sdk",
+      externalTxId,
       source: {
         type: TransferPeerPathType.VaultAccount,
       },
@@ -64,6 +66,7 @@ export class FireblocksSigner {
     vaultAccountId: string,
     txNote?: string,
     testnet: boolean = false,
+    externalId?: string,
   ): Promise<any> => {
     try {
       if (typeof content !== "string") {
@@ -72,7 +75,7 @@ export class FireblocksSigner {
 
       const hexContent = content.startsWith("0x") ? content.slice(2) : content;
 
-      const transactionPayload = this.createTransactionPayload();
+      const transactionPayload = this.createTransactionPayload(externalId ?? randomUUID());
 
       if (txNote) {
         transactionPayload.note = txNote;

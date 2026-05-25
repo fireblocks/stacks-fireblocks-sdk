@@ -37,7 +37,7 @@ import {
   TransactionType,
 } from "./services/types";
 import { helperConstants, pagination_defaults, POX4_ERRORS, RBF_MIN_FEE_MULTIPLIER } from "./utils/constants";
-import { ValidationError } from "./utils/validation";
+import { parseOptionalFee, ValidationError } from "./utils/validation";
 import { formatErrorMessage } from "./utils/errorHandling";
 import { validateApiCredentials } from "./utils/fireblocks.utils";
 import {
@@ -666,6 +666,8 @@ export class StacksSDK {
     note?: string,
     nonce?: bigint,
     feeUstx?: bigint,
+    memo?: string,
+    externalId?: string,
   ): Promise<any> => {
     try {
       const resolvedNonce = await this.resolveNonce(nonce);
@@ -681,6 +683,7 @@ export class StacksSDK {
         customTokenAssetName,
         resolvedNonce,
         feeUstx,
+        memo,
       );
 
       const defaultNote = type === TransactionType.FungibleToken
@@ -691,6 +694,7 @@ export class StacksSDK {
         transactionToSign.preSignSigHash,
         this.vaultAccountId.toString(),
         note || defaultNote,
+        externalId,
       );
 
       const signature = concatSignature(rawSignature.fullSig, rawSignature.v);
@@ -732,11 +736,12 @@ export class StacksSDK {
     authId?: bigint;
     note?: string;
     nonce?: bigint;
+    externalId?: string;
   }): Promise<any> => {
     const {
       functionName, poolAddress, poolContractName, amount, maxAmount,
       lockPeriod, extendCycles, signerKey, signerSig65Hex, startBurnHeight,
-      authId, note, nonce,
+      authId, note, nonce, externalId,
     } = options;
 
     try {
@@ -815,7 +820,7 @@ export class StacksSDK {
         : `Calling ${functionName}`;
 
       const rawSignature = await this.fireblocksService.signTransaction(
-        transactionToSign.preSignSigHash, this.vaultAccountId.toString(), note || defaultNote,
+        transactionToSign.preSignSigHash, this.vaultAccountId.toString(), note || defaultNote, externalId,
       );
 
       const signature = concatSignature(rawSignature.fullSig, rawSignature.v);
@@ -850,6 +855,8 @@ export class StacksSDK {
     note?: string,
     nonce?: bigint,
     fee?: number,
+    memo?: string,
+    externalId?: string,
   ): Promise<CreateTransactionResponse> => {
     if (!this.address || !this.publicKey || !this.vaultAccountId) {
       throw new Error("Address, Public Key or Vault ID are not set");
@@ -883,6 +890,8 @@ export class StacksSDK {
         note,
         nonce,
         fee !== undefined ? stxToMicro(fee) : undefined,
+        memo,
+        externalId,
       );
 
       if (!result || result.error || !result.txid || result.reason) {
@@ -932,6 +941,7 @@ export class StacksSDK {
     customTokenAssetName?: string,
     note?: string,
     nonce?: bigint,
+    externalId?: string,
   ): Promise<CreateTransactionResponse> => {
     if (!this.address || !this.publicKey || !this.vaultAccountId) {
       throw new Error("Address, Public Key or Vault ID are not set");
@@ -980,6 +990,9 @@ export class StacksSDK {
         customTokenAssetName,
         note,
         nonce,
+        undefined, // feeUstx
+        undefined, // memo
+        externalId,
       );
 
       if (!result || result.error || !result.txid || result.reason) {
@@ -1024,6 +1037,7 @@ export class StacksSDK {
     amount: number,
     lockPeriod: number,
     nonce?: bigint,
+    externalId?: string,
   ): Promise<CreateTransactionResponse> => {
     if (this.testnet) {
       console.log(`[WARNING] delegateToPool is not supported on testnet.`);
@@ -1065,6 +1079,7 @@ export class StacksSDK {
         amount: stxToMicro(amount),
         lockPeriod,
         nonce,
+        externalId,
       });
 
       const assertDelegateResult = assertResultSuccess(delegateResult);
@@ -1104,6 +1119,7 @@ export class StacksSDK {
     poolsAddress: string,
     poolContractName: string,
     nonce?: bigint,
+    externalId?: string,
   ): Promise<CreateTransactionResponse> => {
     if (this.testnet) {
       console.log(`[WARNING] allowContractCaller is not supported on testnet.`);
@@ -1128,6 +1144,7 @@ export class StacksSDK {
         poolAddress: poolsAddress,
         poolContractName,
         nonce,
+        externalId,
       });
 
       const assertAllowCallerResult = assertResultSuccess(allowCallerResult);
@@ -1164,7 +1181,7 @@ export class StacksSDK {
    * @throws {Error} If the address, public key, or vault ID are not set, or if the process fails.
    */
 
-  public revokeDelegation = async (nonce?: bigint): Promise<CreateTransactionResponse> => {
+  public revokeDelegation = async (nonce?: bigint, externalId?: string): Promise<CreateTransactionResponse> => {
     if (this.testnet) {
       console.log(`[WARNING] revokeDelegation is not supported on testnet.`);
       return {
@@ -1184,6 +1201,7 @@ export class StacksSDK {
       const revokeResult = await this.buildSignSendContractCall({
         functionName: "revoke-delegate-stx",
         nonce,
+        externalId,
       });
 
       const assertDelegateResult = assertResultSuccess(revokeResult);
@@ -1380,6 +1398,7 @@ export class StacksSDK {
     lockPeriod: number,
     authId: bigint,
     nonce?: bigint,
+    externalId?: string,
   ): Promise<CreateTransactionResponse> => {
     try {
       if (!this.address || !this.publicKey || !this.vaultAccountId) {
@@ -1411,6 +1430,7 @@ export class StacksSDK {
         startBurnHeight,
         authId,
         nonce,
+        externalId,
       });
 
       const assertResult = assertResultSuccess(result);
@@ -1461,6 +1481,7 @@ export class StacksSDK {
     maxAmount: number,
     authId: bigint,
     nonce?: bigint,
+    externalId?: string,
   ): Promise<CreateTransactionResponse> => {
     try {
       if (!this.address || !this.publicKey || !this.vaultAccountId) {
@@ -1477,6 +1498,7 @@ export class StacksSDK {
         signerSig65Hex,
         authId,
         nonce,
+        externalId,
       });
 
       const assertResult = assertResultSuccess(result);
@@ -1527,6 +1549,7 @@ export class StacksSDK {
     maxAmount: number,
     authId: bigint,
     nonce?: bigint,
+    externalId?: string,
   ): Promise<CreateTransactionResponse> => {
     try {
       if (!this.address || !this.publicKey || !this.vaultAccountId) {
@@ -1543,6 +1566,7 @@ export class StacksSDK {
         signerSig65Hex,
         authId,
         nonce,
+        externalId,
       });
 
       const assertResult = assertResultSuccess(result);
@@ -1578,31 +1602,45 @@ export class StacksSDK {
 
 
   /**
-   * Replaces a pending STX transaction with a new one using the same nonce but a higher fee.
-   * Supports both native STX token_transfer and contract_call transactions.
-   * @param originalTxId - The transaction ID of the transaction to replace.
-   * @param newFee - The new fee in STX. Must be at least RBF_MIN_FEE_MULTIPLIER × the original.
-   * @param newRecipient - For token_transfer only: optional new recipient. Defaults to original.
-   * @param newAmount - For token_transfer only: optional new amount in STX. Defaults to original.
-   * @param nonceOverride - Optional nonce override (bigint). Bypasses the Hiro indexer lookup
-   *   and skips ownership validation of the original transaction. Use only when you are certain
-   *   of the nonce value and the original tx is not visible in the explorer. When set,
-   *   newRecipient and newAmount are required (only STX transfers supported on this path).
+   * Replaces a pending transaction with a higher fee (replace-by-fee / RBF).
+   *
+   * Two mutually exclusive modes — provide one, not both:
+   *   - `originalTxId` only: tx is visible in the explorer. SDK looks it up, reads its nonce,
+   *     and reconstructs it. Works for token_transfer and contract_call. `newFee` must be
+   *     at least RBF_MIN_FEE_MULTIPLIER × the original. `newRecipient`/`newAmount` are optional
+   *     overrides for token_transfer only.
+   *   - `nonceOverride` only: tx is NOT visible in the explorer. SDK skips lookup entirely.
+   *     `originalTxId` is unused — omit it. Only STX transfers supported. `newRecipient` and
+   *     `newAmount` are required since there is nothing to reconstruct.
+   *
+   * @param newFee - New fee in STX. Must be > 0 and ≤ MAX_FEE_STX.
+   * @param originalTxId - TX ID to look up and replace. Required unless using nonceOverride.
+   * @param newRecipient - New recipient (token_transfer only). Optional on lookup path, required on override path.
+   * @param newAmount - New amount in STX (token_transfer only). Optional on lookup path, required on override path.
+   * @param nonceOverride - Nonce of the stuck tx. Use only when the tx is not visible in the explorer.
+   * @param note - Optional note shown in Fireblocks console during raw signing.
    * @returns A promise that resolves to a {CreateTransactionResponse}.
    */
   public replaceTransaction = async (
-    originalTxId: string,
     newFee: number,
+    originalTxId?: string,
     newRecipient?: string,
     newAmount?: number,
     nonceOverride?: bigint,
+    note?: string,
+    externalId?: string,
   ): Promise<CreateTransactionResponse> => {
     if (!this.address || !this.publicKey || !this.vaultAccountId) {
       throw new Error("Address, Public Key or Vault ID are not set");
     }
 
     try {
+      parseOptionalFee(newFee);
       const feeBigInt = stxToMicro(newFee);
+
+      if (!originalTxId && nonceOverride === undefined) {
+        return { success: false, error: "Either originalTxId or nonceOverride must be provided" };
+      }
 
       if (nonceOverride !== undefined) {
         // ── Override path: nonce is known, tx may not be visible to the indexer ──
@@ -1646,7 +1684,7 @@ export class StacksSDK {
         );
 
         const rawSignature = await this.fireblocksService.signTransaction(
-          transactionToSign.preSignSigHash, this.vaultAccountId.toString(),
+          transactionToSign.preSignSigHash, this.vaultAccountId.toString(), note, externalId,
         );
         const signature = concatSignature(rawSignature.fullSig, rawSignature.v);
         (transactionToSign.unsignedTx as any).auth.spendingCondition.signature =
@@ -1664,7 +1702,7 @@ export class StacksSDK {
       }
 
       // ── Lookup path: reconstruct any pending tx type with higher fee ──────────
-      const originalTxResponse = await this.getTxStatusById(originalTxId);
+      const originalTxResponse = await this.getTxStatusById(originalTxId!);
 
       if (!originalTxResponse.success || !originalTxResponse.data) {
         return { success: false, error: "Could not fetch original transaction details" };
@@ -1700,6 +1738,13 @@ export class StacksSDK {
         return {
           success: false,
           error: `New fee (${newFee} STX) must be at least ${RBF_MIN_FEE_MULTIPLIER}x the original fee (${microToStx(originalFeeUstx)} STX). Minimum required: ${microToStx(minFeeUstx)} STX`,
+        };
+      }
+
+      if (fullTx.tx_type === "contract_call" && (newRecipient !== undefined || newAmount !== undefined)) {
+        return {
+          success: false,
+          error: "newRecipient and newAmount can only be changed for native STX transfers. This transaction is a contract_call.",
         };
       }
 
@@ -1763,7 +1808,7 @@ export class StacksSDK {
       }
 
       const rawSignature = await this.fireblocksService.signTransaction(
-        preSignSigHash, this.vaultAccountId.toString(),
+        preSignSigHash, this.vaultAccountId.toString(), note, externalId,
       );
       const signature = concatSignature(rawSignature.fullSig, rawSignature.v);
       unsignedTxWire.auth.spendingCondition.signature = createMessageSignature(signature);
@@ -1781,6 +1826,9 @@ export class StacksSDK {
       console.log(`Replaced transaction ${originalTxId} with ${result.txid}`);
       return { success: true, txHash: result.txid };
     } catch (error) {
+      if (error instanceof ValidationError) {
+        return { success: false, error: error.message };
+      }
       console.error(`Error replacing transaction: ${formatErrorMessage(error)}`);
       return {
         success: false,
