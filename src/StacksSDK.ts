@@ -36,7 +36,7 @@ import {
   TransactionDetails,
   TransactionType,
 } from "./services/types";
-import { helperConstants, pagination_defaults, POX4_ERRORS, RBF_MIN_FEE_MULTIPLIER } from "./utils/constants";
+import { helperConstants, pagination_defaults, POX4_ERRORS, RBF_MIN_FEE_BUMP_USTX } from "./utils/constants";
 import { parseOptionalFee, ValidationError } from "./utils/validation";
 import { formatErrorMessage } from "./utils/errorHandling";
 import { validateApiCredentials } from "./utils/fireblocks.utils";
@@ -1607,7 +1607,7 @@ export class StacksSDK {
    * Two mutually exclusive modes — provide one, not both:
    *   - `originalTxId` only: tx is visible in the explorer. SDK looks it up, reads its nonce,
    *     and reconstructs it. Works for token_transfer and contract_call. `newFee` must be
-   *     at least RBF_MIN_FEE_MULTIPLIER × the original. `newRecipient`/`newAmount` are optional
+   *     strictly greater than the original fee. `newRecipient`/`newAmount` are optional
    *     overrides for token_transfer only.
    *   - `nonceOverride` only: tx is NOT visible in the explorer. SDK skips lookup entirely.
    *     `originalTxId` is unused — omit it. Only STX transfers supported. `newRecipient` and
@@ -1731,13 +1731,13 @@ export class StacksSDK {
         };
       }
 
-      // Fee check: new fee must be at least RBF_MIN_FEE_MULTIPLIER × original
+      // Fee check: new fee must exceed the original by at least 1 microSTX
       const originalFeeUstx = BigInt(fullTx.fee_rate);
-      const minFeeUstx = (originalFeeUstx * BigInt(Math.round(RBF_MIN_FEE_MULTIPLIER * 100))) / BigInt(100);
+      const minFeeUstx = originalFeeUstx + RBF_MIN_FEE_BUMP_USTX;
       if (feeBigInt < minFeeUstx) {
         return {
           success: false,
-          error: `New fee (${newFee} STX) must be at least ${RBF_MIN_FEE_MULTIPLIER}x the original fee (${microToStx(originalFeeUstx)} STX). Minimum required: ${microToStx(minFeeUstx)} STX`,
+          error: `New fee (${newFee} STX) must be greater than the original fee (${microToStx(originalFeeUstx)} STX).`,
         };
       }
 

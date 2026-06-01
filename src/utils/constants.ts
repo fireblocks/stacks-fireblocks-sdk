@@ -20,10 +20,9 @@ export const helperConstants = {
   stacks_api_max_limit: 200, // Maximum limit accepted from callers; service paginates internally when limit > stacks_api_page_size
 }
 
-// Minimum fee multiplier for replace-by-fee (RBF) transactions.
-// The new fee must be at least this multiple of the original fee.
-// Applied only on the lookup path (when the original tx is visible to the indexer).
-export const RBF_MIN_FEE_MULTIPLIER = 1.25;
+// Minimum fee bump for replace-by-fee (RBF) transactions, in microSTX.
+// The new fee must exceed the original fee by at least this amount.
+export const RBF_MIN_FEE_BUMP_USTX = BigInt(1);
 
 // Maximum fee accepted by the SDK in STX. Guards against typos (e.g. 100 instead of 0.001).
 export const MAX_FEE_STX = 10;
