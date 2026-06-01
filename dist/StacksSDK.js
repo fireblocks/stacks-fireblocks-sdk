@@ -1129,7 +1129,7 @@ class StacksSDK {
          * Two mutually exclusive modes — provide one, not both:
          *   - `originalTxId` only: tx is visible in the explorer. SDK looks it up, reads its nonce,
          *     and reconstructs it. Works for token_transfer and contract_call. `newFee` must be
-         *     at least RBF_MIN_FEE_MULTIPLIER × the original. `newRecipient`/`newAmount` are optional
+         *     strictly greater than the original fee. `newRecipient`/`newAmount` are optional
          *     overrides for token_transfer only.
          *   - `nonceOverride` only: tx is NOT visible in the explorer. SDK skips lookup entirely.
          *     `originalTxId` is unused — omit it. Only STX transfers supported. `newRecipient` and
@@ -1223,13 +1223,13 @@ class StacksSDK {
                         error: "Transaction sender does not match this vault account address",
                     };
                 }
-                // Fee check: new fee must be at least RBF_MIN_FEE_MULTIPLIER × original
+                // Fee check: new fee must exceed the original by at least 1 microSTX
                 const originalFeeUstx = BigInt(fullTx.fee_rate);
-                const minFeeUstx = (originalFeeUstx * BigInt(Math.round(constants_1.RBF_MIN_FEE_MULTIPLIER * 100))) / BigInt(100);
+                const minFeeUstx = originalFeeUstx + constants_1.RBF_MIN_FEE_BUMP_USTX;
                 if (feeBigInt < minFeeUstx) {
                     return {
                         success: false,
-                        error: `New fee (${newFee} STX) must be at least ${constants_1.RBF_MIN_FEE_MULTIPLIER}x the original fee (${(0, helpers_1.microToStx)(originalFeeUstx)} STX). Minimum required: ${(0, helpers_1.microToStx)(minFeeUstx)} STX`,
+                        error: `New fee (${newFee} STX) must be greater than the original fee (${(0, helpers_1.microToStx)(originalFeeUstx)} STX).`,
                     };
                 }
                 if (fullTx.tx_type === "contract_call" && (newRecipient !== undefined || newAmount !== undefined)) {
