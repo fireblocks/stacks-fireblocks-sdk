@@ -1879,7 +1879,7 @@ export class StacksSDK {
 
         const serialized = await this.chainService.serializeContractCall(
           this.publicKey, contractAddress, contractName, functionName, functionArgs,
-          nonce, feeBigInt,
+          nonce, feeBigInt, undefined, PostConditionMode.Allow,
         );
         unsignedTxWire = serialized.unsignedContractCall;
         preSignSigHash = serialized.preSignSigHash;
