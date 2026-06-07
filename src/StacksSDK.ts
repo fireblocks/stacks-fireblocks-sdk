@@ -2143,7 +2143,8 @@ export class StacksSDK {
         externalId,
       );
 
-      const signature = concatSignature(rawSignature.fullSig, rawSignature.v);
+      const vHex = rawSignature.v === 0 ? '00' : '01';
+      const signature = rawSignature.fullSig + vHex;
       return { success: true, signature };
     } catch (error) {
       return { success: false, error: formatErrorMessage(error) };

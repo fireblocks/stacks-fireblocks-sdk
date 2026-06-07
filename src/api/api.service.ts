@@ -53,6 +53,7 @@ export class ApiService {
             params.maxAmount,
             params.lockPeriod,
             params.authId,
+            params.note,
             params.nonce,
           );
           break;
@@ -142,6 +143,7 @@ export class ApiService {
             params.increaseBy,
             params.maxAmount,
             params.authId,
+            params.note,
             params.nonce,
           );
           break;
@@ -152,6 +154,7 @@ export class ApiService {
             params.extendCycles,
             params.maxAmount,
             params.authId,
+            params.note,
             params.nonce,
           );
           break;
