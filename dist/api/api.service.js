@@ -28,7 +28,7 @@ class ApiService {
                         result = await sdk.checkStatus();
                         break;
                     case types_1.ActionType.STACK_SOLO:
-                        result = await sdk.stackSolo(params.signerKey, params.signerSig65Hex, params.amount, params.maxAmount, params.lockPeriod, params.authId, params.nonce);
+                        result = await sdk.stackSolo(params.signerKey, params.signerSig65Hex, params.amount, params.maxAmount, params.lockPeriod, params.authId, params.note, params.nonce);
                         break;
                     case types_1.ActionType.GET_TX_STATUS_BY_ID:
                         result = await sdk.getTxStatusById(params.txId);
@@ -67,10 +67,10 @@ class ApiService {
                         result = await sdk.getPoxInfo();
                         break;
                     case types_1.ActionType.INCREASE_STACKED_AMOUNT:
-                        result = await sdk.increaseStackedAmount(params.signerKey, params.signerSig65Hex, params.increaseBy, params.maxAmount, params.authId, params.nonce);
+                        result = await sdk.increaseStackedAmount(params.signerKey, params.signerSig65Hex, params.increaseBy, params.maxAmount, params.authId, params.note, params.nonce);
                         break;
                     case types_1.ActionType.EXTEND_STACKING_PERIOD:
-                        result = await sdk.extendStackingPeriod(params.signerKey, params.signerSig65Hex, params.extendCycles, params.maxAmount, params.authId, params.nonce);
+                        result = await sdk.extendStackingPeriod(params.signerKey, params.signerSig65Hex, params.extendCycles, params.maxAmount, params.authId, params.note, params.nonce);
                         break;
                     case types_1.ActionType.REPLACE_TRANSACTION:
                         result = await sdk.replaceTransaction(params.newFee, params.originalTxId, params.newRecipient, params.newAmount, params.nonceOverride);

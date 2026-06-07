@@ -26,6 +26,7 @@ const stacking_1 = require("@stacks/stacking");
 const transactions_1 = require("@stacks/transactions");
 const sha256_1 = require("@noble/hashes/sha256");
 const common_1 = require("@stacks/common");
+const secp256k1_1 = require("@noble/secp256k1");
 // Returns the token info from ftInfo for a given token type and network, or undefined if not found.
 function getTokenInfo(token, network) {
     var _a;
@@ -120,8 +121,21 @@ function microToToken(micro, decimals) {
 }
 // Concatenate a full signature (r + s) with recovery id v to form a single hex string.
 function concatSignature(fullSig, v) {
-    const vHex = v == 0 ? "00" : "01";
-    return vHex + fullSig;
+    if (v !== 0 && v !== 1) {
+        throw new Error(`Invalid recovery id: expected 0 or 1, got ${v}`);
+    }
+    if (!/^[0-9a-fA-F]{128}$/.test(fullSig)) {
+        throw new Error(`Invalid signature: expected 128 hex chars, got ${fullSig.length}`);
+    }
+    const parsed = secp256k1_1.Signature.fromCompact(fullSig);
+    let normalizedSig = fullSig;
+    let normalizedV = v;
+    if (parsed.hasHighS()) {
+        normalizedSig = parsed.normalizeS().toCompactHex();
+        normalizedV = v ^ 1;
+    }
+    const vHex = normalizedV === 0 ? "00" : "01";
+    return vHex + normalizedSig;
 }
 // Get decimals for a fungible token from its contract ID
 const getDecimalsFromFtInfo = (contractId) => {
@@ -158,7 +172,7 @@ function untilBurnHeightForCycles(cycles, poxInput) {
     const Q = Number(pox.prepare_phase_block_length);
     const R = Number(pox.reward_phase_block_length);
     const cycleLen = Q + R;
-    return P + cycles * cycleLen - 1;
+    return P + cycles * cycleLen;
 }
 // Assert that a transaction result indicates success, else log and return error details.
 function assertResultSuccess(result) {

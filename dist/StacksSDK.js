@@ -507,7 +507,7 @@ class StacksSDK {
                         transactionToSign = await this.chainService.allowPoxContractCaller(this.publicKey, poolAddress, poolContractName, resolvedNonce);
                         break;
                     case "delegate-stx":
-                        transactionToSign = await this.chainService.delegateStx(this.publicKey, poolAddress, amount, lockPeriod, resolvedNonce);
+                        transactionToSign = await this.chainService.delegateStx(this.publicKey, poolAddress, amount, lockPeriod, resolvedNonce, poolContractName);
                         break;
                     case "revoke-delegate-stx":
                         transactionToSign = await this.chainService.revokeStxDelegation(this.publicKey, resolvedNonce);
@@ -986,10 +986,10 @@ class StacksSDK {
                     };
                 }
                 const txStatus = await this.waitForTxSettlement(result.txid);
-                if (txStatus.success && ((_b = txStatus.data) === null || _b === void 0 ? void 0 : _b.tx_status) !== "success") {
+                if (!txStatus.success || ((_b = txStatus.data) === null || _b === void 0 ? void 0 : _b.tx_status) !== "success") {
                     return {
                         success: false,
-                        error: ((_c = txStatus.data) === null || _c === void 0 ? void 0 : _c.tx_error) || "Transaction failed at the contract level.",
+                        error: txStatus.error || ((_c = txStatus.data) === null || _c === void 0 ? void 0 : _c.tx_error) || "Transaction failed at the contract level.",
                         txHash: result.txid,
                     };
                 }
@@ -1044,10 +1044,10 @@ class StacksSDK {
                     };
                 }
                 const txStatus = await this.waitForTxSettlement(result.txid);
-                if (txStatus.success && ((_b = txStatus.data) === null || _b === void 0 ? void 0 : _b.tx_status) !== "success") {
+                if (!txStatus.success || ((_b = txStatus.data) === null || _b === void 0 ? void 0 : _b.tx_status) !== "success") {
                     return {
                         success: false,
-                        error: ((_c = txStatus.data) === null || _c === void 0 ? void 0 : _c.tx_error) || "Transaction failed at the contract level.",
+                        error: txStatus.error || ((_c = txStatus.data) === null || _c === void 0 ? void 0 : _c.tx_error) || "Transaction failed at the contract level.",
                         txHash: result.txid,
                     };
                 }
@@ -1102,10 +1102,10 @@ class StacksSDK {
                     };
                 }
                 const txStatus = await this.waitForTxSettlement(result.txid);
-                if (txStatus.success && ((_b = txStatus.data) === null || _b === void 0 ? void 0 : _b.tx_status) !== "success") {
+                if (!txStatus.success || ((_b = txStatus.data) === null || _b === void 0 ? void 0 : _b.tx_status) !== "success") {
                     return {
                         success: false,
-                        error: ((_c = txStatus.data) === null || _c === void 0 ? void 0 : _c.tx_error) || "Transaction failed at the contract level.",
+                        error: txStatus.error || ((_c = txStatus.data) === null || _c === void 0 ? void 0 : _c.tx_error) || "Transaction failed at the contract level.",
                         txHash: result.txid,
                     };
                 }
@@ -1246,6 +1246,10 @@ class StacksSDK {
                     const amountUstx = newAmount !== undefined
                         ? (0, helpers_1.stxToMicro)(newAmount)
                         : BigInt(fullTx.token_transfer.amount);
+                    const memoHex = fullTx.token_transfer.memo;
+                    const memo = memoHex
+                        ? Buffer.from(memoHex.slice(2), 'hex').toString('utf8').replace(/\0/g, '') || undefined
+                        : undefined;
                     if (!(0, helpers_1.validateAddress)(recipient, this.testnet)) {
                         return { success: false, error: "Invalid recipient address" };
                     }
@@ -1259,7 +1263,7 @@ class StacksSDK {
                             };
                         }
                     }
-                    const serialized = await this.chainService.serializeTransaction(this.address, this.publicKey, recipient, amountUstx, types_1.TransactionType.STX, undefined, undefined, undefined, undefined, nonce, feeBigInt);
+                    const serialized = await this.chainService.serializeTransaction(this.address, this.publicKey, recipient, amountUstx, types_1.TransactionType.STX, undefined, undefined, undefined, undefined, nonce, feeBigInt, memo);
                     unsignedTxWire = serialized.unsignedTx;
                     preSignSigHash = serialized.preSignSigHash;
                 }
@@ -1473,7 +1477,8 @@ class StacksSDK {
                 const encoded = (0, transactions_1.encodeStructuredDataBytes)({ message: messageCV, domain: domainCV });
                 const hash = Buffer.from(sha256(encoded)).toString('hex');
                 const rawSignature = await this.fireblocksService.signTransaction(hash, this.vaultAccountId.toString(), '', externalId);
-                const signature = (0, helpers_1.concatSignature)(rawSignature.fullSig, rawSignature.v);
+                const vHex = rawSignature.v === 0 ? '00' : '01';
+                const signature = rawSignature.fullSig + vHex;
                 return { success: true, signature };
             }
             catch (error) {

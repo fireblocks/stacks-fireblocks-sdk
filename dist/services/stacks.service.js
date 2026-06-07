@@ -553,7 +553,7 @@ class StacksService {
          * @param lockPeriod - Number of cycles to lock the delegation for.
          * @returns - The unsigned delegate STX transaction.
          */
-        this.delegateStx = async (senderPublicKey, delegateTo, amount, lockPeriod, nonce) => {
+        this.delegateStx = async (senderPublicKey, delegateTo, amount, lockPeriod, nonce, poolContractName) => {
             try {
                 if (!(0, helpers_1.validateAddress)(delegateTo, this.network === network_1.STACKS_TESTNET)) {
                     throw new Error("Invalid delegateTo address");
@@ -569,7 +569,7 @@ class StacksService {
                 const until_burn_ht = await (0, helpers_1.untilBurnHeightForCycles)(lockPeriod, poxResponse);
                 const serializedContractCall = await this.serializeContractCall(senderPublicKey, poxAddr, poxName, "delegate-stx", [
                     (0, transactions_1.uintCV)(amount),
-                    (0, transactions_1.standardPrincipalCV)(delegateTo),
+                    poolContractName ? (0, transactions_1.contractPrincipalCV)(delegateTo, poolContractName) : (0, transactions_1.standardPrincipalCV)(delegateTo),
                     (0, transactions_1.someCV)((0, transactions_1.uintCV)(until_burn_ht)),
                     (0, transactions_1.noneCV)(),
                 ], nonce);
