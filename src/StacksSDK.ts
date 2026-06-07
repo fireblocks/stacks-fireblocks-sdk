@@ -1836,6 +1836,10 @@ export class StacksSDK {
         const amountUstx = newAmount !== undefined
           ? stxToMicro(newAmount)
           : BigInt(fullTx.token_transfer.amount);
+        const memoHex: string | undefined = fullTx.token_transfer.memo;
+        const memo = memoHex
+          ? Buffer.from(memoHex.slice(2), 'hex').toString('utf8').replace(/\0/g, '') || undefined
+          : undefined;
 
         if (!validateAddress(recipient, this.testnet)) {
           return { success: false, error: "Invalid recipient address" };
@@ -1855,7 +1859,7 @@ export class StacksSDK {
         const serialized = await this.chainService.serializeTransaction(
           this.address, this.publicKey, recipient, amountUstx,
           TransactionType.STX, undefined, undefined, undefined, undefined,
-          nonce, feeBigInt,
+          nonce, feeBigInt, memo,
         );
         unsignedTxWire = serialized.unsignedTx;
         preSignSigHash = serialized.preSignSigHash;
