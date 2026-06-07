@@ -1276,7 +1276,29 @@ class StacksSDK {
                     try {
                         const modeStr = fullTx.post_condition_mode;
                         postConditionMode = modeStr === "allow" ? transactions_1.PostConditionMode.Allow : transactions_1.PostConditionMode.Deny;
-                        postConditions = fullTx.post_conditions.map((pc) => (0, transactions_1.deserializePostConditionWire)(Buffer.from(pc.hex.replace(/^0x/, ""), "hex")));
+                        postConditions = fullTx.post_conditions.map((pc) => {
+                            const principalStr = pc.principal.type_id === "principal_contract"
+                                ? `${pc.principal.address}.${pc.principal.contract_name}`
+                                : pc.principal.address;
+                            const pcBuilder = pc.principal.type_id === "principal_origin" ? transactions_1.Pc.origin() : transactions_1.Pc.principal(principalStr);
+                            const amount = BigInt(pc.amount);
+                            const withCode = (() => {
+                                switch (pc.condition_code) {
+                                    case "sent_equal_to": return pcBuilder.willSendEq(amount);
+                                    case "sent_greater_than": return pcBuilder.willSendGt(amount);
+                                    case "sent_greater_than_or_equal_to": return pcBuilder.willSendGte(amount);
+                                    case "sent_less_than": return pcBuilder.willSendLt(amount);
+                                    case "sent_less_than_or_equal_to": return pcBuilder.willSendLte(amount);
+                                    default: throw new Error(`Unsupported post-condition code: ${pc.condition_code}`);
+                                }
+                            })();
+                            if (pc.type === "stx")
+                                return withCode.ustx();
+                            if (pc.type === "fungible") {
+                                return withCode.ft(`${pc.asset.contract_address}.${pc.asset.contract_name}`, pc.asset.asset_name);
+                            }
+                            throw new Error(`Unsupported post-condition type: ${pc.type}`);
+                        });
                     }
                     catch (_b) {
                         return {

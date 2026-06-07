@@ -59,10 +59,10 @@ import {
 import {
   ClarityValue,
   createMessageSignature,
-  deserializePostConditionWire,
   deserializeTransaction,
   encodeStructuredDataBytes,
   noneCV,
+  Pc,
   PostConditionMode,
   PostConditionWire,
   principalCV,
@@ -1875,9 +1875,31 @@ export class StacksSDK {
         try {
           const modeStr = fullTx.post_condition_mode as string;
           postConditionMode = modeStr === "allow" ? PostConditionMode.Allow : PostConditionMode.Deny;
-          postConditions = (fullTx.post_conditions as any[]).map((pc: { hex: string }) =>
-            deserializePostConditionWire(Buffer.from(pc.hex.replace(/^0x/, ""), "hex")),
-          );
+          postConditions = (fullTx.post_conditions as any[]).map((pc: any) => {
+            const principalStr = pc.principal.type_id === "principal_contract"
+              ? `${pc.principal.address}.${pc.principal.contract_name}`
+              : pc.principal.address;
+            const pcBuilder = pc.principal.type_id === "principal_origin" ? Pc.origin() : Pc.principal(principalStr);
+            const amount = BigInt(pc.amount);
+            const withCode = (() => {
+              switch (pc.condition_code) {
+                case "sent_equal_to":                return pcBuilder.willSendEq(amount);
+                case "sent_greater_than":             return pcBuilder.willSendGt(amount);
+                case "sent_greater_than_or_equal_to": return pcBuilder.willSendGte(amount);
+                case "sent_less_than":                return pcBuilder.willSendLt(amount);
+                case "sent_less_than_or_equal_to":    return pcBuilder.willSendLte(amount);
+                default: throw new Error(`Unsupported post-condition code: ${pc.condition_code}`);
+              }
+            })();
+            if (pc.type === "stx") return (withCode as any).ustx();
+            if (pc.type === "fungible") {
+              return (withCode as any).ft(
+                `${pc.asset.contract_address}.${pc.asset.contract_name}`,
+                pc.asset.asset_name,
+              );
+            }
+            throw new Error(`Unsupported post-condition type: ${pc.type}`);
+          });
         } catch {
           return {
             success: false,
