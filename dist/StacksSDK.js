@@ -1268,6 +1268,22 @@ class StacksSDK {
                     const [contractAddress, contractName] = fullTx.contract_call.contract_id.split(".");
                     const functionName = fullTx.contract_call.function_name;
                     const functionArgs = fullTx.contract_call.function_args.map((arg) => (0, transactions_1.hexToCV)(arg.hex));
+                    // Reconstruct original post-conditions and mode from the Hiro response.
+                    // Dropping them (or switching to Allow) would silently remove "exactly N tokens
+                    // can move" safety guarantees on FT transfers.
+                    let postConditions;
+                    let postConditionMode;
+                    try {
+                        const modeStr = fullTx.post_condition_mode;
+                        postConditionMode = modeStr === "allow" ? transactions_1.PostConditionMode.Allow : transactions_1.PostConditionMode.Deny;
+                        postConditions = fullTx.post_conditions.map((pc) => (0, transactions_1.deserializePostConditionWire)(Buffer.from(pc.hex.replace(/^0x/, ""), "hex")));
+                    }
+                    catch (_b) {
+                        return {
+                            success: false,
+                            error: "Cannot replace transaction: failed to reconstruct original post-conditions. Refusing to replace to avoid weakening safety guarantees.",
+                        };
+                    }
                     const balanceCheck = await this.getBalance();
                     if (balanceCheck.success) {
                         const feeStx = (0, helpers_1.microToStx)(feeBigInt);
@@ -1278,7 +1294,7 @@ class StacksSDK {
                             };
                         }
                     }
-                    const serialized = await this.chainService.serializeContractCall(this.publicKey, contractAddress, contractName, functionName, functionArgs, nonce, feeBigInt, undefined, transactions_1.PostConditionMode.Allow);
+                    const serialized = await this.chainService.serializeContractCall(this.publicKey, contractAddress, contractName, functionName, functionArgs, nonce, feeBigInt, postConditions, postConditionMode);
                     unsignedTxWire = serialized.unsignedContractCall;
                     preSignSigHash = serialized.preSignSigHash;
                 }
