@@ -5,6 +5,9 @@ const crypto_1 = require("crypto");
 const ts_sdk_1 = require("@fireblocks/ts-sdk");
 const constants_1 = require("./constants");
 const errorHandling_1 = require("./errorHandling");
+const POLL_INITIAL_MS = 3000;
+const POLL_CEILING_MS = 30000;
+const POLL_TIMEOUT_MS = 30 * 60 * 1000;
 class FireblocksSigner {
     constructor(fireblocks) {
         this.fireblocks = fireblocks;
@@ -27,22 +30,24 @@ class FireblocksSigner {
         this.getTxStatus = async (txId) => {
             let response = await this.fireblocks.transactions.getTransaction({ txId });
             let tx = response.data;
-            const messageToConsole = `Transaction ${tx.id} is currently at status - ${tx.status}`;
-            console.log(messageToConsole);
+            const deadline = Date.now() + POLL_TIMEOUT_MS;
+            let delay = POLL_INITIAL_MS;
             while (tx.status !== ts_sdk_1.TransactionStateEnum.Completed) {
-                await new Promise((resolve) => setTimeout(resolve, 3000));
-                response = await this.fireblocks.transactions.getTransaction({ txId });
-                tx = response.data;
                 switch (tx.status) {
                     case ts_sdk_1.TransactionStateEnum.Blocked:
                     case ts_sdk_1.TransactionStateEnum.Cancelled:
                     case ts_sdk_1.TransactionStateEnum.Failed:
                     case ts_sdk_1.TransactionStateEnum.Rejected:
                         throw new Error(`Signing request failed/blocked/cancelled: Transaction: ${tx.id} status is ${tx.status}`);
-                    default:
-                        console.log(messageToConsole);
-                        break;
                 }
+                if (Date.now() + delay > deadline) {
+                    throw new Error(`Signing request timed out after 30 minutes: Transaction ${tx.id} is still ${tx.status}`);
+                }
+                console.log(`Transaction ${tx.id} is currently at status - ${tx.status}`);
+                await new Promise((resolve) => setTimeout(resolve, delay));
+                delay = Math.min(delay * 2, POLL_CEILING_MS);
+                response = await this.fireblocks.transactions.getTransaction({ txId });
+                tx = response.data;
             }
             return tx;
         };
