@@ -25,6 +25,7 @@ import {
   noneCV,
   Pc,
   PostConditionMode,
+  PostConditionWire,
   principalCV,
   publicKeyToAddress,
   serializePayload,
@@ -645,7 +646,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
     functionArgs: ClarityValue[],
     nonce?: bigint,
     fee?: bigint,
-    postConditions?: never[],
+    postConditions?: PostConditionWire[],
     postConditionMode?: PostConditionMode,
   ): Promise<{
     unsignedContractCall: StacksTransactionWire;

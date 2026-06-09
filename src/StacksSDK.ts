@@ -56,8 +56,10 @@ import {
 } from "./utils/helpers";
 import {
   createMessageSignature,
+  deserializePostConditionWire,
   hexToCV,
   PostConditionMode,
+  PostConditionWire,
   StacksTransactionWire,
   uintCV,
   principalCV,
@@ -1789,6 +1791,24 @@ export class StacksSDK {
           (arg: { hex: string }) => hexToCV(arg.hex),
         );
 
+        // Reconstruct original post-conditions and mode from the Hiro response.
+        // Dropping them (or switching to Allow) would silently remove "exactly N tokens
+        // can move" safety guarantees on FT transfers.
+        let postConditions: PostConditionWire[];
+        let postConditionMode: PostConditionMode;
+        try {
+          const modeStr = fullTx.post_condition_mode as string;
+          postConditionMode = modeStr === "allow" ? PostConditionMode.Allow : PostConditionMode.Deny;
+          postConditions = (fullTx.post_conditions as any[]).map((pc: { hex: string }) =>
+            deserializePostConditionWire(Buffer.from(pc.hex.replace(/^0x/, ""), "hex")),
+          );
+        } catch {
+          return {
+            success: false,
+            error: "Cannot replace transaction: failed to reconstruct original post-conditions. Refusing to replace to avoid weakening safety guarantees.",
+          };
+        }
+
         const balanceCheck = await this.getBalance();
         if (balanceCheck.success) {
           const feeStx = microToStx(feeBigInt);
@@ -1802,7 +1822,7 @@ export class StacksSDK {
 
         const serialized = await this.chainService.serializeContractCall(
           this.publicKey, contractAddress, contractName, functionName, functionArgs,
-          nonce, feeBigInt, undefined, PostConditionMode.Allow,
+          nonce, feeBigInt, postConditions, postConditionMode,
         );
         unsignedTxWire = serialized.unsignedContractCall;
         preSignSigHash = serialized.preSignSigHash;
