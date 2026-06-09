@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import {
   Fireblocks,
   TransactionOperation,
@@ -11,12 +12,17 @@ import {
 import { derivationPath } from "./constants";
 import { formatErrorMessage } from "./errorHandling";
 
+const POLL_INITIAL_MS = 3_000;
+const POLL_CEILING_MS = 30_000;
+const POLL_TIMEOUT_MS = 30 * 60 * 1_000;
+
 export class FireblocksSigner {
   constructor(public fireblocks: Fireblocks) {}
 
-  createTransactionPayload = (): TransactionRequest => {
+  createTransactionPayload = (externalTxId: string): TransactionRequest => {
     return {
       note: "raw signing for stacks-fireblocks-sdk",
+      externalTxId,
       source: {
         type: TransferPeerPathType.VaultAccount,
       },
@@ -34,28 +40,34 @@ export class FireblocksSigner {
     let response: FireblocksResponse<TransactionResponse> =
       await this.fireblocks.transactions.getTransaction({ txId });
     let tx: TransactionResponse = response.data;
-    const messageToConsole: string = `Transaction ${tx.id} is currently at status - ${tx.status}`;
+    const deadline = Date.now() + POLL_TIMEOUT_MS;
+    let delay = POLL_INITIAL_MS;
 
-      console.log(messageToConsole);
-      while (tx.status !== TransactionStateEnum.Completed) {
-        await new Promise((resolve) => setTimeout(resolve, 3000));
+    while (tx.status !== TransactionStateEnum.Completed) {
+      switch (tx.status) {
+        case TransactionStateEnum.Blocked:
+        case TransactionStateEnum.Cancelled:
+        case TransactionStateEnum.Failed:
+        case TransactionStateEnum.Rejected:
+          throw new Error(
+            `Signing request failed/blocked/cancelled: Transaction: ${tx.id} status is ${tx.status}`,
+          );
+      }
 
-        response = await this.fireblocks.transactions.getTransaction({ txId });
-        tx = response.data;
+      if (Date.now() + delay > deadline) {
+        throw new Error(
+          `Signing request timed out after 30 minutes: Transaction ${tx.id} is still ${tx.status}`,
+        );
+      }
 
-        switch (tx.status) {
-          case TransactionStateEnum.Blocked:
-          case TransactionStateEnum.Cancelled:
-          case TransactionStateEnum.Failed:
-          case TransactionStateEnum.Rejected:
-            throw new Error(
-              `Signing request failed/blocked/cancelled: Transaction: ${tx.id} status is ${tx.status}`,
-            );
-          default:
-            console.log(messageToConsole);
-            break;
-        }
+      console.log(`Transaction ${tx.id} is currently at status - ${tx.status}`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      delay = Math.min(delay * 2, POLL_CEILING_MS);
+
+      response = await this.fireblocks.transactions.getTransaction({ txId });
+      tx = response.data;
     }
+
     return tx;
   };
 
@@ -64,6 +76,7 @@ export class FireblocksSigner {
     vaultAccountId: string,
     txNote?: string,
     testnet: boolean = false,
+    externalId?: string,
   ): Promise<any> => {
     try {
       if (typeof content !== "string") {
@@ -72,7 +85,7 @@ export class FireblocksSigner {
 
       const hexContent = content.startsWith("0x") ? content.slice(2) : content;
 
-      const transactionPayload = this.createTransactionPayload();
+      const transactionPayload = this.createTransactionPayload(externalId ?? randomUUID());
 
       if (txNote) {
         transactionPayload.note = txNote;

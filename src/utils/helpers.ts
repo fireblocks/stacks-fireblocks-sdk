@@ -12,6 +12,7 @@ import { encodeStructuredDataBytes } from "@stacks/transactions";
 import { sha256 } from "@noble/hashes/sha256";
 import { bytesToHex } from "@stacks/common";
 import { StacksService } from "../services/stacks.service";
+import { Signature as Secp256k1Signature } from "@noble/secp256k1";
 
 
 // Returns the token info from ftInfo for a given token type and network, or undefined if not found.
@@ -40,18 +41,19 @@ export function validateAmount(amount: string | number): boolean {
 /** Validate a Stacks account address with a network flag. */
 export function validateAddress(addr: string, testnet: boolean): boolean {
   if (testnet) {
-    if (!/^ST[A-Z0-9]+$/.test(addr)) return false;
+    if (!/^S[TN][A-Z0-9]+$/.test(addr)) return false;
   } else {
-    if (!/^SP[A-Z0-9]+$/.test(addr)) return false;
+    if (!/^S[PM][A-Z0-9]+$/.test(addr)) return false;
   }
 
   try {
     const [version, data] = c32addressDecode(addr) as [number, string];
 
-    // Expected version by network (single-sig accounts)
-    // ST → 26 (testnet), SP → 22 (mainnet)
-    const expectedVersion = testnet ? 26 : 22;
-    if (version !== expectedVersion) return false;
+    // Expected versions by network:
+    // Testnet: ST → 26, SN → 21
+    // Mainnet: SP → 22, SM → 20
+    const validVersions = testnet ? [26, 21] : [22, 20];
+    if (!validVersions.includes(version)) return false;
 
     // Payload must be 20 bytes (HASH160)
     return /^[0-9a-fA-F]{40}$/.test(data);
@@ -134,8 +136,23 @@ export function microToToken(
 
 // Concatenate a full signature (r + s) with recovery id v to form a single hex string.
 export function concatSignature(fullSig: string, v: number): string {
-  const vHex = v == 0 ? "00" : "01";
-  return vHex + fullSig;
+  if (v !== 0 && v !== 1) {
+    throw new Error(`Invalid recovery id: expected 0 or 1, got ${v}`);
+  }
+  if (!/^[0-9a-fA-F]{128}$/.test(fullSig)) {
+    throw new Error(`Invalid signature: expected 128 hex chars, got ${fullSig.length}`);
+  }
+
+  const parsed = Secp256k1Signature.fromCompact(fullSig);
+  let normalizedSig = fullSig;
+  let normalizedV = v;
+  if (parsed.hasHighS()) {
+    normalizedSig = parsed.normalizeS().toCompactHex();
+    normalizedV = v ^ 1;
+  }
+
+  const vHex = normalizedV === 0 ? "00" : "01";
+  return vHex + normalizedSig;
 }
 
 // Get decimals for a fungible token from its contract ID
@@ -200,7 +217,7 @@ export function untilBurnHeightForCycles(
   const R = Number(pox.reward_phase_block_length);
   const cycleLen = Q + R;
 
-  return P + cycles * cycleLen - 1;
+  return P + cycles * cycleLen;
 }
 
 // Assert that a transaction result indicates success, else log and return error details.
