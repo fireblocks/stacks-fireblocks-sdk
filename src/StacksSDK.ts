@@ -1400,6 +1400,7 @@ export class StacksSDK {
     maxAmount: number,
     lockPeriod: number,
     authId: bigint,
+    note?: string,
     nonce?: bigint,
     externalId?: string,
   ): Promise<CreateTransactionResponse> => {
@@ -1432,6 +1433,7 @@ export class StacksSDK {
         signerSig65Hex,
         startBurnHeight,
         authId,
+        note,
         nonce,
         externalId,
       });
@@ -1483,6 +1485,7 @@ export class StacksSDK {
     increaseBy: number,
     maxAmount: number,
     authId: bigint,
+    note?: string,
     nonce?: bigint,
     externalId?: string,
   ): Promise<CreateTransactionResponse> => {
@@ -1500,6 +1503,7 @@ export class StacksSDK {
         signerKey,
         signerSig65Hex,
         authId,
+        note,
         nonce,
         externalId,
       });
@@ -1551,6 +1555,7 @@ export class StacksSDK {
     extendCycles: number,
     maxAmount: number,
     authId: bigint,
+    note?: string,
     nonce?: bigint,
     externalId?: string,
   ): Promise<CreateTransactionResponse> => {
@@ -1568,6 +1573,7 @@ export class StacksSDK {
         signerKey,
         signerSig65Hex,
         authId,
+        note,
         nonce,
         externalId,
       });
