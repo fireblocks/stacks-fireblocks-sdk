@@ -126,38 +126,35 @@ describe("microToToken", () => {
 });
 
 describe("concatSignature", () => {
+  // Valid r value (must be 0 < r < n) - simple small value
+  const validR = "0000000000000000000000000000000000000000000000000000000000000002";
+  // Valid low-S value (s < n/2 where n/2 ≈ 7FFFFFFF...5D576E73...)
+  const lowS = "0000000000000000000000000000000000000000000000000000000000000001";
+  // Valid high-S value (s > n/2)
+  const highS = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364140";
+
   it("concatenates low-S signature with recovery id 0", () => {
-    // Valid low-S signature (s < curve order / 2)
-    const r = "0".repeat(64);
-    const s = "0000000000000000000000000000000000000000000000000000000000000001";
-    const sig = r + s;
+    const sig = validR + lowS;
     expect(concatSignature(sig, 0)).toBe("00" + sig);
   });
 
   it("concatenates low-S signature with recovery id 1", () => {
-    // Valid low-S signature
-    const r = "1".repeat(64);
-    const s = "0000000000000000000000000000000000000000000000000000000000000002";
-    const sig = r + s;
+    const sig = validR + lowS;
     expect(concatSignature(sig, 1)).toBe("01" + sig);
   });
 
   it("normalizes high-S signature and flips v", () => {
-    // High-S signature (s > curve order / 2) should be normalized
-    // secp256k1 curve order n = FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
-    // n/2 ≈ 7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0
-    // Any s > n/2 is high-S
-    const r = "0".repeat(64);
-    const highS = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364140"; // n-1, definitely high-S
-    const sig = r + highS;
+    const sig = validR + highS;
     const result = concatSignature(sig, 0);
     // Should flip v from 0 to 1 and normalize S
     expect(result.substring(0, 2)).toBe("01");
     expect(result.length).toBe(130); // 2 (v) + 128 (r+s)
+    // The normalized s should be different from highS
+    expect(result.substring(66)).not.toBe(highS.toLowerCase());
   });
 
   it("throws for invalid recovery id", () => {
-    const sig = "0".repeat(128);
+    const sig = validR + lowS;
     expect(() => concatSignature(sig, 2)).toThrow("Invalid recovery id");
     expect(() => concatSignature(sig, -1)).toThrow("Invalid recovery id");
   });
