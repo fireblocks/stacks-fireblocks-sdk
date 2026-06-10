@@ -1447,10 +1447,10 @@ export class StacksSDK {
       }
 
       const txStatus = await this.waitForTxSettlement(result.txid);
-      if (txStatus.success && txStatus.data?.tx_status !== "success") {
+      if (!txStatus.success || txStatus.data?.tx_status !== "success") {
         return {
           success: false,
-          error: txStatus.data?.tx_error || "Transaction failed at the contract level.",
+          error: txStatus.error || txStatus.data?.tx_error || "Transaction failed at the contract level.",
           txHash: result.txid,
         };
       }
@@ -1517,10 +1517,10 @@ export class StacksSDK {
       }
 
       const txStatus = await this.waitForTxSettlement(result.txid);
-      if (txStatus.success && txStatus.data?.tx_status !== "success") {
+      if (!txStatus.success || txStatus.data?.tx_status !== "success") {
         return {
           success: false,
-          error: txStatus.data?.tx_error || "Transaction failed at the contract level.",
+          error: txStatus.error || txStatus.data?.tx_error || "Transaction failed at the contract level.",
           txHash: result.txid,
         };
       }
@@ -1587,10 +1587,10 @@ export class StacksSDK {
       }
 
       const txStatus = await this.waitForTxSettlement(result.txid);
-      if (txStatus.success && txStatus.data?.tx_status !== "success") {
+      if (!txStatus.success || txStatus.data?.tx_status !== "success") {
         return {
           success: false,
-          error: txStatus.data?.tx_error || "Transaction failed at the contract level.",
+          error: txStatus.error || txStatus.data?.tx_error || "Transaction failed at the contract level.",
           txHash: result.txid,
         };
       }
