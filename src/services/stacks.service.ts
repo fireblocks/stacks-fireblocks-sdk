@@ -25,6 +25,7 @@ import {
   noneCV,
   Pc,
   PostConditionMode,
+  PostConditionWire,
   principalCV,
   publicKeyToAddress,
   serializePayload,
@@ -513,6 +514,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
     functionName: string,
     functionArgs: ClarityValue[],
     nonce?: bigint,
+    postConditionMode?: PostConditionMode,
   ): Promise<StacksTransactionWire> => {
     try {
       if (!validateAddress(contractAddress, this.network === STACKS_TESTNET)) {
@@ -534,7 +536,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
         functionArgs,
         publicKey: senderPublicKey,
         network: this.network,
-        postConditionMode: PostConditionMode.Deny,
+        postConditionMode: postConditionMode ?? PostConditionMode.Deny,
         ...(nonce !== undefined ? { nonce } : {}),
       });
 
@@ -644,6 +646,8 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
     functionArgs: ClarityValue[],
     nonce?: bigint,
     fee?: bigint,
+    postConditions?: PostConditionWire[],
+    postConditionMode?: PostConditionMode,
   ): Promise<{
     unsignedContractCall: StacksTransactionWire;
     preSignSigHash: string;
@@ -656,6 +660,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
         functionName,
         functionArgs,
         nonce,
+        postConditionMode,
       );
 
       if (fee !== undefined) {
@@ -940,6 +945,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
     amount: bigint,
     lockPeriod: number,
     nonce?: bigint,
+    poolContractName?: string,
   ): Promise<{
     unsignedContractCall: StacksTransactionWire;
     preSignSigHash: string;
@@ -973,7 +979,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
         "delegate-stx",
         [
           uintCV(amount),
-          standardPrincipalCV(delegateTo),
+          poolContractName ? contractPrincipalCV(delegateTo, poolContractName) : standardPrincipalCV(delegateTo),
           someCV(uintCV(until_burn_ht)),
           noneCV(),
         ],

@@ -36,7 +36,7 @@ import {
   TransactionDetails,
   TransactionType,
 } from "./services/types";
-import { helperConstants, pagination_defaults, POX4_ERRORS, RBF_MIN_FEE_MULTIPLIER } from "./utils/constants";
+import { helperConstants, pagination_defaults, POX4_ERRORS, RBF_MIN_FEE_BUMP_USTX } from "./utils/constants";
 import { parseOptionalFee, ValidationError } from "./utils/validation";
 import { formatErrorMessage } from "./utils/errorHandling";
 import { validateApiCredentials } from "./utils/fireblocks.utils";
@@ -57,6 +57,9 @@ import {
 import {
   createMessageSignature,
   hexToCV,
+  Pc,
+  PostConditionMode,
+  PostConditionWire,
   StacksTransactionWire,
   uintCV,
   principalCV,
@@ -786,7 +789,7 @@ export class StacksSDK {
           break;
         case "delegate-stx":
           transactionToSign = await this.chainService.delegateStx(
-            this.publicKey, poolAddress, amount!, lockPeriod!, resolvedNonce,
+            this.publicKey, poolAddress, amount!, lockPeriod!, resolvedNonce, poolContractName,
           );
           break;
         case "revoke-delegate-stx":
@@ -1397,6 +1400,7 @@ export class StacksSDK {
     maxAmount: number,
     lockPeriod: number,
     authId: bigint,
+    note?: string,
     nonce?: bigint,
     externalId?: string,
   ): Promise<CreateTransactionResponse> => {
@@ -1429,6 +1433,7 @@ export class StacksSDK {
         signerSig65Hex,
         startBurnHeight,
         authId,
+        note,
         nonce,
         externalId,
       });
@@ -1442,10 +1447,10 @@ export class StacksSDK {
       }
 
       const txStatus = await this.waitForTxSettlement(result.txid);
-      if (txStatus.success && txStatus.data?.tx_status !== "success") {
+      if (!txStatus.success || txStatus.data?.tx_status !== "success") {
         return {
           success: false,
-          error: txStatus.data?.tx_error || "Transaction failed at the contract level.",
+          error: txStatus.error || txStatus.data?.tx_error || "Transaction failed at the contract level.",
           txHash: result.txid,
         };
       }
@@ -1480,6 +1485,7 @@ export class StacksSDK {
     increaseBy: number,
     maxAmount: number,
     authId: bigint,
+    note?: string,
     nonce?: bigint,
     externalId?: string,
   ): Promise<CreateTransactionResponse> => {
@@ -1497,6 +1503,7 @@ export class StacksSDK {
         signerKey,
         signerSig65Hex,
         authId,
+        note,
         nonce,
         externalId,
       });
@@ -1510,10 +1517,10 @@ export class StacksSDK {
       }
 
       const txStatus = await this.waitForTxSettlement(result.txid);
-      if (txStatus.success && txStatus.data?.tx_status !== "success") {
+      if (!txStatus.success || txStatus.data?.tx_status !== "success") {
         return {
           success: false,
-          error: txStatus.data?.tx_error || "Transaction failed at the contract level.",
+          error: txStatus.error || txStatus.data?.tx_error || "Transaction failed at the contract level.",
           txHash: result.txid,
         };
       }
@@ -1548,6 +1555,7 @@ export class StacksSDK {
     extendCycles: number,
     maxAmount: number,
     authId: bigint,
+    note?: string,
     nonce?: bigint,
     externalId?: string,
   ): Promise<CreateTransactionResponse> => {
@@ -1565,6 +1573,7 @@ export class StacksSDK {
         signerKey,
         signerSig65Hex,
         authId,
+        note,
         nonce,
         externalId,
       });
@@ -1578,10 +1587,10 @@ export class StacksSDK {
       }
 
       const txStatus = await this.waitForTxSettlement(result.txid);
-      if (txStatus.success && txStatus.data?.tx_status !== "success") {
+      if (!txStatus.success || txStatus.data?.tx_status !== "success") {
         return {
           success: false,
-          error: txStatus.data?.tx_error || "Transaction failed at the contract level.",
+          error: txStatus.error || txStatus.data?.tx_error || "Transaction failed at the contract level.",
           txHash: result.txid,
         };
       }
@@ -1607,7 +1616,7 @@ export class StacksSDK {
    * Two mutually exclusive modes — provide one, not both:
    *   - `originalTxId` only: tx is visible in the explorer. SDK looks it up, reads its nonce,
    *     and reconstructs it. Works for token_transfer and contract_call. `newFee` must be
-   *     at least RBF_MIN_FEE_MULTIPLIER × the original. `newRecipient`/`newAmount` are optional
+   *     strictly greater than the original fee. `newRecipient`/`newAmount` are optional
    *     overrides for token_transfer only.
    *   - `nonceOverride` only: tx is NOT visible in the explorer. SDK skips lookup entirely.
    *     `originalTxId` is unused — omit it. Only STX transfers supported. `newRecipient` and
@@ -1731,13 +1740,13 @@ export class StacksSDK {
         };
       }
 
-      // Fee check: new fee must be at least RBF_MIN_FEE_MULTIPLIER × original
+      // Fee check: new fee must exceed the original by at least 1 microSTX
       const originalFeeUstx = BigInt(fullTx.fee_rate);
-      const minFeeUstx = (originalFeeUstx * BigInt(Math.round(RBF_MIN_FEE_MULTIPLIER * 100))) / BigInt(100);
+      const minFeeUstx = originalFeeUstx + RBF_MIN_FEE_BUMP_USTX;
       if (feeBigInt < minFeeUstx) {
         return {
           success: false,
-          error: `New fee (${newFee} STX) must be at least ${RBF_MIN_FEE_MULTIPLIER}x the original fee (${microToStx(originalFeeUstx)} STX). Minimum required: ${microToStx(minFeeUstx)} STX`,
+          error: `New fee (${newFee} STX) must be greater than the original fee (${microToStx(originalFeeUstx)} STX).`,
         };
       }
 
@@ -1757,6 +1766,10 @@ export class StacksSDK {
         const amountUstx = newAmount !== undefined
           ? stxToMicro(newAmount)
           : BigInt(fullTx.token_transfer.amount);
+        const memoHex: string | undefined = fullTx.token_transfer.memo;
+        const memo = memoHex
+          ? Buffer.from(memoHex.slice(2), 'hex').toString('utf8').replace(/\0/g, '') || undefined
+          : undefined;
 
         if (!validateAddress(recipient, this.testnet)) {
           return { success: false, error: "Invalid recipient address" };
@@ -1776,7 +1789,7 @@ export class StacksSDK {
         const serialized = await this.chainService.serializeTransaction(
           this.address, this.publicKey, recipient, amountUstx,
           TransactionType.STX, undefined, undefined, undefined, undefined,
-          nonce, feeBigInt,
+          nonce, feeBigInt, memo,
         );
         unsignedTxWire = serialized.unsignedTx;
         preSignSigHash = serialized.preSignSigHash;
@@ -1787,6 +1800,46 @@ export class StacksSDK {
         const functionArgs = (fullTx.contract_call.function_args as any[]).map(
           (arg: { hex: string }) => hexToCV(arg.hex),
         );
+
+        // Reconstruct original post-conditions and mode from the Hiro response.
+        // Dropping them (or switching to Allow) would silently remove "exactly N tokens
+        // can move" safety guarantees on FT transfers.
+        let postConditions: PostConditionWire[];
+        let postConditionMode: PostConditionMode;
+        try {
+          const modeStr = fullTx.post_condition_mode as string;
+          postConditionMode = modeStr === "allow" ? PostConditionMode.Allow : PostConditionMode.Deny;
+          postConditions = (fullTx.post_conditions as any[]).map((pc: any) => {
+            const principalStr = pc.principal.type_id === "principal_contract"
+              ? `${pc.principal.address}.${pc.principal.contract_name}`
+              : pc.principal.address;
+            const pcBuilder = pc.principal.type_id === "principal_origin" ? Pc.origin() : Pc.principal(principalStr);
+            const amount = BigInt(pc.amount);
+            const withCode = (() => {
+              switch (pc.condition_code) {
+                case "sent_equal_to":                return pcBuilder.willSendEq(amount);
+                case "sent_greater_than":             return pcBuilder.willSendGt(amount);
+                case "sent_greater_than_or_equal_to": return pcBuilder.willSendGte(amount);
+                case "sent_less_than":                return pcBuilder.willSendLt(amount);
+                case "sent_less_than_or_equal_to":    return pcBuilder.willSendLte(amount);
+                default: throw new Error(`Unsupported post-condition code: ${pc.condition_code}`);
+              }
+            })();
+            if (pc.type === "stx") return (withCode as any).ustx();
+            if (pc.type === "fungible") {
+              return (withCode as any).ft(
+                `${pc.asset.contract_address}.${pc.asset.contract_name}`,
+                pc.asset.asset_name,
+              );
+            }
+            throw new Error(`Unsupported post-condition type: ${pc.type}`);
+          });
+        } catch {
+          return {
+            success: false,
+            error: "Cannot replace transaction: failed to reconstruct original post-conditions. Refusing to replace to avoid weakening safety guarantees.",
+          };
+        }
 
         const balanceCheck = await this.getBalance();
         if (balanceCheck.success) {
@@ -1801,7 +1854,7 @@ export class StacksSDK {
 
         const serialized = await this.chainService.serializeContractCall(
           this.publicKey, contractAddress, contractName, functionName, functionArgs,
-          nonce, feeBigInt,
+          nonce, feeBigInt, postConditions, postConditionMode,
         );
         unsignedTxWire = serialized.unsignedContractCall;
         preSignSigHash = serialized.preSignSigHash;

@@ -714,7 +714,7 @@ router.post("/:vaultId/stacking/solo/extend", validateVaultId, controller.extend
  *       token_transfer) need to be provided.
  *
  *       **Limitations**:
- *         - The new fee must be at least `RBF_MIN_FEE_MULTIPLIER` × the original fee (default 1.25×).
+ *         - The new fee must be strictly greater than the original fee (by at least 1 microSTX).
  *         - The original transaction must be in "pending" status (visible to the Hiro indexer).
  *         - `nonceOverride` path only supports STX token_transfer (contract args cannot be inferred).
  *     parameters:
