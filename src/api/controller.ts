@@ -455,6 +455,7 @@ export const stackSolo: Handler = async (req, res, next) => {
     }
     const maxAmount = Number(maxAmountStr);
 
+    const note = req.body.note ? String(req.body.note) : undefined;
     const nonce = parseOptionalNonce(req.body.nonce);
 
     const tx = await apiService.executeAction(vaultId, ActionType.STACK_SOLO, {
@@ -464,6 +465,7 @@ export const stackSolo: Handler = async (req, res, next) => {
       maxAmount,
       lockPeriod,
       authId,
+      note,
       nonce,
     });
 
@@ -513,6 +515,7 @@ export const increaseStackedAmount: Handler = async (req, res, next) => {
     }
     const maxAmount = BigInt(maxAmountStr);
 
+    const note = req.body.note ? String(req.body.note) : undefined;
     const nonce = parseOptionalNonce(req.body.nonce);
 
     const tx = await apiService.executeAction(vaultId, ActionType.INCREASE_STACKED_AMOUNT, {
@@ -521,6 +524,7 @@ export const increaseStackedAmount: Handler = async (req, res, next) => {
       increaseBy,
       maxAmount,
       authId,
+      note,
       nonce,
     });
 
@@ -572,6 +576,7 @@ export const extendStackingPeriod: Handler = async (req, res, next) => {
     }
     const maxAmount = Number(maxAmountStr);
 
+    const note = req.body.note ? String(req.body.note) : undefined;
     const nonce = parseOptionalNonce(req.body.nonce);
 
     const tx = await apiService.executeAction(vaultId, ActionType.EXTEND_STACKING_PERIOD, {
@@ -580,6 +585,7 @@ export const extendStackingPeriod: Handler = async (req, res, next) => {
       extendCycles,
       maxAmount,
       authId,
+      note,
       nonce,
     });
 
