@@ -12,6 +12,7 @@ import { encodeStructuredDataBytes } from "@stacks/transactions";
 import { sha256 } from "@noble/hashes/sha256";
 import { bytesToHex } from "@stacks/common";
 import { StacksService } from "../services/stacks.service";
+import { Signature as Secp256k1Signature } from "@noble/secp256k1";
 
 
 // Returns the token info from ftInfo for a given token type and network, or undefined if not found.
@@ -134,8 +135,23 @@ export function microToToken(
 
 // Concatenate a full signature (r + s) with recovery id v to form a single hex string.
 export function concatSignature(fullSig: string, v: number): string {
-  const vHex = v == 0 ? "00" : "01";
-  return vHex + fullSig;
+  if (v !== 0 && v !== 1) {
+    throw new Error(`Invalid recovery id: expected 0 or 1, got ${v}`);
+  }
+  if (!/^[0-9a-fA-F]{128}$/.test(fullSig)) {
+    throw new Error(`Invalid signature: expected 128 hex chars, got ${fullSig.length}`);
+  }
+
+  const parsed = Secp256k1Signature.fromCompact(fullSig);
+  let normalizedSig = fullSig;
+  let normalizedV = v;
+  if (parsed.hasHighS()) {
+    normalizedSig = parsed.normalizeS().toCompactHex();
+    normalizedV = v ^ 1;
+  }
+
+  const vHex = normalizedV === 0 ? "00" : "01";
+  return vHex + normalizedSig;
 }
 
 // Get decimals for a fungible token from its contract ID
