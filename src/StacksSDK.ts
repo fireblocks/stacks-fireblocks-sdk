@@ -789,7 +789,7 @@ export class StacksSDK {
           break;
         case "delegate-stx":
           transactionToSign = await this.chainService.delegateStx(
-            this.publicKey, poolAddress, amount!, lockPeriod!, resolvedNonce,
+            this.publicKey, poolAddress, amount!, lockPeriod!, resolvedNonce, poolContractName,
           );
           break;
         case "revoke-delegate-stx":

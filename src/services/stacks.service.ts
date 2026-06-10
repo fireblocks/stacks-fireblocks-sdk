@@ -945,6 +945,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
     amount: bigint,
     lockPeriod: number,
     nonce?: bigint,
+    poolContractName?: string,
   ): Promise<{
     unsignedContractCall: StacksTransactionWire;
     preSignSigHash: string;
@@ -978,7 +979,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
         "delegate-stx",
         [
           uintCV(amount),
-          standardPrincipalCV(delegateTo),
+          poolContractName ? contractPrincipalCV(delegateTo, poolContractName) : standardPrincipalCV(delegateTo),
           someCV(uintCV(until_burn_ht)),
           noneCV(),
         ],
