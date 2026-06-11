@@ -64,8 +64,12 @@ export class FireblocksSigner {
       await new Promise((resolve) => setTimeout(resolve, delay));
       delay = Math.min(delay * 2, POLL_CEILING_MS);
 
-      response = await this.fireblocks.transactions.getTransaction({ txId });
-      tx = response.data;
+      try {
+        response = await this.fireblocks.transactions.getTransaction({ txId });
+        tx = response.data;
+      } catch (pollError) {
+        console.warn(`Transient error polling transaction ${txId}, will retry:`, pollError);
+      }
     }
 
     return tx;
