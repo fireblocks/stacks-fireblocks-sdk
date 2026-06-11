@@ -120,6 +120,7 @@ function microToToken(micro, decimals) {
     return after;
 }
 // Concatenate a full signature (r + s) with recovery id v to form a single hex string.
+// Validates inputs, normalizes high-S signatures per BIP-146, and returns VRS format.
 function concatSignature(fullSig, v) {
     if (v !== 0 && v !== 1) {
         throw new Error(`Invalid recovery id: expected 0 or 1, got ${v}`);
@@ -127,12 +128,19 @@ function concatSignature(fullSig, v) {
     if (!/^[0-9a-fA-F]{128}$/.test(fullSig)) {
         throw new Error(`Invalid signature: expected 128 hex chars, got ${fullSig.length}`);
     }
-    const parsed = secp256k1_1.Signature.fromCompact(fullSig);
     let normalizedSig = fullSig;
     let normalizedV = v;
-    if (parsed.hasHighS()) {
-        normalizedSig = parsed.normalizeS().toCompactHex();
-        normalizedV = v ^ 1;
+    try {
+        const parsed = secp256k1_1.Signature.fromCompact(fullSig);
+        if (parsed.hasHighS()) {
+            normalizedSig = parsed.normalizeS().toCompactHex();
+            // When S is negated (S' = n - S), the y-coordinate parity of the recovered point flips,
+            // so the recovery id must flip: v' = v XOR 1
+            normalizedV = v ^ 1;
+        }
+    }
+    catch (error) {
+        throw new Error(`Invalid signature: failed to parse as secp256k1 signature - ${error instanceof Error ? error.message : error}`);
     }
     const vHex = normalizedV === 0 ? "00" : "01";
     return vHex + normalizedSig;
