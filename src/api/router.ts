@@ -767,12 +767,298 @@ router.post(
   controller.replaceTransaction,
 );
 
-// PoX-5 Solo STX routes
+/**
+ * @openapi
+ * /{vaultId}/stacking/pox5/stake:
+ *   post:
+ *     summary: Stake STX (PoX-5)
+ *     description: >
+ *       Initiates a PoX-5 solo STX staking position. Rewards are paid in sBTC
+ *       to the staker's Stacks address by the signer-manager.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - amount
+ *               - numCycles
+ *               - signerManager
+ *             properties:
+ *               amount:
+ *                 type: number
+ *                 description: STX amount to stake (e.g. 1000). Converted to microSTX internally.
+ *               numCycles:
+ *                 type: integer
+ *                 minimum: 1
+ *                 maximum: 96
+ *                 description: Number of reward cycles to lock STX for (1–96).
+ *               signerManager:
+ *                 type: string
+ *                 description: Stacks address of the signer-manager delegated to manage this stake.
+ *               note:
+ *                 type: string
+ *                 description: Optional note attached to the Fireblocks transaction.
+ *               nonce:
+ *                 type: integer
+ *                 minimum: 0
+ *                 description: >
+ *                   Optional transaction nonce override. If omitted, the SDK auto-fetches
+ *                   the current account nonce from the network (default behavior).
+ *               externalId:
+ *                 type: string
+ *                 description: Optional external ID for the Fireblocks transaction.
+ *     responses:
+ *       200:
+ *         description: Stake transaction submitted successfully.
+ *       400:
+ *         description: Invalid input (amount, numCycles, or signerManager missing/invalid).
+ *       500:
+ *         description: Internal server error
+ */
 router.post("/:vaultId/stacking/pox5/stake", validateVaultId, controller.stake);
+
+/**
+ * @openapi
+ * /{vaultId}/stacking/pox5/update:
+ *   post:
+ *     summary: Update stake (PoX-5)
+ *     description: >
+ *       Updates an existing PoX-5 staking position — change the signer-manager,
+ *       extend the lock period, or increase the staked amount. At least one of
+ *       cyclesToExtend or increaseBy must be provided alongside the required fields.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - signerManager
+ *               - oldSignerManager
+ *             properties:
+ *               signerManager:
+ *                 type: string
+ *                 description: Stacks address of the new signer-manager.
+ *               oldSignerManager:
+ *                 type: string
+ *                 description: Stacks address of the currently recorded signer-manager (must match on-chain state).
+ *               cyclesToExtend:
+ *                 type: integer
+ *                 minimum: 1
+ *                 description: Number of additional cycles to extend the lock by.
+ *               increaseBy:
+ *                 type: number
+ *                 description: Additional STX amount to add to the staking position.
+ *               note:
+ *                 type: string
+ *                 description: Optional note attached to the Fireblocks transaction.
+ *               nonce:
+ *                 type: integer
+ *                 minimum: 0
+ *                 description: >
+ *                   Optional transaction nonce override. If omitted, the SDK auto-fetches
+ *                   the current account nonce from the network (default behavior).
+ *               externalId:
+ *                 type: string
+ *                 description: Optional external ID for the Fireblocks transaction.
+ *     responses:
+ *       200:
+ *         description: Update stake transaction submitted successfully.
+ *       400:
+ *         description: Invalid input (signerManager or oldSignerManager missing).
+ *       500:
+ *         description: Internal server error
+ */
 router.post("/:vaultId/stacking/pox5/update", validateVaultId, controller.updateStake);
+
+/**
+ * @openapi
+ * /{vaultId}/stacking/pox5/unstake:
+ *   post:
+ *     summary: Unstake STX (PoX-5)
+ *     description: >
+ *       Exits a PoX-5 staking position. Cannot be called during the prepare phase
+ *       of a reward cycle — the SDK will reject the request if the current burn block
+ *       is within the prepare phase window.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - oldSignerManager
+ *             properties:
+ *               oldSignerManager:
+ *                 type: string
+ *                 description: Stacks address of the currently recorded signer-manager (must match on-chain state).
+ *               note:
+ *                 type: string
+ *                 description: Optional note attached to the Fireblocks transaction.
+ *               nonce:
+ *                 type: integer
+ *                 minimum: 0
+ *                 description: >
+ *                   Optional transaction nonce override. If omitted, the SDK auto-fetches
+ *                   the current account nonce from the network (default behavior).
+ *               externalId:
+ *                 type: string
+ *                 description: Optional external ID for the Fireblocks transaction.
+ *     responses:
+ *       200:
+ *         description: Unstake transaction submitted successfully.
+ *       400:
+ *         description: Invalid input (oldSignerManager missing) or called during prepare phase.
+ *       500:
+ *         description: Internal server error
+ */
 router.post("/:vaultId/stacking/pox5/unstake", validateVaultId, controller.unstake);
+
+/**
+ * @openapi
+ * /{vaultId}/stacking/pox5/grant-signer-key:
+ *   post:
+ *     summary: Grant signer key (PoX-5)
+ *     description: >
+ *       Grants a signer key to a signer-manager, authorizing it to act on behalf
+ *       of this staker. The signerSignature must be produced by the signer using
+ *       the authId and signerManager as inputs.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - signerKey
+ *               - signerManager
+ *               - authId
+ *               - signerSignature
+ *             properties:
+ *               signerKey:
+ *                 type: string
+ *                 description: Compressed public key (33-byte hex) of the signer.
+ *               signerManager:
+ *                 type: string
+ *                 description: Stacks address of the signer-manager to grant the key to.
+ *               authId:
+ *                 type: string
+ *                 description: Positive integer string (bigint) for replay protection — must match the value used to generate signerSignature.
+ *               signerSignature:
+ *                 type: string
+ *                 description: 65-byte hex signature produced by the signer over (signerManager, authId).
+ *               note:
+ *                 type: string
+ *                 description: Optional note attached to the Fireblocks transaction.
+ *               nonce:
+ *                 type: integer
+ *                 minimum: 0
+ *                 description: >
+ *                   Optional transaction nonce override. If omitted, the SDK auto-fetches
+ *                   the current account nonce from the network (default behavior).
+ *               externalId:
+ *                 type: string
+ *                 description: Optional external ID for the Fireblocks transaction.
+ *     responses:
+ *       200:
+ *         description: Grant signer key transaction submitted successfully.
+ *       400:
+ *         description: Invalid input (missing fields or authId not a positive integer).
+ *       500:
+ *         description: Internal server error
+ */
 router.post("/:vaultId/stacking/pox5/grant-signer-key", validateVaultId, controller.grantSignerKey);
+
+/**
+ * @openapi
+ * /{vaultId}/stacking/pox5/revoke-signer-grant:
+ *   post:
+ *     summary: Revoke signer grant (PoX-5)
+ *     description: >
+ *       Revokes a previously granted signer key from a signer-manager.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - signerManager
+ *               - signerKey
+ *             properties:
+ *               signerManager:
+ *                 type: string
+ *                 description: Stacks address of the signer-manager whose grant is being revoked.
+ *               signerKey:
+ *                 type: string
+ *                 description: Compressed public key (33-byte hex) of the signer.
+ *               note:
+ *                 type: string
+ *                 description: Optional note attached to the Fireblocks transaction.
+ *               nonce:
+ *                 type: integer
+ *                 minimum: 0
+ *                 description: >
+ *                   Optional transaction nonce override. If omitted, the SDK auto-fetches
+ *                   the current account nonce from the network (default behavior).
+ *               externalId:
+ *                 type: string
+ *                 description: Optional external ID for the Fireblocks transaction.
+ *     responses:
+ *       200:
+ *         description: Revoke signer grant transaction submitted successfully.
+ *       400:
+ *         description: Invalid input (signerManager or signerKey missing).
+ *       500:
+ *         description: Internal server error
+ */
 router.post("/:vaultId/stacking/pox5/revoke-signer-grant", validateVaultId, controller.revokeSignerGrant);
+
+/**
+ * @openapi
+ * /stacking/pox5/info:
+ *   get:
+ *     summary: Get PoX-5 network info
+ *     description: >
+ *       Returns current PoX-5 protocol state from the private testnet node,
+ *       including the current reward cycle, burn block height, prepare phase window,
+ *       and stacking minimums.
+ *     responses:
+ *       200:
+ *         description: PoX-5 info fetched successfully.
+ *       500:
+ *         description: Internal server error
+ */
+router.get("/stacking/pox5/info", controller.getPox5Info);
+
+/**
+ * @openapi
+ * /{vaultId}/stacking/pox5/staker-info:
+ *   get:
+ *     summary: Get staker info (PoX-5)
+ *     description: >
+ *       Returns the current PoX-5 staking state for the vault's Stacks address,
+ *       including the active signer-manager, locked amount, and unlock height.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *     responses:
+ *       200:
+ *         description: Staker info retrieved successfully.
+ *       500:
+ *         description: Internal server error
+ */
 router.get("/:vaultId/stacking/pox5/staker-info", validateVaultId, controller.getStakerInfo);
 
 // Pool metrics

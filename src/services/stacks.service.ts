@@ -60,10 +60,11 @@ export class StacksService {
 
   constructor(testnet: boolean = false) {
     this.axiosClient = axios.create();
-    this.stackBaseUrl = testnet
-      ? api_constants.stacks_testnet_rpc
-      : api_constants.stacks_mainnet_rpc;
-    this.network = testnet ? STACKS_TESTNET : STACKS_MAINNET;
+    const baseUrl = process.env.STACKS_API_URL
+      || (testnet ? api_constants.stacks_testnet_rpc : api_constants.stacks_mainnet_rpc);
+    this.stackBaseUrl = baseUrl;
+    const defaultNetwork = testnet ? STACKS_TESTNET : STACKS_MAINNET;
+    this.network = { ...defaultNetwork, client: { baseUrl } };
   }
 
 
@@ -695,10 +696,12 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
    */
   public broadcastTransaction = async (
     signedTransaction: StacksTransactionWire,
+    network?: StacksNetwork,
   ): Promise<any> => {
     try {
       const result = await broadcastTransaction({
         transaction: signedTransaction,
+        network: network ?? this.network,
       });
 
       return result;

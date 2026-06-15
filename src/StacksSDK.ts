@@ -19,6 +19,7 @@
  * @public
  */
 import { StacksService } from "./services/stacks.service";
+import { STACKS_MAINNET, STACKS_TESTNET, type StacksNetwork } from "@stacks/network";
 import { FireblocksService } from "./services/fireblocks.service";
 import {
   CheckStatusData,
@@ -868,13 +869,19 @@ export class StacksSDK {
     );
     const signature = concatSignature(rawSignature.fullSig, rawSignature.v);
     (tx as any).auth.spendingCondition.signature = createMessageSignature(signature);
-    return await this.chainService.broadcastTransaction(tx);
+    return this.chainService.broadcastTransaction(tx, this.pox5Network);
   };
 
-  private get pox5Network(): string {
-    // NOTE: private testnet uses chain ID 256 — set a custom StacksNetwork when testing
-    // against https://api.private-1.hiro.so instead of using this string directly.
-    return this.testnet ? 'testnet' : 'mainnet';
+  // PoX-5 private testnet uses chain ID 256 (not the standard Stacks testnet chain ID).
+  // All other testnet settings (address format, transaction version) match STACKS_TESTNET.
+  private static readonly POX5_TESTNET: StacksNetwork = {
+    ...STACKS_TESTNET,
+    chainId: 256,
+    client: { baseUrl: 'https://api.private-1.hiro.so' },
+  };
+
+  private get pox5Network(): StacksNetwork {
+    return this.testnet ? StacksSDK.POX5_TESTNET : STACKS_MAINNET;
   }
 
   // ─── PoX-5 Solo STX ──────────────────────────────────────────────────────────
@@ -901,10 +908,10 @@ export class StacksSDK {
         throw new Error("Address, Public Key or Vault ID are not set");
       }
 
-      const pox = await fetchPox5Info({ network: this.pox5Network as any });
       const resolvedNonce = await this.resolveNonce(nonce);
+      const pox = await fetchPox5Info({ network: this.pox5Network });
 
-      const tx = buildStake({
+      const tx = await buildStake({
         signerManager,
         amountUstx: stxToMicro(amountStx),
         numCycles,
@@ -912,7 +919,7 @@ export class StacksSDK {
         publicKey: this.publicKey,
         fee: BigInt(10000),
         nonce: resolvedNonce,
-        network: this.pox5Network as any,
+        network: this.pox5Network,
       });
 
       const result = await this.pox5SignAndBroadcast(tx, note || `stake ${amountStx} STX for ${numCycles} cycles`, externalId);
@@ -947,7 +954,8 @@ export class StacksSDK {
    * @param externalId - Optional Fireblocks external ID for idempotency.
    */
   public updateStake = async (
-    signerManager?: string,
+    signerManager: string,
+    oldSignerManager: string,
     cyclesToExtend?: number,
     increaseByStx?: number,
     note?: string,
@@ -961,14 +969,15 @@ export class StacksSDK {
 
       const resolvedNonce = await this.resolveNonce(nonce);
 
-      const tx = buildStakeUpdate({
-        ...(signerManager ? { signerManager } : {}),
+      const tx = await buildStakeUpdate({
+        signerManager,
+        oldSignerManager,
         cyclesToExtend: cyclesToExtend ?? 0,
         amountIncrease: increaseByStx ? stxToMicro(increaseByStx) : BigInt(0),
         publicKey: this.publicKey,
         fee: BigInt(10000),
         nonce: resolvedNonce,
-        network: this.pox5Network as any,
+        network: this.pox5Network,
       });
 
       const result = await this.pox5SignAndBroadcast(tx, note || "update stake position", externalId);
@@ -1000,6 +1009,7 @@ export class StacksSDK {
    * @param externalId - Optional Fireblocks external ID for idempotency.
    */
   public unstake = async (
+    oldSignerManager: string,
     note?: string,
     nonce?: bigint,
     externalId?: string,
@@ -1009,18 +1019,19 @@ export class StacksSDK {
         throw new Error("Address, Public Key or Vault ID are not set");
       }
 
-      const pox = await fetchPox5Info({ network: this.pox5Network as any });
+      const pox = await fetchPox5Info({ network: this.pox5Network });
       if (isInPreparePhase({ burnHeight: pox.currentBurnchainBlockHeight, poxInfo: pox })) {
         return { success: false, error: "Cannot unstake during the prepare phase — wait for the reward phase to begin." };
       }
 
       const resolvedNonce = await this.resolveNonce(nonce);
 
-      const tx = buildUnstake({
+      const tx = await buildUnstake({
+        oldSignerManager,
         publicKey: this.publicKey,
         fee: BigInt(10000),
         nonce: resolvedNonce,
-        network: this.pox5Network as any,
+        network: this.pox5Network,
       });
 
       const result = await this.pox5SignAndBroadcast(tx, note || "unstake STX", externalId);
@@ -1071,7 +1082,7 @@ export class StacksSDK {
 
       const resolvedNonce = await this.resolveNonce(nonce);
 
-      const tx = buildGrantSignerKey({
+      const tx = await buildGrantSignerKey({
         signerKey,
         signerManager,
         authId,
@@ -1079,7 +1090,7 @@ export class StacksSDK {
         publicKey: this.publicKey,
         fee: BigInt(10000),
         nonce: resolvedNonce,
-        network: this.pox5Network as any,
+        network: this.pox5Network,
       });
 
       const result = await this.pox5SignAndBroadcast(tx, note || "grant signer key", externalId);
@@ -1125,13 +1136,13 @@ export class StacksSDK {
 
       const resolvedNonce = await this.resolveNonce(nonce);
 
-      const tx = buildRevokeSignerGrant({
+      const tx = await buildRevokeSignerGrant({
         signerManager,
         signerKey,
         publicKey: this.publicKey,
         fee: BigInt(10000),
         nonce: resolvedNonce,
-        network: this.pox5Network as any,
+        network: this.pox5Network,
       });
 
       const result = await this.pox5SignAndBroadcast(tx, note || "revoke signer grant", externalId);
@@ -1164,7 +1175,7 @@ export class StacksSDK {
         throw new Error("Address is not set");
       }
 
-      const info = await fetchStakerInfo({ address: this.address, network: this.pox5Network as any });
+      const info = await fetchStakerInfo({ address: this.address, network: this.pox5Network });
 
       if (!info.staked) {
         return { success: true, staked: false };
@@ -1182,6 +1193,14 @@ export class StacksSDK {
       };
     } catch (error) {
       return { success: false, error: `Failed to fetch staker info: ${formatErrorMessage(error)}` };
+    }
+  };
+
+  public getPox5Info = async (): Promise<any> => {
+    try {
+      return await fetchPox5Info({ network: this.pox5Network });
+    } catch (error) {
+      return { success: false, error: `Failed to fetch PoX-5 info: ${formatErrorMessage(error)}` };
     }
   };
 

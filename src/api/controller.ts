@@ -697,20 +697,21 @@ export const updateStake: Handler = async (req, res, next) => {
     const vaultId = getVaultId(req);
 
     const signerManager = req.body.signerManager ? String(req.body.signerManager).trim() : undefined;
-    const cyclesToExtend = req.body.cyclesToExtend !== undefined ? Number(req.body.cyclesToExtend) : undefined;
-    const increaseBy = req.body.increaseBy !== undefined ? Number(req.body.increaseBy) : undefined;
+    const oldSignerManager = req.body.oldSignerManager ? String(req.body.oldSignerManager).trim() : undefined;
 
-    if (signerManager === undefined && cyclesToExtend === undefined && increaseBy === undefined) {
-      res.status(400).json({ error: "Bad Request: at least one of signerManager, cyclesToExtend, or increaseBy must be provided" });
+    if (!signerManager || !oldSignerManager) {
+      res.status(400).json({ error: "Bad Request: signerManager and oldSignerManager are required" });
       return;
     }
 
+    const cyclesToExtend = req.body.cyclesToExtend !== undefined ? Number(req.body.cyclesToExtend) : undefined;
+    const increaseBy = req.body.increaseBy !== undefined ? Number(req.body.increaseBy) : undefined;
     const note = req.body.note ? String(req.body.note) : undefined;
     const nonce = parseOptionalNonce(req.body.nonce);
     const externalId = req.body.externalId ? String(req.body.externalId) : undefined;
 
     const tx = await apiService.executeAction(vaultId, ActionType.UPDATE_STAKE, {
-      signerManager, cyclesToExtend, increaseBy, note, nonce, externalId,
+      signerManager, oldSignerManager, cyclesToExtend, increaseBy, note, nonce, externalId,
     });
     res.json(tx);
   } catch (err) {
@@ -722,11 +723,18 @@ export const updateStake: Handler = async (req, res, next) => {
 export const unstake: Handler = async (req, res, next) => {
   try {
     const vaultId = getVaultId(req);
+
+    const oldSignerManager = req.body.oldSignerManager ? String(req.body.oldSignerManager).trim() : undefined;
+    if (!oldSignerManager) {
+      res.status(400).json({ error: "Bad Request: oldSignerManager is required" });
+      return;
+    }
+
     const note = req.body.note ? String(req.body.note) : undefined;
     const nonce = parseOptionalNonce(req.body.nonce);
     const externalId = req.body.externalId ? String(req.body.externalId) : undefined;
 
-    const tx = await apiService.executeAction(vaultId, ActionType.UNSTAKE, { note, nonce, externalId });
+    const tx = await apiService.executeAction(vaultId, ActionType.UNSTAKE, { oldSignerManager, note, nonce, externalId });
     res.json(tx);
   } catch (err) {
     next(err);
@@ -788,6 +796,16 @@ export const revokeSignerGrant: Handler = async (req, res, next) => {
       signerManager, signerKey, note, nonce, externalId,
     });
     res.json(tx);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// GET /stacking/pox5/info
+export const getPox5Info: Handler = async (req, res, next) => {
+  try {
+    const info = await apiService.executeAction(helperConstants.vaultIdForReadOnlyActions, ActionType.GET_POX5_INFO, {});
+    res.json(info);
   } catch (err) {
     next(err);
   }

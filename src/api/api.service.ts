@@ -199,6 +199,7 @@ export class ApiService {
         case ActionType.UPDATE_STAKE:
           result = await sdk.updateStake(
             params.signerManager,
+            params.oldSignerManager,
             params.cyclesToExtend,
             params.increaseBy,
             params.note,
@@ -208,6 +209,7 @@ export class ApiService {
           break;
         case ActionType.UNSTAKE:
           result = await sdk.unstake(
+            params.oldSignerManager,
             params.note,
             params.nonce,
             params.externalId,
@@ -235,6 +237,9 @@ export class ApiService {
           break;
         case ActionType.GET_STAKER_INFO:
           result = await sdk.getStakerInfo();
+          break;
+        case ActionType.GET_POX5_INFO:
+          result = await sdk.getPox5Info();
           break;
         default:
           throw new Error(
