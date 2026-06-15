@@ -186,6 +186,56 @@ export class ApiService {
         case ActionType.GET_ACCOUNT_NONCE:
           result = await sdk.getAccountNonce();
           break;
+        case ActionType.STAKE:
+          result = await sdk.stake(
+            params.amount,
+            params.numCycles,
+            params.signerManager,
+            params.note,
+            params.nonce,
+            params.externalId,
+          );
+          break;
+        case ActionType.UPDATE_STAKE:
+          result = await sdk.updateStake(
+            params.signerManager,
+            params.cyclesToExtend,
+            params.increaseBy,
+            params.note,
+            params.nonce,
+            params.externalId,
+          );
+          break;
+        case ActionType.UNSTAKE:
+          result = await sdk.unstake(
+            params.note,
+            params.nonce,
+            params.externalId,
+          );
+          break;
+        case ActionType.GRANT_SIGNER_KEY:
+          result = await sdk.grantSignerKey(
+            params.signerKey,
+            params.signerManager,
+            params.authId,
+            params.signerSignature,
+            params.note,
+            params.nonce,
+            params.externalId,
+          );
+          break;
+        case ActionType.REVOKE_SIGNER_GRANT:
+          result = await sdk.revokeSignerGrant(
+            params.signerManager,
+            params.signerKey,
+            params.note,
+            params.nonce,
+            params.externalId,
+          );
+          break;
+        case ActionType.GET_STAKER_INFO:
+          result = await sdk.getStakerInfo();
+          break;
         default:
           throw new Error(
             `InvalidType :

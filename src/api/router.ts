@@ -767,6 +767,14 @@ router.post(
   controller.replaceTransaction,
 );
 
+// PoX-5 Solo STX routes
+router.post("/:vaultId/stacking/pox5/stake", validateVaultId, controller.stake);
+router.post("/:vaultId/stacking/pox5/update", validateVaultId, controller.updateStake);
+router.post("/:vaultId/stacking/pox5/unstake", validateVaultId, controller.unstake);
+router.post("/:vaultId/stacking/pox5/grant-signer-key", validateVaultId, controller.grantSignerKey);
+router.post("/:vaultId/stacking/pox5/revoke-signer-grant", validateVaultId, controller.revokeSignerGrant);
+router.get("/:vaultId/stacking/pox5/staker-info", validateVaultId, controller.getStakerInfo);
+
 // Pool metrics
 /**
  * @openapi

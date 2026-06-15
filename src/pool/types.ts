@@ -42,6 +42,13 @@ export enum ActionType {
   EXTEND_STACKING_PERIOD = "extendStackingPeriod",
   REPLACE_TRANSACTION = "replaceTransaction",
   GET_ACCOUNT_NONCE = "getAccountNonce",
+  // PoX-5 Solo STX
+  STAKE = "stake",
+  UPDATE_STAKE = "updateStake",
+  UNSTAKE = "unstake",
+  GRANT_SIGNER_KEY = "grantSignerKey",
+  REVOKE_SIGNER_GRANT = "revokeSignerGrant",
+  GET_STAKER_INFO = "getStakerInfo",
 }
 
 export interface SdkManagerMetrics {

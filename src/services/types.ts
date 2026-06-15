@@ -133,9 +133,22 @@ export type GetAccountNonceResponse = {
   error?: string;
 };
 
+export type StakerInfoResponse = {
+  success: boolean;
+  staked?: boolean;
+  details?: {
+    amountUstx: bigint;
+    firstRewardCycle: number;
+    numCycles: number;
+    signerManager: string;
+  };
+  error?: string;
+};
+
 export type SDKResponse =
   | GetNativeBalanceResponse
   | string
   | CreateTransactionResponse
   | GetTransactionHistoryResponse
-  | GetAccountNonceResponse;
+  | GetAccountNonceResponse
+  | StakerInfoResponse;

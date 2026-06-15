@@ -652,6 +652,158 @@ export const replaceTransaction: Handler = async (req, res, next) => {
   }
 };
 
+// POST /:vaultId/stacking/pox5/stake
+export const stake: Handler = async (req, res, next) => {
+  try {
+    const vaultId = getVaultId(req);
+
+    const amountStr = String(req.body.amount || "");
+    const numCyclesStr = String(req.body.numCycles || "");
+    const signerManager = String(req.body.signerManager || "").trim();
+
+    if (!amountStr || !numCyclesStr || !signerManager) {
+      res.status(400).json({ error: "Bad Request: amount, numCycles, and signerManager are required" });
+      return;
+    }
+
+    const amount = Number(amountStr);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      res.status(400).json({ error: "Bad Request: amount must be > 0" });
+      return;
+    }
+
+    const numCycles = Number(numCyclesStr);
+    if (!Number.isInteger(numCycles) || numCycles < 1 || numCycles > 96) {
+      res.status(400).json({ error: "Bad Request: numCycles must be an integer between 1 and 96" });
+      return;
+    }
+
+    const note = req.body.note ? String(req.body.note) : undefined;
+    const nonce = parseOptionalNonce(req.body.nonce);
+    const externalId = req.body.externalId ? String(req.body.externalId) : undefined;
+
+    const tx = await apiService.executeAction(vaultId, ActionType.STAKE, {
+      amount, numCycles, signerManager, note, nonce, externalId,
+    });
+    res.json(tx);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /:vaultId/stacking/pox5/update
+export const updateStake: Handler = async (req, res, next) => {
+  try {
+    const vaultId = getVaultId(req);
+
+    const signerManager = req.body.signerManager ? String(req.body.signerManager).trim() : undefined;
+    const cyclesToExtend = req.body.cyclesToExtend !== undefined ? Number(req.body.cyclesToExtend) : undefined;
+    const increaseBy = req.body.increaseBy !== undefined ? Number(req.body.increaseBy) : undefined;
+
+    if (signerManager === undefined && cyclesToExtend === undefined && increaseBy === undefined) {
+      res.status(400).json({ error: "Bad Request: at least one of signerManager, cyclesToExtend, or increaseBy must be provided" });
+      return;
+    }
+
+    const note = req.body.note ? String(req.body.note) : undefined;
+    const nonce = parseOptionalNonce(req.body.nonce);
+    const externalId = req.body.externalId ? String(req.body.externalId) : undefined;
+
+    const tx = await apiService.executeAction(vaultId, ActionType.UPDATE_STAKE, {
+      signerManager, cyclesToExtend, increaseBy, note, nonce, externalId,
+    });
+    res.json(tx);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /:vaultId/stacking/pox5/unstake
+export const unstake: Handler = async (req, res, next) => {
+  try {
+    const vaultId = getVaultId(req);
+    const note = req.body.note ? String(req.body.note) : undefined;
+    const nonce = parseOptionalNonce(req.body.nonce);
+    const externalId = req.body.externalId ? String(req.body.externalId) : undefined;
+
+    const tx = await apiService.executeAction(vaultId, ActionType.UNSTAKE, { note, nonce, externalId });
+    res.json(tx);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /:vaultId/stacking/pox5/grant-signer-key
+export const grantSignerKey: Handler = async (req, res, next) => {
+  try {
+    const vaultId = getVaultId(req);
+
+    const signerKey = String(req.body.signerKey || "").trim();
+    const signerManager = String(req.body.signerManager || "").trim();
+    const authIdStr = String(req.body.authId || "");
+    const signerSignature = String(req.body.signerSignature || "").trim();
+
+    if (!signerKey || !signerManager || !authIdStr || !signerSignature) {
+      res.status(400).json({ error: "Bad Request: signerKey, signerManager, authId, and signerSignature are required" });
+      return;
+    }
+
+    if (!/^[0-9]+$/.test(authIdStr)) {
+      res.status(400).json({ error: "Bad Request: authId must be a positive integer string" });
+      return;
+    }
+
+    const authId = BigInt(authIdStr);
+    const note = req.body.note ? String(req.body.note) : undefined;
+    const nonce = parseOptionalNonce(req.body.nonce);
+    const externalId = req.body.externalId ? String(req.body.externalId) : undefined;
+
+    const tx = await apiService.executeAction(vaultId, ActionType.GRANT_SIGNER_KEY, {
+      signerKey, signerManager, authId, signerSignature, note, nonce, externalId,
+    });
+    res.json(tx);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /:vaultId/stacking/pox5/revoke-signer-grant
+export const revokeSignerGrant: Handler = async (req, res, next) => {
+  try {
+    const vaultId = getVaultId(req);
+
+    const signerManager = String(req.body.signerManager || "").trim();
+    const signerKey = String(req.body.signerKey || "").trim();
+
+    if (!signerManager || !signerKey) {
+      res.status(400).json({ error: "Bad Request: signerManager and signerKey are required" });
+      return;
+    }
+
+    const note = req.body.note ? String(req.body.note) : undefined;
+    const nonce = parseOptionalNonce(req.body.nonce);
+    const externalId = req.body.externalId ? String(req.body.externalId) : undefined;
+
+    const tx = await apiService.executeAction(vaultId, ActionType.REVOKE_SIGNER_GRANT, {
+      signerManager, signerKey, note, nonce, externalId,
+    });
+    res.json(tx);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// GET /:vaultId/stacking/pox5/staker-info
+export const getStakerInfo: Handler = async (req, res, next) => {
+  try {
+    const vaultId = getVaultId(req);
+    const info = await apiService.executeAction(vaultId, ActionType.GET_STAKER_INFO, {});
+    res.json(info);
+  } catch (err) {
+    next(err);
+  }
+};
+
 // GET /metrics
 export const getPoolMetrics: Handler = async (req, res, next) => {
   try {

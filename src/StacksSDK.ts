@@ -31,6 +31,7 @@ import {
   GetPoxInfoResponse,
   GetTransactionHistoryResponse,
   GetTransactionStatusResponse,
+  StakerInfoResponse,
   TokenType,
   Transaction,
   TransactionDetails,
@@ -60,11 +61,22 @@ import {
   Pc,
   PostConditionMode,
   PostConditionWire,
+  sigHashPreSign,
   StacksTransactionWire,
   uintCV,
   principalCV,
   noneCV,
 } from "@stacks/transactions";
+import {
+  buildStake,
+  buildStakeUpdate,
+  buildUnstake,
+  buildGrantSignerKey,
+  buildRevokeSignerGrant,
+  fetchStakerInfo,
+  fetchPoxInfo as fetchPox5Info,
+  isInPreparePhase,
+} from "@stacks/bitcoin-staking";
 
 export class StacksSDK {
   private fireblocksService: FireblocksService;
@@ -836,6 +848,340 @@ export class StacksSDK {
       throw new Error(
         `Failed to build, sign or send contract call transaction: ${formatErrorMessage(error)}`,
       );
+    }
+  };
+
+  private pox5SignAndBroadcast = async (
+    tx: StacksTransactionWire,
+    note: string,
+    externalId?: string,
+  ): Promise<{ txid?: string; error?: string; reason?: string }> => {
+    const sigHash = tx.signBegin();
+    const preSignSigHash = sigHashPreSign(
+      sigHash,
+      tx.auth.authType,
+      (tx.auth.spendingCondition as any).fee,
+      (tx.auth.spendingCondition as any).nonce,
+    );
+    const rawSignature = await this.fireblocksService.signTransaction(
+      preSignSigHash, this.vaultAccountId.toString(), note, externalId,
+    );
+    const signature = concatSignature(rawSignature.fullSig, rawSignature.v);
+    (tx as any).auth.spendingCondition.signature = createMessageSignature(signature);
+    return await this.chainService.broadcastTransaction(tx);
+  };
+
+  private get pox5Network(): string {
+    // NOTE: private testnet uses chain ID 256 — set a custom StacksNetwork when testing
+    // against https://api.private-1.hiro.so instead of using this string directly.
+    return this.testnet ? 'testnet' : 'mainnet';
+  }
+
+  // ─── PoX-5 Solo STX ──────────────────────────────────────────────────────────
+
+  /**
+   * Stakes STX through a signer-manager (PoX-5). Replaces pox-4 stackSolo.
+   * @param amountStx - Amount of STX to stake (number). Converted to microSTX internally.
+   * @param numCycles - Number of cycles to lock (1–96).
+   * @param signerManager - The signer-manager contract principal (must have an on-chain grant).
+   * @param note - Optional Fireblocks transaction note.
+   * @param nonce - Optional nonce override.
+   * @param externalId - Optional Fireblocks external ID for idempotency.
+   */
+  public stake = async (
+    amountStx: number,
+    numCycles: number,
+    signerManager: string,
+    note?: string,
+    nonce?: bigint,
+    externalId?: string,
+  ): Promise<CreateTransactionResponse> => {
+    try {
+      if (!this.address || !this.publicKey || !this.vaultAccountId) {
+        throw new Error("Address, Public Key or Vault ID are not set");
+      }
+
+      const pox = await fetchPox5Info({ network: this.pox5Network as any });
+      const resolvedNonce = await this.resolveNonce(nonce);
+
+      const tx = buildStake({
+        signerManager,
+        amountUstx: stxToMicro(amountStx),
+        numCycles,
+        startBurnHt: pox.currentBurnchainBlockHeight,
+        publicKey: this.publicKey,
+        fee: BigInt(10000),
+        nonce: resolvedNonce,
+        network: this.pox5Network as any,
+      });
+
+      const result = await this.pox5SignAndBroadcast(tx, note || `stake ${amountStx} STX for ${numCycles} cycles`, externalId);
+
+      if (!result || result.error || !result.txid || result.reason) {
+        return { success: false, error: result?.error || result?.reason || "Failed to broadcast stake transaction" };
+      }
+
+      const txStatus = await this.waitForTxSettlement(result.txid);
+      if (!txStatus.success || txStatus.data?.tx_status !== "success") {
+        return {
+          success: false,
+          error: txStatus.error || txStatus.data?.tx_error || "Stake transaction failed at the contract level.",
+          txHash: result.txid,
+        };
+      }
+
+      return { success: true, txHash: result.txid };
+    } catch (error) {
+      return { success: false, error: `Failed to stake: ${formatErrorMessage(error)}` };
+    }
+  };
+
+  /**
+   * Updates an existing PoX-5 staking position — extend cycles, increase amount, or rotate
+   * signer-manager. All fields are optional; omit any to leave that dimension unchanged.
+   * @param signerManager - Rotate to a new signer-manager principal, or omit to keep current.
+   * @param cyclesToExtend - Additional cycles to add (0 = no extension).
+   * @param increaseByStx - Additional STX to add (0 = no increase). Converted to microSTX internally.
+   * @param note - Optional Fireblocks transaction note.
+   * @param nonce - Optional nonce override.
+   * @param externalId - Optional Fireblocks external ID for idempotency.
+   */
+  public updateStake = async (
+    signerManager?: string,
+    cyclesToExtend?: number,
+    increaseByStx?: number,
+    note?: string,
+    nonce?: bigint,
+    externalId?: string,
+  ): Promise<CreateTransactionResponse> => {
+    try {
+      if (!this.address || !this.publicKey || !this.vaultAccountId) {
+        throw new Error("Address, Public Key or Vault ID are not set");
+      }
+
+      const resolvedNonce = await this.resolveNonce(nonce);
+
+      const tx = buildStakeUpdate({
+        ...(signerManager ? { signerManager } : {}),
+        cyclesToExtend: cyclesToExtend ?? 0,
+        amountIncrease: increaseByStx ? stxToMicro(increaseByStx) : BigInt(0),
+        publicKey: this.publicKey,
+        fee: BigInt(10000),
+        nonce: resolvedNonce,
+        network: this.pox5Network as any,
+      });
+
+      const result = await this.pox5SignAndBroadcast(tx, note || "update stake position", externalId);
+
+      if (!result || result.error || !result.txid || result.reason) {
+        return { success: false, error: result?.error || result?.reason || "Failed to broadcast update-stake transaction" };
+      }
+
+      const txStatus = await this.waitForTxSettlement(result.txid);
+      if (!txStatus.success || txStatus.data?.tx_status !== "success") {
+        return {
+          success: false,
+          error: txStatus.error || txStatus.data?.tx_error || "Update-stake transaction failed at the contract level.",
+          txHash: result.txid,
+        };
+      }
+
+      return { success: true, txHash: result.txid };
+    } catch (error) {
+      return { success: false, error: `Failed to update stake: ${formatErrorMessage(error)}` };
+    }
+  };
+
+  /**
+   * Unlocks a PoX-5 staking position early (sets unlock to end of current cycle).
+   * Reverts if called during the prepare phase — the SDK checks this before submitting.
+   * @param note - Optional Fireblocks transaction note.
+   * @param nonce - Optional nonce override.
+   * @param externalId - Optional Fireblocks external ID for idempotency.
+   */
+  public unstake = async (
+    note?: string,
+    nonce?: bigint,
+    externalId?: string,
+  ): Promise<CreateTransactionResponse> => {
+    try {
+      if (!this.address || !this.publicKey || !this.vaultAccountId) {
+        throw new Error("Address, Public Key or Vault ID are not set");
+      }
+
+      const pox = await fetchPox5Info({ network: this.pox5Network as any });
+      if (isInPreparePhase({ burnHeight: pox.currentBurnchainBlockHeight, poxInfo: pox })) {
+        return { success: false, error: "Cannot unstake during the prepare phase — wait for the reward phase to begin." };
+      }
+
+      const resolvedNonce = await this.resolveNonce(nonce);
+
+      const tx = buildUnstake({
+        publicKey: this.publicKey,
+        fee: BigInt(10000),
+        nonce: resolvedNonce,
+        network: this.pox5Network as any,
+      });
+
+      const result = await this.pox5SignAndBroadcast(tx, note || "unstake STX", externalId);
+
+      if (!result || result.error || !result.txid || result.reason) {
+        return { success: false, error: result?.error || result?.reason || "Failed to broadcast unstake transaction" };
+      }
+
+      const txStatus = await this.waitForTxSettlement(result.txid);
+      if (!txStatus.success || txStatus.data?.tx_status !== "success") {
+        return {
+          success: false,
+          error: txStatus.error || txStatus.data?.tx_error || "Unstake transaction failed at the contract level.",
+          txHash: result.txid,
+        };
+      }
+
+      return { success: true, txHash: result.txid };
+    } catch (error) {
+      return { success: false, error: `Failed to unstake: ${formatErrorMessage(error)}` };
+    }
+  };
+
+  /**
+   * Grants a one-time signer key authorization to a signer-manager (PoX-5).
+   * Must be called once before any stake() calls through that signer-manager.
+   * @param signerKey - 33-byte compressed secp256k1 public key (hex).
+   * @param signerManager - The signer-manager contract principal to authorize.
+   * @param authId - Monotonically increasing unique uint for replay protection.
+   * @param signerSignature - 65-byte SIP-018 recoverable signature (hex) from the signer key.
+   * @param note - Optional Fireblocks transaction note.
+   * @param nonce - Optional nonce override.
+   * @param externalId - Optional Fireblocks external ID for idempotency.
+   */
+  public grantSignerKey = async (
+    signerKey: string,
+    signerManager: string,
+    authId: bigint,
+    signerSignature: string,
+    note?: string,
+    nonce?: bigint,
+    externalId?: string,
+  ): Promise<CreateTransactionResponse> => {
+    try {
+      if (!this.address || !this.publicKey || !this.vaultAccountId) {
+        throw new Error("Address, Public Key or Vault ID are not set");
+      }
+
+      const resolvedNonce = await this.resolveNonce(nonce);
+
+      const tx = buildGrantSignerKey({
+        signerKey,
+        signerManager,
+        authId,
+        signerSignature,
+        publicKey: this.publicKey,
+        fee: BigInt(10000),
+        nonce: resolvedNonce,
+        network: this.pox5Network as any,
+      });
+
+      const result = await this.pox5SignAndBroadcast(tx, note || "grant signer key", externalId);
+
+      if (!result || result.error || !result.txid || result.reason) {
+        return { success: false, error: result?.error || result?.reason || "Failed to broadcast grant-signer-key transaction" };
+      }
+
+      const txStatus = await this.waitForTxSettlement(result.txid);
+      if (!txStatus.success || txStatus.data?.tx_status !== "success") {
+        return {
+          success: false,
+          error: txStatus.error || txStatus.data?.tx_error || "Grant signer key transaction failed at the contract level.",
+          txHash: result.txid,
+        };
+      }
+
+      return { success: true, txHash: result.txid };
+    } catch (error) {
+      return { success: false, error: `Failed to grant signer key: ${formatErrorMessage(error)}` };
+    }
+  };
+
+  /**
+   * Revokes an existing signer key grant from a signer-manager (PoX-5).
+   * @param signerManager - The signer-manager contract principal.
+   * @param signerKey - 33-byte compressed secp256k1 public key (hex) to revoke.
+   * @param note - Optional Fireblocks transaction note.
+   * @param nonce - Optional nonce override.
+   * @param externalId - Optional Fireblocks external ID for idempotency.
+   */
+  public revokeSignerGrant = async (
+    signerManager: string,
+    signerKey: string,
+    note?: string,
+    nonce?: bigint,
+    externalId?: string,
+  ): Promise<CreateTransactionResponse> => {
+    try {
+      if (!this.address || !this.publicKey || !this.vaultAccountId) {
+        throw new Error("Address, Public Key or Vault ID are not set");
+      }
+
+      const resolvedNonce = await this.resolveNonce(nonce);
+
+      const tx = buildRevokeSignerGrant({
+        signerManager,
+        signerKey,
+        publicKey: this.publicKey,
+        fee: BigInt(10000),
+        nonce: resolvedNonce,
+        network: this.pox5Network as any,
+      });
+
+      const result = await this.pox5SignAndBroadcast(tx, note || "revoke signer grant", externalId);
+
+      if (!result || result.error || !result.txid || result.reason) {
+        return { success: false, error: result?.error || result?.reason || "Failed to broadcast revoke-signer-grant transaction" };
+      }
+
+      const txStatus = await this.waitForTxSettlement(result.txid);
+      if (!txStatus.success || txStatus.data?.tx_status !== "success") {
+        return {
+          success: false,
+          error: txStatus.error || txStatus.data?.tx_error || "Revoke signer grant transaction failed at the contract level.",
+          txHash: result.txid,
+        };
+      }
+
+      return { success: true, txHash: result.txid };
+    } catch (error) {
+      return { success: false, error: `Failed to revoke signer grant: ${formatErrorMessage(error)}` };
+    }
+  };
+
+  /**
+   * Fetches the current PoX-5 staking position for this vault account.
+   */
+  public getStakerInfo = async (): Promise<StakerInfoResponse> => {
+    try {
+      if (!this.address) {
+        throw new Error("Address is not set");
+      }
+
+      const info = await fetchStakerInfo({ address: this.address, network: this.pox5Network as any });
+
+      if (!info.staked) {
+        return { success: true, staked: false };
+      }
+
+      return {
+        success: true,
+        staked: true,
+        details: {
+          amountUstx: info.details.amountUstx,
+          firstRewardCycle: info.details.firstRewardCycle,
+          numCycles: info.details.numCycles,
+          signerManager: info.details.signer,
+        },
+      };
+    } catch (error) {
+      return { success: false, error: `Failed to fetch staker info: ${formatErrorMessage(error)}` };
     }
   };
 
