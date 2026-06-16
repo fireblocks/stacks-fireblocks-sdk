@@ -33,6 +33,7 @@ import {
   GetTransactionHistoryResponse,
   GetTransactionStatusResponse,
   StakerInfoResponse,
+  VerifySignerGrantResponse,
   TokenType,
   Transaction,
   TransactionDetails,
@@ -67,6 +68,9 @@ import {
   uintCV,
   principalCV,
   noneCV,
+   makeUnsignedContractCall,
+  contractPrincipalCV,
+  bufferCV,
 } from "@stacks/transactions";
 import {
   buildStake,
@@ -76,8 +80,12 @@ import {
   buildRevokeSignerGrant,
   fetchStakerInfo,
   fetchPoxInfo as fetchPox5Info,
+  fetchVerifySignerKeyGrant,
+  fetchSignerInfo,
+  fetchSignerGrantMessageHash,
   isInPreparePhase,
 } from "@stacks/bitcoin-staking";
+import { hexToBytes } from "@stacks/common"; 
 
 export class StacksSDK {
   private fireblocksService: FireblocksService;
@@ -872,8 +880,7 @@ export class StacksSDK {
     return this.chainService.broadcastTransaction(tx, this.pox5Network);
   };
 
-  // PoX-5 private testnet uses chain ID 256 (not the standard Stacks testnet chain ID).
-  // All other testnet settings (address format, transaction version) match STACKS_TESTNET.
+  // PoX-5 private testnet uses chain ID 256; address encoding matches standard testnet (ST).
   private static readonly POX5_TESTNET: StacksNetwork = {
     ...STACKS_TESTNET,
     chainId: 256,
@@ -1056,21 +1063,29 @@ export class StacksSDK {
   };
 
   /**
-   * Grants a one-time signer key authorization to a signer-manager (PoX-5).
+   * Registers the vault's signer key with a signer-manager contract (PoX-5).
+   * Calls the signer-manager's `register-self`, which performs BOTH legs atomically:
+   *   1. pox-5.grant-signer-key (signer-sig over the signer-manager contract + authId)
+   *   2. pox-5.register-signer
    * Must be called once before any stake() calls through that signer-manager.
-   * @param signerKey - 33-byte compressed secp256k1 public key (hex).
-   * @param signerManager - The signer-manager contract principal to authorize.
-   * @param authId - Monotonically increasing unique uint for replay protection.
-   * @param signerSignature - 65-byte SIP-018 recoverable signature (hex) from the signer key.
+   *
+   * IMPORTANT: `register-self` is admin-gated (authorize-admin). The vault address
+   * MUST be an admin on the signer-manager contract, or this reverts with
+   * ERR_UNAUTHORIZED_ADMIN (u1002). Calling pox-5.grant-signer-key directly from an
+   * EOA fails with ERR_UNAUTHORIZED_SIGNER_REGISTRATION (u26) — hence this path.
+   *
+   * The grant signature is generated internally via Fireblocks raw signing and is
+   * computed over the signer-manager CONTRACT (current-contract), not the caller.
+   *
+   * @param signerManager - The signer-manager contract principal (ST….signer-manager).
+   * @param authId - Monotonically increasing unique uint for replay protection. Never reuse.
    * @param note - Optional Fireblocks transaction note.
    * @param nonce - Optional nonce override.
    * @param externalId - Optional Fireblocks external ID for idempotency.
    */
   public grantSignerKey = async (
-    signerKey: string,
     signerManager: string,
     authId: bigint,
-    signerSignature: string,
     note?: string,
     nonce?: bigint,
     externalId?: string,
@@ -1080,39 +1095,133 @@ export class StacksSDK {
         throw new Error("Address, Public Key or Vault ID are not set");
       }
 
+      const [smAddress, smName] = signerManager.split(".");
+      if (!smAddress || !smName) {
+        throw new Error(`Invalid signer-manager principal: ${signerManager}. Expected ST….contract-name`);
+      }
+
       const resolvedNonce = await this.resolveNonce(nonce);
 
-      const tx = await buildGrantSignerKey({
-        signerKey,
+      // Signature is over the signer-manager contract (register-self grants for current-contract)
+      const grantMsgHash = await fetchSignerGrantMessageHash({
         signerManager,
         authId,
-        signerSignature,
+        network: this.pox5Network,
+      });
+
+      const rawGrantSig = await this.fireblocksService.signTransaction(
+        grantMsgHash, this.vaultAccountId.toString(), note || "sign grant signer key message", externalId,
+      );
+      const signerSignature = concatSignature(rawGrantSig.fullSig, rawGrantSig.v);
+
+      // Call <signerManager>.register-self instead of pox-5.grant-signer-key directly.
+      // register-self args: (signer-manager <trait>) (signer-key (buff 33)) (auth-id uint) (signer-sig (buff 65))
+      const tx = await makeUnsignedContractCall({
+        contractAddress: smAddress,
+        contractName: smName,
+        functionName: "register-self",
+        functionArgs: [
+          contractPrincipalCV(smAddress, smName),       // signer-manager trait = the contract itself
+          bufferCV(hexToBytes(this.publicKey)),         // signer-key (buff 33)
+          uintCV(authId),                               // auth-id
+          bufferCV(hexToBytes(signerSignature)),        // signer-sig (buff 65)
+        ],
         publicKey: this.publicKey,
         fee: BigInt(10000),
         nonce: resolvedNonce,
         network: this.pox5Network,
+        postConditionMode: PostConditionMode.Deny,
+        postConditions: [],
       });
 
-      const result = await this.pox5SignAndBroadcast(tx, note || "grant signer key", externalId);
+      const result = await this.pox5SignAndBroadcast(tx, note || "register signer (register-self)", externalId);
 
       if (!result || result.error || !result.txid || result.reason) {
-        return { success: false, error: result?.error || result?.reason || "Failed to broadcast grant-signer-key transaction" };
+        return { success: false, error: result?.error || result?.reason || "Failed to broadcast register-self transaction" };
       }
 
       const txStatus = await this.waitForTxSettlement(result.txid);
       if (!txStatus.success || txStatus.data?.tx_status !== "success") {
         return {
           success: false,
-          error: txStatus.error || txStatus.data?.tx_error || "Grant signer key transaction failed at the contract level.",
+          error: txStatus.error || txStatus.data?.tx_error || "register-self transaction failed at the contract level.",
           txHash: result.txid,
         };
       }
 
       return { success: true, txHash: result.txid };
     } catch (error) {
-      return { success: false, error: `Failed to grant signer key: ${formatErrorMessage(error)}` };
+      return { success: false, error: `Failed to register signer key: ${formatErrorMessage(error)}` };
     }
   };
+
+  // /**
+  //  * Grants a one-time signer key authorization to a signer-manager (PoX-5).
+  //  * Must be called once before any stake() calls through that signer-manager.
+  //  * The vault's own public key is used as the signer key. The grant signature is
+  //  * generated internally via Fireblocks raw signing — no external signature needed.
+  //  * @param signerManager - The signer-manager contract principal to authorize.
+  //  * @param authId - Monotonically increasing unique uint for replay protection. Never reuse.
+  //  * @param note - Optional Fireblocks transaction note.
+  //  * @param nonce - Optional nonce override.
+  //  * @param externalId - Optional Fireblocks external ID for idempotency.
+  //  */
+  // public grantSignerKey = async (
+  //   signerManager: string,
+  //   authId: bigint,
+  //   note?: string,
+  //   nonce?: bigint,
+  //   externalId?: string,
+  // ): Promise<CreateTransactionResponse> => {
+  //   try {
+  //     if (!this.address || !this.publicKey || !this.vaultAccountId) {
+  //       throw new Error("Address, Public Key or Vault ID are not set");
+  //     }
+
+  //     const resolvedNonce = await this.resolveNonce(nonce);
+
+  //     const grantMsgHash = await fetchSignerGrantMessageHash({
+  //       signerManager,
+  //       authId,
+  //       network: this.pox5Network,
+  //     });
+
+  //     const rawGrantSig = await this.fireblocksService.signTransaction(
+  //       grantMsgHash, this.vaultAccountId.toString(), note || "sign grant signer key message", externalId,
+  //     );
+  //     const signerSignature = concatSignature(rawGrantSig.fullSig, rawGrantSig.v);
+
+  //     const tx = await buildGrantSignerKey({
+  //       signerKey: this.publicKey,
+  //       signerManager,
+  //       authId,
+  //       signerSignature,
+  //       publicKey: this.publicKey,
+  //       fee: BigInt(10000),
+  //       nonce: resolvedNonce,
+  //       network: this.pox5Network,
+  //     });
+
+  //     const result = await this.pox5SignAndBroadcast(tx, note || "grant signer key", externalId);
+
+  //     if (!result || result.error || !result.txid || result.reason) {
+  //       return { success: false, error: result?.error || result?.reason || "Failed to broadcast grant-signer-key transaction" };
+  //     }
+
+  //     const txStatus = await this.waitForTxSettlement(result.txid);
+  //     if (!txStatus.success || txStatus.data?.tx_status !== "success") {
+  //       return {
+  //         success: false,
+  //         error: txStatus.error || txStatus.data?.tx_error || "Grant signer key transaction failed at the contract level.",
+  //         txHash: result.txid,
+  //       };
+  //     }
+
+  //     return { success: true, txHash: result.txid };
+  //   } catch (error) {
+  //     return { success: false, error: `Failed to grant signer key: ${formatErrorMessage(error)}` };
+  //   }
+  // };
 
   /**
    * Revokes an existing signer key grant from a signer-manager (PoX-5).
@@ -1176,7 +1285,7 @@ export class StacksSDK {
       }
 
       const info = await fetchStakerInfo({ address: this.address, network: this.pox5Network });
-
+      console.log("Fetched staker info:", info);
       if (!info.staked) {
         return { success: true, staked: false };
       }
@@ -1185,7 +1294,7 @@ export class StacksSDK {
         success: true,
         staked: true,
         details: {
-          amountUstx: info.details.amountUstx,
+          amount_stx: microToStx(info.details.amountUstx),
           firstRewardCycle: info.details.firstRewardCycle,
           numCycles: info.details.numCycles,
           signerManager: info.details.signer,
@@ -1196,9 +1305,79 @@ export class StacksSDK {
     }
   };
 
+  /**
+   * Verifies the full signer-key grant state for a (signerManager, signerKey) pair.
+   *
+   * Two distinct checks are performed:
+   * 1. grant_exists  — the on-chain grant exists and has NOT been consumed yet
+   *                    (fetchVerifySignerKeyGrant). A consumed or missing grant → false.
+   * 2. signer_registered — the signer-manager contract has a registered signer key
+   *                    (fetchSignerInfo). The grant alone does not mean the signer is
+   *                    active; registration is a separate step (register-self / admin path).
+   *
+   * ready_to_stake is true only when both checks pass.
+   *
+   * If txid is supplied, the transaction is polled first and its status is included.
+   * A non-success tx status causes ready_to_stake to be false regardless of on-chain state.
+   */
+  public verifySignerGrant = async (
+    signerManager: string,
+    txid?: string,
+  ): Promise<VerifySignerGrantResponse> => {
+    try {
+      if (!this.publicKey) throw new Error("Public key is not set");
+
+      const notes: string[] = [];
+      let txStatus: string | null = null;
+
+      if (txid) {
+        const poll = await this.waitForTxSettlement(txid);
+        txStatus = poll.data?.tx_status ?? null;
+        if (txStatus !== 'success') {
+          notes.push(`Transaction ${txid} did not succeed (status: ${txStatus ?? 'unknown'}). A broadcast txid does not guarantee contract success — Stacks mines aborted transactions.`);
+          return { success: true, grant_exists: false, signer_registered: false, ready_to_stake: false, tx_status: txStatus, notes };
+        }
+      }
+
+      const signerKey = this.publicKey;
+      const [grantExists, signerInfo] = await Promise.all([
+        fetchVerifySignerKeyGrant({ signerKey, signerManager, network: this.pox5Network }),
+        fetchSignerInfo({ signerManager, network: this.pox5Network }),
+      ]);
+
+      const signerRegistered = !!signerInfo?.signerKey;
+      const registeredKey = signerInfo?.signerKey ?? null;
+
+      if (!grantExists) {
+        notes.push('No unconsumed grant found for this (signerKey, signerManager) pair. Either the grant was never created, has already been consumed (authId reuse), or was revoked.');
+      }
+      if (!signerRegistered) {
+        notes.push('The signer-manager has no registered signer key. The grant alone is not sufficient — registration (register-self or admin path) must also complete before stakes are accepted.');
+      }
+      if (grantExists && signerRegistered && registeredKey !== signerKey) {
+        notes.push(`The registered key (${registeredKey}) does not match the expected signerKey. The signer-manager may be registered to a different signer.`);
+      }
+
+      const readyToStake = grantExists && signerRegistered && registeredKey === signerKey;
+
+      return {
+        success: true,
+        grant_exists: grantExists,
+        signer_registered: signerRegistered,
+        registered_key: registeredKey,
+        ready_to_stake: readyToStake,
+        tx_status: txStatus,
+        notes: notes.length ? notes : undefined,
+      };
+    } catch (error) {
+      return { success: false, error: `Failed to verify signer grant: ${formatErrorMessage(error)}` };
+    }
+  };
+
   public getPox5Info = async (): Promise<any> => {
     try {
-      return await fetchPox5Info({ network: this.pox5Network });
+      const info = await fetchPox5Info({ network: this.pox5Network });
+      return JSON.parse(JSON.stringify(info, (_, v) => typeof v === 'bigint' ? v.toString() : v));
     } catch (error) {
       return { success: false, error: `Failed to fetch PoX-5 info: ${formatErrorMessage(error)}` };
     }
@@ -1609,9 +1788,11 @@ export class StacksSDK {
     console.log(`Checking account status for address: ${this.address}`);
 
     try {
-      const [delegationData, balanceResponse] = await Promise.all([
-        this.chainService.checkDelegationStatus(this.address), // may be null
+      const [delegationData, balanceResponse, pox5Info, stakerInfo] = await Promise.all([
+        this.chainService.checkDelegationStatus(this.address).catch(() => null),
         this.chainService.makeBalanceCalls(this.address),
+        fetchPox5Info({ network: this.pox5Network }).catch(() => null),
+        fetchStakerInfo({ address: this.address, network: this.pox5Network }).catch(() => null),
       ]);
 
       if (!balanceResponse) {
@@ -1646,6 +1827,16 @@ export class StacksSDK {
         ? (delegationData.value["pox-addr"]?.value ?? null) // null if none
         : null;
 
+      const pox5IsStaked = !!stakerInfo?.staked;
+      const pox5Details = pox5IsStaked && stakerInfo?.staked ? stakerInfo.details : null;
+      const unlockBurnHeight = pox5Details && pox5Info
+        ? pox5Info.firstBurnchainBlockHeight
+          + (pox5Details.firstRewardCycle + pox5Details.numCycles) * pox5Info.rewardCycleLength
+        : null;
+      const inPreparePhase = pox5Info
+        ? isInPreparePhase({ burnHeight: pox5Info.currentBurnchainBlockHeight, poxInfo: pox5Info })
+        : false;
+
       const statusData: CheckStatusData = {
         balance: {
           stx_total: microToStx(stxBalMicro),
@@ -1667,6 +1858,17 @@ export class StacksSDK {
             : null,
           until_burn_ht: untilBurnHt,
           pox_addr: poxAddrTuple,
+        },
+        pox5: {
+          is_staked: pox5IsStaked,
+          amount_stx: pox5Details ? microToStx(pox5Details.amountUstx) : null,
+          signer_manager: pox5Details?.signer ?? null,
+          first_reward_cycle: pox5Details?.firstRewardCycle ?? null,
+          num_cycles: pox5Details?.numCycles ?? null,
+          unlock_burn_height: unlockBurnHeight,
+          current_burn_height: pox5Info?.currentBurnchainBlockHeight ?? 0,
+          current_cycle_id: pox5Info?.rewardCycleId ?? 0,
+          is_prepare_phase: inPreparePhase,
         },
       };
 

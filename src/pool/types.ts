@@ -50,6 +50,7 @@ export enum ActionType {
   REVOKE_SIGNER_GRANT = "revokeSignerGrant",
   GET_STAKER_INFO = "getStakerInfo",
   GET_POX5_INFO = "getPox5Info",
+  VERIFY_SIGNER_GRANT = "verifySignerGrant",
 }
 
 export interface SdkManagerMetrics {

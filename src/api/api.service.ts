@@ -217,10 +217,8 @@ export class ApiService {
           break;
         case ActionType.GRANT_SIGNER_KEY:
           result = await sdk.grantSignerKey(
-            params.signerKey,
             params.signerManager,
             params.authId,
-            params.signerSignature,
             params.note,
             params.nonce,
             params.externalId,
@@ -240,6 +238,12 @@ export class ApiService {
           break;
         case ActionType.GET_POX5_INFO:
           result = await sdk.getPox5Info();
+          break;
+        case ActionType.VERIFY_SIGNER_GRANT:
+          result = await sdk.verifySignerGrant(
+            params.signerManager,
+            params.txid,
+          );
           break;
         default:
           throw new Error(

@@ -746,13 +746,11 @@ export const grantSignerKey: Handler = async (req, res, next) => {
   try {
     const vaultId = getVaultId(req);
 
-    const signerKey = String(req.body.signerKey || "").trim();
     const signerManager = String(req.body.signerManager || "").trim();
     const authIdStr = String(req.body.authId || "");
-    const signerSignature = String(req.body.signerSignature || "").trim();
 
-    if (!signerKey || !signerManager || !authIdStr || !signerSignature) {
-      res.status(400).json({ error: "Bad Request: signerKey, signerManager, authId, and signerSignature are required" });
+    if (!signerManager || !authIdStr) {
+      res.status(400).json({ error: "Bad Request: signerManager and authId are required" });
       return;
     }
 
@@ -767,7 +765,7 @@ export const grantSignerKey: Handler = async (req, res, next) => {
     const externalId = req.body.externalId ? String(req.body.externalId) : undefined;
 
     const tx = await apiService.executeAction(vaultId, ActionType.GRANT_SIGNER_KEY, {
-      signerKey, signerManager, authId, signerSignature, note, nonce, externalId,
+      signerManager, authId, note, nonce, externalId,
     });
     res.json(tx);
   } catch (err) {
@@ -796,6 +794,25 @@ export const revokeSignerGrant: Handler = async (req, res, next) => {
       signerManager, signerKey, note, nonce, externalId,
     });
     res.json(tx);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// GET /:vaultId/stacking/pox5/verify-signer-grant
+export const verifySignerGrant: Handler = async (req, res, next) => {
+  try {
+    const vaultId = getVaultId(req);
+    const signerManager = String(req.query.signerManager || "").trim();
+    const txid = req.query.txid ? String(req.query.txid).trim() : undefined;
+
+    if (!signerManager) {
+      res.status(400).json({ error: "Bad Request: signerManager is a required query parameter" });
+      return;
+    }
+
+    const result = await apiService.executeAction(vaultId, ActionType.VERIFY_SIGNER_GRANT, { signerManager, txid });
+    res.json(result);
   } catch (err) {
     next(err);
   }

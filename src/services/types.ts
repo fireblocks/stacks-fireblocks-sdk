@@ -89,6 +89,17 @@ export type CheckStatusData = {
     until_burn_ht: number | null;
     pox_addr: string | null;
   };
+  pox5: {
+    is_staked: boolean;
+    amount_stx: number | null;
+    signer_manager: string | null;
+    first_reward_cycle: number | null;
+    num_cycles: number | null;
+    unlock_burn_height: number | null;
+    current_burn_height: number;
+    current_cycle_id: number;
+    is_prepare_phase: boolean;
+  };
 };
 
 export type CheckStatusResponse = {
@@ -137,11 +148,22 @@ export type StakerInfoResponse = {
   success: boolean;
   staked?: boolean;
   details?: {
-    amountUstx: bigint;
+    amount_stx: number;
     firstRewardCycle: number;
     numCycles: number;
     signerManager: string;
   };
+  error?: string;
+};
+
+export type VerifySignerGrantResponse = {
+  success: boolean;
+  grant_exists?: boolean;
+  signer_registered?: boolean;
+  registered_key?: string | null;
+  ready_to_stake?: boolean;
+  tx_status?: string | null;
+  notes?: string[];
   error?: string;
 };
 
