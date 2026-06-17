@@ -839,6 +839,73 @@ export const getStakerInfo: Handler = async (req, res, next) => {
   }
 };
 
+// POST /:vaultId/stacking/pox5/bond/create
+export const createBond: Handler = async (req, res, next) => {
+  try {
+    const vaultId = getVaultId(req);
+
+    const bondIndexStr = String(req.body.bondIndex ?? "");
+    const btcAmountSatsStr = String(req.body.btcAmountSats ?? "");
+    const signerManager = String(req.body.signerManager || "").trim();
+
+    if (!bondIndexStr || !btcAmountSatsStr || !signerManager) {
+      res.status(400).json({ error: "Bad Request: bondIndex, btcAmountSats, and signerManager are required" });
+      return;
+    }
+
+    const bondIndex = Number(bondIndexStr);
+    if (!Number.isInteger(bondIndex) || bondIndex < 0) {
+      res.status(400).json({ error: "Bad Request: bondIndex must be a non-negative integer" });
+      return;
+    }
+
+    if (!/^[0-9]+$/.test(btcAmountSatsStr)) {
+      res.status(400).json({ error: "Bad Request: btcAmountSats must be a positive integer string" });
+      return;
+    }
+    const btcAmountSats = BigInt(btcAmountSatsStr);
+
+    const note = req.body.note ? String(req.body.note) : undefined;
+    const nonce = parseOptionalNonce(req.body.nonce);
+    const externalId = req.body.externalId ? String(req.body.externalId) : undefined;
+    const confirmations = req.body.confirmations !== undefined ? Number(req.body.confirmations) : undefined;
+
+    const result = await apiService.executeAction(vaultId, ActionType.CREATE_BOND, {
+      bondIndex, btcAmountSats, signerManager, note, nonce, externalId, confirmations,
+    });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// GET /:vaultId/stacking/pox5/bond/position
+export const getBondPosition: Handler = async (req, res, next) => {
+  try {
+    const vaultId = getVaultId(req);
+    const result = await apiService.executeAction(vaultId, ActionType.GET_BOND_POSITION, {});
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /:vaultId/stacking/pox5/bond/announce-early-exit
+export const announceEarlyExit: Handler = async (req, res, next) => {
+  try {
+    const vaultId = getVaultId(req);
+
+    const note = req.body.note ? String(req.body.note) : undefined;
+    const nonce = parseOptionalNonce(req.body.nonce);
+    const externalId = req.body.externalId ? String(req.body.externalId) : undefined;
+
+    const result = await apiService.executeAction(vaultId, ActionType.ANNOUNCE_EARLY_EXIT, { note, nonce, externalId });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
 // GET /metrics
 export const getPoolMetrics: Handler = async (req, res, next) => {
   try {

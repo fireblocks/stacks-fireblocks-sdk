@@ -658,6 +658,120 @@ router.get("/stacking/pox5/info", controller.getPox5Info);
  */
 router.get("/:vaultId/stacking/pox5/staker-info", validateVaultId, controller.getStakerInfo);
 
+/**
+ * @openapi
+ * /{vaultId}/stacking/pox5/bond/create:
+ *   post:
+ *     summary: Create a PoX-5 BTC bond (L1 + L2 registration)
+ *     description: >
+ *       Funds a BTC P2WSH lock address and registers the resulting UTXO on-chain via
+ *       an SPV proof. The paired STX amount is computed automatically from the bond's
+ *       STX/BTC ratio. The BTC transaction is submitted via Fireblocks and confirmation
+ *       is polled before the L2 registration transaction is broadcast.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - bondIndex
+ *               - btcAmountSats
+ *               - signerManager
+ *             properties:
+ *               bondIndex:
+ *                 type: integer
+ *                 minimum: 0
+ *                 description: Index of the PoX-5 bond to join.
+ *               btcAmountSats:
+ *                 type: string
+ *                 description: BTC amount in satoshis as an integer string (e.g. "100000").
+ *               signerManager:
+ *                 type: string
+ *                 description: Stacks address of the signer-manager for this bond.
+ *               confirmations:
+ *                 type: integer
+ *                 minimum: 1
+ *                 description: BTC confirmations to wait for before L2 registration (default 1).
+ *               note:
+ *                 type: string
+ *                 description: Optional note attached to the Fireblocks transactions.
+ *               nonce:
+ *                 type: integer
+ *                 minimum: 0
+ *                 description: Optional Stacks nonce override for the L2 registration transaction.
+ *               externalId:
+ *                 type: string
+ *                 description: Optional idempotency key for the Fireblocks BTC transaction.
+ *     responses:
+ *       200:
+ *         description: Bond created successfully.
+ *       400:
+ *         description: Invalid input or eligibility check failed.
+ *       500:
+ *         description: Internal server error
+ */
+router.post("/:vaultId/stacking/pox5/bond/create", validateVaultId, controller.createBond);
+
+/**
+ * @openapi
+ * /{vaultId}/stacking/pox5/bond/position:
+ *   get:
+ *     summary: Get current BTC bond position (PoX-5)
+ *     description: >
+ *       Returns the current bond membership for the vault's address, including
+ *       the bond index, locked STX and BTC amounts, unlock height, locking address,
+ *       and accumulated earned sats.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *     responses:
+ *       200:
+ *         description: Bond position retrieved successfully.
+ *       500:
+ *         description: Internal server error
+ */
+router.get("/:vaultId/stacking/pox5/bond/position", validateVaultId, controller.getBondPosition);
+
+/**
+ * @openapi
+ * /{vaultId}/stacking/pox5/bond/announce-early-exit:
+ *   post:
+ *     summary: Announce early BTC bond exit (PoX-5)
+ *     description: >
+ *       Broadcasts the L2 early-exit announcement for a native BTC bond. This signals
+ *       the signer-manager that the BTC lock will be broken before the scheduled
+ *       unlock height. Only valid for L1-locked bonds outside the prepare phase.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               note:
+ *                 type: string
+ *                 description: Optional note attached to the Fireblocks transaction.
+ *               nonce:
+ *                 type: integer
+ *                 minimum: 0
+ *                 description: Optional Stacks nonce override.
+ *               externalId:
+ *                 type: string
+ *                 description: Optional idempotency key for the Fireblocks transaction.
+ *     responses:
+ *       200:
+ *         description: Early exit announced successfully.
+ *       400:
+ *         description: No active L1 bond or called during prepare phase.
+ *       500:
+ *         description: Internal server error
+ */
+router.post("/:vaultId/stacking/pox5/bond/announce-early-exit", validateVaultId, controller.announceEarlyExit);
+
 // Pool metrics
 /**
  * @openapi

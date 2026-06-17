@@ -100,6 +100,13 @@ export type CheckStatusData = {
     current_cycle_id: number;
     is_prepare_phase: boolean;
   };
+  bond: {
+    bond_index: number;
+    amount_stx: number;
+    amount_sats: string;
+    signer_manager: string;
+    is_l1_lock: boolean;
+  } | null;
 };
 
 export type CheckStatusResponse = {
@@ -164,6 +171,50 @@ export type VerifySignerGrantResponse = {
   ready_to_stake?: boolean;
   tx_status?: string | null;
   notes?: string[];
+  error?: string;
+};
+
+export type CreateBondResult = {
+  success: boolean;
+  btcTxid?: string;
+  vout?: number;
+  stacksTxid?: string;
+  lockingAddress?: string;
+  unlockHeight?: number;
+  amountUstx?: bigint;
+  error?: string;
+};
+
+export type BondPositionData = {
+  bond_index: number;
+  amount_stx: number;
+  amount_sats: string;
+  signer_manager: string;
+  is_l1_lock: boolean;
+  unlock_height: number | null;
+  locking_address: string | null;
+  still_locked: boolean | null;
+  blocks_until_unlock: number | null;
+  earned_sats: string;
+} | null;
+
+export type BondPositionResponse = {
+  success: boolean;
+  data?: {
+    bond: BondPositionData;
+    stx_only: {
+      amount_stx: number;
+      first_reward_cycle: number;
+      num_cycles: number;
+      signer_manager: string;
+    } | null;
+  };
+  error?: string;
+};
+
+export type AnnounceEarlyExitResponse = {
+  success: boolean;
+  txHash?: string;
   error?: string;
 };
 

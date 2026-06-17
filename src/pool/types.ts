@@ -51,6 +51,10 @@ export enum ActionType {
   GET_STAKER_INFO = "getStakerInfo",
   GET_POX5_INFO = "getPox5Info",
   VERIFY_SIGNER_GRANT = "verifySignerGrant",
+  // PoX-5 BTC Bonds
+  CREATE_BOND = "createBond",
+  GET_BOND_POSITION = "getBondPosition",
+  ANNOUNCE_EARLY_EXIT = "announceEarlyExit",
 }
 
 export interface SdkManagerMetrics {

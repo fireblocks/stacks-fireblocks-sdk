@@ -245,6 +245,20 @@ export class ApiService {
             params.txid,
           );
           break;
+        case ActionType.CREATE_BOND:
+          result = await sdk.createBond(
+            params.bondIndex,
+            params.btcAmountSats,
+            params.signerManager,
+            { note: params.note, nonce: params.nonce, externalId: params.externalId, confirmations: params.confirmations },
+          );
+          break;
+        case ActionType.GET_BOND_POSITION:
+          result = await sdk.getBondPosition();
+          break;
+        case ActionType.ANNOUNCE_EARLY_EXIT:
+          result = await sdk.announceEarlyExit({ note: params.note, nonce: params.nonce, externalId: params.externalId });
+          break;
         default:
           throw new Error(
             `InvalidType :
