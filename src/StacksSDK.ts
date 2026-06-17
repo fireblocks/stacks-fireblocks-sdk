@@ -84,6 +84,7 @@ import {
   fetchSignerInfo,
   fetchSignerGrantMessageHash,
   isInPreparePhase,
+  type PoxInfo as Pox5PoxInfo,
 } from "@stacks/bitcoin-staking";
 import { hexToBytes } from "@stacks/common"; 
 
@@ -918,6 +919,11 @@ export class StacksSDK {
       const resolvedNonce = await this.resolveNonce(nonce);
       const pox = await fetchPox5Info({ network: this.pox5Network });
 
+      const eligibilityCheck = await this.checkEligibility(pox, amountStx);
+      if (!eligibilityCheck.eligible) {
+        return { success: false, error: `Account not eligible for staking: ${eligibilityCheck.reason}` };
+      }
+
       const tx = await buildStake({
         signerManager,
         amountUstx: stxToMicro(amountStx),
@@ -975,6 +981,12 @@ export class StacksSDK {
       }
 
       const resolvedNonce = await this.resolveNonce(nonce);
+      const pox = await fetchPox5Info({ network: this.pox5Network });
+
+      const safetyCheck = isSafeToSubmit(pox);
+      if (!safetyCheck.safe) {
+        return { success: false, error: `Too close to prepare phase boundary (${safetyCheck.blocksUntilBoundary} blocks remaining). Try again next cycle (cycle ${pox.rewardCycleId + 1}).` };
+      }
 
       const tx = await buildStakeUpdate({
         signerManager,
@@ -1886,60 +1898,45 @@ export class StacksSDK {
   };
 
   /**
-   * Check eligibility for solo stacking.
+   * Check eligibility for PoX-5 staking.
    * @returns A promise that resolves to an object indicating eligibility and reason if not eligible.
    */
   public checkEligibility = async (
-    pox: any,
-    amount: number,
+    pox: Pox5PoxInfo,
+    amountStx: number,
   ): Promise<{ eligible: boolean; reason?: string }> => {
     try {
-      const status = await this.checkStatus();
-      if (!status.success) {
-        throw new Error(
-          `Failed to check account status before solo stacking STX: ${status.error}`,
-        );
-      }
-
-      if (status.data?.delegation.is_delegated) {
+      // Can't stake if already in an active PoX-5 position — must call updateStake instead
+      const stakerInfo = await fetchStakerInfo({ address: this.address!, network: this.pox5Network });
+      if (stakerInfo.staked) {
         return {
           eligible: false,
-          reason: `Account already has an active delegation to ${status.data.delegation.delegated_to}, please revoke existing delegation first.`,
+          reason: `Account already has an active PoX-5 staking position. Use updateStake to modify it.`,
         };
       }
 
-      const safteyCheckResponse = isSafeToSubmit(pox);
-      if (!safteyCheckResponse.safe) {
+      // Block submission when too close to the prepare phase boundary (not just during it)
+      const safetyCheck = isSafeToSubmit(pox);
+      if (!safetyCheck.safe) {
         return {
           eligible: false,
-          reason: `Too close to prepare phase boundary, try again next cycle`,
-        };
-      }
-
-      if (stxToMicro(amount) < BigInt(pox.min_amount_ustx)) {
-        return {
-          eligible: false,
-          reason: `Amount to stack is less than the minimum required amount of ${microToStx(BigInt(pox.min_amount_ustx))} STX.`,
+          reason: `Too close to prepare phase boundary (${safetyCheck.blocksUntilBoundary} blocks remaining). Try again next cycle (cycle ${pox.rewardCycleId + 1}).`,
         };
       }
 
       const balance = await this.getBalance();
       if (!balance.success) {
-        throw new Error(
-          `Could not fetch account balance to check funds sufficiency`,
-        );
+        throw new Error(`Could not fetch account balance to check funds sufficiency`);
       }
 
-      if (stxToMicro(amount) > stxToMicro(balance.balance)) {
+      if (stxToMicro(amountStx) > stxToMicro(balance.balance)) {
         return {
           eligible: false,
-          reason: `Amount to stack is greater than the available balance of ${balance.balance} STX.`,
+          reason: `Amount to stake (${amountStx} STX) exceeds available balance of ${balance.balance} STX.`,
         };
       }
 
-      return {
-        eligible: true,
-      };
+      return { eligible: true };
     } catch (error) {
       console.error(`Error checking eligibility: ${formatErrorMessage(error)}`);
       return {
