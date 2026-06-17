@@ -981,12 +981,6 @@ export class StacksSDK {
       }
 
       const resolvedNonce = await this.resolveNonce(nonce);
-      const pox = await fetchPox5Info({ network: this.pox5Network });
-
-      const safetyCheck = isSafeToSubmit(pox);
-      if (!safetyCheck.safe) {
-        return { success: false, error: `Too close to prepare phase boundary (${safetyCheck.blocksUntilBoundary} blocks remaining). Try again next cycle (cycle ${pox.rewardCycleId + 1}).` };
-      }
 
       const tx = await buildStakeUpdate({
         signerManager,
