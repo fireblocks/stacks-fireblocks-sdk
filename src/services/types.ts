@@ -227,6 +227,7 @@ export type RequirementsResponse = {
       is_prepare_phase: boolean;
       blocks_until_cycle_end: number;
       is_safe_to_submit: boolean;
+      current_bond_index: number | null;
     };
     bond?: {
       bond_index: number;

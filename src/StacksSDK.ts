@@ -2122,19 +2122,27 @@ export class StacksSDK {
       const safetyCheck = isSafeToSubmit(pox);
       const isPreparePh = isInPreparePhase({ burnHeight: pox.currentBurnchainBlockHeight, poxInfo: pox });
 
+      // Derive current bond index from chain state — no guessing required by callers
+      const firstPox5Cycle = firstPox5RewardCycle(pox);
+      const currentBondIndex = firstPox5Cycle !== undefined
+        ? Math.max(0, Math.floor((pox.rewardCycleId - firstPox5Cycle) / BOND_LENGTH_CYCLES))
+        : null;
+
       const cycle = {
         id: pox.rewardCycleId,
         current_burn_height: pox.currentBurnchainBlockHeight,
         is_prepare_phase: isPreparePh,
         blocks_until_cycle_end: safetyCheck.blocksUntilBoundary,
         is_safe_to_submit: safetyCheck.safe,
+        current_bond_index: currentBondIndex,
       };
 
-      if (opts?.bondIndex === undefined) {
+      // Use explicit override if provided, otherwise use the derived current bond
+      const bondIndex = opts?.bondIndex ?? currentBondIndex;
+      if (bondIndex === null) {
         return { success: true, data: { cycle } };
       }
 
-      const bondIndex = opts.bondIndex;
       const [bond, status, allowanceSats] = await Promise.all([
         fetchBond({ bondIndex, network: this.pox5Network }),
         fetchBondStatus({ bondIndex, poxInfo: pox, network: this.pox5Network }),
@@ -2153,7 +2161,7 @@ export class StacksSDK {
         your_allowance_sats: allowanceSats.toString(),
       };
 
-      if (opts.btcAmountSats !== undefined) {
+      if (opts?.btcAmountSats !== undefined) {
         const minUstx = minUstxForSatsAmount({
           sats: opts.btcAmountSats,
           stxValueRatio: bond.stxValueRatio,
