@@ -24,6 +24,7 @@ import { FireblocksService } from "./services/fireblocks.service";
 import {
   AnnounceEarlyExitResponse,
   BondPositionResponse,
+  RequirementsResponse,
   CheckStatusData,
   CheckStatusResponse,
   CreateBondResult,
@@ -91,6 +92,7 @@ import {
   fetchSignerGrantMessageHash,
   fetchBondMembership,
   fetchBond,
+  fetchBondStatus,
   fetchBondAllowance,
   fetchAccountStatus,
   fetchEarned,
@@ -2108,6 +2110,62 @@ export class StacksSDK {
       return { success: true, txHash: result.txid };
     } catch (error) {
       return { success: false, error: `Failed to announce early exit: ${formatErrorMessage(error)}` };
+    }
+  };
+
+  public getRequirements = async (opts?: {
+    bondIndex?: number;
+    btcAmountSats?: bigint;
+  }): Promise<RequirementsResponse> => {
+    try {
+      const pox = await fetchPox5Info({ network: this.pox5Network });
+      const safetyCheck = isSafeToSubmit(pox);
+      const isPreparePh = isInPreparePhase({ burnHeight: pox.currentBurnchainBlockHeight, poxInfo: pox });
+
+      const cycle = {
+        id: pox.rewardCycleId,
+        current_burn_height: pox.currentBurnchainBlockHeight,
+        is_prepare_phase: isPreparePh,
+        blocks_until_cycle_end: safetyCheck.blocksUntilBoundary,
+        is_safe_to_submit: safetyCheck.safe,
+      };
+
+      if (opts?.bondIndex === undefined) {
+        return { success: true, data: { cycle } };
+      }
+
+      const bondIndex = opts.bondIndex;
+      const [bond, status, allowanceSats] = await Promise.all([
+        fetchBond({ bondIndex, network: this.pox5Network }),
+        fetchBondStatus({ bondIndex, poxInfo: pox, network: this.pox5Network }),
+        this.address
+          ? fetchBondAllowance({ bondIndex, address: this.address, network: this.pox5Network }).catch(() => BigInt(0))
+          : Promise.resolve(BigInt(0)),
+      ]);
+
+      if (!bond) return { success: false, error: `Bond ${bondIndex} not found` };
+
+      const bondData: RequirementsResponse['data'] extends { bond?: infer B } ? NonNullable<B> : never = {
+        bond_index: bondIndex,
+        status,
+        stx_value_ratio: bond.stxValueRatio.toString(),
+        target_rate_bps: bond.targetRateBps,
+        your_allowance_sats: allowanceSats.toString(),
+      };
+
+      if (opts.btcAmountSats !== undefined) {
+        const minUstx = minUstxForSatsAmount({
+          sats: opts.btcAmountSats,
+          stxValueRatio: bond.stxValueRatio,
+          minUstxRatioBps: bond.minUstxRatioBps,
+        });
+        bondData.min_stx_for_sats = microToStx(minUstx);
+        bondData.min_ustx_for_sats = minUstx.toString();
+      }
+
+      return { success: true, data: { cycle, bond: bondData } };
+    } catch (error) {
+      return { success: false, error: `Failed to fetch requirements: ${formatErrorMessage(error)}` };
     }
   };
 

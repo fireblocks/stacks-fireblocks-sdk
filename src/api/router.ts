@@ -660,6 +660,43 @@ router.get("/:vaultId/stacking/pox5/staker-info", validateVaultId, controller.ge
 
 /**
  * @openapi
+ * /{vaultId}/stacking/pox5/requirements:
+ *   get:
+ *     summary: Get PoX-5 staking requirements and minimums
+ *     description: >
+ *       Returns cycle timing and safety info. When `bondIndex` is provided, also returns
+ *       the bond's STX/BTC ratio, its current phase status, and the caller's personal BTC
+ *       allowance cap. When `btcAmountSats` is also provided, computes the minimum STX
+ *       required to pair with that BTC amount.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *       - in: query
+ *         name: bondIndex
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 0
+ *         description: Bond index to fetch requirements for.
+ *       - in: query
+ *         name: btcAmountSats
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: >
+ *           BTC amount in satoshis as an integer string. Requires bondIndex.
+ *           When provided, the response includes min_stx_for_sats and min_ustx_for_sats.
+ *     responses:
+ *       200:
+ *         description: Requirements fetched successfully.
+ *       400:
+ *         description: Invalid query parameters.
+ *       500:
+ *         description: Internal server error
+ */
+router.get("/:vaultId/stacking/pox5/requirements", validateVaultId, controller.getRequirements);
+
+/**
+ * @openapi
  * /{vaultId}/stacking/pox5/bond/create:
  *   post:
  *     summary: Create a PoX-5 BTC bond (L1 + L2 registration)

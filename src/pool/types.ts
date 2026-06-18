@@ -55,6 +55,7 @@ export enum ActionType {
   CREATE_BOND = "createBond",
   GET_BOND_POSITION = "getBondPosition",
   ANNOUNCE_EARLY_EXIT = "announceEarlyExit",
+  GET_REQUIREMENTS = "getRequirements",
 }
 
 export interface SdkManagerMetrics {

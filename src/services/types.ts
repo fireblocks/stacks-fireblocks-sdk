@@ -218,6 +218,29 @@ export type AnnounceEarlyExitResponse = {
   error?: string;
 };
 
+export type RequirementsResponse = {
+  success: boolean;
+  data?: {
+    cycle: {
+      id: number;
+      current_burn_height: number;
+      is_prepare_phase: boolean;
+      blocks_until_cycle_end: number;
+      is_safe_to_submit: boolean;
+    };
+    bond?: {
+      bond_index: number;
+      status: string;
+      stx_value_ratio: string;
+      target_rate_bps: number;
+      your_allowance_sats: string;
+      min_stx_for_sats?: number;
+      min_ustx_for_sats?: string;
+    };
+  };
+  error?: string;
+};
+
 export type SDKResponse =
   | GetNativeBalanceResponse
   | string

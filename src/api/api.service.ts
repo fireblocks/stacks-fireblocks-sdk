@@ -259,6 +259,9 @@ export class ApiService {
         case ActionType.ANNOUNCE_EARLY_EXIT:
           result = await sdk.announceEarlyExit({ note: params.note, nonce: params.nonce, externalId: params.externalId });
           break;
+        case ActionType.GET_REQUIREMENTS:
+          result = await sdk.getRequirements({ bondIndex: params.bondIndex, btcAmountSats: params.btcAmountSats });
+          break;
         default:
           throw new Error(
             `InvalidType :

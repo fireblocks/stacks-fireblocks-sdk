@@ -839,6 +839,43 @@ export const getStakerInfo: Handler = async (req, res, next) => {
   }
 };
 
+// GET /:vaultId/stacking/pox5/requirements
+export const getRequirements: Handler = async (req, res, next) => {
+  try {
+    const vaultId = getVaultId(req);
+
+    const bondIndexStr = req.query.bondIndex ? String(req.query.bondIndex) : undefined;
+    const btcAmountSatsStr = req.query.btcAmountSats ? String(req.query.btcAmountSats) : undefined;
+
+    let bondIndex: number | undefined;
+    if (bondIndexStr !== undefined) {
+      bondIndex = Number(bondIndexStr);
+      if (!Number.isInteger(bondIndex) || bondIndex < 0) {
+        res.status(400).json({ error: "Bad Request: bondIndex must be a non-negative integer" });
+        return;
+      }
+    }
+
+    let btcAmountSats: bigint | undefined;
+    if (btcAmountSatsStr !== undefined) {
+      if (bondIndex === undefined) {
+        res.status(400).json({ error: "Bad Request: btcAmountSats requires bondIndex" });
+        return;
+      }
+      if (!/^[0-9]+$/.test(btcAmountSatsStr)) {
+        res.status(400).json({ error: "Bad Request: btcAmountSats must be a positive integer string" });
+        return;
+      }
+      btcAmountSats = BigInt(btcAmountSatsStr);
+    }
+
+    const result = await apiService.executeAction(vaultId, ActionType.GET_REQUIREMENTS, { bondIndex, btcAmountSats });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
 // POST /:vaultId/stacking/pox5/bond/create
 export const createBond: Handler = async (req, res, next) => {
   try {
