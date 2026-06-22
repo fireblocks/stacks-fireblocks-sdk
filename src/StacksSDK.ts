@@ -2159,17 +2159,10 @@ export class StacksSDK {
         throw new Error('Address, Public Key or Vault ID are not set');
       }
 
-      const [pox, membership] = await Promise.all([
-        fetchPox5Info({ network: this.pox5Network }),
-        fetchBondMembership({ address: this.address, network: this.pox5Network }),
-      ]);
+      const membership = await fetchBondMembership({ address: this.address, network: this.pox5Network });
 
       if (!membership) return { success: false, error: 'No active bond membership found' };
       if (!membership.isL1Lock) return { success: false, error: 'Early exit only applies to L1-locked (native BTC) bonds' };
-
-      if (isInPreparePhase({ burnHeight: pox.currentBurnchainBlockHeight, poxInfo: pox })) {
-        return { success: false, error: 'Cannot announce early exit during prepare phase' };
-      }
 
       const resolvedNonce = await this.resolveNonce(opts?.nonce);
       const tx = await buildAnnounceL1EarlyExit({
@@ -2179,6 +2172,8 @@ export class StacksSDK {
         fee: BigInt(10000),
         nonce: resolvedNonce,
         network: this.pox5Network,
+        postConditionMode: 'allow',
+        postConditions: [],
       });
 
       const result = await this.pox5SignAndBroadcast(tx, opts?.note ?? 'announce-l1-early-exit', opts?.externalId);
@@ -2917,14 +2912,16 @@ export class StacksSDK {
           fee: BigInt(10000),
           nonce,
           network: this.pox5Network,
+          postConditionMode: 'allow',
+          postConditions: [],
         });
         const smClaimResult = await this.pox5SignAndBroadcast(smClaimTx, `sm-claim-rewards-cycle-${cycle}`);
         if (smClaimResult?.txid && !smClaimResult.error && !smClaimResult.reason) {
           nonce = nonce + BigInt(1);
           const smClaimSettled = await this.waitForTxSettlement(smClaimResult.txid);
           const smClaimRepr: string = (smClaimSettled.data?.tx_result as any)?.repr ?? smClaimSettled.data?.tx_error ?? '';
-          // Fail only on actual errors — (ok ...) means success, (err u30/u32) means already done (skip)
-          if (!smClaimRepr.startsWith('(ok') && !smClaimRepr.includes('u30') && !smClaimRepr.includes('u32')) {
+          // (err u30/u32) means already done — skip. Any other failure stops here.
+          if (smClaimSettled.data?.tx_status !== 'success' && !smClaimRepr.includes('u30') && !smClaimRepr.includes('u32')) {
             return { success: false, error: `signer-manager.claim-rewards failed at cycle ${cycle}: ${smClaimRepr}`, txHashes };
           }
         } else if (smClaimResult?.error || smClaimResult?.reason) {
@@ -2948,6 +2945,8 @@ export class StacksSDK {
             fee: BigInt(10000),
             nonce,
             network: this.pox5Network,
+            postConditionMode: 'allow',
+            postConditions: [],
           });
           const smStakerResult = await this.pox5SignAndBroadcast(smStakerTx, opts?.note ?? `sm-claim-staker-rewards-cycle-${cycle}-bond-${bondIndex}`);
           if (!smStakerResult?.txid || smStakerResult.error || smStakerResult.reason) {
@@ -2955,8 +2954,8 @@ export class StacksSDK {
             return { success: false, error: `Failed at cycle ${cycle} bond ${bondIndex}: ${errMsg}`, txHashes };
           }
           const settled = await this.waitForTxSettlement(smStakerResult.txid);
-          const stakerRepr: string = (settled.data?.tx_result as any)?.repr ?? settled.data?.tx_error ?? '';
-          if (!stakerRepr.startsWith('(ok')) {
+          if (!settled.success || settled.data?.tx_status !== 'success') {
+            const stakerRepr: string = (settled.data?.tx_result as any)?.repr ?? settled.data?.tx_error ?? '';
             return { success: false, error: `Claim failed on-chain at cycle ${cycle} bond ${bondIndex}: ${stakerRepr}`, txHashes };
           }
           txHashes.push(smStakerResult.txid);

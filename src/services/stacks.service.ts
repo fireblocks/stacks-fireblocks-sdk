@@ -66,7 +66,12 @@ export class StacksService {
       || (testnet ? api_constants.stacks_testnet_rpc : api_constants.stacks_mainnet_rpc);
     this.stackBaseUrl = baseUrl;
     const defaultNetwork = testnet ? STACKS_TESTNET : STACKS_MAINNET;
-    this.network = { ...defaultNetwork, client: { baseUrl } };
+    const isPrivate1 = baseUrl.includes('private-1.hiro.so');
+    this.network = {
+      ...defaultNetwork,
+      ...(isPrivate1 ? { chainId: 256, magicBytes: 'id' } : {}),
+      client: { baseUrl },
+    };
   }
 
 
