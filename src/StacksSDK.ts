@@ -2771,7 +2771,8 @@ export class StacksSDK {
 
       const settled = await this.waitForTxSettlement(result.txid);
       if (!settled.success || settled.data?.tx_status !== 'success') {
-        return { success: false, error: settled.data?.tx_error ?? 'register-for-bond failed on-chain', stacksTxid: result.txid, btcTxid, vout: lockupProof.outputIndex };
+        const txRepr: string = (settled.data?.tx_result as any)?.repr ?? settled.data?.tx_error ?? '';
+        return { success: false, error: `[${settled.data?.tx_status}] ${txRepr}`.trim(), stacksTxid: result.txid, btcTxid, vout: lockupProof.outputIndex };
       }
 
       return {
