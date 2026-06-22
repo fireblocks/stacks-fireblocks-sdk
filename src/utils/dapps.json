@@ -2,7 +2,7 @@
   "dapps": [
     {
       "id": "stacks-bridge",
-      "name": "Stacks Bridge",
+      "name": "USDCx Bridge",
       "url": "https://bridge.stacks.co/usdc/eth/stx",
       "description": "The Stacks Bridge is the official app for moving USDCx — a USDC-backed stablecoin issued through Circle's xReserve infrastructure — between Ethereum and Stacks. It is maintained by Stacks Labs and powered by Circle xReserve, providing cryptographic attestations for deposits and minting without relying on third-party bridges or wrapped assets.",
       "logo": "https://bridge.stacks.co/favicon.ico",
