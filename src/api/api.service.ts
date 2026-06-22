@@ -283,6 +283,9 @@ export class ApiService {
         case ActionType.FUND_BOND_LOCK_ADDRESS:
           result = await sdk.fundBondLockAddress(params.bondIndex);
           break;
+        case ActionType.FUND_VAULT:
+          result = await sdk.fundVault(params.staking);
+          break;
         default:
           throw new Error(
             `InvalidType :

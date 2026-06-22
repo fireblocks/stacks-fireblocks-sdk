@@ -38,6 +38,7 @@ import {
   EarnedRewardsResponse,
   BondLockAddressResponse,
   FundBondLockResponse,
+  FundVaultResponse,
   FireblocksConfig,
   GetAccountNonceResponse,
   GetFtBalancesResponse,
@@ -2241,6 +2242,24 @@ export class StacksSDK {
       return { success: true, data: { txid: body.txid, lockAddress } };
     } catch (error) {
       return { success: false, error: `Failed to fund bond lock address: ${formatErrorMessage(error)}` };
+    }
+  };
+
+  /**
+   * Funds the vault's STX address via the private-1 STX faucet (testnet only).
+   * Pass staking=true to request the stacking-sized faucet amount.
+   */
+  public fundVault = async (staking = false): Promise<FundVaultResponse> => {
+    if (!this.testnet) return { success: false, error: 'Faucet funding is only available on testnet' };
+    try {
+      const address = await this.getAddress() as string;
+      const url = `https://api.private-1.hiro.so/extended/v1/faucets/stx?address=${address}${staking ? '&stacking=true' : ''}`;
+      const res = await fetch(url, { method: 'POST' });
+      const body = await res.json() as { success: boolean; txId?: string; error?: string };
+      if (!body.success) return { success: false, error: body.error ?? 'Faucet request failed' };
+      return { success: true, data: { txid: body.txId ?? '', address } };
+    } catch (error) {
+      return { success: false, error: `Failed to fund vault: ${formatErrorMessage(error)}` };
     }
   };
 

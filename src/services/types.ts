@@ -343,6 +343,12 @@ export type FundBondLockResponse = {
   error?: string;
 };
 
+export type FundVaultResponse = {
+  success: boolean;
+  data?: { txid: string; address: string };
+  error?: string;
+};
+
 export type SDKResponse =
   | GetNativeBalanceResponse
   | string

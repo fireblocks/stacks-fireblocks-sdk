@@ -1054,6 +1054,34 @@ router.post("/:vaultId/stacking/pox5/rewards/claim", validateVaultId, controller
  */
 router.get("/:vaultId/stacking/pox5/rewards/earned", validateVaultId, controller.getEarnedRewards);
 
+/**
+ * @openapi
+ * /{vaultId}/faucet:
+ *   post:
+ *     summary: Fund vault address via STX faucet (testnet only)
+ *     description: >
+ *       Calls the private-1 STX faucet to fund the vault's Stacks address.
+ *       Pass stacking=true to request the stacking-sized amount.
+ *       Only available on testnet.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *       - in: query
+ *         name: stacking
+ *         required: false
+ *         schema:
+ *           type: boolean
+ *           default: false
+ *         description: If true, requests the larger stacking-sized faucet amount.
+ *     responses:
+ *       200:
+ *         description: Faucet funded successfully, returns txid and address.
+ *       400:
+ *         description: Not on testnet.
+ *       500:
+ *         description: Internal server error
+ */
+router.post("/:vaultId/faucet", validateVaultId, controller.fundVault);
+
 // Pool metrics
 /**
  * @openapi

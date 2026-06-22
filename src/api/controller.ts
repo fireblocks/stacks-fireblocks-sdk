@@ -1073,6 +1073,18 @@ export const getEarnedRewards: Handler = async (req, res, next) => {
   }
 };
 
+// POST /:vaultId/faucet
+export const fundVault: Handler = async (req, res, next) => {
+  try {
+    const vaultId = getVaultId(req);
+    const staking = String(req.query.stacking).toLowerCase() === 'true';
+    const result = await apiService.executeAction(vaultId, ActionType.FUND_VAULT, { staking });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
 // GET /metrics
 export const getPoolMetrics: Handler = async (req, res, next) => {
   try {

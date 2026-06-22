@@ -63,6 +63,7 @@ export enum ActionType {
   GET_EARNED_REWARDS = "getEarnedRewards",
   GET_BOND_LOCK_ADDRESS = "getBondLockAddress",
   FUND_BOND_LOCK_ADDRESS = "fundBondLockAddress",
+  FUND_VAULT = "fundVault",
 }
 
 export interface SdkManagerMetrics {
