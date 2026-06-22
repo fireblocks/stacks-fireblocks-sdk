@@ -1,40 +1,22 @@
 {
   "dapps": [
     {
-      "id": "alex",
-      "name": "ALEX",
-      "url": "https://app.alexlab.co",
-      "description": "ALEX is the largest DeFi protocol on Bitcoin via Stacks, offering an AMM DEX, orderbook, launchpad, and lending/borrowing markets secured by Bitcoin finality. Built by veteran quants, it provides a full suite of Bitcoin DeFi primitives including token swaps, liquidity pools, yield farming, and the XLink cross-chain bridge for moving assets between Bitcoin L1 and L2.",
-      "logo": "https://app.alexlab.co/favicon.png",
-      "category": "DEX",
-      "tags": ["DEX", "AMM", "Swap"]
+      "id": "stacks-bridge",
+      "name": "Stacks Bridge",
+      "url": "https://bridge.stacks.co/usdc/eth/stx",
+      "description": "The Stacks Bridge is the official app for moving USDCx — a USDC-backed stablecoin issued through Circle's xReserve infrastructure — between Ethereum and Stacks. It is maintained by Stacks Labs and powered by Circle xReserve, providing cryptographic attestations for deposits and minting without relying on third-party bridges or wrapped assets.",
+      "logo": "https://bridge.stacks.co/favicon.ico",
+      "category": "Bridge",
+      "tags": ["Bridge", "USDC", "Cross-chain"]
     },
     {
-      "id": "bitflow",
-      "name": "Bitflow",
-      "url": "https://app.bitflow.finance",
-      "description": "Bitflow is the premier decentralized exchange for Bitcoiners on Stacks, featuring a powerful DEX aggregator that guarantees the best swap rates by routing across all DEXs and liquidity pools on the network. It offers low-slippage stablecoin swaps, deep AMM liquidity pools, real BTC yield for liquidity providers, and multi-hop routing to ensure optimal trade execution.",
-      "logo": "https://app.bitflow.finance/favicon.ico",
-      "category": "DEX",
-      "tags": ["DEX", "Swap", "Liquidity"]
-    },
-    {
-      "id": "velar",
-      "name": "Velar",
-      "url": "https://app.velar.co",
-      "description": "Velar is a DeFi liquidity protocol on Bitcoin via Stacks, providing institutional-grade trading tools including an automated liquidity protocol with swap, liquidity pools, staking, farming, and an IDO launchpad. It is developing the world's first decentralized perpetual contracts exchange on Bitcoin with up to 20x leverage, using a layer-2 agnostic design to bring advanced DeFi capabilities to Bitcoin.",
-      "logo": "https://app.velar.com/favicon.png",
-      "category": "DEX",
-      "tags": ["DEX", "Liquidity"]
-    },
-    {
-      "id": "stackingdao-defi",
-      "name": "StackingDAO",
-      "url": "https://app.stackingdao.com/?stackingOption=stx",
-      "description": "StackingDAO is the leading STX stacking infrastructure on Stacks, and the largest DeFi protocol on the network by TVL. It issues liquid stacking tokens — stSTX (auto-compounding STX yield) and stSTXbtc (sBTC streamed directly to your wallet) — allowing users to earn stacking rewards while keeping their STX liquid and deployable across the Stacks DeFi ecosystem.",
-      "logo": "https://app.stackingdao.com/favicon.ico",
-      "category": "Staking",
-      "tags": ["Liquid Stacking", "DeFi"]
+      "id": "sbtc",
+      "name": "sBTC",
+      "url": "https://sbtc.stacks.co",
+      "description": "sBTC is a 1:1 Bitcoin-backed asset on Stacks that enables users to bridge their BTC onto the Stacks L2 to use in DeFi, dApps, and smart contracts, while retaining 100% Bitcoin finality. It is secured by a decentralized network of Stacks validators via threshold signatures, removing the need to trust any single custodian, and deposits can complete within a single Bitcoin block.",
+      "logo": "https://sbtc.stacks.co/favicon.ico",
+      "category": "Bridge",
+      "tags": ["Bridge", "sBTC", "Bitcoin"]
     },
     {
       "id": "zestprotocol",
@@ -55,6 +37,15 @@
       "tags": ["Lending", "Institutional"]
     },
     {
+      "id": "bitflow",
+      "name": "Bitflow",
+      "url": "https://app.bitflow.finance",
+      "description": "Bitflow is the premier decentralized exchange for Bitcoiners on Stacks, featuring a powerful DEX aggregator that guarantees the best swap rates by routing across all DEXs and liquidity pools on the network. It offers low-slippage stablecoin swaps, deep AMM liquidity pools, real BTC yield for liquidity providers, and multi-hop routing to ensure optimal trade execution.",
+      "logo": "https://app.bitflow.finance/favicon.ico",
+      "category": "DEX",
+      "tags": ["DEX", "Swap", "Liquidity"]
+    },
+    {
       "id": "hermetica",
       "name": "Hermetica",
       "url": "https://app.hermetica.fi",
@@ -64,22 +55,22 @@
       "tags": ["Yield", "Bitcoin", "USDh"]
     },
     {
-      "id": "sbtc",
-      "name": "sBTC",
-      "url": "https://sbtc.stacks.co",
-      "description": "sBTC is a 1:1 Bitcoin-backed asset on Stacks that enables users to bridge their BTC onto the Stacks L2 to use in DeFi, dApps, and smart contracts, while retaining 100% Bitcoin finality. It is secured by a decentralized network of Stacks validators via threshold signatures, removing the need to trust any single custodian, and deposits can complete within a single Bitcoin block.",
-      "logo": "https://sbtc.stacks.co/favicon.ico",
-      "category": "Bridge",
-      "tags": ["Bridge", "sBTC", "Bitcoin"]
+      "id": "stackingdao-defi",
+      "name": "StackingDAO",
+      "url": "https://app.stackingdao.com/?stackingOption=stx",
+      "description": "StackingDAO is the leading STX stacking infrastructure on Stacks, and the largest DeFi protocol on the network by TVL. It issues liquid stacking tokens — stSTX (auto-compounding STX yield) and stSTXbtc (sBTC streamed directly to your wallet) — allowing users to earn stacking rewards while keeping their STX liquid and deployable across the Stacks DeFi ecosystem.",
+      "logo": "https://app.stackingdao.com/favicon.ico",
+      "category": "Staking",
+      "tags": ["Liquid Stacking", "DeFi"]
     },
     {
-      "id": "stacks-bridge",
-      "name": "Stacks Bridge",
-      "url": "https://bridge.stacks.co/usdc/eth/stx",
-      "description": "The Stacks Bridge is the official app for moving USDCx — a USDC-backed stablecoin issued through Circle's xReserve infrastructure — between Ethereum and Stacks. It is maintained by Stacks Labs and powered by Circle xReserve, providing cryptographic attestations for deposits and minting without relying on third-party bridges or wrapped assets.",
-      "logo": "https://bridge.stacks.co/favicon.ico",
-      "category": "Bridge",
-      "tags": ["Bridge", "USDC", "Cross-chain"]
+      "id": "alex",
+      "name": "ALEX",
+      "url": "https://app.alexlab.co",
+      "description": "ALEX is the largest DeFi protocol on Bitcoin via Stacks, offering an AMM DEX, orderbook, launchpad, and lending/borrowing markets secured by Bitcoin finality. Built by veteran quants, it provides a full suite of Bitcoin DeFi primitives including token swaps, liquidity pools, yield farming, and the XLink cross-chain bridge for moving assets between Bitcoin L1 and L2.",
+      "logo": "https://app.alexlab.co/favicon.png",
+      "category": "DEX",
+      "tags": ["DEX", "AMM", "Swap"]
     },
     {
       "id": "arkadiko",
