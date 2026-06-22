@@ -254,7 +254,7 @@ export const POX4_ERRORS: Record<number, { name: string; message: string }> = {
 
 export const BTC_ESPLORA = {
   mainnet: 'https://mempool.space/api',
-  testnet: 'https://mempool.space/testnet/api',
+  testnet: 'https://mempool.bitcoin.private-1.hiro.so/api',
 };
 
 export const POX5_BOND_ERRORS: Record<number, { name: string; message: string }> = {

@@ -742,6 +742,11 @@ router.get("/:vaultId/stacking/pox5/requirements", validateVaultId, controller.g
  *               externalId:
  *                 type: string
  *                 description: Optional idempotency key for the Fireblocks BTC transaction.
+ *               btcTxid:
+ *                 type: string
+ *                 description: >
+ *                   Pre-funded BTC txid (testnet only). If provided, skips the Fireblocks BTC
+ *                   send and uses this txid directly. Get it from bond/fund-lock.
  *     responses:
  *       200:
  *         description: Bond created successfully.
@@ -808,6 +813,246 @@ router.get("/:vaultId/stacking/pox5/bond/position", validateVaultId, controller.
  *         description: Internal server error
  */
 router.post("/:vaultId/stacking/pox5/bond/announce-early-exit", validateVaultId, controller.announceEarlyExit);
+
+/**
+ * @openapi
+ * /{vaultId}/stacking/pox5/bond/lock-address:
+ *   get:
+ *     summary: Get BTC bond lock address (PoX-5)
+ *     description: >
+ *       Returns the P2WSH lock address (bcrt1… on testnet, bc1… on mainnet) for the given
+ *       bond index. Send BTC to this address before calling bond/create with a pre-funded btcTxid.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *       - in: query
+ *         name: bondIndex
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Bond index to derive the lock address for.
+ *     responses:
+ *       200:
+ *         description: Lock address returned successfully.
+ *       400:
+ *         description: bondIndex is required.
+ *       500:
+ *         description: Internal server error
+ */
+router.get("/:vaultId/stacking/pox5/bond/lock-address", validateVaultId, controller.getBondLockAddress);
+
+/**
+ * @openapi
+ * /{vaultId}/stacking/pox5/bond/fund-lock:
+ *   post:
+ *     summary: Fund BTC bond lock address via faucet (testnet only)
+ *     description: >
+ *       Calls the private-1 BTC faucet to fund the bond lock address for the given bond index.
+ *       Returns the faucet txid — pass it as btcTxid in bond/create to skip the Fireblocks send.
+ *       Only available on testnet.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - bondIndex
+ *             properties:
+ *               bondIndex:
+ *                 type: integer
+ *                 description: Bond index to fund the lock address for.
+ *     responses:
+ *       200:
+ *         description: Faucet funded successfully, returns txid and lockAddress.
+ *       400:
+ *         description: bondIndex is required or not on testnet.
+ *       500:
+ *         description: Internal server error
+ */
+router.post("/:vaultId/stacking/pox5/bond/fund-lock", validateVaultId, controller.fundBondLockAddress);
+
+/**
+ * @openapi
+ * /{vaultId}/stacking/pox5/bond/unlock:
+ *   post:
+ *     summary: Unlock matured BTC bond (PoX-5)
+ *     description: >
+ *       Spends the P2WSH lock UTXO via the OP_IF (CLTV) branch and sends the BTC to a
+ *       destination address. Only callable after the unlock height has passed on the Bitcoin chain.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - destinationBtcAddress
+ *             properties:
+ *               destinationBtcAddress:
+ *                 type: string
+ *                 description: BTC address to send the unlocked funds to.
+ *               feeSats:
+ *                 type: integer
+ *                 description: Optional fee in sats (default 500).
+ *     responses:
+ *       200:
+ *         description: BTC unlocked successfully, returns btcTxid.
+ *       400:
+ *         description: Bond not matured or no active bond found.
+ *       500:
+ *         description: Internal server error
+ */
+router.post("/:vaultId/stacking/pox5/bond/unlock", validateVaultId, controller.unlockMaturedBond);
+
+/**
+ * @openapi
+ * /{vaultId}/stacking/pox5/bond/renew:
+ *   post:
+ *     summary: Renew BTC bond into next bond period (PoX-5)
+ *     description: >
+ *       Spends the current lock UTXO via the OP_ELSE branch and re-locks the BTC into the
+ *       next bond's P2WSH address, then broadcasts the L2 register-for-bond transaction.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - nextBondIndex
+ *               - signerManager
+ *             properties:
+ *               nextBondIndex:
+ *                 type: integer
+ *                 description: Bond index to renew into.
+ *               signerManager:
+ *                 type: string
+ *                 description: Signer manager contract address for the next bond.
+ *               feeSats:
+ *                 type: integer
+ *                 description: Optional BTC fee in sats (default 500).
+ *               note:
+ *                 type: string
+ *               nonce:
+ *                 type: integer
+ *               externalId:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Bond renewed successfully.
+ *       400:
+ *         description: No active bond or eligibility check failed.
+ *       500:
+ *         description: Internal server error
+ */
+router.post("/:vaultId/stacking/pox5/bond/renew", validateVaultId, controller.renewBond);
+
+/**
+ * @openapi
+ * /{vaultId}/stacking/pox5/rewards/calculate:
+ *   post:
+ *     summary: Trigger reward calculation (PoX-5)
+ *     description: >
+ *       Broadcasts a calculate-rewards transaction for all active bonds. Bond indices are
+ *       sorted automatically (descending stxValueRatio, ascending bondIndex as tiebreaker).
+ *       Must be called before claim.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               note:
+ *                 type: string
+ *               nonce:
+ *                 type: integer
+ *     responses:
+ *       200:
+ *         description: Reward calculation transaction confirmed, returns txHash.
+ *       500:
+ *         description: Internal server error
+ */
+router.post("/:vaultId/stacking/pox5/rewards/calculate", validateVaultId, controller.calculateRewards);
+
+/**
+ * @openapi
+ * /{vaultId}/stacking/pox5/rewards/claim:
+ *   post:
+ *     summary: Claim sBTC rewards (PoX-5)
+ *     description: >
+ *       Claims ALL accumulated sBTC rewards for the given bond indices.
+ *       Automatically scans every settled cycle and submits one claim transaction per cycle.
+ *       Returns all transaction hashes. No need to know or pass a reward cycle.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - bondIndices
+ *             properties:
+ *               bondIndices:
+ *                 type: array
+ *                 items:
+ *                   type: integer
+ *                 description: "Bond indices to claim rewards for (e.g. [4])."
+ *               note:
+ *                 type: string
+ *               nonce:
+ *                 type: integer
+ *           example:
+ *             bondIndices: [4]
+ *     responses:
+ *       200:
+ *         description: Rewards claimed successfully, returns txHash.
+ *       500:
+ *         description: Internal server error
+ */
+router.post("/:vaultId/stacking/pox5/rewards/claim", validateVaultId, controller.claimRewards);
+
+/**
+ * @openapi
+ * /{vaultId}/stacking/pox5/rewards/earned:
+ *   get:
+ *     summary: Get earned sBTC rewards (PoX-5)
+ *     description: >
+ *       Returns accumulated earned sBTC rewards (in sats) for a signer manager and optional
+ *       bond index. Includes staker-specific rewards when the vault address is in the signer set.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *       - in: query
+ *         name: signerManager
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Signer manager contract address (e.g. ST3N….signer-manager).
+ *       - in: query
+ *         name: bondIndex
+ *         required: false
+ *         schema:
+ *           type: integer
+ *         description: Optional bond index to scope the query.
+ *     responses:
+ *       200:
+ *         description: Earned rewards returned successfully.
+ *       400:
+ *         description: signerManager is required.
+ *       500:
+ *         description: Internal server error
+ */
+router.get("/:vaultId/stacking/pox5/rewards/earned", validateVaultId, controller.getEarnedRewards);
 
 // Pool metrics
 /**

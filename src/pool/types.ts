@@ -56,6 +56,13 @@ export enum ActionType {
   GET_BOND_POSITION = "getBondPosition",
   ANNOUNCE_EARLY_EXIT = "announceEarlyExit",
   GET_REQUIREMENTS = "getRequirements",
+  UNLOCK_BTC = "unlockMaturedBond",
+  RENEW_BOND = "renewBond",
+  CALCULATE_REWARDS = "calculateRewards",
+  CLAIM_REWARDS = "claimRewards",
+  GET_EARNED_REWARDS = "getEarnedRewards",
+  GET_BOND_LOCK_ADDRESS = "getBondLockAddress",
+  FUND_BOND_LOCK_ADDRESS = "fundBondLockAddress",
 }
 
 export interface SdkManagerMetrics {

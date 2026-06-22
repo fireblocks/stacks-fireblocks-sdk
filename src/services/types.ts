@@ -89,7 +89,7 @@ export type CheckStatusData = {
     until_burn_ht: number | null;
     pox_addr: string | null;
   };
-  pox5: {
+  stx_only: {
     is_staked: boolean;
     amount_stx: number | null;
     signer_manager: string | null;
@@ -181,21 +181,26 @@ export type CreateBondResult = {
   stacksTxid?: string;
   lockingAddress?: string;
   unlockHeight?: number;
-  amountUstx?: bigint;
+  amountUstx?: string;
   error?: string;
 };
 
 export type BondPositionData = {
   bond_index: number;
   amount_stx: number;
+  amount_ustx: string;
   amount_sats: string;
+  amount_btc: string;
   signer_manager: string;
   is_l1_lock: boolean;
+  first_reward_cycle: number;
+  cycles_until_rewards: number;
   unlock_height: number | null;
   locking_address: string | null;
   still_locked: boolean | null;
   blocks_until_unlock: number | null;
   earned_sats: string;
+  earned_btc: string;
 } | null;
 
 export type BondPositionResponse = {
@@ -225,20 +230,116 @@ export type RequirementsResponse = {
       id: number;
       current_burn_height: number;
       is_prepare_phase: boolean;
-      blocks_until_cycle_end: number;
-      is_safe_to_submit: boolean;
-      current_bond_index: number | null;
     };
-    bond?: {
-      bond_index: number;
-      status: string;
-      stx_value_ratio: string;
-      target_rate_bps: number;
-      your_allowance_sats: string;
-      min_stx_for_sats?: number;
-      min_ustx_for_sats?: string;
+    stx_only: {
+      safe_to_submit: boolean;
+      blocks_until_deadline: number;
+      blocks_until_safe: number | null;
+    };
+    btc_bond?: {
+      current_bond: {
+        bond_index: number;
+        bond_phase: string;
+        can_participate: boolean;
+        stx_value_ratio: string;
+        target_rate_bps: number;
+        min_ustx_ratio_bps: number;
+        your_allowance_sats: string;
+      } | null;
+      next_open_bond: {
+        bond_index: number;
+        bond_phase: string;
+        can_participate: boolean;
+        stx_value_ratio: string;
+        target_rate_bps: number;
+        min_ustx_ratio_bps: number;
+        your_allowance_sats: string;
+        min_stx_for_sats?: number;
+        min_ustx_for_sats?: string;
+      } | null;
+      requested_bond?: {
+        bond_index: number;
+        bond_phase: string;
+        can_participate: boolean;
+        stx_value_ratio: string;
+        target_rate_bps: number;
+        min_ustx_ratio_bps: number;
+        your_allowance_sats: string;
+        min_stx_for_sats?: number;
+        min_ustx_for_sats?: string;
+      };
     };
   };
+  error?: string;
+};
+
+export type DerivedLock = {
+  bondIndex: number;
+  unlockHeight: number;
+  lockScript: Uint8Array;
+  lockingAddress: string;
+  earlyUnlockBytes: Uint8Array;
+  unlockBytes: Uint8Array;
+  amountSats: bigint;
+  isL1Lock: boolean;
+};
+
+export type UnlockBtcResponse = {
+  success: boolean;
+  btcTxid?: string;
+  error?: string;
+};
+
+export type SpendEarlyExitResponse = {
+  success: boolean;
+  btcTxid?: string;
+  error?: string;
+};
+
+export type RenewBondResult = {
+  success: boolean;
+  btcTxid?: string;
+  vout?: number;
+  stacksTxid?: string;
+  lockingAddress?: string;
+  unlockHeight?: number;
+  amountUstx?: string;
+  error?: string;
+};
+
+export type CalculateRewardsResponse = {
+  success: boolean;
+  txHash?: string;
+  error?: string;
+};
+
+export type ClaimRewardsResponse = {
+  success: boolean;
+  txHashes?: string[];
+  error?: string;
+};
+
+export type EarnedRewardsResponse = {
+  success: boolean;
+  data?: {
+    current_cycle: number;
+    first_reward_cycle?: number;
+    cycles_until_rewards?: number;
+    earned_sats: string;
+    staker_earned_sats?: string;
+  };
+  error?: string;
+};
+
+export type BondLockAddressResponse = {
+  success: boolean;
+  data?: { lockAddress: string; unlockHeight: number };
+  error?: string;
+};
+
+export type FundBondLockResponse = {
+  success: boolean;
+  data?: { txid: string; lockAddress: string };
   error?: string;
 };
 

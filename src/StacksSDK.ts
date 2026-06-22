@@ -29,6 +29,15 @@ import {
   CheckStatusResponse,
   CreateBondResult,
   CreateTransactionResponse,
+  DerivedLock,
+  UnlockBtcResponse,
+  SpendEarlyExitResponse,
+  RenewBondResult,
+  CalculateRewardsResponse,
+  ClaimRewardsResponse,
+  EarnedRewardsResponse,
+  BondLockAddressResponse,
+  FundBondLockResponse,
   FireblocksConfig,
   GetAccountNonceResponse,
   GetFtBalancesResponse,
@@ -43,7 +52,7 @@ import {
   TransactionDetails,
   TransactionType,
 } from "./services/types";
-import { BTC_ESPLORA, helperConstants, pagination_defaults, POX4_ERRORS, RBF_MIN_FEE_BUMP_USTX } from "./utils/constants";
+import { BTC_ESPLORA, helperConstants, pagination_defaults, POX4_ERRORS, RBF_MIN_FEE_BUMP_USTX, stacks_info } from "./utils/constants";
 import { InMemoryUnlockBytesStore, UnlockBytesStore } from "./staking/bonds/unlock-bytes-store";
 import { parseOptionalFee, ValidationError } from "./utils/validation";
 import { formatErrorMessage } from "./utils/errorHandling";
@@ -63,6 +72,7 @@ import {
   validateAddress,
 } from "./utils/helpers";
 import {
+  Cl,
   createMessageSignature,
   hexToCV,
   Pc,
@@ -73,7 +83,7 @@ import {
   uintCV,
   principalCV,
   noneCV,
-   makeUnsignedContractCall,
+  makeUnsignedContractCall,
   contractPrincipalCV,
   bufferCV,
 } from "@stacks/transactions";
@@ -85,6 +95,9 @@ import {
   buildRevokeSignerGrant,
   buildRegisterForBond,
   buildAnnounceL1EarlyExit,
+  buildCalculateRewards,
+  buildClaimRewards,
+  buildClaimStakerRewardsForSigner,
   fetchStakerInfo,
   fetchPoxInfo as fetchPox5Info,
   fetchVerifySignerKeyGrant,
@@ -96,18 +109,27 @@ import {
   fetchBondAllowance,
   fetchAccountStatus,
   fetchEarned,
+  fetchEarnedStakerRewards,
+  fetchLastRewardComputeHeight,
   fetchConstructLockupOutputScript,
   isInPreparePhase,
+  isBondActiveAtHeight,
   firstPox5RewardCycle,
   bondPeriodToRewardCycle,
+  bondPeriodToBurnHeight,
   computeUnlockHeight,
   buildUnlockScript,
+  buildLockScript,
   buildRegisterMetadata,
   buildLockProof,
+  computeRegisterPreimage,
   minUstxForSatsAmount,
   type PoxInfo as Pox5PoxInfo,
   type BondMembership,
 } from "@stacks/bitcoin-staking";
+import * as btc from '@scure/btc-signer';
+import { sha256 } from '@noble/hashes/sha2';
+import { Signature as Secp256k1Signature } from '@noble/secp256k1';
 
 const BOND_LENGTH_CYCLES = 12; // fixed per PoX-5 spec; not in .d.ts but confirmed in dist/constants.js
 import { hexToBytes, bytesToHex } from "@stacks/common";
@@ -209,6 +231,17 @@ export class StacksSDK {
    */
   public getBtcRewardsAddress = (): string => {
     return this.btcRewardsAddress || "";
+  };
+
+  /**
+   * Returns the P2WPKH address for the vault's public key on the active Bitcoin network.
+   * On testnet this is a bcrt1… regtest address (for use as unlock destination on private-1).
+   * On mainnet this is a bc1… address.
+   */
+  public getBtcVaultAddress = (): string => {
+    if (!this.publicKey) return '';
+    const pub = hexToBytes(this.publicKey);
+    return btc.p2wpkh(pub, this.btcNetwork).address!;
   };
 
   /**
@@ -906,10 +939,12 @@ export class StacksSDK {
     return this.chainService.broadcastTransaction(tx, this.pox5Network);
   };
 
-  // PoX-5 private testnet uses chain ID 256; address encoding matches standard testnet (ST).
+  // PoX-5 private testnet: chainId 256, magicBytes 'id' (devnet) so buildRegisterMetadata
+  // derives bcrt1… addresses matching the private regtest Bitcoin burn chain.
   private static readonly POX5_TESTNET: StacksNetwork = {
     ...STACKS_TESTNET,
     chainId: 256,
+    magicBytes: 'id',
     client: { baseUrl: 'https://api.private-1.hiro.so' },
   };
 
@@ -1847,7 +1882,7 @@ export class StacksSDK {
     bondIndex: number,
     btcAmountSats: bigint,
     signerManager: string,
-    opts?: { note?: string; nonce?: bigint; externalId?: string; confirmations?: number },
+    opts?: { note?: string; nonce?: bigint; externalId?: string; confirmations?: number; btcTxid?: string; amountUstxOverride?: bigint },
   ): Promise<CreateBondResult> => {
     try {
       if (!this.address || !this.publicKey || !this.vaultAccountId) {
@@ -1867,8 +1902,13 @@ export class StacksSDK {
       ]);
       if (!bond) return { success: false, error: `Bond ${bondIndex} not found` };
 
+      // const safetyCheck = isSafeToSubmit(pox);
+      // if (!safetyCheck.safe) {
+      //   return { success: false, error: `In prepare phase — wait ${safetyCheck.blocksUntilBoundary} blocks before registering (next cycle: ${pox.rewardCycleId + 1})` };
+      // }
+
       // Step 3 — required paired STX
-      const amountUstx = minUstxForSatsAmount({
+      const amountUstx = opts?.amountUstxOverride ?? minUstxForSatsAmount({
         sats: btcAmountSats,
         stxValueRatio: bond.stxValueRatio,
         minUstxRatioBps: bond.minUstxRatioBps,
@@ -1876,6 +1916,16 @@ export class StacksSDK {
 
       const accountStatus = await fetchAccountStatus({ address: this.address, network: this.pox5Network });
       const liquidStx = accountStatus.balance - accountStatus.locked;
+      console.log('createBond STX check:', {
+        btcAmountSats: btcAmountSats.toString(),
+        stxValueRatio: bond.stxValueRatio.toString(),
+        minUstxRatioBps: bond.minUstxRatioBps.toString(),
+        amountUstx: amountUstx.toString(),
+        amountStx: microToStx(amountUstx),
+        balance: accountStatus.balance.toString(),
+        locked: accountStatus.locked.toString(),
+        liquidStx: liquidStx.toString(),
+      });
       if (amountUstx > liquidStx) {
         return { success: false, error: `Insufficient liquid STX: need ${microToStx(amountUstx)} STX but only ${microToStx(liquidStx)} available` };
       }
@@ -1896,6 +1946,8 @@ export class StacksSDK {
         network: this.pox5Network,
       });
 
+      console.log(`createBond: expecting BTC output to lock address ${metadata.lockAddress}`);
+
       // Step 6 — cross-check script vs contract (prevents funding an unverifiable address)
       const onchainScript = await fetchConstructLockupOutputScript({
         stxAddress: this.address,
@@ -1911,14 +1963,21 @@ export class StacksSDK {
       // Persist unlockBytes BEFORE funding (losing this strands the BTC)
       await this.unlockBytesStore.save(this.address, bondIndex, metadata.unlockBytes);
 
-      // Step 7 — fund lock address via Fireblocks BTC vault
-      const { btcTxid } = await this.fireblocksService.createBitcoinTransaction(
-        metadata.lockAddress,
-        btcAmountSats,
-        this.vaultAccountId.toString(),
-        opts?.note || `BTC bond ${bondIndex} lock`,
-        opts?.externalId,
-      );
+      // Step 7 — fund lock address.
+      // If btcTxid is provided (e.g. funded via faucet on regtest), skip Fireblocks send.
+      let btcTxid: string;
+      if (opts?.btcTxid) {
+        btcTxid = opts.btcTxid;
+      } else {
+        const result = await this.fireblocksService.createBitcoinTransaction(
+          metadata.lockAddress,
+          btcAmountSats,
+          this.vaultAccountId.toString(),
+          opts?.note || `BTC bond ${bondIndex} lock`,
+          opts?.externalId,
+        );
+        btcTxid = result.btcTxid;
+      }
 
       // Step 8 — wait for Bitcoin confirmations
       const { blockHash } = await this.waitForBtcConfirmations(btcTxid, opts?.confirmations ?? 3);
@@ -1930,13 +1989,16 @@ export class StacksSDK {
         fetch(`${this.esploraBase()}/tx/${btcTxid}/merkle-proof`).then(r => r.json()),
         fetch(`${this.esploraBase()}/block/${blockHash}`).then(r => r.json()),
       ]);
-      const lockupProof = buildLockProof({
-        txHex,
-        header: headerHex,
-        merkleProof,
-        txCount: blockMeta.tx_count,
-        expectedScript: metadata.outputScript,
-      });
+      const lockupProof = {
+        ...buildLockProof({
+          txHex,
+          header: headerHex,
+          merkleProof,
+          txCount: blockMeta.tx_count,
+          expectedScript: metadata.outputScript,
+        }),
+        unlockBurnHeight: metadata.unlockHeight,
+      };
 
       // Step 10 — register on L2
       const resolvedNonce = await this.resolveNonce(opts?.nonce);
@@ -1949,16 +2011,22 @@ export class StacksSDK {
         fee: BigInt(10000),
         nonce: resolvedNonce,
         network: this.pox5Network,
+        postConditionMode: 'allow',
       });
 
       const result = await this.pox5SignAndBroadcast(tx, opts?.note ?? 'register-for-bond', opts?.externalId);
       if (!result?.txid || result.error || result.reason) {
-        return { success: false, error: result?.error ?? result?.reason ?? 'broadcast failed', btcTxid, vout: lockupProof.outputIndex };
+        console.error('register-for-bond broadcast failed:', JSON.stringify(result));
+        const parts = [result?.error, result?.reason, (result as any)?.reason_data ? JSON.stringify((result as any).reason_data) : undefined].filter(Boolean);
+        const errMsg = parts.join(' — ') || 'broadcast failed';
+        return { success: false, error: errMsg, btcTxid, vout: lockupProof.outputIndex };
       }
 
       const settled = await this.waitForTxSettlement(result.txid);
+      console.log('register-for-bond settlement:', JSON.stringify({ tx_status: settled.data?.tx_status, tx_result: settled.data?.tx_result }));
       if (!settled.success || settled.data?.tx_status !== 'success') {
-        return { success: false, error: settled.data?.tx_error ?? 'register-for-bond failed on-chain', stacksTxid: result.txid, btcTxid, vout: lockupProof.outputIndex };
+        const txRepr: string = (settled.data?.tx_result as any)?.repr ?? settled.data?.tx_error ?? '';
+        return { success: false, error: `[${settled.data?.tx_status}] ${txRepr}`.trim(), stacksTxid: result.txid, btcTxid, vout: lockupProof.outputIndex };
       }
 
       return {
@@ -1968,9 +2036,10 @@ export class StacksSDK {
         stacksTxid: result.txid,
         lockingAddress: metadata.lockAddress,
         unlockHeight: metadata.unlockHeight,
-        amountUstx,
+        amountUstx: amountUstx.toString(),
       };
     } catch (error) {
+      console.error('createBond error:', error);
       return { success: false, error: `Failed to create bond: ${formatErrorMessage(error)}` };
     }
   };
@@ -2000,13 +2069,18 @@ export class StacksSDK {
         return { success: true, data: { bond: null, stx_only: stxOnlyData } };
       }
 
-      // Accrued rewards
-      const earnedSats = await fetchEarned({
-        signerManager: membership.signer,
-        rewardCycle: pox.rewardCycleId,
-        bondIndex: membership.bondIndex,
-        network: this.pox5Network,
-      }).catch(() => BigInt(0));
+      // Sum earned sats across all past cycles for a stable, accurate total
+      const firstEarningCycle = bondPeriodToRewardCycle({ bondIndex: membership.bondIndex, poxInfo: pox });
+      let earnedSats = BigInt(0);
+      for (let cycle = firstEarningCycle; cycle < pox.rewardCycleId; cycle++) {
+        const cycleEarned = await fetchEarned({
+          signerManager: membership.signer,
+          rewardCycle: cycle,
+          bondIndex: membership.bondIndex,
+          network: this.pox5Network,
+        }).catch(() => BigInt(0));
+        earnedSats += cycleEarned;
+      }
 
       // L1 lock state (BTC-locked positions only)
       let unlock_height: number | null = null;
@@ -2015,28 +2089,32 @@ export class StacksSDK {
       let blocks_until_unlock: number | null = null;
 
       if (membership.isL1Lock) {
-        const unlockBytes = await this.unlockBytesStore.load(this.address, membership.bondIndex);
-        if (unlockBytes) {
-          const bond = await fetchBond({ bondIndex: membership.bondIndex, network: this.pox5Network });
-          if (bond) {
-            const meta = buildRegisterMetadata({
-              bondIndex: membership.bondIndex,
-              poxInfo: pox,
-              bitcoinPublicKey: this.publicKey!,
-              stxAddress: this.address,
-              earlyUnlockBytes: bond.earlyUnlockBytes,
-              network: this.pox5Network,
-            });
-            unlock_height = meta.unlockHeight;
-            locking_address = meta.lockAddress;
-            blocks_until_unlock = Math.max(0, meta.unlockHeight - pox.currentBurnchainBlockHeight);
+        const bond = await fetchBond({ bondIndex: membership.bondIndex, network: this.pox5Network });
+        if (bond) {
+          const meta = buildRegisterMetadata({
+            bondIndex: membership.bondIndex,
+            poxInfo: pox,
+            bitcoinPublicKey: this.publicKey!,
+            stxAddress: this.address,
+            earlyUnlockBytes: bond.earlyUnlockBytes,
+            network: this.pox5Network,
+          });
+          unlock_height = meta.unlockHeight;
+          locking_address = meta.lockAddress;
+          blocks_until_unlock = Math.max(0, meta.unlockHeight - pox.currentBurnchainBlockHeight);
 
-            const utxos: any[] = await fetch(`${this.esploraBase()}/address/${meta.lockAddress}/utxo`)
-              .then(r => r.json()).catch(() => []);
-            still_locked = utxos.some(u => BigInt(u.value) === membership.amountSats);
-          }
+          const utxos: any[] = await fetch(`${this.esploraBase()}/address/${meta.lockAddress}/utxo`)
+            .then(r => r.json()).catch(() => []);
+          still_locked = utxos.some(u => BigInt(u.value) === membership.amountSats);
         }
       }
+
+      const amountSatsBn = membership.amountSats;
+      const amountBtc = (Number(amountSatsBn) / 1e8).toFixed(8);
+      const earnedBtc = (Number(earnedSats) / 1e8).toFixed(8);
+
+      const firstRewardCycle = bondPeriodToRewardCycle({ bondIndex: membership.bondIndex, poxInfo: pox });
+      const cyclesUntilRewards = Math.max(0, firstRewardCycle - pox.rewardCycleId);
 
       return {
         success: true,
@@ -2044,14 +2122,19 @@ export class StacksSDK {
           bond: {
             bond_index: membership.bondIndex,
             amount_stx: microToStx(membership.amountUstx),
-            amount_sats: membership.amountSats.toString(),
+            amount_ustx: membership.amountUstx.toString(),
+            amount_sats: amountSatsBn.toString(),
+            amount_btc: amountBtc,
             signer_manager: membership.signer,
             is_l1_lock: membership.isL1Lock,
+            first_reward_cycle: firstRewardCycle,
+            cycles_until_rewards: cyclesUntilRewards,
             unlock_height,
             locking_address,
             still_locked,
             blocks_until_unlock,
             earned_sats: earnedSats.toString(),
+            earned_btc: earnedBtc,
           },
           stx_only: stxOnlyData,
         },
@@ -2113,6 +2196,54 @@ export class StacksSDK {
     }
   };
 
+  /**
+   * Returns the P2WSH lock address (bcrt1… on testnet, bc1… on mainnet) for a given bond index.
+   * Use this to know where to send BTC before calling createBond with a pre-funded btcTxid.
+   */
+  public getBondLockAddress = async (bondIndex: number): Promise<BondLockAddressResponse> => {
+    try {
+      if (!this.address || !this.publicKey) throw new Error('Address or Public Key not set');
+      const [pox, bond] = await Promise.all([
+        fetchPox5Info({ network: this.pox5Network }),
+        fetchBond({ bondIndex, network: this.pox5Network }),
+      ]);
+      if (!bond) return { success: false, error: `Bond ${bondIndex} not found` };
+      const metadata = buildRegisterMetadata({
+        bondIndex,
+        poxInfo: pox,
+        bitcoinPublicKey: this.publicKey,
+        stxAddress: this.address,
+        earlyUnlockBytes: bond.earlyUnlockBytes,
+        network: this.pox5Network,
+      });
+      return { success: true, data: { lockAddress: metadata.lockAddress, unlockHeight: metadata.unlockHeight } };
+    } catch (error) {
+      return { success: false, error: `Failed to get bond lock address: ${formatErrorMessage(error)}` };
+    }
+  };
+
+  /**
+   * Funds the bond lock address via the private-1 BTC faucet (testnet only).
+   * Returns the faucet txid — pass it as btcTxid in createBond to skip the Fireblocks send.
+   */
+  public fundBondLockAddress = async (bondIndex: number): Promise<FundBondLockResponse> => {
+    if (!this.testnet) return { success: false, error: 'Faucet funding is only available on testnet' };
+    try {
+      const lockResult = await this.getBondLockAddress(bondIndex);
+      if (!lockResult.success || !lockResult.data?.lockAddress) return { success: false, error: lockResult.error };
+      const { lockAddress } = lockResult.data;
+      const res = await fetch(
+        `https://api.private-1.hiro.so/extended/v1/faucets/btc?address=${lockAddress}`,
+        { method: 'POST' },
+      );
+      const body = await res.json() as { success: boolean; txid?: string; error?: string };
+      if (!body.success) return { success: false, error: body.error ?? 'Faucet request failed' };
+      return { success: true, data: { txid: body.txid, lockAddress } };
+    } catch (error) {
+      return { success: false, error: `Failed to fund bond lock address: ${formatErrorMessage(error)}` };
+    }
+  };
+
   public getRequirements = async (opts?: {
     bondIndex?: number;
     btcAmountSats?: bigint;
@@ -2122,58 +2253,759 @@ export class StacksSDK {
       const safetyCheck = isSafeToSubmit(pox);
       const isPreparePh = isInPreparePhase({ burnHeight: pox.currentBurnchainBlockHeight, poxInfo: pox });
 
-      // Derive current bond index from chain state — no guessing required by callers
-      const firstPox5Cycle = firstPox5RewardCycle(pox);
-      const currentBondIndex = firstPox5Cycle !== undefined
-        ? Math.max(0, Math.floor((pox.rewardCycleId - firstPox5Cycle) / BOND_LENGTH_CYCLES))
-        : null;
-
       const cycle = {
         id: pox.rewardCycleId,
         current_burn_height: pox.currentBurnchainBlockHeight,
         is_prepare_phase: isPreparePh,
-        blocks_until_cycle_end: safetyCheck.blocksUntilBoundary,
-        is_safe_to_submit: safetyCheck.safe,
-        current_bond_index: currentBondIndex,
       };
 
-      // Use explicit override if provided, otherwise use the derived current bond
-      const bondIndex = opts?.bondIndex ?? currentBondIndex;
-      if (bondIndex === null) {
-        return { success: true, data: { cycle } };
+      const stx_only = {
+        safe_to_submit: safetyCheck.safe,
+        blocks_until_deadline: Math.max(0, safetyCheck.blocksUntilBoundary - stacks_info.stacking.solo.safetyBlocks),
+        blocks_until_safe: safetyCheck.safe
+          ? null
+          : pox.prepareCycleLength + safetyCheck.blocksUntilBoundary,
+      };
+
+      // Scan to find current and next open bond indices.
+      // bondPeriodToRewardCycle is pure — boundary is the first bond whose locked
+      // period starts at or after the current cycle.
+      // current = boundary - 1 (the bond actively locked right now)
+      // next open = boundary or boundary+1 (whichever has open/eligible status)
+      let currentBondIndex: number | null = null;
+      let nextOpenBondIndex: number | null = null;
+      for (let i = 0; i < 100; i++) {
+        const periodStart = bondPeriodToRewardCycle({ bondIndex: i, poxInfo: pox });
+        if (periodStart >= pox.rewardCycleId) {
+          currentBondIndex = i > 0 ? i - 1 : null;
+          for (const candidate of [i, i + 1]) {
+            const s = await fetchBondStatus({ bondIndex: candidate, poxInfo: pox, network: this.pox5Network });
+            if (s === 'open' || s === 'eligible') {
+              nextOpenBondIndex = candidate;
+              break;
+            }
+          }
+          break;
+        }
       }
 
-      const [bond, status, allowanceSats] = await Promise.all([
-        fetchBond({ bondIndex, network: this.pox5Network }),
-        fetchBondStatus({ bondIndex, poxInfo: pox, network: this.pox5Network }),
-        this.address
-          ? fetchBondAllowance({ bondIndex, address: this.address, network: this.pox5Network }).catch(() => BigInt(0))
-          : Promise.resolve(BigInt(0)),
+      // Helper to fetch full bond details for a given index
+      const fetchBondDetails = async (idx: number) => {
+        const [bond, status, allowance] = await Promise.all([
+          fetchBond({ bondIndex: idx, network: this.pox5Network }),
+          fetchBondStatus({ bondIndex: idx, poxInfo: pox, network: this.pox5Network }),
+          this.address
+            ? fetchBondAllowance({ bondIndex: idx, address: this.address, network: this.pox5Network }).catch(() => BigInt(0))
+            : Promise.resolve(BigInt(0)),
+        ]);
+        if (!bond) return null;
+        return {
+          bond_index: idx,
+          bond_phase: status,
+          can_participate: allowance > BigInt(0) && (status === 'open' || status === 'eligible'),
+          stx_value_ratio: bond.stxValueRatio.toString(),
+          target_rate_bps: bond.targetRateBps,
+          min_ustx_ratio_bps: bond.minUstxRatioBps,
+          your_allowance_sats: allowance.toString(),
+          _bond: bond,
+        };
+      };
+
+      // Fetch current and next open bond in parallel
+      const [currentDetails, nextOpenDetails] = await Promise.all([
+        currentBondIndex !== null ? fetchBondDetails(currentBondIndex) : Promise.resolve(null),
+        nextOpenBondIndex !== null ? fetchBondDetails(nextOpenBondIndex) : Promise.resolve(null),
       ]);
 
-      if (!bond) return { success: false, error: `Bond ${bondIndex} not found` };
-
-      const bondData: RequirementsResponse['data'] extends { bond?: infer B } ? NonNullable<B> : never = {
-        bond_index: bondIndex,
-        status,
-        stx_value_ratio: bond.stxValueRatio.toString(),
-        target_rate_bps: bond.targetRateBps,
-        your_allowance_sats: allowanceSats.toString(),
-      };
-
-      if (opts?.btcAmountSats !== undefined) {
-        const minUstx = minUstxForSatsAmount({
-          sats: opts.btcAmountSats,
-          stxValueRatio: bond.stxValueRatio,
-          minUstxRatioBps: bond.minUstxRatioBps,
-        });
-        bondData.min_stx_for_sats = microToStx(minUstx);
-        bondData.min_ustx_for_sats = minUstx.toString();
+      if (currentDetails === null && nextOpenDetails === null) {
+        return { success: true, data: { cycle, stx_only } };
       }
 
-      return { success: true, data: { cycle, bond: bondData } };
+      const btc_bond: NonNullable<NonNullable<RequirementsResponse['data']>['btc_bond']> = {
+        current_bond: currentDetails ? {
+          bond_index: currentDetails.bond_index,
+          bond_phase: currentDetails.bond_phase,
+          can_participate: currentDetails.can_participate,
+          stx_value_ratio: currentDetails.stx_value_ratio,
+          target_rate_bps: currentDetails.target_rate_bps,
+          min_ustx_ratio_bps: currentDetails.min_ustx_ratio_bps,
+          your_allowance_sats: currentDetails.your_allowance_sats,
+        } : null,
+        next_open_bond: nextOpenDetails ? {
+          bond_index: nextOpenDetails.bond_index,
+          bond_phase: nextOpenDetails.bond_phase,
+          can_participate: nextOpenDetails.can_participate,
+          stx_value_ratio: nextOpenDetails.stx_value_ratio,
+          target_rate_bps: nextOpenDetails.target_rate_bps,
+          min_ustx_ratio_bps: nextOpenDetails.min_ustx_ratio_bps,
+          your_allowance_sats: nextOpenDetails.your_allowance_sats,
+        } : null,
+      };
+
+      // Add btcAmountSats calculation to next_open_bond if provided
+      if (opts?.btcAmountSats !== undefined && nextOpenDetails?._bond) {
+        const minUstx = minUstxForSatsAmount({
+          sats: opts.btcAmountSats,
+          stxValueRatio: nextOpenDetails._bond.stxValueRatio,
+          minUstxRatioBps: nextOpenDetails._bond.minUstxRatioBps,
+        });
+        btc_bond.next_open_bond!.min_stx_for_sats = microToStx(minUstx);
+        btc_bond.next_open_bond!.min_ustx_for_sats = minUstx.toString();
+      }
+
+      // If caller passed an explicit bondIndex, fetch and attach as requested_bond
+      if (opts?.bondIndex !== undefined) {
+        const reqDetails = await fetchBondDetails(opts.bondIndex);
+        if (reqDetails) {
+          btc_bond.requested_bond = {
+            bond_index: reqDetails.bond_index,
+            bond_phase: reqDetails.bond_phase,
+            can_participate: reqDetails.can_participate,
+            stx_value_ratio: reqDetails.stx_value_ratio,
+            target_rate_bps: reqDetails.target_rate_bps,
+            min_ustx_ratio_bps: reqDetails.min_ustx_ratio_bps,
+            your_allowance_sats: reqDetails.your_allowance_sats,
+          };
+          if (opts.btcAmountSats !== undefined) {
+            const minUstx = minUstxForSatsAmount({
+              sats: opts.btcAmountSats,
+              stxValueRatio: reqDetails._bond.stxValueRatio,
+              minUstxRatioBps: reqDetails._bond.minUstxRatioBps,
+            });
+            btc_bond.requested_bond.min_stx_for_sats = microToStx(minUstx);
+            btc_bond.requested_bond.min_ustx_for_sats = minUstx.toString();
+          }
+        }
+      }
+
+      return { success: true, data: { cycle, stx_only, btc_bond } };
     } catch (error) {
       return { success: false, error: `Failed to fetch requirements: ${formatErrorMessage(error)}` };
+    }
+  };
+
+  // ─── §11: BTC signing helpers (private) ─────────────────────────────────────
+
+  // Private-1 regtest uses bech32 prefix 'bcrt', not 'tb' (testnet3).
+  private get btcNetwork(): typeof btc.NETWORK {
+    return this.testnet ? { ...btc.TEST_NETWORK, bech32: 'bcrt' } : btc.NETWORK;
+  }
+
+  // Build the P2WSH output script (OP_0 <32-byte-sha256-of-witnessScript>)
+  private p2wshOutputScript = (witnessScript: Uint8Array): Uint8Array => {
+    const hash = sha256(witnessScript);
+    const out = new Uint8Array(34);
+    out[0] = 0x00; // OP_0
+    out[1] = 0x20; // PUSH 32
+    out.set(hash, 2);
+    return out;
+  };
+
+  private broadcastBtc = async (rawHex: string): Promise<string> => {
+    const res = await fetch(`${this.esploraBase()}/tx`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: rawHex,
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`BTC broadcast failed (${res.status}): ${body}`);
+    }
+    return res.text(); // esplora returns the txid as plain text
+  };
+
+  private btcDerSig = (fullSigHex: string): Uint8Array => {
+    // fullSigHex is r||s as 128 hex chars — normalize to low-S then DER-encode
+    const parsed = Secp256k1Signature.fromCompact(fullSigHex);
+    const normalized = parsed.hasHighS() ? parsed.normalizeS() : parsed;
+    const compact = normalized.toCompactRawBytes();
+    const r = compact.slice(0, 32);
+    const s = compact.slice(32, 64);
+
+    const encodeScalar = (bytes: Uint8Array): Uint8Array => {
+      return bytes[0] >= 0x80 ? new Uint8Array([0, ...bytes]) : bytes;
+    };
+    const rEnc = encodeScalar(r);
+    const sEnc = encodeScalar(s);
+    const total = 4 + rEnc.length + sEnc.length;
+    const der = new Uint8Array(total + 3); // +2 outer tag/len + 1 SIGHASH_ALL
+    let i = 0;
+    der[i++] = 0x30;
+    der[i++] = total;
+    der[i++] = 0x02; der[i++] = rEnc.length; der.set(rEnc, i); i += rEnc.length;
+    der[i++] = 0x02; der[i++] = sEnc.length; der.set(sEnc, i); i += sEnc.length;
+    der[i] = 0x01; // SIGHASH_ALL
+    return der;
+  };
+
+  private signBtcSighash = async (sighash: Uint8Array): Promise<Uint8Array> => {
+    const rawSig = await this.fireblocksService.signTransaction(
+      bytesToHex(sighash),
+      this.vaultAccountId.toString(),
+      'BTC P2WSH spend',
+    );
+    return this.btcDerSig(rawSig.fullSig);
+  };
+
+  private btcSegwitSighash = (
+    tx: btc.Transaction,
+    inputIndex: number,
+    witnessScript: Uint8Array,
+    amountSats: bigint,
+  ): Uint8Array => {
+    const preimage = tx.preimageWitnessV0(inputIndex, witnessScript, btc.SigHash.ALL, amountSats);
+    return sha256(sha256(preimage));
+  };
+
+  private setP2wshWitness = (
+    tx: btc.Transaction,
+    inputIndex: number,
+    items: Uint8Array[],
+  ): void => {
+    tx.updateInput(inputIndex, { finalScriptWitness: items });
+  };
+
+  // ─── §5: deriveLock (private) ─────────────────────────────────────────────
+
+  private deriveLock = async (address?: string): Promise<DerivedLock | null> => {
+    const addr = address ?? this.address!;
+    const [pox, membership] = await Promise.all([
+      fetchPox5Info({ network: this.pox5Network }),
+      fetchBondMembership({ address: addr, network: this.pox5Network }).catch(() => null),
+    ]);
+    if (!membership || !membership.isL1Lock) return null;
+
+    let unlockBytes = await this.unlockBytesStore.load(addr, membership.bondIndex);
+    if (!unlockBytes) {
+      // Rederive from the vault's signing key (default tail = <pubkey> OP_CHECKSIG)
+      unlockBytes = buildUnlockScript(hexToBytes(this.publicKey!));
+    }
+
+    const bond = await fetchBond({ bondIndex: membership.bondIndex, network: this.pox5Network });
+    if (!bond) throw new Error(`Bond ${membership.bondIndex} not found`);
+
+    const meta = buildRegisterMetadata({
+      bondIndex: membership.bondIndex,
+      poxInfo: pox,
+      bitcoinPublicKey: this.publicKey!,
+      stxAddress: addr,
+      earlyUnlockBytes: bond.earlyUnlockBytes,
+      network: this.pox5Network,
+    });
+
+    return {
+      bondIndex: membership.bondIndex,
+      unlockHeight: meta.unlockHeight,
+      lockScript: meta.lockScript,
+      lockingAddress: meta.lockAddress,
+      earlyUnlockBytes: typeof bond.earlyUnlockBytes === 'string' ? hexToBytes(bond.earlyUnlockBytes) : bond.earlyUnlockBytes,
+      unlockBytes: meta.unlockBytes,
+      amountSats: membership.amountSats,
+      isL1Lock: membership.isL1Lock,
+    };
+  };
+
+  private findLockUtxo = async (
+    lockingAddress: string,
+    amountSats: bigint,
+  ): Promise<{ txid: string; vout: number; value: number } | null> => {
+    const utxos: any[] = await fetch(`${this.esploraBase()}/address/${lockingAddress}/utxo`)
+      .then(r => r.json())
+      .catch(() => []);
+    return utxos.find(u => BigInt(u.value) === amountSats) ?? utxos[0] ?? null;
+  };
+
+  // ─── §6: unlockMaturedBond ────────────────────────────────────────────────
+
+  /**
+   * Spends the matured P2WSH UTXO back to a destination BTC address via the
+   * OP_IF (CLTV) branch. Only callable after `unlockHeight` has passed on the
+   * BTC chain. No early-exit signer set required — unilateral staker signature.
+   */
+  public unlockMaturedBond = async (
+    destinationBtcAddress: string,
+    opts?: { feeSats?: bigint },
+  ): Promise<UnlockBtcResponse> => {
+    try {
+      const lock = await this.deriveLock();
+      if (!lock) return { success: false, error: 'No L1-locked bond membership found' };
+
+      const tipHeight = await fetch(`${this.esploraBase()}/blocks/tip/height`)
+        .then(r => r.text()).then(Number);
+      if (tipHeight < lock.unlockHeight) {
+        return { success: false, error: `Bond not matured: BTC tip ${tipHeight} < unlock height ${lock.unlockHeight}` };
+      }
+
+      const utxo = await this.findLockUtxo(lock.lockingAddress, lock.amountSats);
+      if (!utxo) return { success: false, error: 'Lock UTXO not found or already spent' };
+
+      const feeSats = opts?.feeSats ?? BigInt(500);
+      const outputAmount = lock.amountSats - feeSats;
+      if (outputAmount <= BigInt(0)) return { success: false, error: 'Fee exceeds locked amount' };
+
+      const p2wshScript = this.p2wshOutputScript(lock.lockScript);
+
+      const tx = new btc.Transaction({ lockTime: lock.unlockHeight });
+      tx.addInput({
+        txid: utxo.txid,
+        index: utxo.vout,
+        sequence: 0xfffffffe, // non-final — lockTime enforced
+        witnessUtxo: { script: p2wshScript, amount: lock.amountSats },
+        witnessScript: lock.lockScript,
+      });
+      tx.addOutputAddress(destinationBtcAddress, outputAmount, this.btcNetwork);
+
+      const sighash = this.btcSegwitSighash(tx, 0, lock.lockScript, lock.amountSats);
+      const stakerSig = await this.signBtcSighash(sighash);
+
+      // OP_IF (matured) branch witness: [ <stakerSig>, <1=TRUE>, <witnessScript> ]
+      this.setP2wshWitness(tx, 0, [stakerSig, new Uint8Array([1]), lock.lockScript]);
+
+      const btcTxid = await this.broadcastBtc(bytesToHex(tx.extract()));
+      return { success: true, btcTxid };
+    } catch (error) {
+      return { success: false, error: `Failed to unlock matured bond: ${formatErrorMessage(error)}` };
+    }
+  };
+
+  // ─── §7B: spendEarlyExitUtxo ─────────────────────────────────────────────
+
+  /**
+   * Spends the P2WSH UTXO via the OP_ELSE (early-exit) branch. Requires an
+   * external `earlyExitSigner` (from the Endowment) to co-sign the same sighash.
+   * Call `announceEarlyExit()` on L2 first and wait for it to settle.
+   */
+  public spendEarlyExitUtxo = async (
+    destinationBtcAddress: string,
+    earlyExitSigner: { sign(sighash: Uint8Array): Promise<Uint8Array> },
+    opts?: { feeSats?: bigint },
+  ): Promise<SpendEarlyExitResponse> => {
+    try {
+      const lock = await this.deriveLock();
+      if (!lock) return { success: false, error: 'No L1-locked bond membership found' };
+
+      const utxo = await this.findLockUtxo(lock.lockingAddress, lock.amountSats);
+      if (!utxo) return { success: false, error: 'Lock UTXO not found or already spent' };
+
+      const feeSats = opts?.feeSats ?? BigInt(500);
+      const outputAmount = lock.amountSats - feeSats;
+      if (outputAmount <= BigInt(0)) return { success: false, error: 'Fee exceeds locked amount' };
+
+      const p2wshScript = this.p2wshOutputScript(lock.lockScript);
+
+      const tx = new btc.Transaction();
+      // OP_ELSE path has no CLTV gate — lockTime not required
+      tx.addInput({
+        txid: utxo.txid,
+        index: utxo.vout,
+        sequence: 0xfffffffe,
+        witnessUtxo: { script: p2wshScript, amount: lock.amountSats },
+        witnessScript: lock.lockScript,
+      });
+      tx.addOutputAddress(destinationBtcAddress, outputAmount, this.btcNetwork);
+
+      const sighash = this.btcSegwitSighash(tx, 0, lock.lockScript, lock.amountSats);
+      const [stakerSig, earlyExitSig] = await Promise.all([
+        this.signBtcSighash(sighash),
+        earlyExitSigner.sign(sighash),
+      ]);
+      const preimage = computeRegisterPreimage(this.address!);
+
+      // OP_ELSE witness: [ <stakerSig>, <earlyExitSig>, <preimage>, <0=FALSE>, <witnessScript> ]
+      this.setP2wshWitness(tx, 0, [stakerSig, earlyExitSig, preimage, new Uint8Array([]), lock.lockScript]);
+
+      const btcTxid = await this.broadcastBtc(bytesToHex(tx.extract()));
+      return { success: true, btcTxid };
+    } catch (error) {
+      return { success: false, error: `Failed to spend early exit UTXO: ${formatErrorMessage(error)}` };
+    }
+  };
+
+  // ─── §8: renewBond ───────────────────────────────────────────────────────
+
+  /**
+   * Rolls the current bond into the next period atomically:
+   * 1. Spends the matured prior P2WSH → next bond's locking address (OP_IF branch)
+   * 2. Assembles the SPV proof for the new output
+   * 3. Calls register-for-bond for nextBondIndex on L2
+   *
+   * Must be called inside the re-lock window (after prior unlockHeight, before next bond starts).
+   */
+  public renewBond = async (
+    nextBondIndex: number,
+    signerManager: string,
+    opts?: { feeSats?: bigint; note?: string; nonce?: bigint; externalId?: string; confirmations?: number },
+  ): Promise<RenewBondResult> => {
+    try {
+      if (!this.address || !this.publicKey || !this.vaultAccountId) {
+        throw new Error('Address, Public Key or Vault ID are not set');
+      }
+
+      // 1. Resolve prior lock
+      const prior = await this.deriveLock();
+      if (!prior) return { success: false, error: 'No current L1 bond to renew' };
+
+      const tipHeight = await fetch(`${this.esploraBase()}/blocks/tip/height`)
+        .then(r => r.text()).then(Number);
+      if (tipHeight < prior.unlockHeight) {
+        return { success: false, error: `Prior bond not matured: BTC tip ${tipHeight} < unlock height ${prior.unlockHeight}` };
+      }
+
+      const utxo = await this.findLockUtxo(prior.lockingAddress, prior.amountSats);
+      if (!utxo) return { success: false, error: 'Prior lock UTXO not found or already spent' };
+
+      // 2. Compute next lock parameters
+      const [pox, nextBond] = await Promise.all([
+        fetchPox5Info({ network: this.pox5Network }),
+        fetchBond({ bondIndex: nextBondIndex, network: this.pox5Network }),
+      ]);
+      if (!nextBond) return { success: false, error: `Next bond ${nextBondIndex} not found` };
+
+      const nextMeta = buildRegisterMetadata({
+        bondIndex: nextBondIndex,
+        poxInfo: pox,
+        bitcoinPublicKey: this.publicKey,
+        stxAddress: this.address,
+        earlyUnlockBytes: nextBond.earlyUnlockBytes,
+        network: this.pox5Network,
+      });
+
+      // Cross-check next lock script against contract
+      const onchainNext = await fetchConstructLockupOutputScript({
+        stxAddress: this.address,
+        unlockHeight: nextMeta.unlockHeight,
+        unlockBytes: nextMeta.unlockBytes,
+        earlyUnlockBytes: nextBond.earlyUnlockBytes,
+        network: this.pox5Network,
+      });
+      if (bytesToHex(nextMeta.outputScript) !== bytesToHex(onchainNext)) {
+        return { success: false, error: 'Next bond lockup script mismatch — NOT proceeding' };
+      }
+
+      // Persist unlockBytes for the new bond period before spending
+      await this.unlockBytesStore.save(this.address, nextBondIndex, nextMeta.unlockBytes);
+
+      // 3. Build the atomic BTC spend: prior P2WSH → next locking address
+      const feeSats = opts?.feeSats ?? BigInt(500);
+      const outputAmount = prior.amountSats - feeSats;
+      if (outputAmount <= BigInt(0)) return { success: false, error: 'Fee exceeds locked amount' };
+
+      const priorP2wshScript = this.p2wshOutputScript(prior.lockScript);
+
+      const btcTx = new btc.Transaction({ lockTime: prior.unlockHeight });
+      btcTx.addInput({
+        txid: utxo.txid,
+        index: utxo.vout,
+        sequence: 0xfffffffe,
+        witnessUtxo: { script: priorP2wshScript, amount: prior.amountSats },
+        witnessScript: prior.lockScript,
+      });
+      btcTx.addOutputAddress(nextMeta.lockAddress, outputAmount, this.btcNetwork);
+
+      const sighash = this.btcSegwitSighash(btcTx, 0, prior.lockScript, prior.amountSats);
+      const stakerSig = await this.signBtcSighash(sighash);
+      this.setP2wshWitness(btcTx, 0, [stakerSig, new Uint8Array([1]), prior.lockScript]);
+
+      const btcTxid = await this.broadcastBtc(bytesToHex(btcTx.extract()));
+
+      // 4. Wait for confirmations on the new lock output
+      const { blockHash } = await this.waitForBtcConfirmations(btcTxid, opts?.confirmations ?? 3);
+
+      // 5. Assemble SPV proof for the new lock output
+      const [txHex, headerHex, merkleProof, blockMeta] = await Promise.all([
+        fetch(`${this.esploraBase()}/tx/${btcTxid}/hex`).then(r => r.text()),
+        fetch(`${this.esploraBase()}/block/${blockHash}/header`).then(r => r.text()),
+        fetch(`${this.esploraBase()}/tx/${btcTxid}/merkle-proof`).then(r => r.json()),
+        fetch(`${this.esploraBase()}/block/${blockHash}`).then(r => r.json()),
+      ]);
+      const lockupProof = {
+        ...buildLockProof({
+          txHex,
+          header: headerHex,
+          merkleProof,
+          txCount: blockMeta.tx_count,
+          expectedScript: nextMeta.outputScript,
+        }),
+        unlockBurnHeight: nextMeta.unlockHeight,
+      };
+
+      // 6. Required STX for next bond
+      const amountUstx = minUstxForSatsAmount({
+        sats: outputAmount,
+        stxValueRatio: nextBond.stxValueRatio,
+        minUstxRatioBps: nextBond.minUstxRatioBps,
+      });
+
+      // 7. Register on L2
+      const resolvedNonce = await this.resolveNonce(opts?.nonce);
+      const stacksTx = await buildRegisterForBond({
+        bondIndex: nextBondIndex,
+        signerManager,
+        amountUstx,
+        lockup: { kind: 'btc', outputs: [lockupProof], unlockBytes: nextMeta.unlockBytes },
+        publicKey: this.publicKey,
+        fee: BigInt(10000),
+        nonce: resolvedNonce,
+        network: this.pox5Network,
+        postConditionMode: 'allow',
+      });
+
+      const result = await this.pox5SignAndBroadcast(stacksTx, opts?.note ?? `renew-bond-${nextBondIndex}`, opts?.externalId);
+      if (!result?.txid || result.error || result.reason) {
+        return { success: false, error: result?.error ?? result?.reason ?? 'broadcast failed', btcTxid, vout: lockupProof.outputIndex };
+      }
+
+      const settled = await this.waitForTxSettlement(result.txid);
+      if (!settled.success || settled.data?.tx_status !== 'success') {
+        return { success: false, error: settled.data?.tx_error ?? 'register-for-bond failed on-chain', stacksTxid: result.txid, btcTxid, vout: lockupProof.outputIndex };
+      }
+
+      return {
+        success: true,
+        btcTxid,
+        vout: lockupProof.outputIndex,
+        stacksTxid: result.txid,
+        lockingAddress: nextMeta.lockAddress,
+        unlockHeight: nextMeta.unlockHeight,
+        amountUstx: amountUstx.toString(),
+      };
+    } catch (error) {
+      return { success: false, error: `Failed to renew bond: ${formatErrorMessage(error)}` };
+    }
+  };
+
+  // ─── §9: Rewards ─────────────────────────────────────────────────────────
+
+  private getActiveBondsSorted = async (): Promise<number[]> => {
+    const pox = await fetchPox5Info({ network: this.pox5Network });
+    const candidates = Array.from({ length: 20 }, (_, i) => i);
+    const results = await Promise.all(
+      candidates.map(async i => {
+        const bond = await fetchBond({ bondIndex: i, network: this.pox5Network }).catch(() => null);
+        if (!bond) return null;
+        const active = isBondActiveAtHeight({ bondIndex: i, burnHeight: pox.currentBurnchainBlockHeight, poxInfo: pox });
+        if (!active) return null;
+        return { i, stxValueRatio: bond.stxValueRatio };
+      }),
+    );
+    return results
+      .filter((r): r is { i: number; stxValueRatio: bigint } => r !== null)
+      .sort((a, b) => {
+        if (b.stxValueRatio > a.stxValueRatio) return 1;
+        if (b.stxValueRatio < a.stxValueRatio) return -1;
+        return a.i - b.i;
+      })
+      .map(r => r.i);
+  };
+
+  /**
+   * Triggers the PoX-5 reward distribution waterfall for the current cycle.
+   * Must include ALL active bonds, sorted descending by stxValueRatio (ascending bondIndex as tiebreaker).
+   * ERR_DISTRIBUTION_ALREADY_COMPUTED (u30) is benign — rewards were already settled.
+   */
+  public calculateRewards = async (
+    opts?: { note?: string; nonce?: bigint },
+  ): Promise<CalculateRewardsResponse> => {
+    try {
+      if (!this.publicKey || !this.vaultAccountId) throw new Error('SDK not initialized');
+      const bondIndices = await this.getActiveBondsSorted();
+      const resolvedNonce = await this.resolveNonce(opts?.nonce);
+      const tx = await buildCalculateRewards({
+        bondIndices,
+        publicKey: this.publicKey,
+        fee: BigInt(10000),
+        nonce: resolvedNonce,
+        network: this.pox5Network,
+      });
+      const result = await this.pox5SignAndBroadcast(tx, opts?.note ?? 'calculate-rewards');
+      if (!result?.txid || result.error || result.reason) {
+        return { success: false, error: result?.error ?? result?.reason ?? 'broadcast failed' };
+      }
+      const settled = await this.waitForTxSettlement(result.txid);
+      if (!settled.success || settled.data?.tx_status !== 'success') {
+        return { success: false, error: settled.data?.tx_error ?? 'calculate-rewards failed on-chain', txHash: result.txid };
+      }
+      return { success: true, txHash: result.txid };
+    } catch (error) {
+      return { success: false, error: `Failed to calculate rewards: ${formatErrorMessage(error)}` };
+    }
+  };
+
+  /**
+   * Claims ALL accumulated sBTC rewards for the given bond indices.
+   * Handles the full flow internally: calculate → distribute → claim staker share.
+   * User just passes bond indices and gets their sBTC.
+   */
+  public claimRewards = async (
+    bondIndices: number[],
+    opts?: { note?: string; nonce?: bigint },
+  ): Promise<ClaimRewardsResponse> => {
+    try {
+      if (!this.publicKey || !this.vaultAccountId) throw new Error('SDK not initialized');
+      if (!this.address) throw new Error('Address not set');
+
+      const pox = await fetchPox5Info({ network: this.pox5Network });
+      const membership = await fetchBondMembership({ address: this.address, network: this.pox5Network }).catch(() => null);
+      if (!membership) return { success: false, error: 'No bond membership found for this vault' };
+
+      const minBondIndex = Math.min(...bondIndices);
+      const firstEarningCycle = bondPeriodToRewardCycle({ bondIndex: minBondIndex, poxInfo: pox });
+      const lastComputeHeight = await fetchLastRewardComputeHeight({ network: this.pox5Network }).catch(() => 0);
+      const lastComputedCycle = lastComputeHeight > 0
+        ? Math.floor((lastComputeHeight - pox.firstBurnchainBlockHeight) / pox.rewardCycleLength)
+        : pox.rewardCycleId - 1;
+
+      // Find cycles with non-zero bond rewards
+      const claimableCycles: number[] = [];
+      for (let cycle = firstEarningCycle; cycle <= lastComputedCycle; cycle++) {
+        const earned = await fetchEarned({
+          signerManager: membership.signer,
+          rewardCycle: cycle,
+          bondIndex: minBondIndex,
+          network: this.pox5Network,
+        }).catch(() => BigInt(0));
+        if (earned > BigInt(0)) claimableCycles.push(cycle);
+      }
+
+      if (claimableCycles.length === 0) {
+        return {
+          success: false,
+          error: `No rewards available yet for bond ${minBondIndex} (first_reward_cycle: ${firstEarningCycle}, last_computed_cycle: ${lastComputedCycle}, current_cycle: ${pox.rewardCycleId})`,
+        };
+      }
+
+      let nonce = await this.resolveNonce(opts?.nonce);
+      const txHashes: string[] = [];
+
+      // Parse signer-manager contract address and name from membership.signer
+      // e.g. "ST3NB...XCP.signer-manager" → contractAddress + contractName
+      const signerDotIdx = membership.signer.lastIndexOf('.');
+      const signerContractAddress = membership.signer.slice(0, signerDotIdx);
+      const signerContractName = membership.signer.slice(signerDotIdx + 1);
+
+      for (const cycle of claimableCycles) {
+        // Step 1: signer-manager.claim-rewards — pulls sBTC from pox-5 into signer-manager
+        // Anyone can call this. Skip gracefully if already done.
+        const smClaimTx = await makeUnsignedContractCall({
+          contractAddress: signerContractAddress,
+          contractName: signerContractName,
+          functionName: 'claim-rewards',
+          functionArgs: [
+            Cl.list(bondIndices.map(i => Cl.uint(i))),
+            Cl.uint(cycle),
+          ],
+          publicKey: this.publicKey,
+          fee: BigInt(10000),
+          nonce,
+          network: this.pox5Network,
+        });
+        const smClaimResult = await this.pox5SignAndBroadcast(smClaimTx, `sm-claim-rewards-cycle-${cycle}`);
+        if (smClaimResult?.txid && !smClaimResult.error && !smClaimResult.reason) {
+          nonce = nonce + BigInt(1);
+          const smClaimSettled = await this.waitForTxSettlement(smClaimResult.txid);
+          const smClaimRepr: string = (smClaimSettled.data?.tx_result as any)?.repr ?? smClaimSettled.data?.tx_error ?? '';
+          // Fail only on actual errors — (ok ...) means success, (err u30/u32) means already done (skip)
+          if (!smClaimRepr.startsWith('(ok') && !smClaimRepr.includes('u30') && !smClaimRepr.includes('u32')) {
+            return { success: false, error: `signer-manager.claim-rewards failed at cycle ${cycle}: ${smClaimRepr}`, txHashes };
+          }
+        } else if (smClaimResult?.error || smClaimResult?.reason) {
+          const errMsg = [smClaimResult?.error, smClaimResult?.reason].filter(Boolean).join(' — ');
+          return { success: false, error: `signer-manager.claim-rewards broadcast failed at cycle ${cycle}: ${errMsg}`, txHashes };
+        }
+
+        // Step 2: signer-manager.claim-staker-rewards — pays this staker their sBTC share
+        // Anyone can call this on behalf of any staker.
+        for (const bondIndex of bondIndices) {
+          const smStakerTx = await makeUnsignedContractCall({
+            contractAddress: signerContractAddress,
+            contractName: signerContractName,
+            functionName: 'claim-staker-rewards',
+            functionArgs: [
+              Cl.address(this.address),
+              Cl.uint(cycle),
+              Cl.some(Cl.uint(bondIndex)),
+            ],
+            publicKey: this.publicKey,
+            fee: BigInt(10000),
+            nonce,
+            network: this.pox5Network,
+          });
+          const smStakerResult = await this.pox5SignAndBroadcast(smStakerTx, opts?.note ?? `sm-claim-staker-rewards-cycle-${cycle}-bond-${bondIndex}`);
+          if (!smStakerResult?.txid || smStakerResult.error || smStakerResult.reason) {
+            const errMsg = [smStakerResult?.error, smStakerResult?.reason].filter(Boolean).join(' — ') || 'broadcast failed';
+            return { success: false, error: `Failed at cycle ${cycle} bond ${bondIndex}: ${errMsg}`, txHashes };
+          }
+          const settled = await this.waitForTxSettlement(smStakerResult.txid);
+          const stakerRepr: string = (settled.data?.tx_result as any)?.repr ?? settled.data?.tx_error ?? '';
+          if (!stakerRepr.startsWith('(ok')) {
+            return { success: false, error: `Claim failed on-chain at cycle ${cycle} bond ${bondIndex}: ${stakerRepr}`, txHashes };
+          }
+          txHashes.push(smStakerResult.txid);
+          nonce = nonce + BigInt(1);
+        }
+      }
+
+      return { success: true, txHashes };
+    } catch (error) {
+      return { success: false, error: `Failed to claim rewards: ${formatErrorMessage(error)}` };
+    }
+  };
+
+  /**
+   * Returns earned sBTC rewards (sats) for a signerManager + optional bondIndex.
+   * Includes staker-specific rewards when this vault's address is in the signer set.
+   */
+  public getEarnedRewards = async (
+    signerManager: string,
+    bondIndex?: number,
+  ): Promise<EarnedRewardsResponse> => {
+    try {
+      const pox = await fetchPox5Info({ network: this.pox5Network });
+      const bondFirstRewardCycle = bondIndex !== undefined
+        ? bondPeriodToRewardCycle({ bondIndex, poxInfo: pox })
+        : undefined;
+
+      // Sum across all past cycles for a stable total
+      const startCycle = bondFirstRewardCycle ?? 0;
+      let earned = BigInt(0);
+      let stakerEarned = BigInt(0);
+      for (let cycle = startCycle; cycle < pox.rewardCycleId; cycle++) {
+        const cycleEarned = await fetchEarned({
+          signerManager,
+          rewardCycle: cycle,
+          bondIndex,
+          network: this.pox5Network,
+        }).catch(() => BigInt(0));
+        earned += cycleEarned;
+
+        if (this.address) {
+          const cycleStakerEarned = await fetchEarnedStakerRewards({
+            signerManager,
+            rewardCycle: cycle,
+            bondIndex,
+            staker: this.address,
+            network: this.pox5Network,
+          }).catch(() => BigInt(0));
+          stakerEarned += cycleStakerEarned;
+        }
+      }
+
+      const cyclesUntilRewards = bondFirstRewardCycle !== undefined
+        ? Math.max(0, bondFirstRewardCycle - pox.rewardCycleId)
+        : undefined;
+
+      return {
+        success: true,
+        data: {
+          current_cycle: pox.rewardCycleId,
+          first_reward_cycle: bondFirstRewardCycle,
+          cycles_until_rewards: cyclesUntilRewards,
+          earned_sats: earned.toString(),
+          staker_earned_sats: stakerEarned.toString(),
+        },
+      };
+    } catch (error) {
+      return { success: false, error: `Failed to fetch earned rewards: ${formatErrorMessage(error)}` };
     }
   };
 
@@ -2262,7 +3094,7 @@ export class StacksSDK {
           until_burn_ht: untilBurnHt,
           pox_addr: poxAddrTuple,
         },
-        pox5: {
+        stx_only: {
           is_staked: pox5IsStaked,
           amount_stx: pox5Details ? microToStx(pox5Details.amountUstx) : null,
           signer_manager: pox5Details?.signer ?? null,

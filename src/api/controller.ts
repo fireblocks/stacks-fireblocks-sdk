@@ -906,9 +906,11 @@ export const createBond: Handler = async (req, res, next) => {
     const nonce = parseOptionalNonce(req.body.nonce);
     const externalId = req.body.externalId ? String(req.body.externalId) : undefined;
     const confirmations = req.body.confirmations !== undefined ? Number(req.body.confirmations) : undefined;
+    const btcTxid = req.body.btcTxid ? String(req.body.btcTxid).trim() : undefined;
+    const amountUstxOverride = req.body.amountUstxOverride !== undefined ? BigInt(req.body.amountUstxOverride) : undefined;
 
     const result = await apiService.executeAction(vaultId, ActionType.CREATE_BOND, {
-      bondIndex, btcAmountSats, signerManager, note, nonce, externalId, confirmations,
+      bondIndex, btcAmountSats, signerManager, note, nonce, externalId, confirmations, btcTxid, amountUstxOverride,
     });
     res.json(result);
   } catch (err) {
@@ -937,6 +939,134 @@ export const announceEarlyExit: Handler = async (req, res, next) => {
     const externalId = req.body.externalId ? String(req.body.externalId) : undefined;
 
     const result = await apiService.executeAction(vaultId, ActionType.ANNOUNCE_EARLY_EXIT, { note, nonce, externalId });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// GET /:vaultId/stacking/pox5/bond/lock-address
+export const getBondLockAddress: Handler = async (req, res, next) => {
+  try {
+    const vaultId = getVaultId(req);
+    const bondIndex = Number(req.query.bondIndex ?? req.body.bondIndex);
+    if (isNaN(bondIndex)) { res.status(400).json({ error: 'bondIndex is required' }); return; }
+    const result = await apiService.executeAction(vaultId, ActionType.GET_BOND_LOCK_ADDRESS, { bondIndex });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /:vaultId/stacking/pox5/bond/fund-lock
+export const fundBondLockAddress: Handler = async (req, res, next) => {
+  try {
+    const vaultId = getVaultId(req);
+    const bondIndex = Number(req.body.bondIndex);
+    if (isNaN(bondIndex)) { res.status(400).json({ error: 'bondIndex is required' }); return; }
+    const result = await apiService.executeAction(vaultId, ActionType.FUND_BOND_LOCK_ADDRESS, { bondIndex });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /:vaultId/stacking/pox5/bond/unlock
+export const unlockMaturedBond: Handler = async (req, res, next) => {
+  try {
+    const vaultId = getVaultId(req);
+    const destination = String(req.body.destinationBtcAddress || "").trim();
+    if (!destination) {
+      res.status(400).json({ error: "Bad Request: destinationBtcAddress is required" });
+      return;
+    }
+    const feeSats = req.body.feeSats !== undefined ? BigInt(String(req.body.feeSats)) : undefined;
+    const result = await apiService.executeAction(vaultId, ActionType.UNLOCK_BTC, { destinationBtcAddress: destination, feeSats });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /:vaultId/stacking/pox5/bond/renew
+export const renewBond: Handler = async (req, res, next) => {
+  try {
+    const vaultId = getVaultId(req);
+    const nextBondIndexStr = String(req.body.nextBondIndex ?? "");
+    const signerManager = String(req.body.signerManager || "").trim();
+    if (!nextBondIndexStr || !signerManager) {
+      res.status(400).json({ error: "Bad Request: nextBondIndex and signerManager are required" });
+      return;
+    }
+    const nextBondIndex = Number(nextBondIndexStr);
+    if (!Number.isInteger(nextBondIndex) || nextBondIndex < 0) {
+      res.status(400).json({ error: "Bad Request: nextBondIndex must be a non-negative integer" });
+      return;
+    }
+    const feeSats = req.body.feeSats !== undefined ? BigInt(String(req.body.feeSats)) : undefined;
+    const note = req.body.note ? String(req.body.note) : undefined;
+    const nonce = parseOptionalNonce(req.body.nonce);
+    const externalId = req.body.externalId ? String(req.body.externalId) : undefined;
+    const confirmations = req.body.confirmations !== undefined ? Number(req.body.confirmations) : undefined;
+    const result = await apiService.executeAction(vaultId, ActionType.RENEW_BOND, { nextBondIndex, signerManager, feeSats, note, nonce, externalId, confirmations });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /:vaultId/stacking/pox5/rewards/calculate
+export const calculateRewards: Handler = async (req, res, next) => {
+  try {
+    const vaultId = getVaultId(req);
+    const note = req.body.note ? String(req.body.note) : undefined;
+    const nonce = parseOptionalNonce(req.body.nonce);
+    const result = await apiService.executeAction(vaultId, ActionType.CALCULATE_REWARDS, { note, nonce });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /:vaultId/stacking/pox5/rewards/claim
+export const claimRewards: Handler = async (req, res, next) => {
+  try {
+    const vaultId = getVaultId(req);
+    const rawIndices = req.body.bondIndices;
+    if (!Array.isArray(rawIndices) || rawIndices.length === 0) {
+      res.status(400).json({ error: "Bad Request: bondIndices must be a non-empty array of integers" });
+      return;
+    }
+    const bondIndices: number[] = rawIndices.map(Number);
+    if (bondIndices.some(i => !Number.isInteger(i) || i < 0)) {
+      res.status(400).json({ error: "Bad Request: each bondIndex must be a non-negative integer" });
+      return;
+    }
+    const note = req.body.note ? String(req.body.note) : undefined;
+    const nonce = parseOptionalNonce(req.body.nonce);
+    const result = await apiService.executeAction(vaultId, ActionType.CLAIM_REWARDS, { bondIndices, note, nonce });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// GET /:vaultId/stacking/pox5/rewards/earned
+export const getEarnedRewards: Handler = async (req, res, next) => {
+  try {
+    const vaultId = getVaultId(req);
+    const signerManager = String(req.query.signerManager || "").trim();
+    if (!signerManager) {
+      res.status(400).json({ error: "Bad Request: signerManager query param is required" });
+      return;
+    }
+    const bondIndexStr = req.query.bondIndex as string | undefined;
+    const bondIndex = bondIndexStr !== undefined ? Number(bondIndexStr) : undefined;
+    if (bondIndex !== undefined && (!Number.isInteger(bondIndex) || bondIndex < 0)) {
+      res.status(400).json({ error: "Bad Request: bondIndex must be a non-negative integer" });
+      return;
+    }
+    const result = await apiService.executeAction(vaultId, ActionType.GET_EARNED_REWARDS, { signerManager, bondIndex });
     res.json(result);
   } catch (err) {
     next(err);

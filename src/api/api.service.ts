@@ -250,7 +250,7 @@ export class ApiService {
             params.bondIndex,
             params.btcAmountSats,
             params.signerManager,
-            { note: params.note, nonce: params.nonce, externalId: params.externalId, confirmations: params.confirmations },
+            { note: params.note, nonce: params.nonce, externalId: params.externalId, confirmations: params.confirmations, btcTxid: params.btcTxid, amountUstxOverride: params.amountUstxOverride },
           );
           break;
         case ActionType.GET_BOND_POSITION:
@@ -261,6 +261,27 @@ export class ApiService {
           break;
         case ActionType.GET_REQUIREMENTS:
           result = await sdk.getRequirements({ bondIndex: params.bondIndex, btcAmountSats: params.btcAmountSats });
+          break;
+        case ActionType.UNLOCK_BTC:
+          result = await sdk.unlockMaturedBond(params.destinationBtcAddress, { feeSats: params.feeSats });
+          break;
+        case ActionType.RENEW_BOND:
+          result = await sdk.renewBond(params.nextBondIndex, params.signerManager, { feeSats: params.feeSats, note: params.note, nonce: params.nonce, externalId: params.externalId, confirmations: params.confirmations });
+          break;
+        case ActionType.CALCULATE_REWARDS:
+          result = await sdk.calculateRewards({ note: params.note, nonce: params.nonce });
+          break;
+        case ActionType.CLAIM_REWARDS:
+          result = await sdk.claimRewards(params.bondIndices, { note: params.note, nonce: params.nonce });
+          break;
+        case ActionType.GET_EARNED_REWARDS:
+          result = await sdk.getEarnedRewards(params.signerManager, params.bondIndex);
+          break;
+        case ActionType.GET_BOND_LOCK_ADDRESS:
+          result = await sdk.getBondLockAddress(params.bondIndex);
+          break;
+        case ActionType.FUND_BOND_LOCK_ADDRESS:
+          result = await sdk.fundBondLockAddress(params.bondIndex);
           break;
         default:
           throw new Error(
