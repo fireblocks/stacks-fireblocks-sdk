@@ -898,6 +898,9 @@ router.post("/:vaultId/stacking/pox5/bond/fund-lock", validateVaultId, controlle
  *               feeSats:
  *                 type: integer
  *                 description: Optional fee in sats (default 500).
+ *               bondIndex:
+ *                 type: integer
+ *                 description: Bond index to unlock. Required when the bond membership has already expired on-chain (bond cycle closed but BTC still at locking address).
  *     responses:
  *       200:
  *         description: BTC unlocked successfully, returns btcTxid.

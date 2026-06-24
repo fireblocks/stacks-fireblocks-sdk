@@ -74,7 +74,9 @@ import {
 } from "./utils/helpers";
 import {
   Cl,
+  ClarityType,
   createMessageSignature,
+  fetchCallReadOnlyFunction,
   hexToCV,
   Pc,
   PostConditionMode,
@@ -1950,15 +1952,33 @@ export class StacksSDK {
       console.log(`createBond: expecting BTC output to lock address ${metadata.lockAddress}`);
 
       // Step 6 — cross-check script vs contract (prevents funding an unverifiable address)
-      const onchainScript = await fetchConstructLockupOutputScript({
-        stxAddress: this.address,
-        unlockHeight: metadata.unlockHeight,
-        unlockBytes: metadata.unlockBytes,
-        earlyUnlockBytes: bond.earlyUnlockBytes,
-        network: this.pox5Network,
-      });
-      if (bytesToHex(metadata.outputScript) !== bytesToHex(onchainScript)) {
-        return { success: false, error: 'Lockup script mismatch between SDK and contract — NOT funding BTC' };
+      // The library's fetchConstructLockupOutputScript doesn't handle (ok (buff N)) returns —
+      // call the contract directly and unwrap the ResponseOk wrapper ourselves.
+      {
+        const bootAddr = (this.pox5Network as any)?.bootAddress ?? (this.testnet ? 'ST000000000000000000002AMW42H' : 'SP000000000000000000002Q6VF78');
+        const buf = (v: Uint8Array | string) => typeof v === 'string' ? Cl.bufferFromHex(v) : Cl.buffer(v);
+        const rawResult = await fetchCallReadOnlyFunction({
+          contractAddress: bootAddr,
+          contractName: 'pox-5',
+          functionName: 'construct-lockup-output-script',
+          functionArgs: [
+            Cl.address(this.address!),
+            Cl.uint(metadata.unlockHeight),
+            buf(metadata.unlockBytes),
+            buf(bond.earlyUnlockBytes),
+          ],
+          senderAddress: bootAddr,
+          network: this.pox5Network,
+        });
+        if (rawResult.type === ClarityType.ResponseErr) {
+          return { success: false, error: `construct-lockup-output-script contract error: ${Cl.prettyPrint((rawResult as any).value)}` };
+        }
+        // Unwrap (ok (buff N)) or plain (buff N)
+        const inner = rawResult.type === ClarityType.ResponseOk ? (rawResult as any).value : rawResult;
+        const onchainScriptHex: string = inner.value;
+        if (bytesToHex(metadata.outputScript) !== onchainScriptHex.replace(/^0x/, '')) {
+          return { success: false, error: `Lockup script mismatch — SDK: ${bytesToHex(metadata.outputScript)}, contract: ${onchainScriptHex}` };
+        }
       }
 
       // Persist unlockBytes BEFORE funding (losing this strands the BTC)
@@ -1990,6 +2010,12 @@ export class StacksSDK {
         fetch(`${this.esploraBase()}/tx/${btcTxid}/merkle-proof`).then(r => r.json()),
         fetch(`${this.esploraBase()}/block/${blockHash}`).then(r => r.json()),
       ]);
+      console.log('[createBond] SPV data types:', {
+        txHex: typeof txHex, txHexPreview: String(txHex).slice(0, 80),
+        headerHex: typeof headerHex, headerHexPreview: String(headerHex).slice(0, 40),
+        merkleProof: JSON.stringify(merkleProof).slice(0, 200),
+        blockMeta: JSON.stringify(blockMeta).slice(0, 200),
+      });
       const lockupProof = {
         ...buildLockProof({
           txHex,
@@ -2467,8 +2493,8 @@ export class StacksSDK {
     witnessScript: Uint8Array,
     amountSats: bigint,
   ): Uint8Array => {
-    const preimage = tx.preimageWitnessV0(inputIndex, witnessScript, btc.SigHash.ALL, amountSats);
-    return sha256(sha256(preimage));
+    // preimageWitnessV0 already returns SHA256d(BIP143 preimage) — do not hash again
+    return tx.preimageWitnessV0(inputIndex, witnessScript, btc.SigHash.ALL, amountSats);
   };
 
   private setP2wshWitness = (
@@ -2481,25 +2507,30 @@ export class StacksSDK {
 
   // ─── §5: deriveLock (private) ─────────────────────────────────────────────
 
-  private deriveLock = async (address?: string): Promise<DerivedLock | null> => {
+  private deriveLock = async (address?: string, bondIndexOverride?: number): Promise<DerivedLock | null> => {
     const addr = address ?? this.address!;
     const [pox, membership] = await Promise.all([
       fetchPox5Info({ network: this.pox5Network }),
       fetchBondMembership({ address: addr, network: this.pox5Network }).catch(() => null),
     ]);
-    if (!membership || !membership.isL1Lock) return null;
 
-    let unlockBytes = await this.unlockBytesStore.load(addr, membership.bondIndex);
+    const bondIndex = membership?.bondIndex ?? bondIndexOverride;
+    if (bondIndex === undefined) return null;
+
+    // Active membership must be L1-locked unless we're using a bondIndex override
+    // (override is used when membership has expired after the bond matured)
+    if (membership && !membership.isL1Lock) return null;
+
+    let unlockBytes = await this.unlockBytesStore.load(addr, bondIndex);
     if (!unlockBytes) {
-      // Rederive from the vault's signing key (default tail = <pubkey> OP_CHECKSIG)
       unlockBytes = buildUnlockScript(hexToBytes(this.publicKey!));
     }
 
-    const bond = await fetchBond({ bondIndex: membership.bondIndex, network: this.pox5Network });
-    if (!bond) throw new Error(`Bond ${membership.bondIndex} not found`);
+    const bond = await fetchBond({ bondIndex, network: this.pox5Network });
+    if (!bond) throw new Error(`Bond ${bondIndex} not found`);
 
     const meta = buildRegisterMetadata({
-      bondIndex: membership.bondIndex,
+      bondIndex,
       poxInfo: pox,
       bitcoinPublicKey: this.publicKey!,
       stxAddress: addr,
@@ -2508,14 +2539,14 @@ export class StacksSDK {
     });
 
     return {
-      bondIndex: membership.bondIndex,
+      bondIndex,
       unlockHeight: meta.unlockHeight,
       lockScript: meta.lockScript,
       lockingAddress: meta.lockAddress,
       earlyUnlockBytes: typeof bond.earlyUnlockBytes === 'string' ? hexToBytes(bond.earlyUnlockBytes) : bond.earlyUnlockBytes,
       unlockBytes: meta.unlockBytes,
-      amountSats: membership.amountSats,
-      isL1Lock: membership.isL1Lock,
+      amountSats: membership?.amountSats ?? BigInt(0),
+      isL1Lock: membership?.isL1Lock ?? true,
     };
   };
 
@@ -2538,44 +2569,67 @@ export class StacksSDK {
    */
   public unlockMaturedBond = async (
     destinationBtcAddress: string,
-    opts?: { feeSats?: bigint },
+    opts?: { feeSats?: bigint; bondIndex?: number },
   ): Promise<UnlockBtcResponse> => {
     try {
-      const lock = await this.deriveLock();
+      const lock = await this.deriveLock(undefined, opts?.bondIndex);
+      console.log('[unlockMaturedBond] deriveLock:', lock ? {
+        bondIndex: lock.bondIndex,
+        unlockHeight: lock.unlockHeight,
+        lockingAddress: lock.lockingAddress,
+        amountSats: lock.amountSats.toString(),
+        isL1Lock: lock.isL1Lock,
+        lockScriptHex: bytesToHex(lock.lockScript),
+      } : null);
       if (!lock) return { success: false, error: 'No L1-locked bond membership found' };
 
       const tipHeight = await fetch(`${this.esploraBase()}/blocks/tip/height`)
         .then(r => r.text()).then(Number);
+      console.log('[unlockMaturedBond] BTC tip:', tipHeight, '| unlock height:', lock.unlockHeight, '| matured:', tipHeight >= lock.unlockHeight);
       if (tipHeight < lock.unlockHeight) {
         return { success: false, error: `Bond not matured: BTC tip ${tipHeight} < unlock height ${lock.unlockHeight}` };
       }
 
-      const utxo = await this.findLockUtxo(lock.lockingAddress, lock.amountSats);
+      const allUtxos: any[] = await fetch(`${this.esploraBase()}/address/${lock.lockingAddress}/utxo`)
+        .then(r => r.json()).catch(() => []);
+      console.log('[unlockMaturedBond] UTXOs at locking address:', JSON.stringify(allUtxos));
+
+      const utxo = allUtxos.find((u: any) => BigInt(u.value) === lock.amountSats) ?? allUtxos[0] ?? null;
+      console.log('[unlockMaturedBond] selected UTXO:', utxo ? { txid: utxo.txid, vout: utxo.vout, value: utxo.value } : null);
+      console.log('[unlockMaturedBond] amountSats match:', utxo ? BigInt(utxo.value) === lock.amountSats : false, `(utxo=${utxo?.value}, lock=${lock.amountSats.toString()})`);
       if (!utxo) return { success: false, error: 'Lock UTXO not found or already spent' };
 
       const feeSats = opts?.feeSats ?? BigInt(500);
-      const outputAmount = lock.amountSats - feeSats;
+      const actualUtxoSats = BigInt(utxo.value);
+      const outputAmount = actualUtxoSats - feeSats;
+      console.log('[unlockMaturedBond] feeSats:', feeSats.toString(), '| outputAmount:', outputAmount.toString());
       if (outputAmount <= BigInt(0)) return { success: false, error: 'Fee exceeds locked amount' };
 
       const p2wshScript = this.p2wshOutputScript(lock.lockScript);
+      console.log('[unlockMaturedBond] p2wshScript:', bytesToHex(p2wshScript));
 
       const tx = new btc.Transaction({ lockTime: lock.unlockHeight });
       tx.addInput({
         txid: utxo.txid,
         index: utxo.vout,
-        sequence: 0xfffffffe, // non-final — lockTime enforced
-        witnessUtxo: { script: p2wshScript, amount: lock.amountSats },
+        sequence: 0xfffffffe,
+        witnessUtxo: { script: p2wshScript, amount: actualUtxoSats },
         witnessScript: lock.lockScript,
       });
       tx.addOutputAddress(destinationBtcAddress, outputAmount, this.btcNetwork);
 
-      const sighash = this.btcSegwitSighash(tx, 0, lock.lockScript, lock.amountSats);
+      const sighash = this.btcSegwitSighash(tx, 0, lock.lockScript, actualUtxoSats);
+      console.log('[unlockMaturedBond] sighash:', bytesToHex(sighash));
       const stakerSig = await this.signBtcSighash(sighash);
+      console.log('[unlockMaturedBond] stakerSig (DER):', bytesToHex(stakerSig));
 
-      // OP_IF (matured) branch witness: [ <stakerSig>, <1=TRUE>, <witnessScript> ]
       this.setP2wshWitness(tx, 0, [stakerSig, new Uint8Array([1]), lock.lockScript]);
 
-      const btcTxid = await this.broadcastBtc(bytesToHex(tx.extract()));
+      const rawHex = bytesToHex(tx.extract());
+      console.log('[unlockMaturedBond] raw tx hex:', rawHex);
+
+      const btcTxid = await this.broadcastBtc(rawHex);
+      console.log('[unlockMaturedBond] broadcast success, txid:', btcTxid);
       return { success: true, btcTxid };
     } catch (error) {
       return { success: false, error: `Failed to unlock matured bond: ${formatErrorMessage(error)}` };

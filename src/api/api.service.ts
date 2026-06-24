@@ -263,7 +263,7 @@ export class ApiService {
           result = await sdk.getRequirements({ bondIndex: params.bondIndex, btcAmountSats: params.btcAmountSats });
           break;
         case ActionType.UNLOCK_BTC:
-          result = await sdk.unlockMaturedBond(params.destinationBtcAddress, { feeSats: params.feeSats });
+          result = await sdk.unlockMaturedBond(params.destinationBtcAddress, { feeSats: params.feeSats, bondIndex: params.bondIndex });
           break;
         case ActionType.RENEW_BOND:
           result = await sdk.renewBond(params.nextBondIndex, params.signerManager, { feeSats: params.feeSats, note: params.note, nonce: params.nonce, externalId: params.externalId, confirmations: params.confirmations });

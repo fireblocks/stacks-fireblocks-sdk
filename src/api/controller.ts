@@ -981,7 +981,8 @@ export const unlockMaturedBond: Handler = async (req, res, next) => {
       return;
     }
     const feeSats = req.body.feeSats !== undefined ? BigInt(String(req.body.feeSats)) : undefined;
-    const result = await apiService.executeAction(vaultId, ActionType.UNLOCK_BTC, { destinationBtcAddress: destination, feeSats });
+    const bondIndex = req.body.bondIndex !== undefined ? Number(req.body.bondIndex) : undefined;
+    const result = await apiService.executeAction(vaultId, ActionType.UNLOCK_BTC, { destinationBtcAddress: destination, feeSats, bondIndex });
     res.json(result);
   } catch (err) {
     next(err);
