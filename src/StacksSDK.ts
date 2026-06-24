@@ -996,6 +996,7 @@ export class StacksSDK {
         fee: BigInt(10000),
         nonce: resolvedNonce,
         network: this.pox5Network,
+        postConditionMode: 'allow',
       });
 
       const result = await this.pox5SignAndBroadcast(tx, note || `stake ${amountStx} STX for ${numCycles} cycles`, externalId);
@@ -1054,6 +1055,7 @@ export class StacksSDK {
         fee: BigInt(10000),
         nonce: resolvedNonce,
         network: this.pox5Network,
+        postConditionMode: 'allow',
       });
 
       const result = await this.pox5SignAndBroadcast(tx, note || "update stake position", externalId);
@@ -1108,6 +1110,7 @@ export class StacksSDK {
         fee: BigInt(10000),
         nonce: resolvedNonce,
         network: this.pox5Network,
+        postConditionMode: 'allow',
       });
 
       const result = await this.pox5SignAndBroadcast(tx, note || "unstake STX", externalId);
@@ -1321,6 +1324,7 @@ export class StacksSDK {
         fee: BigInt(10000),
         nonce: resolvedNonce,
         network: this.pox5Network,
+        postConditionMode: 'allow',
       });
 
       const result = await this.pox5SignAndBroadcast(tx, note || "revoke signer grant", externalId);
