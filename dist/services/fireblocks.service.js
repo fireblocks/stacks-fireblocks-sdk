@@ -153,6 +153,29 @@ class FireblocksService {
          * @returns A promise that resolves to the signature when the transaction is successfully signed.
          * @throws {Error} If any parameter is invalid or if the transaction fails.
          **/
+        this.createBitcoinTransaction = async (destination, amountSats, vaultAccountId, note, externalId) => {
+            const assetId = this.testnet ? 'BTC_TEST' : 'BTC';
+            const amountBtc = (Number(amountSats) / 1e8).toFixed(8);
+            const response = await this.fireblocksSDK.transactions.createTransaction({
+                transactionRequest: {
+                    operation: ts_sdk_1.TransactionOperation.Transfer,
+                    assetId,
+                    source: { type: ts_sdk_1.TransferPeerPathType.VaultAccount, id: String(vaultAccountId) },
+                    destination: { type: ts_sdk_1.TransferPeerPathType.OneTimeAddress, oneTimeAddress: { address: destination } },
+                    amount: amountBtc,
+                    note: note || 'BTC bond lock',
+                    externalTxId: externalId,
+                },
+            });
+            const fireblocksId = response.data.id;
+            if (!fireblocksId)
+                throw new Error('Fireblocks BTC transaction creation returned no ID');
+            const completedTx = await this.fireblocksSigner.getTxStatus(fireblocksId);
+            const btcTxid = completedTx.txHash;
+            if (!btcTxid)
+                throw new Error(`BTC transaction ${fireblocksId} completed but has no txHash`);
+            return { fireblocksId, btcTxid };
+        };
         this.signTransaction = async (content, vaultAccountId, txNote, externalId) => {
             try {
                 const signature = await this.fireblocksSigner.rawSign(content, vaultAccountId, txNote || "", this.testnet, externalId);

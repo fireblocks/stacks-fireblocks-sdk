@@ -93,6 +93,66 @@ class ApiService {
                     case types_1.ActionType.GET_ACCOUNT_NONCE:
                         result = await sdk.getAccountNonce();
                         break;
+                    case types_1.ActionType.STAKE:
+                        result = await sdk.stake(params.amount, params.numCycles, params.signerManager, params.note, params.nonce, params.externalId);
+                        break;
+                    case types_1.ActionType.UPDATE_STAKE:
+                        result = await sdk.updateStake(params.signerManager, params.oldSignerManager, params.cyclesToExtend, params.increaseBy, params.note, params.nonce, params.externalId);
+                        break;
+                    case types_1.ActionType.UNSTAKE:
+                        result = await sdk.unstake(params.oldSignerManager, params.note, params.nonce, params.externalId);
+                        break;
+                    case types_1.ActionType.GRANT_SIGNER_KEY:
+                        result = await sdk.grantSignerKey(params.signerManager, params.authId, params.note, params.nonce, params.externalId);
+                        break;
+                    case types_1.ActionType.REVOKE_SIGNER_GRANT:
+                        result = await sdk.revokeSignerGrant(params.signerManager, params.signerKey, params.note, params.nonce, params.externalId);
+                        break;
+                    case types_1.ActionType.GET_STAKER_INFO:
+                        result = await sdk.getStakerInfo();
+                        break;
+                    case types_1.ActionType.GET_POX5_INFO:
+                        result = await sdk.getPox5Info();
+                        break;
+                    case types_1.ActionType.VERIFY_SIGNER_GRANT:
+                        result = await sdk.verifySignerGrant(params.signerManager, params.txid);
+                        break;
+                    case types_1.ActionType.CREATE_BOND:
+                        result = await sdk.createBond(params.bondIndex, params.btcAmountSats, params.signerManager, { note: params.note, nonce: params.nonce, externalId: params.externalId, confirmations: params.confirmations, btcTxid: params.btcTxid, amountUstxOverride: params.amountUstxOverride });
+                        break;
+                    case types_1.ActionType.GET_BOND_POSITION:
+                        result = await sdk.getBondPosition();
+                        break;
+                    case types_1.ActionType.ANNOUNCE_EARLY_EXIT:
+                        result = await sdk.announceEarlyExit({ note: params.note, nonce: params.nonce, externalId: params.externalId });
+                        break;
+                    case types_1.ActionType.GET_REQUIREMENTS:
+                        result = await sdk.getRequirements({ bondIndex: params.bondIndex, btcAmountSats: params.btcAmountSats });
+                        break;
+                    case types_1.ActionType.UNLOCK_BTC:
+                        result = await sdk.unlockMaturedBond(params.destinationBtcAddress, { feeSats: params.feeSats, bondIndex: params.bondIndex });
+                        break;
+                    case types_1.ActionType.RENEW_BOND:
+                        result = await sdk.renewBond(params.nextBondIndex, params.signerManager, { feeSats: params.feeSats, note: params.note, nonce: params.nonce, externalId: params.externalId, confirmations: params.confirmations });
+                        break;
+                    case types_1.ActionType.CALCULATE_REWARDS:
+                        result = await sdk.calculateRewards({ note: params.note, nonce: params.nonce });
+                        break;
+                    case types_1.ActionType.CLAIM_REWARDS:
+                        result = await sdk.claimRewards(params.bondIndices, { note: params.note, nonce: params.nonce });
+                        break;
+                    case types_1.ActionType.GET_EARNED_REWARDS:
+                        result = await sdk.getEarnedRewards(params.signerManager, params.bondIndex);
+                        break;
+                    case types_1.ActionType.GET_BOND_LOCK_ADDRESS:
+                        result = await sdk.getBondLockAddress(params.bondIndex);
+                        break;
+                    case types_1.ActionType.FUND_BOND_LOCK_ADDRESS:
+                        result = await sdk.fundBondLockAddress(params.bondIndex);
+                        break;
+                    case types_1.ActionType.FUND_VAULT:
+                        result = await sdk.fundVault(params.staking);
+                        break;
                     default:
                         throw new Error(`InvalidType :
             Unknown action type: ${actionType}`);

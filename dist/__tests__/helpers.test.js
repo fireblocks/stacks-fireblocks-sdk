@@ -93,13 +93,37 @@ describe("microToToken", () => {
     });
 });
 describe("concatSignature", () => {
-    it("concatenates signature with recovery id 0", () => {
-        const sig = "a".repeat(128);
+    // Valid r value (must be 0 < r < n) - simple small value
+    const validR = "0000000000000000000000000000000000000000000000000000000000000002";
+    // Valid low-S value (s < n/2 where n/2 ≈ 7FFFFFFF...5D576E73...)
+    const lowS = "0000000000000000000000000000000000000000000000000000000000000001";
+    // Valid high-S value (s > n/2)
+    const highS = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364140";
+    it("concatenates low-S signature with recovery id 0", () => {
+        const sig = validR + lowS;
         expect((0, helpers_1.concatSignature)(sig, 0)).toBe("00" + sig);
     });
-    it("concatenates signature with recovery id 1", () => {
-        const sig = "b".repeat(128);
+    it("concatenates low-S signature with recovery id 1", () => {
+        const sig = validR + lowS;
         expect((0, helpers_1.concatSignature)(sig, 1)).toBe("01" + sig);
+    });
+    it("normalizes high-S signature and flips v", () => {
+        const sig = validR + highS;
+        const result = (0, helpers_1.concatSignature)(sig, 0);
+        // Should flip v from 0 to 1 and normalize S
+        expect(result.substring(0, 2)).toBe("01");
+        expect(result.length).toBe(130); // 2 (v) + 128 (r+s)
+        // The normalized s should be different from highS
+        expect(result.substring(66)).not.toBe(highS.toLowerCase());
+    });
+    it("throws for invalid recovery id", () => {
+        const sig = validR + lowS;
+        expect(() => (0, helpers_1.concatSignature)(sig, 2)).toThrow("Invalid recovery id");
+        expect(() => (0, helpers_1.concatSignature)(sig, -1)).toThrow("Invalid recovery id");
+    });
+    it("throws for invalid signature length", () => {
+        expect(() => (0, helpers_1.concatSignature)("aa", 0)).toThrow("Invalid signature");
+        expect(() => (0, helpers_1.concatSignature)("a".repeat(127), 0)).toThrow("Invalid signature");
     });
 });
 describe("parseAssetId", () => {
@@ -123,8 +147,8 @@ describe("untilBurnHeightForCycles", () => {
     };
     it("calculates burn height for given cycles", () => {
         const result = (0, helpers_1.untilBurnHeightForCycles)(1, mockPoxInfo);
-        // P=1000, cycleLen=2100, result = 1000 + 1*2100 - 1 = 3099
-        expect(result).toBe(3099);
+        // P=1000, cycleLen=2100, result = 1000 + 1*2100 = 3100
+        expect(result).toBe(3100);
     });
     it("throws for invalid cycle counts", () => {
         expect(() => (0, helpers_1.untilBurnHeightForCycles)(0, mockPoxInfo)).toThrow();
@@ -133,7 +157,7 @@ describe("untilBurnHeightForCycles", () => {
     });
     it("handles wrapped poxInfo with data property", () => {
         const wrapped = { data: mockPoxInfo };
-        expect((0, helpers_1.untilBurnHeightForCycles)(1, wrapped)).toBe(3099);
+        expect((0, helpers_1.untilBurnHeightForCycles)(1, wrapped)).toBe(3100);
     });
 });
 describe("assertResultSuccess", () => {

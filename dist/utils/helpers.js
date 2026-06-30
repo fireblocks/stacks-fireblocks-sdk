@@ -212,19 +212,24 @@ function safeStringify(obj) {
 }
 /**
  * Returns true if we're in a "safe" window to submit a stacking request now.
+ * Accepts both PoX-4 (snake_case) and PoX-5 (camelCase) PoxInfo shapes.
  */
 function isSafeToSubmit(poxInput, safetyBuffer = constants_1.stacks_info.stacking.solo.safetyBlocks) {
-    var _a;
-    const pox = (_a = poxInput.data) !== null && _a !== void 0 ? _a : poxInput;
-    const current = Number(pox.current_burnchain_block_height);
-    const first = Number(pox.first_burnchain_block_height);
-    const rewardLen = Number(pox.reward_phase_block_length);
-    const prepLen = Number(pox.prepare_phase_block_length);
+    var _a, _b, _c, _d;
+    const raw = (_a = poxInput.data) !== null && _a !== void 0 ? _a : poxInput;
+    const current = Number((_b = raw.current_burnchain_block_height) !== null && _b !== void 0 ? _b : raw.currentBurnchainBlockHeight);
+    const first = Number((_c = raw.first_burnchain_block_height) !== null && _c !== void 0 ? _c : raw.firstBurnchainBlockHeight);
+    const prepLen = Number((_d = raw.prepare_phase_block_length) !== null && _d !== void 0 ? _d : raw.prepareCycleLength);
+    // PoX-4: reward_phase_block_length is the reward portion only.
+    // PoX-5: rewardCycleLength is the full cycle (reward + prepare), so subtract prepLen.
+    const rewardLen = raw.reward_phase_block_length !== undefined
+        ? Number(raw.reward_phase_block_length)
+        : Number(raw.rewardCycleLength) - prepLen;
     const cycleLen = rewardLen + prepLen;
     const rewardIndex = (current - first) % cycleLen; // position inside cycle
-    const safeEnd = cycleLen - prepLen; // boundary where prepare starts
+    const safeEnd = cycleLen - prepLen; // block where prepare starts
     const blocksUntilBoundary = safeEnd - rewardIndex;
-    const safe = blocksUntilBoundary > safetyBuffer; // must be > buffer
+    const safe = blocksUntilBoundary > safetyBuffer;
     return { safe, blocksUntilBoundary, rewardIndex };
 }
 // Convert a BTC address to a PoX tuple (version and hashbytes).

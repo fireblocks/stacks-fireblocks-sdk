@@ -33,7 +33,7 @@ class StacksService {
                 return { contractAddress, contractName };
             }
             // Fallback to static config
-            return this.network === network_1.STACKS_TESTNET ? constants_1.poxInfo.testnet : constants_1.poxInfo.mainnet;
+            return this.testnet ? constants_1.poxInfo.testnet : constants_1.poxInfo.mainnet;
         };
         /**
          * Formats a compressed secp256k1 public key hex into a Stacks address.
@@ -48,8 +48,7 @@ class StacksService {
                 if (!(0, helpers_1.isCompressedSecp256k1PubKeyHex)(pubKey)) {
                     throw new Error("Invalid compressed secp256k1 public key hex format");
                 }
-                const isTestnet = this.network === network_1.STACKS_TESTNET;
-                const address = (0, transactions_1.publicKeyToAddress)(pubKey, isTestnet ? "testnet" : "mainnet");
+                const address = (0, transactions_1.publicKeyToAddress)(pubKey, this.network);
                 return address;
             }
             catch (error) {
@@ -220,7 +219,7 @@ class StacksService {
          */
         this.checkDelegationStatus = async (address) => {
             try {
-                if (!(0, helpers_1.validateAddress)(address, this.network === network_1.STACKS_TESTNET)) {
+                if (!(0, helpers_1.validateAddress)(address, this.testnet)) {
                     throw new Error("Invalid Stacks address");
                 }
                 const { contractAddress: poxAddr, contractName: poxName } = await this.getPoxContractInfo();
@@ -254,7 +253,7 @@ class StacksService {
          */
         this.buildUnsignedTransaction = async (sender, senderPublicKey, recipient, amount, type = types_1.TransactionType.STX, token, customTokenContractAddress, customTokenContractName, customTokenAssetName, nonce, fee, memo) => {
             try {
-                if (!(0, helpers_1.validateAddress)(recipient, this.network === network_1.STACKS_TESTNET)) {
+                if (!(0, helpers_1.validateAddress)(recipient, this.testnet)) {
                     throw new Error("Invalid recipient address");
                 }
                 if (!(0, helpers_1.isCompressedSecp256k1PubKeyHex)(senderPublicKey)) {
@@ -269,7 +268,7 @@ class StacksService {
                         throw new Error(`Custom token contract address, name, and asset name must be provided for CUSTOM token type`);
                     }
                 }
-                const tokenInfo = (0, helpers_1.getTokenInfo)(token, this.network === network_1.STACKS_TESTNET ? "testnet" : "mainnet");
+                const tokenInfo = (0, helpers_1.getTokenInfo)(token, this.testnet ? "testnet" : "mainnet");
                 if (type === types_1.TransactionType.FungibleToken && token !== types_1.TokenType.CUSTOM && !tokenInfo) {
                     throw new Error(`Token ${token} is not supported on ${this.network}`);
                 }
@@ -297,8 +296,8 @@ class StacksService {
                         ], publicKey: senderPublicKey, network: this.network, postConditionMode: transactions_1.PostConditionMode.Deny, postConditions: [postCondition] }, (nonce !== undefined ? { nonce } : {})), (fee !== undefined ? { fee } : {})));
                 }
                 else {
-                    unsignedTx = await (0, transactions_1.makeUnsignedSTXTokenTransfer)(Object.assign(Object.assign(Object.assign({ recipient,
-                        amount, publicKey: senderPublicKey, network: this.network }, (nonce !== undefined ? { nonce } : {})), (fee !== undefined ? { fee } : {})), (memo !== undefined ? { memo } : {})));
+                    unsignedTx = await (0, transactions_1.makeUnsignedSTXTokenTransfer)(Object.assign(Object.assign(Object.assign(Object.assign({ recipient,
+                        amount, publicKey: senderPublicKey, network: this.network }, (nonce !== undefined ? { nonce } : {})), (fee !== undefined ? { fee } : {})), (memo !== undefined ? { memo } : {})), (memo !== undefined ? { memo } : {})));
                 }
                 return unsignedTx;
             }
@@ -397,10 +396,11 @@ class StacksService {
          * @param signedTransaction - The signed Stacks transaction to broadcast.
          * @returns - The result of the broadcast operation.
          */
-        this.broadcastTransaction = async (signedTransaction) => {
+        this.broadcastTransaction = async (signedTransaction, network) => {
             try {
                 const result = await (0, transactions_1.broadcastTransaction)({
                     transaction: signedTransaction,
+                    network: network !== null && network !== void 0 ? network : this.network,
                 });
                 return result;
             }
@@ -487,7 +487,7 @@ class StacksService {
          * @returns An array of parsed transactions for this page.
          */
         this.getTransactionHistory = async (address, limit = constants_1.helperConstants.stacks_api_page_size, offset = constants_1.pagination_defaults.page) => {
-            if (!(0, helpers_1.validateAddress)(address, this.network === network_1.STACKS_TESTNET)) {
+            if (!(0, helpers_1.validateAddress)(address, this.testnet)) {
                 throw new Error("Invalid Stacks address");
             }
             try {
@@ -512,7 +512,7 @@ class StacksService {
          * @returns An array of parsed pending transactions for this page.
          */
         this.getMempoolTransactions = async (address, limit = constants_1.helperConstants.stacks_api_page_size, offset = constants_1.pagination_defaults.page) => {
-            if (!(0, helpers_1.validateAddress)(address, this.network === network_1.STACKS_TESTNET)) {
+            if (!(0, helpers_1.validateAddress)(address, this.testnet)) {
                 throw new Error("Invalid Stacks address");
             }
             try {
@@ -555,7 +555,7 @@ class StacksService {
          */
         this.delegateStx = async (senderPublicKey, delegateTo, amount, lockPeriod, nonce, poolContractName) => {
             try {
-                if (!(0, helpers_1.validateAddress)(delegateTo, this.network === network_1.STACKS_TESTNET)) {
+                if (!(0, helpers_1.validateAddress)(delegateTo, this.testnet)) {
                     throw new Error("Invalid delegateTo address");
                 }
                 if (!(0, helpers_1.isCompressedSecp256k1PubKeyHex)(senderPublicKey)) {
@@ -569,6 +569,7 @@ class StacksService {
                 const until_burn_ht = await (0, helpers_1.untilBurnHeightForCycles)(lockPeriod, poxResponse);
                 const serializedContractCall = await this.serializeContractCall(senderPublicKey, poxAddr, poxName, "delegate-stx", [
                     (0, transactions_1.uintCV)(amount),
+                    poolContractName ? (0, transactions_1.contractPrincipalCV)(delegateTo, poolContractName) : (0, transactions_1.standardPrincipalCV)(delegateTo),
                     poolContractName ? (0, transactions_1.contractPrincipalCV)(delegateTo, poolContractName) : (0, transactions_1.standardPrincipalCV)(delegateTo),
                     (0, transactions_1.someCV)((0, transactions_1.uintCV)(until_burn_ht)),
                     (0, transactions_1.noneCV)(),
@@ -609,7 +610,7 @@ class StacksService {
          */
         this.allowPoxContractCaller = async (senderPublicKey, poolAddress, poolContractName, nonce) => {
             try {
-                if (!(0, helpers_1.validateAddress)(poolAddress, this.network === network_1.STACKS_TESTNET)) {
+                if (!(0, helpers_1.validateAddress)(poolAddress, this.testnet)) {
                     throw new Error("Invalid pool address");
                 }
                 if (!(0, helpers_1.isCompressedSecp256k1PubKeyHex)(senderPublicKey)) {
@@ -820,6 +821,7 @@ class StacksService {
                 throw new Error(`Failed to fetch contract call history: ${(0, errorHandling_1.formatErrorMessage)(error)}`);
             }
         };
+        this.testnet = testnet;
         this.axiosClient = axios_1.default.create();
         if (hiroApiKey) {
             this.axiosClient.defaults.headers['x-hiro-api-key'] = hiroApiKey;
@@ -828,6 +830,12 @@ class StacksService {
             ? constants_1.api_constants.stacks_testnet_rpc
             : constants_1.api_constants.stacks_mainnet_rpc;
         this.network = testnet ? network_1.STACKS_TESTNET : network_1.STACKS_MAINNET;
+        const baseUrl = process.env.STACKS_API_URL
+            || (testnet ? constants_1.api_constants.stacks_testnet_rpc : constants_1.api_constants.stacks_mainnet_rpc);
+        this.stackBaseUrl = baseUrl;
+        const defaultNetwork = testnet ? network_1.STACKS_TESTNET : network_1.STACKS_MAINNET;
+        const isPrivate1 = baseUrl.includes('private-1.hiro.so');
+        this.network = Object.assign(Object.assign(Object.assign({}, defaultNetwork), (isPrivate1 ? { chainId: 256, magicBytes: 'id' } : {})), { client: { baseUrl } });
     }
 }
 exports.StacksService = StacksService;

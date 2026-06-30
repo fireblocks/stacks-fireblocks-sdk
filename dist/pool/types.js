@@ -29,4 +29,26 @@ var ActionType;
     ActionType["REPLACE_TRANSACTION"] = "replaceTransaction";
     ActionType["GET_ACCOUNT_NONCE"] = "getAccountNonce";
     ActionType["ESTIMATE_FEE"] = "estimateFee";
+    // PoX-5 Solo STX
+    ActionType["STAKE"] = "stake";
+    ActionType["UPDATE_STAKE"] = "updateStake";
+    ActionType["UNSTAKE"] = "unstake";
+    ActionType["GRANT_SIGNER_KEY"] = "grantSignerKey";
+    ActionType["REVOKE_SIGNER_GRANT"] = "revokeSignerGrant";
+    ActionType["GET_STAKER_INFO"] = "getStakerInfo";
+    ActionType["GET_POX5_INFO"] = "getPox5Info";
+    ActionType["VERIFY_SIGNER_GRANT"] = "verifySignerGrant";
+    // PoX-5 BTC Bonds
+    ActionType["CREATE_BOND"] = "createBond";
+    ActionType["GET_BOND_POSITION"] = "getBondPosition";
+    ActionType["ANNOUNCE_EARLY_EXIT"] = "announceEarlyExit";
+    ActionType["GET_REQUIREMENTS"] = "getRequirements";
+    ActionType["UNLOCK_BTC"] = "unlockMaturedBond";
+    ActionType["RENEW_BOND"] = "renewBond";
+    ActionType["CALCULATE_REWARDS"] = "calculateRewards";
+    ActionType["CLAIM_REWARDS"] = "claimRewards";
+    ActionType["GET_EARNED_REWARDS"] = "getEarnedRewards";
+    ActionType["GET_BOND_LOCK_ADDRESS"] = "getBondLockAddress";
+    ActionType["FUND_BOND_LOCK_ADDRESS"] = "fundBondLockAddress";
+    ActionType["FUND_VAULT"] = "fundVault";
 })(ActionType || (exports.ActionType = ActionType = {}));
