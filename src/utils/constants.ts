@@ -251,3 +251,29 @@ export const POX4_ERRORS: Record<number, { name: string; message: string }> = {
     message: "An unreachable code path was hit (internal error).",
   },
 };
+
+export const BTC_ESPLORA = {
+  mainnet: 'https://mempool.space/api',
+  testnet: 'https://mempool.bitcoin.private-1.hiro.so/api',
+};
+
+export const POX5_BOND_ERRORS: Record<number, { name: string; message: string }> = {
+  7:  { name: 'ERR_BOND_NOT_FOUND',                    message: 'Bond index not found — verify bondIndex.' },
+  8:  { name: 'ERR_INSUFFICIENT_STX',                  message: 'amountUstx below the required STX/BTC ratio minimum.' },
+  9:  { name: 'ERR_ALREADY_REGISTERED',                message: 'Overlapping bond membership already exists for this address.' },
+  10: { name: 'ERR_TOO_MUCH_SATS',                     message: 'BTC amount exceeds the allowlist cap for this address.' },
+  11: { name: 'ERR_NOT_ALLOWLISTED',                   message: 'Address has no allowance entry for this bond — contact the bond operator.' },
+  19: { name: 'ERR_ALREADY_STAKED',                    message: 'Address has an overlapping STX-only stake — unstake first.' },
+  23: { name: 'ERR_SIGNER_NOT_FOUND',                  message: 'Signer-manager not registered — run grantSignerKey first.' },
+  26: { name: 'ERR_UNAUTHORIZED_SIGNER_REGISTRATION',  message: 'Called pox-5 grant directly — use the signer-manager register-self path.' },
+  39: { name: 'ERR_READ_TX_OUT_OF_BOUNDS',             message: 'Raw BTC tx bytes malformed or truncated.' },
+  40: { name: 'ERR_INVALID_BTC_HEADER',                message: "Block header doesn't hash to the expected burn-chain header at that height." },
+  41: { name: 'ERR_INVALID_MERKLE_PROOF',              message: 'Merkle proof is wrong — check block hash and endianness.' },
+  42: { name: 'ERR_INVALID_LOCKUP_SCRIPT',             message: 'scriptPubKey ≠ expected P2WSH — script mismatch between SDK and contract.' },
+  43: { name: 'ERR_BOND_ALREADY_STARTED',              message: 'Registered after bond-start-height — no grace period.' },
+  45: { name: 'ERR_INVALID_LOCKUP_AMOUNT',             message: 'Proof amount ≠ decoded output value.' },
+  46: { name: 'ERR_DUPLICATE_LOCKUP_OUTPOINT',         message: 'Same (txid, vout) submitted twice.' },
+  47: { name: 'ERR_STAKE_IN_PREPARE_PHASE',            message: 'Landed in prepare phase — broadcast earlier in the cycle.' },
+  48: { name: 'ERR_ROLLOVER_TOO_EARLY',                message: 'Rollover attempted before prior bond L1 unlock window.' },
+  50: { name: 'ERR_L1_EARLY_EXIT_ALREADY_ANNOUNCED',  message: 'announceEarlyExit already called for this membership.' },
+};

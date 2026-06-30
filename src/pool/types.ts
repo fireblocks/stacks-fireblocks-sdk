@@ -49,6 +49,28 @@ export enum ActionType {
   REPLACE_TRANSACTION = "replaceTransaction",
   GET_ACCOUNT_NONCE = "getAccountNonce",
   ESTIMATE_FEE = "estimateFee",
+  // PoX-5 Solo STX
+  STAKE = "stake",
+  UPDATE_STAKE = "updateStake",
+  UNSTAKE = "unstake",
+  GRANT_SIGNER_KEY = "grantSignerKey",
+  REVOKE_SIGNER_GRANT = "revokeSignerGrant",
+  GET_STAKER_INFO = "getStakerInfo",
+  GET_POX5_INFO = "getPox5Info",
+  VERIFY_SIGNER_GRANT = "verifySignerGrant",
+  // PoX-5 BTC Bonds
+  CREATE_BOND = "createBond",
+  GET_BOND_POSITION = "getBondPosition",
+  ANNOUNCE_EARLY_EXIT = "announceEarlyExit",
+  GET_REQUIREMENTS = "getRequirements",
+  UNLOCK_BTC = "unlockMaturedBond",
+  RENEW_BOND = "renewBond",
+  CALCULATE_REWARDS = "calculateRewards",
+  CLAIM_REWARDS = "claimRewards",
+  GET_EARNED_REWARDS = "getEarnedRewards",
+  GET_BOND_LOCK_ADDRESS = "getBondLockAddress",
+  FUND_BOND_LOCK_ADDRESS = "fundBondLockAddress",
+  FUND_VAULT = "fundVault",
 }
 
 export interface SdkManagerMetrics {

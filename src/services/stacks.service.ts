@@ -57,8 +57,10 @@ export class StacksService {
   private axiosClient: AxiosInstance;
   private stackBaseUrl: string;
   private network: StacksNetwork;
+  private testnet: boolean;
 
-  constructor(testnet: boolean = false, hiroApiKey?: string) {
+  constructor(testnet: boolean = false , hiroApiKey?: string) {
+    this.testnet = testnet;
     this.axiosClient = axios.create();
     if (hiroApiKey) {
       this.axiosClient.defaults.headers['x-hiro-api-key'] = hiroApiKey;
@@ -67,6 +69,16 @@ export class StacksService {
       ? api_constants.stacks_testnet_rpc
       : api_constants.stacks_mainnet_rpc;
     this.network = testnet ? STACKS_TESTNET : STACKS_MAINNET;
+    const baseUrl = process.env.STACKS_API_URL
+      || (testnet ? api_constants.stacks_testnet_rpc : api_constants.stacks_mainnet_rpc);
+    this.stackBaseUrl = baseUrl;
+    const defaultNetwork = testnet ? STACKS_TESTNET : STACKS_MAINNET;
+    const isPrivate1 = baseUrl.includes('private-1.hiro.so');
+    this.network = {
+      ...defaultNetwork,
+      ...(isPrivate1 ? { chainId: 256, magicBytes: 'id' } : {}),
+      client: { baseUrl },
+    };
   }
 
 
@@ -83,7 +95,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
   }
   
   // Fallback to static config
-  return this.network === STACKS_TESTNET ? poxInfo.testnet : poxInfo.mainnet;
+  return this.testnet ? poxInfo.testnet : poxInfo.mainnet;
 };
 
   /**
@@ -101,11 +113,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
         throw new Error("Invalid compressed secp256k1 public key hex format");
       }
 
-      const isTestnet = this.network === STACKS_TESTNET;
-      const address = publicKeyToAddress(
-        pubKey,
-        isTestnet ? "testnet" : "mainnet",
-      );
+      const address = publicKeyToAddress(pubKey, this.network);
       return address;
     } catch (error) {
       console.error(
@@ -353,7 +361,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
 
   public checkDelegationStatus = async (address: string): Promise<any> => {
     try {
-      if (!validateAddress(address, this.network === STACKS_TESTNET)) {
+      if (!validateAddress(address, this.testnet)) {
         throw new Error("Invalid Stacks address");
       }
 
@@ -409,7 +417,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
     memo?: string,
   ): Promise<StacksTransactionWire> => {
     try {
-      if (!validateAddress(recipient, this.network === STACKS_TESTNET)) {
+      if (!validateAddress(recipient, this.testnet)) {
         throw new Error("Invalid recipient address");
       }
 
@@ -432,7 +440,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
         }
       }
 
-      const tokenInfo = getTokenInfo(token, this.network === STACKS_TESTNET ? "testnet" : "mainnet");
+      const tokenInfo = getTokenInfo(token, this.testnet ? "testnet" : "mainnet");
 
       if (type === TransactionType.FungibleToken && token !== TokenType.CUSTOM && !tokenInfo) {
         throw new Error(`Token ${token} is not supported on ${this.network}`);
@@ -485,6 +493,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
           network: this.network,
           ...(nonce !== undefined ? { nonce } : {}),
           ...(fee !== undefined ? { fee } : {}),
+          ...(memo !== undefined ? { memo } : {}),
           ...(memo !== undefined ? { memo } : {}),
         });
       }
@@ -701,10 +710,12 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
    */
   public broadcastTransaction = async (
     signedTransaction: StacksTransactionWire,
+    network?: StacksNetwork,
   ): Promise<any> => {
     try {
       const result = await broadcastTransaction({
         transaction: signedTransaction,
+        network: network ?? this.network,
       });
 
       return result;
@@ -857,7 +868,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
     limit: number = helperConstants.stacks_api_page_size,
     offset: number = pagination_defaults.page,
   ): Promise<Transaction[]> => {
-    if (!validateAddress(address, this.network === STACKS_TESTNET)) {
+    if (!validateAddress(address, this.testnet)) {
       throw new Error("Invalid Stacks address");
     }
 
@@ -893,7 +904,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
     limit: number = helperConstants.stacks_api_page_size,
     offset: number = pagination_defaults.page,
   ): Promise<Transaction[]> => {
-    if (!validateAddress(address, this.network === STACKS_TESTNET)) {
+    if (!validateAddress(address, this.testnet)) {
       throw new Error("Invalid Stacks address");
     }
 
@@ -957,7 +968,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
     preSignSigHash: string;
   }> => {
     try {
-      if (!validateAddress(delegateTo, this.network === STACKS_TESTNET)) {
+      if (!validateAddress(delegateTo, this.testnet)) {
         throw new Error("Invalid delegateTo address");
       }
 
@@ -985,6 +996,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
         "delegate-stx",
         [
           uintCV(amount),
+          poolContractName ? contractPrincipalCV(delegateTo, poolContractName) : standardPrincipalCV(delegateTo),
           poolContractName ? contractPrincipalCV(delegateTo, poolContractName) : standardPrincipalCV(delegateTo),
           someCV(uintCV(until_burn_ht)),
           noneCV(),
@@ -1062,7 +1074,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
     preSignSigHash: string;
   }> => {
     try {
-      if (!validateAddress(poolAddress, this.network === STACKS_TESTNET)) {
+      if (!validateAddress(poolAddress, this.testnet)) {
         throw new Error("Invalid pool address");
       }
 
