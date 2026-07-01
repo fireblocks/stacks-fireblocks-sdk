@@ -3113,10 +3113,10 @@ export class StacksSDK {
 
       const balanceData = balanceResponse.data;
 
-      const stxBalMicro = BigInt(balanceData.stx.balance ?? "0");
-      const stxLockedMicro = BigInt(balanceData.stx.locked ?? "0");
+      const stxBalMicro = BigInt(balanceData.balance ?? "0");
+      const stxLockedMicro = BigInt(balanceData.locked ?? "0");
       const totalMinerRewardsRecievedMicro = BigInt(
-        balanceData.stx.total_miner_rewards_received ?? "0",
+        balanceData.total_miner_rewards_received ?? "0",
       );
 
       const isDelegated = !!(delegationData && delegationData.value);
