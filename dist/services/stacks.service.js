@@ -100,7 +100,7 @@ class StacksService {
          */
         this.makeBalanceCalls = async (address) => {
             try {
-                const response = await this.axiosClient.get(`${this.stackBaseUrl}/extended/v1/address/${address}/balances`);
+                const response = await this.axiosClient.get(`${this.stackBaseUrl}/extended/v2/addresses/${address}/balances/stx`);
                 if (!response || !response.data || response.status !== 200) {
                     throw new Error(`HTTP ${response.status}`);
                 }
@@ -119,7 +119,7 @@ class StacksService {
         this.getNativeBalance = async (address) => {
             try {
                 const response = await this.makeBalanceCalls(address);
-                const balance = Number(response.data.stx.balance) / 10 ** constants_1.stacks_info.stxDecimals;
+                const balance = Number(response.data.balance) / 10 ** constants_1.stacks_info.stxDecimals;
                 return balance;
             }
             catch (error) {
@@ -134,13 +134,26 @@ class StacksService {
          */
         this.getFTBalancesForAddress = async (address) => {
             try {
-                const response = await this.makeBalanceCalls(address);
-                const ftObject = response.data.fungible_tokens;
-                return ftObject;
+                const result = {};
+                let offset = 0;
+                const limit = 100;
+                while (true) {
+                    const response = await this.axiosClient.get(`${this.stackBaseUrl}/extended/v2/addresses/${address}/balances/ft`, { params: { limit, offset } });
+                    if (!response || !response.data || response.status !== 200) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                    for (const item of response.data.results) {
+                        result[item.token] = { balance: item.balance };
+                    }
+                    if (offset + limit >= response.data.total)
+                        break;
+                    offset += limit;
+                }
+                return result;
             }
             catch (error) {
                 console.error("getFTBalancesForAddress : Error fetching fungible token balances:", (0, errorHandling_1.formatErrorMessage)(error));
-                throw new Error(`Failed to fetch native balance for address ${address}: ${(0, errorHandling_1.formatErrorMessage)(error)}`);
+                throw new Error(`Failed to fetch FT balances for address ${address}: ${(0, errorHandling_1.formatErrorMessage)(error)}`);
             }
         };
         /**

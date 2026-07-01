@@ -2413,9 +2413,9 @@ class StacksSDK {
                     throw new Error("Failed to fetch balance data");
                 }
                 const balanceData = balanceResponse.data;
-                const stxBalMicro = BigInt((_b = balanceData.stx.balance) !== null && _b !== void 0 ? _b : "0");
-                const stxLockedMicro = BigInt((_c = balanceData.stx.locked) !== null && _c !== void 0 ? _c : "0");
-                const totalMinerRewardsRecievedMicro = BigInt((_d = balanceData.stx.total_miner_rewards_received) !== null && _d !== void 0 ? _d : "0");
+                const stxBalMicro = BigInt((_b = balanceData.balance) !== null && _b !== void 0 ? _b : "0");
+                const stxLockedMicro = BigInt((_c = balanceData.locked) !== null && _c !== void 0 ? _c : "0");
+                const totalMinerRewardsRecievedMicro = BigInt((_d = balanceData.total_miner_rewards_received) !== null && _d !== void 0 ? _d : "0");
                 const isDelegated = !!(delegationData && delegationData.value);
                 const amountDelegatedMicro = isDelegated
                     ? BigInt((_f = (_e = delegationData.value["amount-ustx"]) === null || _e === void 0 ? void 0 : _e.value) !== null && _f !== void 0 ? _f : "0")
@@ -2444,10 +2444,10 @@ class StacksSDK {
                     balance: {
                         stx_total: (0, helpers_1.microToStx)(stxBalMicro),
                         stx_locked: (0, helpers_1.microToStx)(stxLockedMicro),
-                        lock_tx_id: balanceData.stx.lock_tx_id || null,
-                        lock_height: balanceData.stx.lock_height || null,
-                        burnchain_lock_height: balanceData.stx.burnchain_lock_height || null,
-                        burnchain_unlock_height: balanceData.stx.burnchain_unlock_height || null,
+                        lock_tx_id: balanceData.lock_tx_id || null,
+                        lock_height: balanceData.lock_height || null,
+                        burnchain_lock_height: balanceData.burnchain_lock_height || null,
+                        burnchain_unlock_height: balanceData.burnchain_unlock_height || null,
                         total_miner_rewards_received: (0, helpers_1.microToStx)(totalMinerRewardsRecievedMicro),
                     },
                     delegation: {
