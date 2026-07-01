@@ -3180,10 +3180,10 @@ export class StacksSDK {
 
       const balanceData = balanceResponse.data;
 
-      const stxBalMicro = BigInt(balanceData.stx.balance ?? "0");
-      const stxLockedMicro = BigInt(balanceData.stx.locked ?? "0");
+      const stxBalMicro = BigInt(balanceData.balance ?? "0");
+      const stxLockedMicro = BigInt(balanceData.locked ?? "0");
       const totalMinerRewardsRecievedMicro = BigInt(
-        balanceData.stx.total_miner_rewards_received ?? "0",
+        balanceData.total_miner_rewards_received ?? "0",
       );
 
       const isDelegated = !!(delegationData && delegationData.value);
@@ -3220,11 +3220,10 @@ export class StacksSDK {
         balance: {
           stx_total: microToStx(stxBalMicro),
           stx_locked: microToStx(stxLockedMicro),
-          lock_tx_id: balanceData.stx.lock_tx_id || null,
-          lock_height: balanceData.stx.lock_height || null,
-          burnchain_lock_height: balanceData.stx.burnchain_lock_height || null,
-          burnchain_unlock_height:
-            balanceData.stx.burnchain_unlock_height || null,
+          lock_tx_id: balanceData.lock_tx_id || null,
+          lock_height: balanceData.lock_height || null,
+          burnchain_lock_height: balanceData.burnchain_lock_height || null,
+          burnchain_unlock_height: balanceData.burnchain_unlock_height || null,
           total_miner_rewards_received: microToStx(
             totalMinerRewardsRecievedMicro,
           ),
