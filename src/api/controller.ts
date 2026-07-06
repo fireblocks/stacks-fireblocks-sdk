@@ -1052,6 +1052,19 @@ export const claimRewards: Handler = async (req, res, next) => {
   }
 };
 
+// POST /:vaultId/stacking/pox5/rewards/claim-stx
+export const claimStxOnlyRewards: Handler = async (req, res, next) => {
+  try {
+    const vaultId = getVaultId(req);
+    const note = req.body.note ? String(req.body.note) : undefined;
+    const nonce = parseOptionalNonce(req.body.nonce);
+    const result = await apiService.executeAction(vaultId, ActionType.CLAIM_STX_ONLY_REWARDS, { note, nonce });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
 // GET /:vaultId/stacking/pox5/rewards/earned
 export const getEarnedRewards: Handler = async (req, res, next) => {
   try {

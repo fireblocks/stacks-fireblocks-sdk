@@ -1002,7 +1002,9 @@ export class StacksSDK {
       const result = await this.pox5SignAndBroadcast(tx, note || `stake ${amountStx} STX for ${numCycles} cycles`, externalId);
 
       if (!result || result.error || !result.txid || result.reason) {
-        return { success: false, error: result?.error || result?.reason || "Failed to broadcast stake transaction" };
+        console.error('stake broadcast rejected:', JSON.stringify(result));
+        const parts = [result?.error, result?.reason, (result as any)?.reason_data ? JSON.stringify((result as any).reason_data) : undefined].filter(Boolean);
+        return { success: false, error: parts.join(' — ') || 'Failed to broadcast stake transaction' };
       }
 
       const txStatus = await this.waitForTxSettlement(result.txid);
@@ -3029,6 +3031,118 @@ export class StacksSDK {
   };
 
   /**
+   * Claims accumulated sBTC rewards for an STX-only staker (no BTC bonds).
+   * Same two-step flow as claimRewards but uses none() for bond index and derives
+   * the signer-manager from the vault's active STX stake rather than bond membership.
+   */
+  public claimStxOnlyRewards = async (
+    opts?: { note?: string; nonce?: bigint },
+  ): Promise<ClaimRewardsResponse> => {
+    try {
+      if (!this.publicKey || !this.vaultAccountId) throw new Error('SDK not initialized');
+      if (!this.address) throw new Error('Address not set');
+
+      const stakerInfo = await fetchStakerInfo({ address: this.address, network: this.pox5Network }).catch(() => null);
+      if (!stakerInfo?.staked) return { success: false, error: 'No active STX-only stake found for this vault' };
+
+      const signerPrincipal: string = stakerInfo.details.signer;
+      const firstEarningCycle: number = stakerInfo.details.firstRewardCycle;
+      const signerDotIdx = signerPrincipal.lastIndexOf('.');
+      const signerContractAddress = signerPrincipal.slice(0, signerDotIdx);
+      const signerContractName = signerPrincipal.slice(signerDotIdx + 1);
+
+      const pox = await fetchPox5Info({ network: this.pox5Network });
+      const lastComputeHeight = await fetchLastRewardComputeHeight({ network: this.pox5Network }).catch(() => 0);
+      const lastComputedCycle = lastComputeHeight > 0
+        ? Math.floor((lastComputeHeight - pox.firstBurnchainBlockHeight) / pox.rewardCycleLength)
+        : pox.rewardCycleId - 1;
+
+      const claimableCycles: number[] = [];
+      for (let cycle = firstEarningCycle; cycle <= lastComputedCycle; cycle++) {
+        const earned = await fetchEarned({
+          signerManager: signerPrincipal,
+          rewardCycle: cycle,
+          bondIndex: undefined,
+          network: this.pox5Network,
+        }).catch(() => BigInt(0));
+        if (earned > BigInt(0)) claimableCycles.push(cycle);
+      }
+
+      if (claimableCycles.length === 0) {
+        return {
+          success: false,
+          error: `No rewards available yet for STX-only stake (first_reward_cycle: ${firstEarningCycle}, last_computed_cycle: ${lastComputedCycle}, current_cycle: ${pox.rewardCycleId})`,
+        };
+      }
+
+      let nonce = await this.resolveNonce(opts?.nonce);
+      const txHashes: string[] = [];
+
+      for (const cycle of claimableCycles) {
+        // Step 1: signer-manager.claim-rewards with empty bond list
+        const smClaimTx = await makeUnsignedContractCall({
+          contractAddress: signerContractAddress,
+          contractName: signerContractName,
+          functionName: 'claim-rewards',
+          functionArgs: [Cl.list([]), Cl.uint(cycle)],
+          publicKey: this.publicKey,
+          fee: BigInt(10000),
+          nonce,
+          network: this.pox5Network,
+          postConditionMode: 'allow',
+          postConditions: [],
+        });
+        const smClaimResult = await this.pox5SignAndBroadcast(smClaimTx, `sm-claim-stx-rewards-cycle-${cycle}`);
+        if (smClaimResult?.txid && !smClaimResult.error && !smClaimResult.reason) {
+          nonce = nonce + BigInt(1);
+          const smClaimSettled = await this.waitForTxSettlement(smClaimResult.txid);
+          const smClaimRepr: string = (smClaimSettled.data?.tx_result as any)?.repr ?? smClaimSettled.data?.tx_error ?? '';
+          if (smClaimSettled.data?.tx_status !== 'success' && !smClaimRepr.includes('u30') && !smClaimRepr.includes('u32')) {
+            return { success: false, error: `signer-manager.claim-rewards failed at cycle ${cycle}: ${smClaimRepr}`, txHashes };
+          }
+        } else if (smClaimResult?.error || smClaimResult?.reason) {
+          const errMsg = [smClaimResult?.error, smClaimResult?.reason].filter(Boolean).join(' — ');
+          return { success: false, error: `signer-manager.claim-rewards broadcast failed at cycle ${cycle}: ${errMsg}`, txHashes };
+        }
+
+        // Step 2: signer-manager.claim-staker-rewards with none() as bond index
+        const smStakerTx = await makeUnsignedContractCall({
+          contractAddress: signerContractAddress,
+          contractName: signerContractName,
+          functionName: 'claim-staker-rewards',
+          functionArgs: [
+            Cl.address(this.address),
+            Cl.uint(cycle),
+            Cl.none(),
+          ],
+          publicKey: this.publicKey,
+          fee: BigInt(10000),
+          nonce,
+          network: this.pox5Network,
+          postConditionMode: 'allow',
+          postConditions: [],
+        });
+        const smStakerResult = await this.pox5SignAndBroadcast(smStakerTx, opts?.note ?? `sm-claim-staker-stx-rewards-cycle-${cycle}`);
+        if (!smStakerResult?.txid || smStakerResult.error || smStakerResult.reason) {
+          const errMsg = [smStakerResult?.error, smStakerResult?.reason].filter(Boolean).join(' — ') || 'broadcast failed';
+          return { success: false, error: `Failed at cycle ${cycle}: ${errMsg}`, txHashes };
+        }
+        const settled = await this.waitForTxSettlement(smStakerResult.txid);
+        if (!settled.success || settled.data?.tx_status !== 'success') {
+          const stakerRepr: string = (settled.data?.tx_result as any)?.repr ?? settled.data?.tx_error ?? '';
+          return { success: false, error: `Claim failed on-chain at cycle ${cycle}: ${stakerRepr}`, txHashes };
+        }
+        txHashes.push(smStakerResult.txid);
+        nonce = nonce + BigInt(1);
+      }
+
+      return { success: true, txHashes };
+    } catch (error) {
+      return { success: false, error: `Failed to claim STX-only rewards: ${formatErrorMessage(error)}` };
+    }
+  };
+
+  /**
    * Returns earned sBTC rewards (sats) for a signerManager + optional bondIndex.
    * Includes staker-specific rewards when this vault's address is in the signer set.
    */
@@ -3227,7 +3341,7 @@ export class StacksSDK {
       if (!safetyCheck.safe) {
         return {
           eligible: false,
-          reason: `Too close to prepare phase boundary (${safetyCheck.blocksUntilBoundary} blocks remaining). Try again next cycle (cycle ${pox.rewardCycleId + 1}).`,
+          reason: `Too close to prepare phase boundary. Try again in ${pox.prepareCycleLength + safetyCheck.blocksUntilBoundary} blocks (next cycle: ${pox.rewardCycleId + 1}).`,
         };
       }
 

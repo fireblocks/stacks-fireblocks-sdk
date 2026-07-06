@@ -60,6 +60,7 @@ export enum ActionType {
   RENEW_BOND = "renewBond",
   CALCULATE_REWARDS = "calculateRewards",
   CLAIM_REWARDS = "claimRewards",
+  CLAIM_STX_ONLY_REWARDS = "claimStxOnlyRewards",
   GET_EARNED_REWARDS = "getEarnedRewards",
   GET_BOND_LOCK_ADDRESS = "getBondLockAddress",
   FUND_BOND_LOCK_ADDRESS = "fundBondLockAddress",

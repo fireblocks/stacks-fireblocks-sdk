@@ -657,6 +657,7 @@ router.get("/stacking/pox5/info", controller.getPox5Info);
  *         description: Internal server error
  */
 router.get("/:vaultId/stacking/pox5/staker-info", validateVaultId, controller.getStakerInfo);
+router.get("/:vaultId/stacking/pox5/verify-grant", validateVaultId, controller.verifySignerGrant);
 
 /**
  * @openapi
@@ -1024,6 +1025,36 @@ router.post("/:vaultId/stacking/pox5/rewards/calculate", validateVaultId, contro
  *         description: Internal server error
  */
 router.post("/:vaultId/stacking/pox5/rewards/claim", validateVaultId, controller.claimRewards);
+
+/**
+ * @openapi
+ * /{vaultId}/stacking/pox5/rewards/claim-stx:
+ *   post:
+ *     summary: Claim sBTC rewards for STX-only staking (PoX-5)
+ *     description: >
+ *       Claims all accumulated sBTC rewards for a vault that is staked STX-only (no BTC bond).
+ *       Automatically scans every settled cycle and submits one claim transaction per cycle.
+ *       The signer-manager is derived from the vault's active STX stake — no parameters needed.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               note:
+ *                 type: string
+ *               nonce:
+ *                 type: integer
+ *     responses:
+ *       200:
+ *         description: Rewards claimed successfully, returns txHashes array.
+ *       500:
+ *         description: Internal server error
+ */
+router.post("/:vaultId/stacking/pox5/rewards/claim-stx", validateVaultId, controller.claimStxOnlyRewards);
 
 /**
  * @openapi
