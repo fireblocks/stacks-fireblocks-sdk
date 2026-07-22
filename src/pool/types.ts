@@ -71,5 +71,4 @@ export interface SdkManagerMetrics {
   totalInstances: number;
   activeInstances: number;
   idleInstances: number;
-  instancesByVaultAccount: Record<string, boolean>;
 }

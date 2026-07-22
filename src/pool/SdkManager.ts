@@ -167,16 +167,14 @@ export class SdkManager {
       totalInstances: this.sdkPool.size,
       activeInstances: 0,
       idleInstances: 0,
-      instancesByVaultAccount: {},
     };
 
-    for (const [key, value] of this.sdkPool.entries()) {
+    for (const [, value] of this.sdkPool.entries()) {
       if (value.isInUse) {
         metrics.activeInstances++;
       } else {
         metrics.idleInstances++;
       }
-      metrics.instancesByVaultAccount[key] = value.isInUse;
     }
 
     return metrics;
