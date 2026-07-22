@@ -218,7 +218,7 @@ export function untilBurnHeightForCycles(
   const R = Number(pox.reward_phase_block_length);
   const cycleLen = Q + R;
 
-  return P + cycles * cycleLen;
+  return P + cycles * cycleLen - 1;
 }
 
 // Assert that a transaction result indicates success, else log and return error details.

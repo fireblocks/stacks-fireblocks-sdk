@@ -126,14 +126,23 @@ describe("microToToken", () => {
 });
 
 describe("concatSignature", () => {
+  /** Byte values here must stay below 0x7f (s < curve order / 2) to avoid triggering low-S normalization. */
   it("concatenates signature with recovery id 0", () => {
-    const sig = "a".repeat(128);
+    const sig = "1".repeat(128);
     expect(concatSignature(sig, 0)).toBe("00" + sig);
   });
 
   it("concatenates signature with recovery id 1", () => {
-    const sig = "b".repeat(128);
+    const sig = "3".repeat(128);
     expect(concatSignature(sig, 1)).toBe("01" + sig);
+  });
+
+  /** Byte value here exceeds 0x7f (s > curve order / 2), requiring BIP-62 low-S normalization. */
+  it("normalizes a high-S signature and flips the recovery id", () => {
+    const sig = "a".repeat(128);
+    const result = concatSignature(sig, 0);
+    expect(result.slice(0, 2)).toBe("01");
+    expect(result.slice(2)).not.toBe(sig);
   });
 });
 
