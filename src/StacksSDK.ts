@@ -1369,7 +1369,6 @@ export class StacksSDK {
       }
 
       const info = await fetchStakerInfo({ address: this.address, network: this.pox5Network });
-      console.log("Fetched staker info:", info);
       if (!info.staked) {
         return { success: true, staked: false };
       }
@@ -1934,16 +1933,6 @@ export class StacksSDK {
 
       const accountStatus = await fetchAccountStatus({ address: this.address, network: this.pox5Network });
       const liquidStx = accountStatus.balance - accountStatus.locked;
-      console.log('createBond STX check:', {
-        btcAmountSats: btcAmountSats.toString(),
-        stxValueRatio: bond.stxValueRatio.toString(),
-        minUstxRatioBps: bond.minUstxRatioBps.toString(),
-        amountUstx: amountUstx.toString(),
-        amountStx: microToStx(amountUstx),
-        balance: accountStatus.balance.toString(),
-        locked: accountStatus.locked.toString(),
-        liquidStx: liquidStx.toString(),
-      });
       if (amountUstx > liquidStx) {
         return { success: false, error: `Insufficient liquid STX: need ${microToStx(amountUstx)} STX but only ${microToStx(liquidStx)} available` };
       }
@@ -1963,8 +1952,6 @@ export class StacksSDK {
         earlyUnlockBytes: bond.earlyUnlockBytes,
         network: this.pox5Network,
       });
-
-      console.log(`createBond: expecting BTC output to lock address ${metadata.lockAddress}`);
 
       // Step 6 — cross-check script vs contract (prevents funding an unverifiable address)
       // The library's fetchConstructLockupOutputScript doesn't handle (ok (buff N)) returns —
@@ -2025,12 +2012,6 @@ export class StacksSDK {
         fetch(`${this.esploraBase()}/tx/${btcTxid}/merkle-proof`).then(r => r.json()),
         fetch(`${this.esploraBase()}/block/${blockHash}`).then(r => r.json()),
       ]);
-      console.log('[createBond] SPV data types:', {
-        txHex: typeof txHex, txHexPreview: String(txHex).slice(0, 80),
-        headerHex: typeof headerHex, headerHexPreview: String(headerHex).slice(0, 40),
-        merkleProof: JSON.stringify(merkleProof).slice(0, 200),
-        blockMeta: JSON.stringify(blockMeta).slice(0, 200),
-      });
       const lockupProof = {
         ...buildLockProof({
           txHex,
@@ -2588,40 +2569,23 @@ export class StacksSDK {
   ): Promise<UnlockBtcResponse> => {
     try {
       const lock = await this.deriveLock(undefined, opts?.bondIndex);
-      console.log('[unlockMaturedBond] deriveLock:', lock ? {
-        bondIndex: lock.bondIndex,
-        unlockHeight: lock.unlockHeight,
-        lockingAddress: lock.lockingAddress,
-        amountSats: lock.amountSats.toString(),
-        isL1Lock: lock.isL1Lock,
-        lockScriptHex: bytesToHex(lock.lockScript),
-      } : null);
       if (!lock) return { success: false, error: 'No L1-locked bond membership found' };
 
       const tipHeight = await fetch(`${this.esploraBase()}/blocks/tip/height`)
         .then(r => r.text()).then(Number);
-      console.log('[unlockMaturedBond] BTC tip:', tipHeight, '| unlock height:', lock.unlockHeight, '| matured:', tipHeight >= lock.unlockHeight);
       if (tipHeight < lock.unlockHeight) {
         return { success: false, error: `Bond not matured: BTC tip ${tipHeight} < unlock height ${lock.unlockHeight}` };
       }
 
-      const allUtxos: any[] = await fetch(`${this.esploraBase()}/address/${lock.lockingAddress}/utxo`)
-        .then(r => r.json()).catch(() => []);
-      console.log('[unlockMaturedBond] UTXOs at locking address:', JSON.stringify(allUtxos));
-
-      const utxo = allUtxos.find((u: any) => BigInt(u.value) === lock.amountSats) ?? allUtxos[0] ?? null;
-      console.log('[unlockMaturedBond] selected UTXO:', utxo ? { txid: utxo.txid, vout: utxo.vout, value: utxo.value } : null);
-      console.log('[unlockMaturedBond] amountSats match:', utxo ? BigInt(utxo.value) === lock.amountSats : false, `(utxo=${utxo?.value}, lock=${lock.amountSats.toString()})`);
+      const utxo = await this.findLockUtxo(lock.lockingAddress, lock.amountSats);
       if (!utxo) return { success: false, error: 'Lock UTXO not found or already spent' };
 
       const feeSats = opts?.feeSats ?? BigInt(500);
       const actualUtxoSats = BigInt(utxo.value);
       const outputAmount = actualUtxoSats - feeSats;
-      console.log('[unlockMaturedBond] feeSats:', feeSats.toString(), '| outputAmount:', outputAmount.toString());
       if (outputAmount <= BigInt(0)) return { success: false, error: 'Fee exceeds locked amount' };
 
       const p2wshScript = this.p2wshOutputScript(lock.lockScript);
-      console.log('[unlockMaturedBond] p2wshScript:', bytesToHex(p2wshScript));
 
       const tx = new btc.Transaction({ lockTime: lock.unlockHeight });
       tx.addInput({
@@ -2634,17 +2598,13 @@ export class StacksSDK {
       tx.addOutputAddress(destinationBtcAddress, outputAmount, this.btcNetwork);
 
       const sighash = this.btcSegwitSighash(tx, 0, lock.lockScript, actualUtxoSats);
-      console.log('[unlockMaturedBond] sighash:', bytesToHex(sighash));
       const stakerSig = await this.signBtcSighash(sighash);
-      console.log('[unlockMaturedBond] stakerSig (DER):', bytesToHex(stakerSig));
 
       this.setP2wshWitness(tx, 0, [stakerSig, new Uint8Array([1]), lock.lockScript]);
 
       const rawHex = bytesToHex(tx.extract());
-      console.log('[unlockMaturedBond] raw tx hex:', rawHex);
 
       const btcTxid = await this.broadcastBtc(rawHex);
-      console.log('[unlockMaturedBond] broadcast success, txid:', btcTxid);
       return { success: true, btcTxid };
     } catch (error) {
       return { success: false, error: `Failed to unlock matured bond: ${formatErrorMessage(error)}` };
