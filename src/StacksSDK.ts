@@ -95,13 +95,10 @@ import {
   buildStake,
   buildStakeUpdate,
   buildUnstake,
-  buildGrantSignerKey,
   buildRevokeSignerGrant,
   buildRegisterForBond,
   buildAnnounceL1EarlyExit,
   buildCalculateRewards,
-  buildClaimRewards,
-  buildClaimStakerRewardsForSigner,
   fetchStakerInfo,
   fetchPoxInfo as fetchPox5Info,
   fetchVerifySignerKeyGrant,
@@ -121,16 +118,13 @@ import {
   isBondActiveAtHeight,
   firstPox5RewardCycle,
   bondPeriodToRewardCycle,
-  bondPeriodToBurnHeight,
   computeUnlockHeight,
   buildUnlockScript,
-  buildLockScript,
   buildRegisterMetadata,
   buildLockProof,
   computeRegisterPreimage,
   minUstxForSatsAmount,
   type PoxInfo as Pox5PoxInfo,
-  type BondMembership,
 } from "@stacks/bitcoin-staking";
 import * as btc from '@scure/btc-signer';
 import { sha256 } from '@noble/hashes/sha2';
@@ -1246,74 +1240,6 @@ export class StacksSDK {
       return { success: false, error: `Failed to register signer key: ${formatErrorMessage(error)}` };
     }
   };
-
-  // /**
-  //  * Grants a one-time signer key authorization to a signer-manager (PoX-5).
-  //  * Must be called once before any stake() calls through that signer-manager.
-  //  * The vault's own public key is used as the signer key. The grant signature is
-  //  * generated internally via Fireblocks raw signing — no external signature needed.
-  //  * @param signerManager - The signer-manager contract principal to authorize.
-  //  * @param authId - Monotonically increasing unique uint for replay protection. Never reuse.
-  //  * @param note - Optional Fireblocks transaction note.
-  //  * @param nonce - Optional nonce override.
-  //  * @param externalId - Optional Fireblocks external ID for idempotency.
-  //  */
-  // public grantSignerKey = async (
-  //   signerManager: string,
-  //   authId: bigint,
-  //   note?: string,
-  //   nonce?: bigint,
-  //   externalId?: string,
-  // ): Promise<CreateTransactionResponse> => {
-  //   try {
-  //     if (!this.address || !this.publicKey || !this.vaultAccountId) {
-  //       throw new Error("Address, Public Key or Vault ID are not set");
-  //     }
-
-  //     const resolvedNonce = await this.resolveNonce(nonce);
-
-  //     const grantMsgHash = await fetchSignerGrantMessageHash({
-  //       signerManager,
-  //       authId,
-  //       network: this.pox5Network,
-  //     });
-
-  //     const rawGrantSig = await this.fireblocksService.signTransaction(
-  //       grantMsgHash, this.vaultAccountId.toString(), note || "sign grant signer key message", externalId,
-  //     );
-  //     const signerSignature = concatSignature(rawGrantSig.fullSig, rawGrantSig.v);
-
-  //     const tx = await buildGrantSignerKey({
-  //       signerKey: this.publicKey,
-  //       signerManager,
-  //       authId,
-  //       signerSignature,
-  //       publicKey: this.publicKey,
-  //       fee: BigInt(10000),
-  //       nonce: resolvedNonce,
-  //       network: this.pox5Network,
-  //     });
-
-  //     const result = await this.pox5SignAndBroadcast(tx, note || "grant signer key", externalId);
-
-  //     if (!result || result.error || !result.txid || result.reason) {
-  //       return { success: false, error: result?.error || result?.reason || "Failed to broadcast grant-signer-key transaction" };
-  //     }
-
-  //     const txStatus = await this.waitForTxSettlement(result.txid);
-  //     if (!txStatus.success || txStatus.data?.tx_status !== "success") {
-  //       return {
-  //         success: false,
-  //         error: txStatus.error || txStatus.data?.tx_error || "Grant signer key transaction failed at the contract level.",
-  //         txHash: result.txid,
-  //       };
-  //     }
-
-  //     return { success: true, txHash: result.txid };
-  //   } catch (error) {
-  //     return { success: false, error: `Failed to grant signer key: ${formatErrorMessage(error)}` };
-  //   }
-  // };
 
   /**
    * Revokes an existing signer key grant from a signer-manager (PoX-5).
