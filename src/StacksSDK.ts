@@ -148,7 +148,16 @@ export class StacksSDK {
   private publicKey: string | undefined;
   private cachedTransactions: Transaction[] = [];
   private testnet: boolean = false;
-  public unlockBytesStore: UnlockBytesStore = new InMemoryUnlockBytesStore();
+  private unlockBytesStore: UnlockBytesStore = new InMemoryUnlockBytesStore();
+
+  /**
+   * Sets the unlockBytes persistence backend (default: in-memory, non-durable).
+   * @param store - Durable implementation (e.g. Redis-backed) required for production,
+   * since loss of unlockBytes permanently strands the associated BTC bond.
+   */
+  public setUnlockBytesStore = (store: UnlockBytesStore): void => {
+    this.unlockBytesStore = store;
+  };
 
   private constructor(
     vaultAccountId: string | number,
