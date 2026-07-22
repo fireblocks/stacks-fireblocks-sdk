@@ -36,11 +36,17 @@ It's designed to simplify integration with Fireblocks for secure Stacks transact
 - **Fungible token transfers**: Support for SIP-010 token transfers (sBTC, USDC, etc.)
 - **Nonce management**: Optional nonce override on every transaction method; query confirmed on-chain nonce via `getAccountNonce()`
 - **Replace-by-fee**: Replace a stuck pending STX transaction with a higher-fee one using the same nonce
-- **Stacking functionality**:
+- **Stacking functionality (PoX-4)**:
   - Solo stacking 
   - Pool delegation and stacking
   - Delegation management (delegate, revoke, allow contract caller)
   - Account status and eligibility checking
+- **PoX-5 / BTC Bonding**:
+  - STX staking and unstaking via signer-manager
+  - BTC bond lifecycle: create, renew, unlock matured bonds
+  - Early-exit announcement and spend (cosigner-assisted)
+  - Reward calculation, claiming (BTC + STX-only paths), and earned rewards query
+  - Signer key grant and verification
 - **Transaction monitoring**: Real-time transaction status polling with error code mapping
 - **REST API mode**: Easily integrate through HTTP requests.
 - **Vault pooling**: Efficient per-vault instance management.
@@ -117,6 +123,7 @@ Environment variables (via `.env`) control SDK behavior:
 | FIREBLOCKS_BASE_PATH       | No       | BasePath.US from "@fireblocks/ts-sdk" | Base URL of the Fireblocks API          |
 | NETWORK                    | No       | MAINNET                               | Stacks mainnet or testnet               |
 | PORT                       | No       | 3000                                  | Port to run the REST API server         |
+| EARLY_EXIT_SIGNER_URL      | No       | Built-in testnet URL (none on mainnet) | Base URL of the external KMS cosigner service for bond early-exit spends |
 
 ### Sample `.env`:
 
@@ -395,7 +402,7 @@ if (replacement.success) {
 }
 ```
 
-> The minimum fee bump is controlled by `RBF_MIN_FEE_MULTIPLIER` in `constants.ts` (default `1.25`). The fee check only applies on the lookup path where the original fee is known.
+> The minimum fee bump is controlled by `RBF_MIN_FEE_BUMP_USTX` in `constants.ts` (default: 1 microSTX above the original fee). The fee check only applies on the lookup path where the original fee is known.
 
 ### **Transaction Status Monitoring**
 
@@ -467,7 +474,7 @@ history.forEach((tx) => {
 | Field           | Type    | Required | Description                                                                  |
 | --------------- | ------- | -------- | ---------------------------------------------------------------------------- |
 | `originalTxId`  | string  | Yes      | Transaction ID of the pending transaction to replace                         |
-| `newFee`        | number  | Yes      | New fee in STX — must be higher than the original                            |
+| `newFee`        | number  | Yes      | New fee in STX — must exceed the original fee by at least 1 microSTX (enforced by `RBF_MIN_FEE_BUMP_USTX`) |
 | `newRecipient`  | string  | No       | New recipient address. Defaults to the original recipient                    |
 | `newAmount`     | number  | No       | New transfer amount in STX. Defaults to the original amount                  |
 | `nonceOverride` | integer | No       | Nonce to use directly, bypassing the Hiro indexer lookup. Required when the original tx is a future-nonce tx not visible in the explorer. When set, `newRecipient` and `newAmount` are also required. |
@@ -485,11 +492,47 @@ history.forEach((tx) => {
 | POST   | `/api/:vaultId/stacking/pool/allow-contract-caller` | Allow a pool contract to lock your STX               |
 | POST   | `/api/:vaultId/revoke-delegation`                   | Revoke any active STX delegation                     |
 
+### **PoX-5 Staking Endpoints**
+
+| Method | Route                                              | Description                                               |
+| ------ | -------------------------------------------------- | --------------------------------------------------------- |
+| GET    | `/api/stacking/pox5/info`                          | Fetch current PoX-5 protocol info                         |
+| GET    | `/api/:vaultId/stacking/pox5/requirements`         | Get minimum STX amount and cycle requirements             |
+| GET    | `/api/:vaultId/stacking/pox5/staker-info`          | Get current staker position and status                    |
+| POST   | `/api/:vaultId/stacking/pox5/stake`                | Stake STX via signer-manager (replaces PoX-4 solo stack)  |
+| POST   | `/api/:vaultId/stacking/pox5/update`               | Update (increase) an existing PoX-5 stake                 |
+| POST   | `/api/:vaultId/stacking/pox5/unstake`              | Unstake STX from PoX-5                                    |
+| POST   | `/api/:vaultId/stacking/pox5/grant`                | Grant signer key via signer-manager                       |
+| GET    | `/api/:vaultId/stacking/pox5/verify-grant`         | Verify that the signer grant is active                    |
+
+### **PoX-5 BTC Bond Endpoints**
+
+| Method | Route                                                       | Description                                                  |
+| ------ | ----------------------------------------------------------- | ------------------------------------------------------------ |
+| POST   | `/api/:vaultId/stacking/pox5/bond/create`                   | Create a BTC bond (locks BTC, registers on Stacks L2)        |
+| GET    | `/api/:vaultId/stacking/pox5/bond/position`                 | Get current bond position for the vault                      |
+| GET    | `/api/:vaultId/stacking/pox5/bond/lock-address`             | Get the BTC lock address for a bond                          |
+| POST   | `/api/:vaultId/stacking/pox5/bond/fund-lock`                | Fund the BTC lock address (alternative to in-band funding)   |
+| POST   | `/api/:vaultId/stacking/pox5/bond/unlock`                   | Unlock a matured bond and reclaim BTC                        |
+| POST   | `/api/:vaultId/stacking/pox5/bond/renew`                    | Renew an existing bond for additional cycles                 |
+| POST   | `/api/:vaultId/stacking/pox5/bond/announce-early-exit`      | Announce intent to early-exit a bond (starts cosigner flow)  |
+| POST   | `/api/:vaultId/stacking/pox5/bond/early-exit`               | Spend the early-exit UTXO after cosigner approval            |
+| GET    | `/api/:vaultId/stacking/pox5/bond/early-exit/public-key`    | Get the cosigner public key for the early-exit path          |
+
+### **PoX-5 Rewards Endpoints**
+
+| Method | Route                                              | Description                                          |
+| ------ | -------------------------------------------------- | ---------------------------------------------------- |
+| POST   | `/api/:vaultId/stacking/pox5/rewards/calculate`    | Calculate expected rewards for a staking position    |
+| POST   | `/api/:vaultId/stacking/pox5/rewards/claim`        | Claim BTC + STX rewards                              |
+| POST   | `/api/:vaultId/stacking/pox5/rewards/claim-stx`    | Claim STX-only rewards                               |
+| GET    | `/api/:vaultId/stacking/pox5/rewards/earned`       | Query earned rewards for the vault                   |
+
 ### **Utility Endpoints**
 
 | Method | Route          | Description                           |
 | ------ | -------------- | ------------------------------------- |
-| GET    | `/api/metrics` | Prometheus-compatible service metrics |
+| GET    | `/api/metrics` | Pool metrics (instance counts)        |
 
 ---
 
@@ -720,13 +763,20 @@ Swagger UI API Documentation will be available at http://localhost:3000/api-docs
 
 - **Network**: Stacks Mainnet
 - **API**: `https://api.hiro.so`
-- **PoX Contract**: `SP000000000000000000002Q6VF78.pox-4`
+- **PoX-4 Contract**: `SP000000000000000000002Q6VF78.pox-4`
 
-### Testnet
+### Testnet (PoX-4)
 
 - **Network**: Stacks Testnet
 - **API**: `https://api.testnet.hiro.so`
-- **PoX Contract**: `ST000000000000000000002AMW42H.pox-4`
+- **PoX-4 Contract**: `ST000000000000000000002AMW42H.pox-4`
+
+### PoX-5 / BTC Bonding Testnet
+
+PoX-5 operates on a private testnet. Set `NETWORK=testnet` — the SDK automatically routes PoX-5 calls to the private-1 node.
+
+- **API**: `https://api.private-1.hiro.so`
+- **Chain ID**: `256`
 
 ---
 
