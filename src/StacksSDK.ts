@@ -21,6 +21,7 @@
 import { StacksService } from "./services/stacks.service";
 import { STACKS_MAINNET, STACKS_TESTNET, type StacksNetwork } from "@stacks/network";
 import { FireblocksService } from "./services/fireblocks.service";
+import { CosignerService, resolveCosignerUrl } from "./services/cosigner.service";
 import {
   AnnounceEarlyExitResponse,
   BondPositionResponse,
@@ -53,7 +54,7 @@ import {
   TransactionDetails,
   TransactionType,
 } from "./services/types";
-import { BTC_ESPLORA, helperConstants, pagination_defaults, POX4_ERRORS, RBF_MIN_FEE_BUMP_USTX, stacks_info } from "./utils/constants";
+import { BTC_ESPLORA, DEFAULT_POX_FEE_USTX, helperConstants, pagination_defaults, POX4_ERRORS, RBF_MIN_FEE_BUMP_USTX, stacks_info } from "./utils/constants";
 import { InMemoryUnlockBytesStore, UnlockBytesStore } from "./staking/bonds/unlock-bytes-store";
 import { parseOptionalFee, ValidationError } from "./utils/validation";
 import { formatErrorMessage } from "./utils/errorHandling";
@@ -110,6 +111,7 @@ import {
   fetchBond,
   fetchBondStatus,
   fetchBondAllowance,
+  fetchHasAnnouncedL1EarlyExit,
   fetchAccountStatus,
   fetchEarned,
   fetchEarnedStakerRewards,
@@ -135,7 +137,7 @@ import { sha256 } from '@noble/hashes/sha2';
 import { Signature as Secp256k1Signature } from '@noble/secp256k1';
 
 const BOND_LENGTH_CYCLES = 12; // fixed per PoX-5 spec; not in .d.ts but confirmed in dist/constants.js
-import { hexToBytes, bytesToHex } from "@stacks/common";
+import { hexToBytes, bytesToHex, signatureVrsToRsv } from "@stacks/common";
 
 export class StacksSDK {
   private fireblocksService: FireblocksService;
@@ -364,11 +366,13 @@ export class StacksSDK {
    * @returns A promise that resolves to a {GetTransactionStatusResponse} containing the final transaction status.
    */
   private waitForTxSettlement = async (
-  txId: string,
-  intervalMs = 3000,
-  maxAttempts = 20,
+    txId: string,
+    timeoutMs = 30 * 60 * 1000, // 30 min — covers mainnet block times of ~10 min
+    intervalMs = 15_000,
   ): Promise<GetTransactionStatusResponse> => {
-    for (let i = 0; i < maxAttempts; i++) {
+    const deadline = Date.now() + timeoutMs;
+
+    while (Date.now() < deadline) {
       const status = await this.getTxStatusById(txId);
       if (!status.success) return status;
 
@@ -377,10 +381,12 @@ export class StacksSDK {
         return status; // settled — success or a real error
       }
 
-      await new Promise(res => setTimeout(res, intervalMs));
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) break;
+      await new Promise(res => setTimeout(res, Math.min(intervalMs, remaining)));
     }
 
-    return { success: false, error: "Transaction timed out waiting for confirmation." };
+    return { success: false, error: `Transaction ${txId} timed out waiting for confirmation after ${timeoutMs / 60_000} minutes.` };
   };
 
   /**
@@ -993,7 +999,7 @@ export class StacksSDK {
         numCycles,
         startBurnHt: pox.currentBurnchainBlockHeight,
         publicKey: this.publicKey,
-        fee: BigInt(10000),
+        fee: DEFAULT_POX_FEE_USTX,
         nonce: resolvedNonce,
         network: this.pox5Network,
         postConditionMode: 'allow',
@@ -1054,7 +1060,7 @@ export class StacksSDK {
         cyclesToExtend: cyclesToExtend ?? 0,
         amountIncrease: increaseByStx ? stxToMicro(increaseByStx) : BigInt(0),
         publicKey: this.publicKey,
-        fee: BigInt(10000),
+        fee: DEFAULT_POX_FEE_USTX,
         nonce: resolvedNonce,
         network: this.pox5Network,
         postConditionMode: 'allow',
@@ -1109,7 +1115,7 @@ export class StacksSDK {
       const tx = await buildUnstake({
         oldSignerManager,
         publicKey: this.publicKey,
-        fee: BigInt(10000),
+        fee: DEFAULT_POX_FEE_USTX,
         nonce: resolvedNonce,
         network: this.pox5Network,
         postConditionMode: 'allow',
@@ -1186,7 +1192,10 @@ export class StacksSDK {
       const rawGrantSig = await this.fireblocksService.signTransaction(
         grantMsgHash, this.vaultAccountId.toString(), note || "sign grant signer key message", externalId,
       );
-      const signerSignature = concatSignature(rawGrantSig.fullSig, rawGrantSig.v);
+      // pox-5's grant-signer-key verifies this via Clarity's secp256k1-recover?,
+      // which expects RSV (r + s + recovery-byte-last) — NOT the VRS format
+      // concatSignature produces for Stacks transaction auth signatures.
+      const signerSignature = signatureVrsToRsv(concatSignature(rawGrantSig.fullSig, rawGrantSig.v));
 
       // Call <signerManager>.register-self instead of pox-5.grant-signer-key directly.
       // register-self args: (signer-manager <trait>) (signer-key (buff 33)) (auth-id uint) (signer-sig (buff 65))
@@ -1201,7 +1210,7 @@ export class StacksSDK {
           bufferCV(hexToBytes(signerSignature)),        // signer-sig (buff 65)
         ],
         publicKey: this.publicKey,
-        fee: BigInt(10000),
+        fee: DEFAULT_POX_FEE_USTX,
         nonce: resolvedNonce,
         network: this.pox5Network,
         postConditionMode: PostConditionMode.Deny,
@@ -1323,7 +1332,7 @@ export class StacksSDK {
         signerManager,
         signerKey,
         publicKey: this.publicKey,
-        fee: BigInt(10000),
+        fee: DEFAULT_POX_FEE_USTX,
         nonce: resolvedNonce,
         network: this.pox5Network,
         postConditionMode: 'allow',
@@ -2001,7 +2010,7 @@ export class StacksSDK {
           btcAmountSats,
           this.vaultAccountId.toString(),
           opts?.note || `BTC bond ${bondIndex} lock`,
-          opts?.externalId,
+          opts?.externalId ? `${opts.externalId}-lock` : undefined,
         );
         btcTxid = result.btcTxid;
       }
@@ -2041,13 +2050,13 @@ export class StacksSDK {
         amountUstx,
         lockup: { kind: 'btc', outputs: [lockupProof], unlockBytes: metadata.unlockBytes },
         publicKey: this.publicKey,
-        fee: BigInt(10000),
+        fee: DEFAULT_POX_FEE_USTX,
         nonce: resolvedNonce,
         network: this.pox5Network,
         postConditionMode: 'allow',
       });
 
-      const result = await this.pox5SignAndBroadcast(tx, opts?.note ?? 'register-for-bond', opts?.externalId);
+      const result = await this.pox5SignAndBroadcast(tx, opts?.note ?? 'register-for-bond', opts?.externalId ? `${opts.externalId}-register` : undefined);
       if (!result?.txid || result.error || result.reason) {
         console.error('register-for-bond broadcast failed:', JSON.stringify(result));
         const parts = [result?.error, result?.reason, (result as any)?.reason_data ? JSON.stringify((result as any).reason_data) : undefined].filter(Boolean);
@@ -2201,7 +2210,7 @@ export class StacksSDK {
         staker: this.address,
         oldSignerManager: membership.signer,
         publicKey: this.publicKey,
-        fee: BigInt(10000),
+        fee: DEFAULT_POX_FEE_USTX,
         nonce: resolvedNonce,
         network: this.pox5Network,
         postConditionMode: 'allow',
@@ -2645,24 +2654,34 @@ export class StacksSDK {
   // ─── §7B: spendEarlyExitUtxo ─────────────────────────────────────────────
 
   /**
-   * Spends the P2WSH UTXO via the OP_ELSE (early-exit) branch. Requires an
-   * external `earlyExitSigner` (from the Endowment) to co-sign the same sighash.
-   * Call `announceEarlyExit()` on L2 first and wait for it to settle.
+   * Spends the P2WSH UTXO via the OP_ELSE (early-exit) branch. The cosigner
+   * leg comes from the external KMS signing service (see cosigner.service.ts).
+   * Call `announceEarlyExit()` on L2 first and wait for it to settle — this is
+   * pre-checked on-chain before the cosigner is contacted.
    */
   public spendEarlyExitUtxo = async (
     destinationBtcAddress: string,
-    earlyExitSigner: { sign(sighash: Uint8Array): Promise<Uint8Array> },
-    opts?: { feeSats?: bigint },
+    opts?: { feeSats?: bigint; bondIndex?: number },
   ): Promise<SpendEarlyExitResponse> => {
     try {
-      const lock = await this.deriveLock();
+      const lock = await this.deriveLock(undefined, opts?.bondIndex);
       if (!lock) return { success: false, error: 'No L1-locked bond membership found' };
+
+      const announced = await fetchHasAnnouncedL1EarlyExit({
+        bondIndex: lock.bondIndex,
+        staker: this.address!,
+        network: this.pox5Network,
+      });
+      if (!announced) {
+        return { success: false, error: 'announce-l1-early-exit not settled — call announceEarlyExit first and wait for it to confirm' };
+      }
 
       const utxo = await this.findLockUtxo(lock.lockingAddress, lock.amountSats);
       if (!utxo) return { success: false, error: 'Lock UTXO not found or already spent' };
 
       const feeSats = opts?.feeSats ?? BigInt(500);
-      const outputAmount = lock.amountSats - feeSats;
+      const actualUtxoSats = BigInt(utxo.value);
+      const outputAmount = actualUtxoSats - feeSats;
       if (outputAmount <= BigInt(0)) return { success: false, error: 'Fee exceeds locked amount' };
 
       const p2wshScript = this.p2wshOutputScript(lock.lockScript);
@@ -2673,15 +2692,27 @@ export class StacksSDK {
         txid: utxo.txid,
         index: utxo.vout,
         sequence: 0xfffffffe,
-        witnessUtxo: { script: p2wshScript, amount: lock.amountSats },
+        witnessUtxo: { script: p2wshScript, amount: actualUtxoSats },
         witnessScript: lock.lockScript,
       });
       tx.addOutputAddress(destinationBtcAddress, outputAmount, this.btcNetwork);
 
-      const sighash = this.btcSegwitSighash(tx, 0, lock.lockScript, lock.amountSats);
+      const sighash = this.btcSegwitSighash(tx, 0, lock.lockScript, actualUtxoSats);
+      // Unsigned serialization (no scriptSig, no witness) — the cosigner
+      // service recomputes the sighash from this tx plus the prevout context.
+      const unsignedTxHex = bytesToHex(tx.toBytes(false, false));
+
+      const cosigner = new CosignerService(resolveCosignerUrl(this.testnet));
       const [stakerSig, earlyExitSig] = await Promise.all([
         this.signBtcSighash(sighash),
-        earlyExitSigner.sign(sighash),
+        cosigner.cosignEarlyExit({
+          unsignedTxHex,
+          prevoutScriptPubKeyHex: bytesToHex(p2wshScript),
+          prevoutValueSats: Number(actualUtxoSats),
+          witnessScriptHex: bytesToHex(lock.lockScript),
+          expectedSighash: sighash,
+          expectedUnlockBytes: lock.earlyUnlockBytes,
+        }),
       ]);
       const preimage = computeRegisterPreimage(this.address!);
 
@@ -2693,6 +2724,16 @@ export class StacksSDK {
     } catch (error) {
       return { success: false, error: `Failed to spend early exit UTXO: ${formatErrorMessage(error)}` };
     }
+  };
+
+  /**
+   * Returns the early-exit cosigner service's account xpub and metadata —
+   * useful for verifying the configured service matches a bond's
+   * early-unlock-bytes before attempting an early-exit spend.
+   */
+  public getEarlyExitPublicKey = async () => {
+    const cosigner = new CosignerService(resolveCosignerUrl(this.testnet));
+    return cosigner.getPublicKey();
   };
 
   // ─── §8: renewBond ───────────────────────────────────────────────────────
@@ -2818,7 +2859,7 @@ export class StacksSDK {
         amountUstx,
         lockup: { kind: 'btc', outputs: [lockupProof], unlockBytes: nextMeta.unlockBytes },
         publicKey: this.publicKey,
-        fee: BigInt(10000),
+        fee: DEFAULT_POX_FEE_USTX,
         nonce: resolvedNonce,
         network: this.pox5Network,
         postConditionMode: 'allow',
@@ -2888,7 +2929,7 @@ export class StacksSDK {
       const tx = await buildCalculateRewards({
         bondIndices,
         publicKey: this.publicKey,
-        fee: BigInt(10000),
+        fee: DEFAULT_POX_FEE_USTX,
         nonce: resolvedNonce,
         network: this.pox5Network,
       });
@@ -2970,7 +3011,7 @@ export class StacksSDK {
             Cl.uint(cycle),
           ],
           publicKey: this.publicKey,
-          fee: BigInt(10000),
+          fee: DEFAULT_POX_FEE_USTX,
           nonce,
           network: this.pox5Network,
           postConditionMode: 'allow',
@@ -3003,7 +3044,7 @@ export class StacksSDK {
               Cl.some(Cl.uint(bondIndex)),
             ],
             publicKey: this.publicKey,
-            fee: BigInt(10000),
+            fee: DEFAULT_POX_FEE_USTX,
             nonce,
             network: this.pox5Network,
             postConditionMode: 'allow',
@@ -3086,7 +3127,7 @@ export class StacksSDK {
           functionName: 'claim-rewards',
           functionArgs: [Cl.list([]), Cl.uint(cycle)],
           publicKey: this.publicKey,
-          fee: BigInt(10000),
+          fee: DEFAULT_POX_FEE_USTX,
           nonce,
           network: this.pox5Network,
           postConditionMode: 'allow',
@@ -3116,7 +3157,7 @@ export class StacksSDK {
             Cl.none(),
           ],
           publicKey: this.publicKey,
-          fee: BigInt(10000),
+          fee: DEFAULT_POX_FEE_USTX,
           nonce,
           network: this.pox5Network,
           postConditionMode: 'allow',

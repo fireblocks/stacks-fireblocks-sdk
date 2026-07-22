@@ -259,6 +259,12 @@ export class ApiService {
         case ActionType.ANNOUNCE_EARLY_EXIT:
           result = await sdk.announceEarlyExit({ note: params.note, nonce: params.nonce, externalId: params.externalId });
           break;
+        case ActionType.SPEND_EARLY_EXIT:
+          result = await sdk.spendEarlyExitUtxo(params.destinationBtcAddress, { feeSats: params.feeSats, bondIndex: params.bondIndex });
+          break;
+        case ActionType.GET_EARLY_EXIT_PUBLIC_KEY:
+          result = await sdk.getEarlyExitPublicKey();
+          break;
         case ActionType.GET_REQUIREMENTS:
           result = await sdk.getRequirements({ bondIndex: params.bondIndex, btcAmountSats: params.btcAmountSats });
           break;

@@ -55,6 +55,8 @@ export enum ActionType {
   CREATE_BOND = "createBond",
   GET_BOND_POSITION = "getBondPosition",
   ANNOUNCE_EARLY_EXIT = "announceEarlyExit",
+  SPEND_EARLY_EXIT = "spendEarlyExit",
+  GET_EARLY_EXIT_PUBLIC_KEY = "getEarlyExitPublicKey",
   GET_REQUIREMENTS = "getRequirements",
   UNLOCK_BTC = "unlockMaturedBond",
   RENEW_BOND = "renewBond",

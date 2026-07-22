@@ -945,6 +945,43 @@ export const announceEarlyExit: Handler = async (req, res, next) => {
   }
 };
 
+// POST /:vaultId/stacking/pox5/bond/early-exit
+export const spendEarlyExit: Handler = async (req, res, next) => {
+  try {
+    const vaultId = getVaultId(req);
+    const destination = String(req.body.destinationBtcAddress || "").trim();
+    if (!destination) {
+      res.status(400).json({ error: "Bad Request: destinationBtcAddress is required" });
+      return;
+    }
+    if (req.body.feeSats !== undefined && !/^[0-9]+$/.test(String(req.body.feeSats))) {
+      res.status(400).json({ error: "Bad Request: feeSats must be a positive integer string" });
+      return;
+    }
+    const feeSats = req.body.feeSats !== undefined ? BigInt(String(req.body.feeSats)) : undefined;
+    const bondIndex = req.body.bondIndex !== undefined ? Number(req.body.bondIndex) : undefined;
+    if (bondIndex !== undefined && (!Number.isInteger(bondIndex) || bondIndex < 0)) {
+      res.status(400).json({ error: "Bad Request: bondIndex must be a non-negative integer" });
+      return;
+    }
+    const result = await apiService.executeAction(vaultId, ActionType.SPEND_EARLY_EXIT, { destinationBtcAddress: destination, feeSats, bondIndex });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// GET /:vaultId/stacking/pox5/bond/early-exit/public-key
+export const getEarlyExitPublicKey: Handler = async (req, res, next) => {
+  try {
+    const vaultId = getVaultId(req);
+    const result = await apiService.executeAction(vaultId, ActionType.GET_EARLY_EXIT_PUBLIC_KEY, {});
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
 // GET /:vaultId/stacking/pox5/bond/lock-address
 export const getBondLockAddress: Handler = async (req, res, next) => {
   try {
