@@ -52,6 +52,7 @@ router.get("/:vaultId/address", validateVaultId, controller.getAddress);
  * @openapi
  * /{vaultId}/btc-rewards-address:
  *   get:
+ *     tags: [Account]
  *     summary: Get BTC rewards address
  *     description: Retrieves the BTC rewards address for the given vault ID (corresponding to the same public key as the Stacks address).
  *     parameters:
@@ -82,6 +83,7 @@ router.get(
  * @openapi
  * /{vaultId}/publicKey:
  *   get:
+ *     tags: [Account]
  *     summary: Get account public key
  *     description: Retrieves the public key for the given vault ID.
  *     parameters:
@@ -108,6 +110,7 @@ router.get("/:vaultId/publicKey", validateVaultId, controller.getPublicKey);
  * @openapi
  * /{vaultId}/check-status:
  *   get:
+ *     tags: [Account]
  *     summary: Get account status (balance total, locked STX and delegation status)
  *     description: >
  *       fetches the account status for STX balance total,
@@ -128,6 +131,7 @@ router.get("/:vaultId/check-status", validateVaultId, controller.checkStatus);
  * @openapi
  *  /transactions/{txId}:
  *   get:
+ *     tags: [Transactions]
  *     summary: Get transaction status by txid
  *     description: Retrieves status and details for a specific transaction ID.
  *     parameters:
@@ -155,6 +159,7 @@ router.get(
  * @openapi
  * /poxInfo:
  *   get:
+ *     tags: [Protocol Info]
  *     summary: Get PoX info
  *     description: >
  *       Retrieves information related to the Proof of Transfer (PoX) from blockchain
@@ -172,6 +177,7 @@ router.get(
  * @openapi
  * /{vaultId}/nonce:
  *   get:
+ *     tags: [Account]
  *     summary: Get account nonce
  *     description: >
  *       Returns nonce information for this vault's Stacks address, accounting
@@ -217,6 +223,7 @@ router.get("/:vaultId/nonce", validateVaultId, controller.getAccountNonce);
  * @openapi
  * /{vaultId}/balance:
  *   get:
+ *     tags: [Balances]
  *     summary: Get base asset balance
  *     description: Retrieves the balance of the native coin for the address of the vault ID.
  *     parameters:
@@ -235,6 +242,7 @@ router.get("/:vaultId/balance", validateVaultId, controller.getBalance);
  * @openapi
  * /{vaultId}/ft-balances:
  *   get:
+ *     tags: [Balances]
  *     summary: Get fungible token balances
  *     description: Retrieves balances for supported SIP-010 tokens for the address of the vault ID.
  *     parameters:
@@ -254,6 +262,7 @@ router.get("/:vaultId/ft-balances", validateVaultId, controller.getFtBalances);
  * @openapi
  * /{vaultId}/transactions:
  *   get:
+ *     tags: [Transactions]
  *     summary: Get transaction history
  *     description: Retrieves transaction history for the vault’s associated blockchain account with optional pagination.
  *     parameters:
@@ -324,6 +333,7 @@ router.get(
  * @openapi
  * /{vaultId}/transfer:
  *   post:
+ *     tags: [Transactions]
  *     summary: Create transfer (STX or FT)
  *     description: Initiates a transfer of native STX or a supported SIP-010 token.
  *     parameters:
@@ -404,6 +414,7 @@ router.post(
  * @openapi
  * /{vaultId}/replace-transaction:
  *   post:
+ *     tags: [Transactions]
  *     summary: Replace a stuck pending transaction (bump fee)
  *     description: >
  *       Replaces a pending transaction that is stuck in the mempool by submitting a new one
@@ -472,6 +483,7 @@ router.post(
  * @openapi
  * /{vaultId}/stacking/pox5/stake:
  *   post:
+ *     tags: [PoX-5 Staking]
  *     summary: Stake STX (PoX-5)
  *     description: >
  *       Initiates a PoX-5 solo STX staking position. Rewards are paid in sBTC
@@ -526,6 +538,7 @@ router.post("/:vaultId/stacking/pox5/stake", validateVaultId, controller.stake);
  * @openapi
  * /{vaultId}/stacking/pox5/update:
  *   post:
+ *     tags: [PoX-5 Staking]
  *     summary: Update stake (PoX-5)
  *     description: >
  *       Updates an existing PoX-5 staking position — change the signer-manager,
@@ -582,6 +595,7 @@ router.post("/:vaultId/stacking/pox5/update", validateVaultId, controller.update
  * @openapi
  * /{vaultId}/stacking/pox5/unstake:
  *   post:
+ *     tags: [PoX-5 Staking]
  *     summary: Unstake STX (PoX-5)
  *     description: >
  *       Exits a PoX-5 staking position. Cannot be called during the prepare phase
@@ -627,6 +641,7 @@ router.post("/:vaultId/stacking/pox5/unstake", validateVaultId, controller.unsta
  * @openapi
  * /stacking/pox5/info:
  *   get:
+ *     tags: [Protocol Info]
  *     summary: Get PoX-5 network info
  *     description: >
  *       Returns current PoX-5 protocol state from the private testnet node,
@@ -644,6 +659,7 @@ router.get("/stacking/pox5/info", controller.getPox5Info);
  * @openapi
  * /{vaultId}/stacking/pox5/staker-info:
  *   get:
+ *     tags: [PoX-5 Staking]
  *     summary: Get staker info (PoX-5)
  *     description: >
  *       Returns the current PoX-5 staking state for the vault's Stacks address,
@@ -657,13 +673,74 @@ router.get("/stacking/pox5/info", controller.getPox5Info);
  *         description: Internal server error
  */
 router.get("/:vaultId/stacking/pox5/staker-info", validateVaultId, controller.getStakerInfo);
+
+/**
+ * @openapi
+ * /{vaultId}/stacking/pox5/grant:
+ *   post:
+ *     tags: [PoX-5 Staking]
+ *     summary: Grant signer key (PoX-5)
+ *     description: Grants a signer key via the signer-manager contract, authorising it to act on behalf of this vault for PoX-5 staking.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [signerManager, signerKey]
+ *             properties:
+ *               signerManager:
+ *                 type: string
+ *                 description: Stacks address of the signer-manager contract.
+ *               signerKey:
+ *                 type: string
+ *                 description: Signer public key to grant (compressed 33-byte hex).
+ *               nonce:
+ *                 type: integer
+ *               externalId:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Signer key granted successfully.
+ *       400:
+ *         description: Invalid input.
+ *       500:
+ *         description: Internal server error
+ */
 router.post("/:vaultId/stacking/pox5/grant", validateVaultId, controller.grantSignerKey);
+
+/**
+ * @openapi
+ * /{vaultId}/stacking/pox5/verify-grant:
+ *   get:
+ *     tags: [PoX-5 Staking]
+ *     summary: Verify signer grant (PoX-5)
+ *     description: Checks on-chain whether the signer grant for this vault is currently active.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *       - in: query
+ *         name: signerManager
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Signer-manager contract address to verify the grant against.
+ *     responses:
+ *       200:
+ *         description: Grant verification result returned.
+ *       400:
+ *         description: signerManager is required.
+ *       500:
+ *         description: Internal server error
+ */
 router.get("/:vaultId/stacking/pox5/verify-grant", validateVaultId, controller.verifySignerGrant);
 
 /**
  * @openapi
  * /{vaultId}/stacking/pox5/requirements:
  *   get:
+ *     tags: [PoX-5 Staking]
  *     summary: Get PoX-5 staking requirements and minimums
  *     description: >
  *       Returns cycle timing and safety info. When `bondIndex` is provided, also returns
@@ -701,6 +778,7 @@ router.get("/:vaultId/stacking/pox5/requirements", validateVaultId, controller.g
  * @openapi
  * /{vaultId}/stacking/pox5/bond/create:
  *   post:
+ *     tags: [PoX-5 BTC Bonds]
  *     summary: Create a PoX-5 BTC bond (L1 + L2 registration)
  *     description: >
  *       Funds a BTC P2WSH lock address and registers the resulting UTXO on-chain via
@@ -763,6 +841,7 @@ router.post("/:vaultId/stacking/pox5/bond/create", validateVaultId, controller.c
  * @openapi
  * /{vaultId}/stacking/pox5/bond/position:
  *   get:
+ *     tags: [PoX-5 BTC Bonds]
  *     summary: Get current BTC bond position (PoX-5)
  *     description: >
  *       Returns the current bond membership for the vault's address, including
@@ -782,6 +861,7 @@ router.get("/:vaultId/stacking/pox5/bond/position", validateVaultId, controller.
  * @openapi
  * /{vaultId}/stacking/pox5/bond/announce-early-exit:
  *   post:
+ *     tags: [PoX-5 BTC Bonds]
  *     summary: Announce early BTC bond exit (PoX-5)
  *     description: >
  *       Broadcasts the L2 early-exit announcement for a native BTC bond. This signals
@@ -820,6 +900,7 @@ router.post("/:vaultId/stacking/pox5/bond/announce-early-exit", validateVaultId,
  * @openapi
  * /{vaultId}/stacking/pox5/bond/early-exit:
  *   post:
+ *     tags: [PoX-5 BTC Bonds]
  *     summary: Spend early-exit BTC bond via cosigner (PoX-5)
  *     description: >
  *       Spends the bond's P2WSH UTXO through the OP_ELSE (early-exit) branch. The
@@ -861,6 +942,7 @@ router.post("/:vaultId/stacking/pox5/bond/early-exit", validateVaultId, controll
  * @openapi
  * /{vaultId}/stacking/pox5/bond/early-exit/public-key:
  *   get:
+ *     tags: [PoX-5 BTC Bonds]
  *     summary: Get early-exit cosigner public key metadata (PoX-5)
  *     description: >
  *       Proxies the external KMS cosigner service's public-key endpoint. Returns the
@@ -880,6 +962,7 @@ router.get("/:vaultId/stacking/pox5/bond/early-exit/public-key", validateVaultId
  * @openapi
  * /{vaultId}/stacking/pox5/bond/lock-address:
  *   get:
+ *     tags: [PoX-5 BTC Bonds]
  *     summary: Get BTC bond lock address (PoX-5)
  *     description: >
  *       Returns the P2WSH lock address (bcrt1… on testnet, bc1… on mainnet) for the given
@@ -906,6 +989,7 @@ router.get("/:vaultId/stacking/pox5/bond/lock-address", validateVaultId, control
  * @openapi
  * /{vaultId}/stacking/pox5/bond/fund-lock:
  *   post:
+ *     tags: [PoX-5 BTC Bonds]
  *     summary: Fund BTC bond lock address via faucet (testnet only)
  *     description: >
  *       Calls the private-1 BTC faucet to fund the bond lock address for the given bond index.
@@ -939,6 +1023,7 @@ router.post("/:vaultId/stacking/pox5/bond/fund-lock", validateVaultId, controlle
  * @openapi
  * /{vaultId}/stacking/pox5/bond/unlock:
  *   post:
+ *     tags: [PoX-5 BTC Bonds]
  *     summary: Unlock matured BTC bond (PoX-5)
  *     description: >
  *       Spends the P2WSH lock UTXO via the OP_IF (CLTV) branch and sends the BTC to a
@@ -977,6 +1062,7 @@ router.post("/:vaultId/stacking/pox5/bond/unlock", validateVaultId, controller.u
  * @openapi
  * /{vaultId}/stacking/pox5/bond/renew:
  *   post:
+ *     tags: [PoX-5 BTC Bonds]
  *     summary: Renew BTC bond into next bond period (PoX-5)
  *     description: >
  *       Spends the current lock UTXO via the OP_ELSE branch and re-locks the BTC into the
@@ -1022,6 +1108,7 @@ router.post("/:vaultId/stacking/pox5/bond/renew", validateVaultId, controller.re
  * @openapi
  * /{vaultId}/stacking/pox5/rewards/calculate:
  *   post:
+ *     tags: [PoX-5 Rewards]
  *     summary: Trigger reward calculation (PoX-5)
  *     description: >
  *       Broadcasts a calculate-rewards transaction for all active bonds. Bond indices are
@@ -1052,6 +1139,7 @@ router.post("/:vaultId/stacking/pox5/rewards/calculate", validateVaultId, contro
  * @openapi
  * /{vaultId}/stacking/pox5/rewards/claim:
  *   post:
+ *     tags: [PoX-5 Rewards]
  *     summary: Claim sBTC rewards (PoX-5)
  *     description: >
  *       Claims ALL accumulated sBTC rewards for the given bond indices.
@@ -1091,6 +1179,7 @@ router.post("/:vaultId/stacking/pox5/rewards/claim", validateVaultId, controller
  * @openapi
  * /{vaultId}/stacking/pox5/rewards/claim-stx:
  *   post:
+ *     tags: [PoX-5 Rewards]
  *     summary: Claim sBTC rewards for STX-only staking (PoX-5)
  *     description: >
  *       Claims all accumulated sBTC rewards for a vault that is staked STX-only (no BTC bond).
@@ -1121,6 +1210,7 @@ router.post("/:vaultId/stacking/pox5/rewards/claim-stx", validateVaultId, contro
  * @openapi
  * /{vaultId}/stacking/pox5/rewards/earned:
  *   get:
+ *     tags: [PoX-5 Rewards]
  *     summary: Get earned sBTC rewards (PoX-5)
  *     description: >
  *       Returns accumulated earned sBTC rewards (in sats) for a signer manager and optional
@@ -1153,6 +1243,7 @@ router.get("/:vaultId/stacking/pox5/rewards/earned", validateVaultId, controller
  * @openapi
  * /{vaultId}/faucet:
  *   post:
+ *     tags: [Utility]
  *     summary: Fund vault address via STX faucet (testnet only)
  *     description: >
  *       Calls the private-1 STX faucet to fund the vault's Stacks address.
@@ -1182,6 +1273,7 @@ router.post("/:vaultId/faucet", validateVaultId, controller.fundVault);
  * @openapi
  * /metrics:
  *   get:
+ *     tags: [Utility]
  *     summary: Get SDK pool metrics
  *     description: Retrieves metrics for the Fireblocks SDK connection pool.
  *     responses:
