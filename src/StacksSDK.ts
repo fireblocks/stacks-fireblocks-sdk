@@ -2572,7 +2572,7 @@ export class StacksSDK {
     const utxos: any[] = await fetch(`${this.esploraBase()}/address/${lockingAddress}/utxo`)
       .then(r => r.json())
       .catch(() => []);
-    return utxos.find(u => BigInt(u.value) === amountSats) ?? utxos[0] ?? null;
+    return utxos.find(u => BigInt(u.value) === amountSats) ?? null;
   };
 
   // ─── §6: unlockMaturedBond ────────────────────────────────────────────────
