@@ -2847,6 +2847,86 @@ export class StacksSDK {
    * Handles the full flow internally: calculate → distribute → claim staker share.
    * User just passes bond indices and gets their sBTC.
    */
+  /**
+   * Executes the two-step signer-manager reward claim for a single reward cycle.
+   * @param claimBondIndices - Bond indices passed to claim-rewards (empty for STX-only stakes).
+   * @param stakerBondIndices - One claim-staker-rewards call per entry; `undefined` claims the
+   * STX-only share via none() instead of some(bondIndex).
+   * @returns The advanced nonce, and an error message if any step failed.
+   */
+  private executeClaimCycle = async (
+    signerContractAddress: string,
+    signerContractName: string,
+    cycle: number,
+    claimBondIndices: number[],
+    stakerBondIndices: (number | undefined)[],
+    nonce: bigint,
+    note: string | undefined,
+    txHashes: string[],
+  ): Promise<{ nonce: bigint; error?: string }> => {
+    const smClaimTx = await makeUnsignedContractCall({
+      contractAddress: signerContractAddress,
+      contractName: signerContractName,
+      functionName: 'claim-rewards',
+      functionArgs: [Cl.list(claimBondIndices.map(i => Cl.uint(i))), Cl.uint(cycle)],
+      publicKey: this.publicKey!,
+      fee: DEFAULT_POX_FEE_USTX,
+      nonce,
+      network: this.pox5Network,
+      postConditionMode: 'allow',
+      postConditions: [],
+    });
+    const smClaimResult = await this.pox5SignAndBroadcast(smClaimTx, `sm-claim-rewards-cycle-${cycle}`);
+    if (smClaimResult?.txid && !smClaimResult.error && !smClaimResult.reason) {
+      nonce = nonce + BigInt(1);
+      const smClaimSettled = await this.waitForTxSettlement(smClaimResult.txid);
+      const smClaimRepr: string = (smClaimSettled.data?.tx_result as any)?.repr ?? smClaimSettled.data?.tx_error ?? '';
+      if (smClaimSettled.data?.tx_status !== 'success' && !smClaimRepr.includes('u30') && !smClaimRepr.includes('u32')) {
+        return { nonce, error: `signer-manager.claim-rewards failed at cycle ${cycle}: ${smClaimRepr}` };
+      }
+    } else if (smClaimResult?.error || smClaimResult?.reason) {
+      const errMsg = [smClaimResult?.error, smClaimResult?.reason].filter(Boolean).join(' — ');
+      return { nonce, error: `signer-manager.claim-rewards broadcast failed at cycle ${cycle}: ${errMsg}` };
+    }
+
+    for (const bondIndex of stakerBondIndices) {
+      const smStakerTx = await makeUnsignedContractCall({
+        contractAddress: signerContractAddress,
+        contractName: signerContractName,
+        functionName: 'claim-staker-rewards',
+        functionArgs: [
+          Cl.address(this.address!),
+          Cl.uint(cycle),
+          bondIndex !== undefined ? Cl.some(Cl.uint(bondIndex)) : Cl.none(),
+        ],
+        publicKey: this.publicKey!,
+        fee: DEFAULT_POX_FEE_USTX,
+        nonce,
+        network: this.pox5Network,
+        postConditionMode: 'allow',
+        postConditions: [],
+      });
+      const defaultNote = bondIndex !== undefined
+        ? `sm-claim-staker-rewards-cycle-${cycle}-bond-${bondIndex}`
+        : `sm-claim-staker-stx-rewards-cycle-${cycle}`;
+      const bondSuffix = bondIndex !== undefined ? ` bond ${bondIndex}` : '';
+      const smStakerResult = await this.pox5SignAndBroadcast(smStakerTx, note ?? defaultNote);
+      if (!smStakerResult?.txid || smStakerResult.error || smStakerResult.reason) {
+        const errMsg = [smStakerResult?.error, smStakerResult?.reason].filter(Boolean).join(' — ') || 'broadcast failed';
+        return { nonce, error: `Failed at cycle ${cycle}${bondSuffix}: ${errMsg}` };
+      }
+      const settled = await this.waitForTxSettlement(smStakerResult.txid);
+      if (!settled.success || settled.data?.tx_status !== 'success') {
+        const stakerRepr: string = (settled.data?.tx_result as any)?.repr ?? settled.data?.tx_error ?? '';
+        return { nonce, error: `Claim failed on-chain at cycle ${cycle}${bondSuffix}: ${stakerRepr}` };
+      }
+      txHashes.push(smStakerResult.txid);
+      nonce = nonce + BigInt(1);
+    }
+
+    return { nonce };
+  };
+
   public claimRewards = async (
     bondIndices: number[],
     opts?: { note?: string; nonce?: bigint },
@@ -2895,69 +2975,12 @@ export class StacksSDK {
       const signerContractName = membership.signer.slice(signerDotIdx + 1);
 
       for (const cycle of claimableCycles) {
-        // Step 1: signer-manager.claim-rewards — pulls sBTC from pox-5 into signer-manager
-        // Anyone can call this. Skip gracefully if already done.
-        const smClaimTx = await makeUnsignedContractCall({
-          contractAddress: signerContractAddress,
-          contractName: signerContractName,
-          functionName: 'claim-rewards',
-          functionArgs: [
-            Cl.list(bondIndices.map(i => Cl.uint(i))),
-            Cl.uint(cycle),
-          ],
-          publicKey: this.publicKey,
-          fee: DEFAULT_POX_FEE_USTX,
-          nonce,
-          network: this.pox5Network,
-          postConditionMode: 'allow',
-          postConditions: [],
-        });
-        const smClaimResult = await this.pox5SignAndBroadcast(smClaimTx, `sm-claim-rewards-cycle-${cycle}`);
-        if (smClaimResult?.txid && !smClaimResult.error && !smClaimResult.reason) {
-          nonce = nonce + BigInt(1);
-          const smClaimSettled = await this.waitForTxSettlement(smClaimResult.txid);
-          const smClaimRepr: string = (smClaimSettled.data?.tx_result as any)?.repr ?? smClaimSettled.data?.tx_error ?? '';
-          // (err u30/u32) means already done — skip. Any other failure stops here.
-          if (smClaimSettled.data?.tx_status !== 'success' && !smClaimRepr.includes('u30') && !smClaimRepr.includes('u32')) {
-            return { success: false, error: `signer-manager.claim-rewards failed at cycle ${cycle}: ${smClaimRepr}`, txHashes };
-          }
-        } else if (smClaimResult?.error || smClaimResult?.reason) {
-          const errMsg = [smClaimResult?.error, smClaimResult?.reason].filter(Boolean).join(' — ');
-          return { success: false, error: `signer-manager.claim-rewards broadcast failed at cycle ${cycle}: ${errMsg}`, txHashes };
-        }
-
-        // Step 2: signer-manager.claim-staker-rewards — pays this staker their sBTC share
-        // Anyone can call this on behalf of any staker.
-        for (const bondIndex of bondIndices) {
-          const smStakerTx = await makeUnsignedContractCall({
-            contractAddress: signerContractAddress,
-            contractName: signerContractName,
-            functionName: 'claim-staker-rewards',
-            functionArgs: [
-              Cl.address(this.address),
-              Cl.uint(cycle),
-              Cl.some(Cl.uint(bondIndex)),
-            ],
-            publicKey: this.publicKey,
-            fee: DEFAULT_POX_FEE_USTX,
-            nonce,
-            network: this.pox5Network,
-            postConditionMode: 'allow',
-            postConditions: [],
-          });
-          const smStakerResult = await this.pox5SignAndBroadcast(smStakerTx, opts?.note ?? `sm-claim-staker-rewards-cycle-${cycle}-bond-${bondIndex}`);
-          if (!smStakerResult?.txid || smStakerResult.error || smStakerResult.reason) {
-            const errMsg = [smStakerResult?.error, smStakerResult?.reason].filter(Boolean).join(' — ') || 'broadcast failed';
-            return { success: false, error: `Failed at cycle ${cycle} bond ${bondIndex}: ${errMsg}`, txHashes };
-          }
-          const settled = await this.waitForTxSettlement(smStakerResult.txid);
-          if (!settled.success || settled.data?.tx_status !== 'success') {
-            const stakerRepr: string = (settled.data?.tx_result as any)?.repr ?? settled.data?.tx_error ?? '';
-            return { success: false, error: `Claim failed on-chain at cycle ${cycle} bond ${bondIndex}: ${stakerRepr}`, txHashes };
-          }
-          txHashes.push(smStakerResult.txid);
-          nonce = nonce + BigInt(1);
-        }
+        const result = await this.executeClaimCycle(
+          signerContractAddress, signerContractName, cycle,
+          bondIndices, bondIndices, nonce, opts?.note, txHashes,
+        );
+        nonce = result.nonce;
+        if (result.error) return { success: false, error: result.error, txHashes };
       }
 
       return { success: true, txHashes };
@@ -3015,61 +3038,12 @@ export class StacksSDK {
       const txHashes: string[] = [];
 
       for (const cycle of claimableCycles) {
-        // Step 1: signer-manager.claim-rewards with empty bond list
-        const smClaimTx = await makeUnsignedContractCall({
-          contractAddress: signerContractAddress,
-          contractName: signerContractName,
-          functionName: 'claim-rewards',
-          functionArgs: [Cl.list([]), Cl.uint(cycle)],
-          publicKey: this.publicKey,
-          fee: DEFAULT_POX_FEE_USTX,
-          nonce,
-          network: this.pox5Network,
-          postConditionMode: 'allow',
-          postConditions: [],
-        });
-        const smClaimResult = await this.pox5SignAndBroadcast(smClaimTx, `sm-claim-stx-rewards-cycle-${cycle}`);
-        if (smClaimResult?.txid && !smClaimResult.error && !smClaimResult.reason) {
-          nonce = nonce + BigInt(1);
-          const smClaimSettled = await this.waitForTxSettlement(smClaimResult.txid);
-          const smClaimRepr: string = (smClaimSettled.data?.tx_result as any)?.repr ?? smClaimSettled.data?.tx_error ?? '';
-          if (smClaimSettled.data?.tx_status !== 'success' && !smClaimRepr.includes('u30') && !smClaimRepr.includes('u32')) {
-            return { success: false, error: `signer-manager.claim-rewards failed at cycle ${cycle}: ${smClaimRepr}`, txHashes };
-          }
-        } else if (smClaimResult?.error || smClaimResult?.reason) {
-          const errMsg = [smClaimResult?.error, smClaimResult?.reason].filter(Boolean).join(' — ');
-          return { success: false, error: `signer-manager.claim-rewards broadcast failed at cycle ${cycle}: ${errMsg}`, txHashes };
-        }
-
-        // Step 2: signer-manager.claim-staker-rewards with none() as bond index
-        const smStakerTx = await makeUnsignedContractCall({
-          contractAddress: signerContractAddress,
-          contractName: signerContractName,
-          functionName: 'claim-staker-rewards',
-          functionArgs: [
-            Cl.address(this.address),
-            Cl.uint(cycle),
-            Cl.none(),
-          ],
-          publicKey: this.publicKey,
-          fee: DEFAULT_POX_FEE_USTX,
-          nonce,
-          network: this.pox5Network,
-          postConditionMode: 'allow',
-          postConditions: [],
-        });
-        const smStakerResult = await this.pox5SignAndBroadcast(smStakerTx, opts?.note ?? `sm-claim-staker-stx-rewards-cycle-${cycle}`);
-        if (!smStakerResult?.txid || smStakerResult.error || smStakerResult.reason) {
-          const errMsg = [smStakerResult?.error, smStakerResult?.reason].filter(Boolean).join(' — ') || 'broadcast failed';
-          return { success: false, error: `Failed at cycle ${cycle}: ${errMsg}`, txHashes };
-        }
-        const settled = await this.waitForTxSettlement(smStakerResult.txid);
-        if (!settled.success || settled.data?.tx_status !== 'success') {
-          const stakerRepr: string = (settled.data?.tx_result as any)?.repr ?? settled.data?.tx_error ?? '';
-          return { success: false, error: `Claim failed on-chain at cycle ${cycle}: ${stakerRepr}`, txHashes };
-        }
-        txHashes.push(smStakerResult.txid);
-        nonce = nonce + BigInt(1);
+        const result = await this.executeClaimCycle(
+          signerContractAddress, signerContractName, cycle,
+          [], [undefined], nonce, opts?.note, txHashes,
+        );
+        nonce = result.nonce;
+        if (result.error) return { success: false, error: result.error, txHashes };
       }
 
       return { success: true, txHashes };
