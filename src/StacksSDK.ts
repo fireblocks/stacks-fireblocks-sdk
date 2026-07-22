@@ -2044,16 +2044,15 @@ export class StacksSDK {
 
       // Sum earned sats across all past cycles for a stable, accurate total
       const firstEarningCycle = bondPeriodToRewardCycle({ bondIndex: membership.bondIndex, poxInfo: pox });
-      let earnedSats = BigInt(0);
-      for (let cycle = firstEarningCycle; cycle < pox.rewardCycleId; cycle++) {
-        const cycleEarned = await fetchEarned({
+      const earnedSats = await this.sumOverCycles(
+        this.cycleRange(firstEarningCycle, pox.rewardCycleId),
+        cycle => fetchEarned({
           signerManager: membership.signer,
           rewardCycle: cycle,
           bondIndex: membership.bondIndex,
           network: this.pox5Network,
-        }).catch(() => BigInt(0));
-        earnedSats += cycleEarned;
-      }
+        }).catch(() => BigInt(0)),
+      );
 
       // L1 lock state (BTC-locked positions only)
       let unlock_height: number | null = null;
@@ -2842,11 +2841,30 @@ export class StacksSDK {
     }
   };
 
-  /**
-   * Claims ALL accumulated sBTC rewards for the given bond indices.
-   * Handles the full flow internally: calculate → distribute → claim staker share.
-   * User just passes bond indices and gets their sBTC.
-   */
+  private cycleRange = (startCycle: number, endCycleExclusive: number): number[] => {
+    const cycles: number[] = [];
+    for (let cycle = startCycle; cycle < endCycleExclusive; cycle++) cycles.push(cycle);
+    return cycles;
+  };
+
+  /** Fetches a bigint value per cycle in parallel and sums the results. */
+  private sumOverCycles = async (
+    cycles: number[],
+    fetcher: (cycle: number) => Promise<bigint>,
+  ): Promise<bigint> => {
+    const values = await Promise.all(cycles.map(fetcher));
+    return values.reduce((sum, v) => sum + v, BigInt(0));
+  };
+
+  /** Fetches a bigint value per cycle in parallel and returns the cycles with a positive result. */
+  private filterCyclesWithPositiveValue = async (
+    cycles: number[],
+    fetcher: (cycle: number) => Promise<bigint>,
+  ): Promise<number[]> => {
+    const values = await Promise.all(cycles.map(fetcher));
+    return cycles.filter((_, i) => values[i] > BigInt(0));
+  };
+
   /**
    * Executes the two-step signer-manager reward claim for a single reward cycle.
    * @param claimBondIndices - Bond indices passed to claim-rewards (empty for STX-only stakes).
@@ -2927,6 +2945,11 @@ export class StacksSDK {
     return { nonce };
   };
 
+  /**
+   * Claims ALL accumulated sBTC rewards for the given bond indices.
+   * Handles the full flow internally: calculate → distribute → claim staker share.
+   * User just passes bond indices and gets their sBTC.
+   */
   public claimRewards = async (
     bondIndices: number[],
     opts?: { note?: string; nonce?: bigint },
@@ -2947,16 +2970,15 @@ export class StacksSDK {
         : pox.rewardCycleId - 1;
 
       // Find cycles with non-zero bond rewards
-      const claimableCycles: number[] = [];
-      for (let cycle = firstEarningCycle; cycle <= lastComputedCycle; cycle++) {
-        const earned = await fetchEarned({
+      const claimableCycles = await this.filterCyclesWithPositiveValue(
+        this.cycleRange(firstEarningCycle, lastComputedCycle + 1),
+        cycle => fetchEarned({
           signerManager: membership.signer,
           rewardCycle: cycle,
           bondIndex: minBondIndex,
           network: this.pox5Network,
-        }).catch(() => BigInt(0));
-        if (earned > BigInt(0)) claimableCycles.push(cycle);
-      }
+        }).catch(() => BigInt(0)),
+      );
 
       if (claimableCycles.length === 0) {
         return {
@@ -3016,16 +3038,15 @@ export class StacksSDK {
         ? Math.floor((lastComputeHeight - pox.firstBurnchainBlockHeight) / pox.rewardCycleLength)
         : pox.rewardCycleId - 1;
 
-      const claimableCycles: number[] = [];
-      for (let cycle = firstEarningCycle; cycle <= lastComputedCycle; cycle++) {
-        const earned = await fetchEarned({
+      const claimableCycles = await this.filterCyclesWithPositiveValue(
+        this.cycleRange(firstEarningCycle, lastComputedCycle + 1),
+        cycle => fetchEarned({
           signerManager: signerPrincipal,
           rewardCycle: cycle,
           bondIndex: undefined,
           network: this.pox5Network,
-        }).catch(() => BigInt(0));
-        if (earned > BigInt(0)) claimableCycles.push(cycle);
-      }
+        }).catch(() => BigInt(0)),
+      );
 
       if (claimableCycles.length === 0) {
         return {
@@ -3068,28 +3089,26 @@ export class StacksSDK {
 
       // Sum across all past cycles for a stable total
       const startCycle = bondFirstRewardCycle ?? 0;
-      let earned = BigInt(0);
-      let stakerEarned = BigInt(0);
-      for (let cycle = startCycle; cycle < pox.rewardCycleId; cycle++) {
-        const cycleEarned = await fetchEarned({
+      const pastCycles = this.cycleRange(startCycle, pox.rewardCycleId);
+      const stakerAddress = this.address;
+
+      const [earned, stakerEarned] = await Promise.all([
+        this.sumOverCycles(pastCycles, cycle => fetchEarned({
           signerManager,
           rewardCycle: cycle,
           bondIndex,
           network: this.pox5Network,
-        }).catch(() => BigInt(0));
-        earned += cycleEarned;
-
-        if (this.address) {
-          const cycleStakerEarned = await fetchEarnedStakerRewards({
-            signerManager,
-            rewardCycle: cycle,
-            bondIndex,
-            staker: this.address,
-            network: this.pox5Network,
-          }).catch(() => BigInt(0));
-          stakerEarned += cycleStakerEarned;
-        }
-      }
+        }).catch(() => BigInt(0))),
+        stakerAddress
+          ? this.sumOverCycles(pastCycles, cycle => fetchEarnedStakerRewards({
+              signerManager,
+              rewardCycle: cycle,
+              bondIndex,
+              staker: stakerAddress,
+              network: this.pox5Network,
+            }).catch(() => BigInt(0)))
+          : Promise.resolve(BigInt(0)),
+      ]);
 
       const cyclesUntilRewards = bondFirstRewardCycle !== undefined
         ? Math.max(0, bondFirstRewardCycle - pox.rewardCycleId)
