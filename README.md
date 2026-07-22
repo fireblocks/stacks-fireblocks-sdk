@@ -502,8 +502,9 @@ history.forEach((tx) => {
 | POST   | `/api/:vaultId/stacking/pox5/stake`                | Stake STX via signer-manager (replaces PoX-4 solo stack)  |
 | POST   | `/api/:vaultId/stacking/pox5/update`               | Update (increase) an existing PoX-5 stake                 |
 | POST   | `/api/:vaultId/stacking/pox5/unstake`              | Unstake STX from PoX-5                                    |
-| POST   | `/api/:vaultId/stacking/pox5/grant`                | Grant signer key via signer-manager                       |
-| GET    | `/api/:vaultId/stacking/pox5/verify-grant`         | Verify that the signer grant is active                    |
+| POST   | `/api/:vaultId/stacking/pox5/grant-signer-key`     | Grant signer key via signer-manager                       |
+| GET    | `/api/:vaultId/stacking/pox5/verify-signer-grant`  | Verify that the signer grant is active                    |
+| POST   | `/api/:vaultId/stacking/pox5/revoke-signer-grant`  | Revoke an existing signer key grant                        |
 
 ### **PoX-5 BTC Bond Endpoints**
 

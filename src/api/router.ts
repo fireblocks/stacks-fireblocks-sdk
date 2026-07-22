@@ -676,7 +676,7 @@ router.get("/:vaultId/stacking/pox5/staker-info", validateVaultId, controller.ge
 
 /**
  * @openapi
- * /{vaultId}/stacking/pox5/grant:
+ * /{vaultId}/stacking/pox5/grant-signer-key:
  *   post:
  *     tags: [PoX-5 Staking]
  *     summary: Grant signer key (PoX-5)
@@ -709,11 +709,11 @@ router.get("/:vaultId/stacking/pox5/staker-info", validateVaultId, controller.ge
  *       500:
  *         description: Internal server error
  */
-router.post("/:vaultId/stacking/pox5/grant", validateVaultId, controller.grantSignerKey);
+router.post("/:vaultId/stacking/pox5/grant-signer-key", validateVaultId, controller.grantSignerKey);
 
 /**
  * @openapi
- * /{vaultId}/stacking/pox5/verify-grant:
+ * /{vaultId}/stacking/pox5/verify-signer-grant:
  *   get:
  *     tags: [PoX-5 Staking]
  *     summary: Verify signer grant (PoX-5)
@@ -734,7 +734,7 @@ router.post("/:vaultId/stacking/pox5/grant", validateVaultId, controller.grantSi
  *       500:
  *         description: Internal server error
  */
-router.get("/:vaultId/stacking/pox5/verify-grant", validateVaultId, controller.verifySignerGrant);
+router.get("/:vaultId/stacking/pox5/verify-signer-grant", validateVaultId, controller.verifySignerGrant);
 
 /**
  * @openapi
