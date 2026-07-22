@@ -738,6 +738,43 @@ router.get("/:vaultId/stacking/pox5/verify-grant", validateVaultId, controller.v
 
 /**
  * @openapi
+ * /{vaultId}/stacking/pox5/revoke-signer-grant:
+ *   post:
+ *     tags: [PoX-5 Staking]
+ *     summary: Revoke signer grant (PoX-5)
+ *     description: Revokes an existing signer key grant from a signer-manager contract on PoX-5.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [signerManager, signerKey]
+ *             properties:
+ *               signerManager:
+ *                 type: string
+ *                 description: Stacks principal of the signer-manager contract.
+ *               signerKey:
+ *                 type: string
+ *                 description: 33-byte compressed public key (hex) to revoke.
+ *               nonce:
+ *                 type: integer
+ *               externalId:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Signer grant revoked successfully.
+ *       400:
+ *         description: Invalid input.
+ *       500:
+ *         description: Internal server error
+ */
+router.post("/:vaultId/stacking/pox5/revoke-signer-grant", validateVaultId, controller.revokeSignerGrant);
+
+/**
+ * @openapi
  * /{vaultId}/stacking/pox5/requirements:
  *   get:
  *     tags: [PoX-5 Staking]
