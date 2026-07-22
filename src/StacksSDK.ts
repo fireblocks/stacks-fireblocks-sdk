@@ -1819,6 +1819,36 @@ export class StacksSDK {
     throw new Error(`BTC tx ${btcTxid} did not reach ${required} confirmations within ${timeoutMs / 60000} minutes`);
   };
 
+  /**
+   * Fetches the confirmed BTC transaction, its block header, and its Merkle proof from
+   * Esplora, and builds the SPV lockup proof for `register-for-bond` / `renew-bond`.
+   * @param outputScript - Expected P2WSH output script the lock transaction must pay to.
+   * @param unlockHeight - Burn height at which the lock becomes spendable.
+   */
+  private assembleLockupProof = async (
+    btcTxid: string,
+    blockHash: string,
+    outputScript: Uint8Array,
+    unlockHeight: number,
+  ) => {
+    const [txHex, headerHex, merkleProof, blockMeta] = await Promise.all([
+      fetch(`${this.esploraBase()}/tx/${btcTxid}/hex`).then(r => r.text()),
+      fetch(`${this.esploraBase()}/block/${blockHash}/header`).then(r => r.text()),
+      fetch(`${this.esploraBase()}/tx/${btcTxid}/merkle-proof`).then(r => r.json()),
+      fetch(`${this.esploraBase()}/block/${blockHash}`).then(r => r.json()),
+    ]);
+    return {
+      ...buildLockProof({
+        txHex,
+        header: headerHex,
+        merkleProof,
+        txCount: blockMeta.tx_count,
+        expectedScript: outputScript,
+      }),
+      unlockBurnHeight: unlockHeight,
+    };
+  };
+
   // --- PoX-5 BTC Bond methods ---
 
   /**
@@ -1941,22 +1971,7 @@ export class StacksSDK {
       const { blockHash } = await this.waitForBtcConfirmations(btcTxid, opts?.confirmations ?? 3);
 
       // Step 9 — assemble SPV proof
-      const [txHex, headerHex, merkleProof, blockMeta] = await Promise.all([
-        fetch(`${this.esploraBase()}/tx/${btcTxid}/hex`).then(r => r.text()),
-        fetch(`${this.esploraBase()}/block/${blockHash}/header`).then(r => r.text()),
-        fetch(`${this.esploraBase()}/tx/${btcTxid}/merkle-proof`).then(r => r.json()),
-        fetch(`${this.esploraBase()}/block/${blockHash}`).then(r => r.json()),
-      ]);
-      const lockupProof = {
-        ...buildLockProof({
-          txHex,
-          header: headerHex,
-          merkleProof,
-          txCount: blockMeta.tx_count,
-          expectedScript: metadata.outputScript,
-        }),
-        unlockBurnHeight: metadata.unlockHeight,
-      };
+      const lockupProof = await this.assembleLockupProof(btcTxid, blockHash, metadata.outputScript, metadata.unlockHeight);
 
       // Step 10 — register on L2
       const resolvedNonce = await this.resolveNonce(opts?.nonce);
@@ -2722,22 +2737,7 @@ export class StacksSDK {
       const { blockHash } = await this.waitForBtcConfirmations(btcTxid, opts?.confirmations ?? 3);
 
       // 5. Assemble SPV proof for the new lock output
-      const [txHex, headerHex, merkleProof, blockMeta] = await Promise.all([
-        fetch(`${this.esploraBase()}/tx/${btcTxid}/hex`).then(r => r.text()),
-        fetch(`${this.esploraBase()}/block/${blockHash}/header`).then(r => r.text()),
-        fetch(`${this.esploraBase()}/tx/${btcTxid}/merkle-proof`).then(r => r.json()),
-        fetch(`${this.esploraBase()}/block/${blockHash}`).then(r => r.json()),
-      ]);
-      const lockupProof = {
-        ...buildLockProof({
-          txHex,
-          header: headerHex,
-          merkleProof,
-          txCount: blockMeta.tx_count,
-          expectedScript: nextMeta.outputScript,
-        }),
-        unlockBurnHeight: nextMeta.unlockHeight,
-      };
+      const lockupProof = await this.assembleLockupProof(btcTxid, blockHash, nextMeta.outputScript, nextMeta.unlockHeight);
 
       // 6. Required STX for next bond
       const amountUstx = minUstxForSatsAmount({
