@@ -26,7 +26,7 @@ export enum ActionType {
   CREATE_FT_TRANSACTION = "createFTTransaction",
   GET_BALANCE = "getBalance",
   GET_FT_BALANCES = "getFtBalances",
-  GET_TRANSACTIONS_HISTORY = "getTransactionsHistory",
+  GET_TRANSACTION_HISTORY = "getTransactionHistory",
   GET_ACCOUNT_ADDRESS = "getAddress",
   GET_ACCOUNT_PUBLIC_KEY = "getPublicKey",
   GET_BTC_REWARDS_ADDRESS = "getBtcRewardsAddress",

@@ -134,7 +134,7 @@ export class ApiService {
         case ActionType.GET_FT_BALANCES:
           result = await sdk.getFtBalances();
           break;
-        case ActionType.GET_TRANSACTIONS_HISTORY:
+        case ActionType.GET_TRANSACTION_HISTORY:
           result = await sdk.getTransactionHistory(
             params.getCachedTransactions,
             params.limit,

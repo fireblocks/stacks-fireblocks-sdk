@@ -160,7 +160,7 @@ export const getTransactionHistory: Handler = async (req, res, next) => {
 
     const history = await apiService.executeAction(
       vaultId,
-      ActionType.GET_TRANSACTIONS_HISTORY,
+      ActionType.GET_TRANSACTION_HISTORY,
       { getCachedTransactions, limit, offset, fetchAll, fetchPending },
     );
 
