@@ -1,6 +1,9 @@
 import { hexToBytes, bytesToHex } from "@stacks/common";
+import { Signature as Secp256k1Signature, verify as secp256k1Verify } from "@noble/secp256k1";
 import { env } from "../config";
 import { EARLY_EXIT_SIGNER } from "../utils/constants";
+
+const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
 
 /**
  * Client for the external KMS cosigner service used by the bond early-exit
@@ -50,10 +53,28 @@ export const resolveCosignerUrl = (testnet: boolean): string => {
 };
 
 export class CosignerService {
-  constructor(private baseUrl: string) {}
+  constructor(
+    private baseUrl: string,
+    private requestTimeoutMs: number = DEFAULT_REQUEST_TIMEOUT_MS,
+  ) {}
+
+  private fetchWithTimeout = async (url: string, init?: RequestInit): Promise<Response> => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+    try {
+      return await fetch(url, { ...init, signal: controller.signal });
+    } catch (error) {
+      if ((error as Error).name === "AbortError") {
+        throw new Error(`Cosigner request to ${url} timed out after ${this.requestTimeoutMs}ms`);
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
+  };
 
   public getPublicKey = async (): Promise<CosignerPublicKeyResponse> => {
-    const res = await fetch(`${this.baseUrl}/public-key`);
+    const res = await this.fetchWithTimeout(`${this.baseUrl}/public-key`);
     if (!res.ok) {
       throw new Error(`Cosigner public-key request failed (${res.status})`);
     }
@@ -61,7 +82,7 @@ export class CosignerService {
   };
 
   public sign = async (req: CosignRequest): Promise<CosignResponse> => {
-    const res = await fetch(`${this.baseUrl}/sign`, {
+    const res = await this.fetchWithTimeout(`${this.baseUrl}/sign`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(req),
@@ -116,6 +137,19 @@ export class CosignerService {
     }
 
     const der = hexToBytes(res.signature);
+    let parsedSig: Secp256k1Signature;
+    try {
+      parsedSig = Secp256k1Signature.fromDER(der);
+    } catch (error) {
+      throw new Error(`Cosigner returned a malformed DER signature: ${(error as Error).message}`);
+    }
+    if (parsedSig.hasHighS()) {
+      throw new Error("Cosigner signature is not canonical (high-S) — refusing signature");
+    }
+    if (!secp256k1Verify(parsedSig, args.expectedSighash, pubkey, { strict: true })) {
+      throw new Error("Cosigner signature failed local verification against the expected sighash and public key");
+    }
+
     const sig = new Uint8Array(der.length + 1);
     sig.set(der, 0);
     sig[der.length] = 0x01; // SIGHASH_ALL
