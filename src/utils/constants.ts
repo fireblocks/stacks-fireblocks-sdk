@@ -26,6 +26,7 @@ export const RBF_MIN_FEE_BUMP_USTX = BigInt(1);
 
 // Maximum fee accepted by the SDK in STX. Guards against typos (e.g. 100 instead of 0.001).
 export const MAX_FEE_STX = 10;
+export const DEFAULT_POX_FEE_USTX = BigInt(10000);
 
 export const api_constants = {
   stacks_mainnet_rpc: "https://api.hiro.so",
@@ -255,6 +256,14 @@ export const POX4_ERRORS: Record<number, { name: string; message: string }> = {
 export const BTC_ESPLORA = {
   mainnet: 'https://mempool.space/api',
   testnet: 'https://mempool.bitcoin.private-1.hiro.so/api',
+};
+
+// External KMS cosigner for the bond early-exit (OP_ELSE) spend path.
+// Auth-less public endpoints — no secrets involved. Mainnet is not provisioned
+// yet; resolveCosignerUrl throws unless EARLY_EXIT_SIGNER_URL is set.
+export const EARLY_EXIT_SIGNER = {
+  mainnet: '',
+  testnet: 'https://r25rniyw12.execute-api.eu-west-1.amazonaws.com/v1/v1',
 };
 
 export const POX5_BOND_ERRORS: Record<number, { name: string; message: string }> = {
