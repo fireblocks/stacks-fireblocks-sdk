@@ -657,6 +657,7 @@ router.get("/stacking/pox5/info", controller.getPox5Info);
  *         description: Internal server error
  */
 router.get("/:vaultId/stacking/pox5/staker-info", validateVaultId, controller.getStakerInfo);
+router.post("/:vaultId/stacking/pox5/grant", validateVaultId, controller.grantSignerKey);
 router.get("/:vaultId/stacking/pox5/verify-grant", validateVaultId, controller.verifySignerGrant);
 
 /**
@@ -814,6 +815,66 @@ router.get("/:vaultId/stacking/pox5/bond/position", validateVaultId, controller.
  *         description: Internal server error
  */
 router.post("/:vaultId/stacking/pox5/bond/announce-early-exit", validateVaultId, controller.announceEarlyExit);
+
+/**
+ * @openapi
+ * /{vaultId}/stacking/pox5/bond/early-exit:
+ *   post:
+ *     summary: Spend early-exit BTC bond via cosigner (PoX-5)
+ *     description: >
+ *       Spends the bond's P2WSH UTXO through the OP_ELSE (early-exit) branch. The
+ *       staker leg is raw-signed via Fireblocks and the cosigner leg is fetched from
+ *       the external KMS signing service, which is verified against the locally
+ *       computed sighash and the bond's early-unlock-bytes before use.
+ *       Requires announce-early-exit to have settled on L2 first (pre-checked on-chain).
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [destinationBtcAddress]
+ *             properties:
+ *               destinationBtcAddress:
+ *                 type: string
+ *                 description: BTC address to receive the unlocked funds.
+ *               feeSats:
+ *                 type: string
+ *                 description: Optional BTC fee in sats (default 500).
+ *               bondIndex:
+ *                 type: integer
+ *                 minimum: 0
+ *                 description: Optional bond index override when membership is no longer active.
+ *     responses:
+ *       200:
+ *         description: Early-exit spend broadcast successfully (returns btcTxid).
+ *       400:
+ *         description: Missing/invalid parameters, announce not settled, or no L1-locked bond.
+ *       500:
+ *         description: Internal server error
+ */
+router.post("/:vaultId/stacking/pox5/bond/early-exit", validateVaultId, controller.spendEarlyExit);
+
+/**
+ * @openapi
+ * /{vaultId}/stacking/pox5/bond/early-exit/public-key:
+ *   get:
+ *     summary: Get early-exit cosigner public key metadata (PoX-5)
+ *     description: >
+ *       Proxies the external KMS cosigner service's public-key endpoint. Returns the
+ *       service's account xpub, derivation path, fingerprint, and network — useful for
+ *       verifying the configured cosigner matches a bond's early-unlock-bytes.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *     responses:
+ *       200:
+ *         description: Cosigner public key metadata returned successfully.
+ *       500:
+ *         description: Cosigner service unreachable or not configured.
+ */
+router.get("/:vaultId/stacking/pox5/bond/early-exit/public-key", validateVaultId, controller.getEarlyExitPublicKey);
 
 /**
  * @openapi
