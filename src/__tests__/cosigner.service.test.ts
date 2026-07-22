@@ -1,4 +1,5 @@
 import { hexToBytes, bytesToHex } from "@stacks/common";
+import { getPublicKey, sign } from "@noble/secp256k1";
 import {
   CosignerService,
   resolveCosignerUrl,
@@ -10,9 +11,10 @@ import { EARLY_EXIT_SIGNER } from "../utils/constants";
 const BASE_URL = "https://cosigner.example/v1";
 
 const SIGHASH_HEX = "ab".repeat(32);
-const PUBKEY_HEX = "02" + "11".repeat(32);
-const DER_SIG_HEX = "30440220" + "cd".repeat(64); // opaque DER blob for the test
+const TEST_PRIVATE_KEY_HEX = "11".repeat(32);
+const PUBKEY_HEX = bytesToHex(getPublicKey(TEST_PRIVATE_KEY_HEX, true));
 const UNLOCK_BYTES = new Uint8Array([0x21, ...hexToBytes(PUBKEY_HEX), 0xac]);
+let DER_SIG_HEX: string;
 
 const signResponse = (overrides: Partial<Record<string, string>> = {}) => ({
   signature: DER_SIG_HEX,
@@ -43,6 +45,12 @@ const cosignArgs = () => ({
 describe("CosignerService", () => {
   const originalFetch = global.fetch;
   let service: CosignerService;
+
+  beforeAll(async () => {
+    DER_SIG_HEX = bytesToHex(
+      await sign(hexToBytes(SIGHASH_HEX), TEST_PRIVATE_KEY_HEX),
+    );
+  });
 
   beforeEach(() => {
     global.fetch = jest.fn();
@@ -130,13 +138,38 @@ describe("CosignerService", () => {
       mockFetchOnce(200, meta);
 
       await expect(service.getPublicKey()).resolves.toEqual(meta);
-      expect(global.fetch).toHaveBeenCalledWith(`${BASE_URL}/public-key`);
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${BASE_URL}/public-key`,
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
     });
 
     it("throws with the status on a non-2xx response", async () => {
       mockFetchOnce(404, {});
 
       await expect(service.getPublicKey()).rejects.toThrow(/404/);
+    });
+
+    it("times out an unresponsive request instead of hanging indefinitely", async () => {
+      jest.useFakeTimers();
+      const timeoutMs = 1000;
+      service = new CosignerService(BASE_URL, timeoutMs);
+      (global.fetch as jest.Mock).mockImplementationOnce(
+        (_url: string, init: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            init.signal?.addEventListener("abort", () =>
+              reject(
+                Object.assign(new Error("aborted"), { name: "AbortError" }),
+              ),
+            );
+          }),
+      );
+
+      const result = service.getPublicKey();
+      const assertion = expect(result).rejects.toThrow(/timed out/i);
+      jest.advanceTimersByTime(timeoutMs);
+      await assertion;
+      jest.useRealTimers();
     });
   });
 });
