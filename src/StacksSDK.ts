@@ -3682,7 +3682,7 @@ export class StacksSDK {
           : BigInt(fullTx.token_transfer.amount);
         const memoHex: string | undefined = fullTx.token_transfer.memo;
         const memo = memoHex
-          ? Buffer.from(memoHex.slice(2), 'hex').toString('utf8').replace(/\0/g, '') || undefined
+          ? Buffer.from(memoHex.startsWith('0x') ? memoHex.slice(2) : memoHex, 'hex').toString('utf8').replace(/\0/g, '') || undefined
           : undefined;
 
         if (!validateAddress(recipient, this.testnet)) {
