@@ -54,7 +54,7 @@ import {
   TransactionDetails,
   TransactionType,
 } from "./services/types";
-import { BTC_ESPLORA, DEFAULT_POX_FEE_USTX, helperConstants, pagination_defaults, POX4_ERRORS, RBF_MIN_FEE_BUMP_USTX, stacks_info } from "./utils/constants";
+import { BTC_ESPLORA, DEFAULT_POX_FEE_USTX, helperConstants, pagination_defaults, POX4_ERRORS, PRIVATE1_HIRO_API_BASE, RBF_MIN_FEE_BUMP_USTX, stacks_info } from "./utils/constants";
 import { InMemoryUnlockBytesStore, UnlockBytesStore } from "./staking/bonds/unlock-bytes-store";
 import { parseOptionalFee, ValidationError } from "./utils/validation";
 import { formatErrorMessage } from "./utils/errorHandling";
@@ -957,7 +957,7 @@ export class StacksSDK {
     ...STACKS_TESTNET,
     chainId: 256,
     magicBytes: 'id',
-    client: { baseUrl: 'https://api.private-1.hiro.so' },
+    client: { baseUrl: PRIVATE1_HIRO_API_BASE },
   };
 
   private get pox5Network(): StacksNetwork {
@@ -2200,7 +2200,7 @@ export class StacksSDK {
       if (!lockResult.success || !lockResult.data?.lockAddress) return { success: false, error: lockResult.error };
       const { lockAddress } = lockResult.data;
       const res = await fetch(
-        `https://api.private-1.hiro.so/extended/v1/faucets/btc?address=${lockAddress}`,
+        `${PRIVATE1_HIRO_API_BASE}/extended/v1/faucets/btc?address=${lockAddress}`,
         { method: 'POST' },
       );
       const body = await res.json() as { success: boolean; txid?: string; error?: string };
@@ -2219,7 +2219,7 @@ export class StacksSDK {
     if (!this.testnet) return { success: false, error: 'Faucet funding is only available on testnet' };
     try {
       const address = await this.getAddress() as string;
-      const url = `https://api.private-1.hiro.so/extended/v1/faucets/stx?address=${address}${staking ? '&stacking=true' : ''}`;
+      const url = `${PRIVATE1_HIRO_API_BASE}/extended/v1/faucets/stx?address=${address}${staking ? '&stacking=true' : ''}`;
       const res = await fetch(url, { method: 'POST' });
       const body = await res.json() as { success: boolean; txId?: string; error?: string };
       if (!body.success) return { success: false, error: body.error ?? 'Faucet request failed' };
