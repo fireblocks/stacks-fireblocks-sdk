@@ -551,6 +551,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
     functionArgs: ClarityValue[],
     nonce?: bigint,
     postConditionMode?: PostConditionMode,
+    postConditions?: PostConditionWire[],
   ): Promise<StacksTransactionWire> => {
     try {
       if (!validateAddress(contractAddress, this.testnet)) {
@@ -574,6 +575,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
         network: this.network,
         postConditionMode: postConditionMode ?? PostConditionMode.Deny,
         ...(nonce !== undefined ? { nonce } : {}),
+        ...(postConditions !== undefined ? { postConditions } : {}),
       });
 
       return unsignedContractCall;
@@ -697,6 +699,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
         functionArgs,
         nonce,
         postConditionMode,
+        postConditions,
       );
 
       if (fee !== undefined) {
