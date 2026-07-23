@@ -36,11 +36,6 @@ It's designed to simplify integration with Fireblocks for secure Stacks transact
 - **Fungible token transfers**: Support for SIP-010 token transfers (sBTC, USDC, etc.)
 - **Nonce management**: Optional nonce override on every transaction method; query confirmed on-chain nonce via `getAccountNonce()`
 - **Replace-by-fee**: Replace a stuck pending STX transaction with a higher-fee one using the same nonce
-- **Stacking functionality (PoX-4)**:
-  - Solo stacking 
-  - Pool delegation and stacking
-  - Delegation management (delegate, revoke, allow contract caller)
-  - Account status and eligibility checking
 - **PoX-5 / BTC Bonding**:
   - STX staking and unstaking via signer-manager
   - BTC bond lifecycle: create, renew, unlock matured bonds
@@ -296,60 +291,6 @@ if (status.success) {
 }
 ```
 
-### **Solo Stacking**
-
-Solo stacking requires you to provide a signer key and signature. You can use any valid `secp256k1` key pair for your signer.
-
-**Generate signer signature:**
-Use the [Stacks Signature Generation Tool](https://signature.stacking.tools/) to generate your signer signature with the following parameters:
-- **Function**: "stack-stx"
-- **Max Amount**: Maximum STX amount to authorize, equal or more to what you'll stack
-- **Lock period**: Number of cycles (1-12)
-- **Auth ID**: Random integer for replay protection, must be the same one used to generate the signature
-- **Reward cycle**: Current reward cycle
-- **PoX address**: Your BTC rewards address
-- If you plan to run your own signer to earn full rewards, use your signer's public key here
-- If using a hosted signer service, use their public key and signature
-
-```typescript
-// Stack 150,000 STX for 6 cycles
-const stackResponse = await sdk.stackSolo(
-  "02778d476704afa...", // Signer public key
-  "1997445c32fc172f...", // Signer signature
-  150000, // amount in STX
-  6, // lock period in cycles (1-12)
-  "1772114443795", // authId (same as used to generate signature)
-);
-
-if (stackResponse.success) {
-  console.log("Stacking Transaction Hash:", stackResponse.txHash);
-  console.log("BTC rewards will be sent to:", sdk.getBtcRewardsAddress());
-} else {
-  console.error("Stacking failed:", stackResponse.error);
-}
-```
-
-### **Pool Stacking**
-
-```typescript
-// Delegate to a stacking pool
-const delegateResponse = await sdk.delegateToPool(
-  "SP21YTSM60CAY6D011EZVEVNKXVW8FVZE198XEFFP", // pool address
-  "stacking-pool-v1", // pool contract name
-  50000, // amount to delegate
-  12, // lock period in cycles
-);
-
-// Allow a pool to lock your STX
-const allowCallerResponse = await sdk.allowContractCaller(
-  "SP21YTSM60CAY6D011EZVEVNKXVW8FVZE198XEFFP",
-  "stacking-pool-v1",
-);
-
-// Revoke delegation
-const revokeResponse = await sdk.revokeDelegation();
-```
-
 ### **Nonce Management**
 
 ```typescript
@@ -535,49 +476,6 @@ history.forEach((tx) => {
 - **\* IMPORTANT NOTE \*\***: Transactions could sometimes pass at blockchain level but fail at smart contract level,
   in this case a {success: true, txid: <VALID-TX-ID>} 200 response will be returned to user, please double check
   the success of the transaction by polling the txid status with the `/api/:vaultId/transactions/:txId` endpoint.
-
-## 🎯 Stacking Guide
-
-### **Solo Stacking Requirements**
-
-1. **Minimum Amount**: Must meet the dynamic minimum threshold (request will fail otherwise)
-2. **Lock Period**: 1-12 reward cycles (each cycle ≈ 2 weeks)
-3. **No Active Delegation**: Account must not be delegated to an address
-4. **Timing**: Submit during reward phase (with more than 10 blocks away from prepare phase)
-
-### **Reward Cycle Timeline**
-
-- Each cycle is approximately 2,100 Bitcoin blocks (~2 weeks)
-- **Reward Phase**: ~2,000 blocks - safe to submit stacking requests
-- **Prepare Phase**: ~100 blocks - risky window before next cycle
-- SDK automatically checks timing safety before stacking
-
-### **Bitcoin Rewards**
-
-- Rewards are paid directly to your BTC address each cycle
-- Amount: `Expected ≈(Your STX / Total Stacked) × Total BTC from Miners`
-
-### **Pool Stacking vs Solo Stacking**
-
-**Pool Stacking:**
-
-- ✅ Lower minimum (pool operators set their own minimum)
-- ✅ No signer infrastructure required
-- ✅ Pool handles all technical operations
-- ❌ Pool takes a commission
-- ❌ Less control over reward address
-
-- Note: For pool stacking, delegate the amount you want to stack to the pool and allow the pool contract as contract-caller to lock your STX,
-  the pool will handle the rest and lock STX when ready and distribute rewards at the end of locking period.
-
-**Solo Stacking:**
-
-- ✅ Keep all rewards (no commission)
-- ✅ Full control over reward address
-- ✅ Higher rewards for large holders
-- ❌ Must meet higher minimum threshold (typically 90,000+ STX)
-
----
 
 ## 📊 REST API Examples (cURL)
 
