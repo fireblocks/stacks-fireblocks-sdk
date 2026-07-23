@@ -203,7 +203,9 @@ export class FireblocksService {
     externalId?: string,
   ): Promise<{ fireblocksId: string; btcTxid: string }> => {
     const assetId = this.testnet ? 'BTC_TEST' : 'BTC';
-    const amountBtc = (Number(amountSats) / 1e8).toFixed(8);
+    const whole = amountSats / BigInt(100000000);
+    const frac = (amountSats % BigInt(100000000)).toString().padStart(8, '0');
+    const amountBtc = `${whole.toString()}.${frac}`;
 
     const response = await this.fireblocksSDK.transactions.createTransaction({
       transactionRequest: {
