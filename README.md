@@ -315,7 +315,7 @@ If a transaction is stuck in the mempool due to a low fee, you can replace it by
 // Replace any pending transaction visible to the Hiro indexer.
 // The original tx is looked up automatically — same nonce, same args, higher fee.
 const replacement = await sdk.replaceTransaction(
-  0.01,          // new fee in STX (must exceed original fee by at least RBF_MIN_FEE_BUMP_USTX)
+  0.01,          // new fee in STX (must be ≥ RBF_MIN_FEE_MULTIPLIER × original fee)
   "0xabc123...", // original tx ID
 );
 
@@ -343,7 +343,7 @@ if (replacement.success) {
 }
 ```
 
-> The minimum fee bump is controlled by `RBF_MIN_FEE_BUMP_USTX` in `constants.ts` (default: 1 microSTX above the original fee). The fee check only applies on the lookup path where the original fee is known.
+> The minimum fee bump is controlled by `RBF_MIN_FEE_MULTIPLIER` in `constants.ts` (default `1.25`). The fee check only applies on the lookup path where the original fee is known.
 
 ### **Transaction Status Monitoring**
 
@@ -414,8 +414,8 @@ history.forEach((tx) => {
 
 | Field           | Type    | Required | Description                                                                  |
 | --------------- | ------- | -------- | ---------------------------------------------------------------------------- |
-| `originalTxId`  | string  | Yes      | Transaction ID of the pending transaction to replace                         |
-| `newFee`        | number  | Yes      | New fee in STX — must exceed the original fee by at least 1 microSTX (enforced by `RBF_MIN_FEE_BUMP_USTX`) |
+| `originalTxId`  | string  | No       | Transaction ID of the pending transaction to replace. Required unless `nonceOverride` is provided. |
+| `newFee`        | number  | Yes      | New fee in STX — must be at least `RBF_MIN_FEE_MULTIPLIER` × the original fee |
 | `newRecipient`  | string  | No       | New recipient address. Defaults to the original recipient                    |
 | `newAmount`     | number  | No       | New transfer amount in STX. Defaults to the original amount                  |
 | `nonceOverride` | integer | No       | Nonce to use directly, bypassing the Hiro indexer lookup. Required when the original tx is a future-nonce tx not visible in the explorer. When set, `newRecipient` and `newAmount` are also required. |

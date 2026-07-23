@@ -1308,6 +1308,74 @@ router.get("/:vaultId/stacking/pox5/rewards/earned", validateVaultId, controller
  */
 router.post("/:vaultId/faucet", validateVaultId, controller.fundVault);
 
+/**
+ * @openapi
+ * /{vaultId}/replace-transaction:
+ *   post:
+ *     summary: Replace a stuck pending transaction (bump fee)
+ *     description: >
+ *       Replaces a pending transaction that is stuck in the mempool by submitting a new one
+ *       with the **same nonce** but a higher fee. The Stacks node will evict the original.
+ *
+ *       Supported transaction types: `token_transfer` and `contract_call`.
+ *       The original transaction is looked up automatically — args are reconstructed from
+ *       the Hiro indexer response, so only the fee (and optionally recipient/amount for
+ *       token_transfer) need to be provided.
+ *
+ *       **Limitations**:
+ *         - The new fee must be at least `RBF_MIN_FEE_MULTIPLIER` × the original fee (default 1.25×).
+ *         - The original transaction must be in "pending" status (visible to the Hiro indexer).
+ *         - `nonceOverride` path only supports STX token_transfer (contract args cannot be inferred).
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - originalTxId
+ *               - newFee
+ *             properties:
+ *               originalTxId:
+ *                 type: string
+ *                 description: Transaction ID of the pending transaction to replace.
+ *               newFee:
+ *                 type: number
+ *                 description: New fee in STX. Must be higher than the original fee.
+ *               newRecipient:
+ *                 type: string
+ *                 description: >
+ *                   Optional new recipient Stacks address. Defaults to the original recipient.
+ *               newAmount:
+ *                 type: number
+ *                 description: >
+ *                   Optional new transfer amount in STX.
+ *                   Defaults to the original amount. Required when nonceOverride is set.
+ *               nonceOverride:
+ *                 type: integer
+ *                 minimum: 0
+ *                 description: >
+ *                   Provide the nonce directly to skip the transaction lookup.
+ *                   Use this when the original transaction is not visible to the Hiro
+ *                   indexer — for example, a future-nonce transaction that was accepted
+ *                   by the node but does not appear in the explorer or getTxStatusById.
+ *                   When set, newRecipient and newAmount are required.
+ *     responses:
+ *       200:
+ *         description: Replacement transaction submitted successfully.
+ *       400:
+ *         description: Invalid input or transaction cannot be replaced.
+ *       500:
+ *         description: Internal server error
+ */
+router.post(
+  "/:vaultId/replace-transaction",
+  validateVaultId,
+  controller.replaceTransaction,
+);
+
 // Pool metrics
 /**
  * @openapi

@@ -144,6 +144,17 @@ describe("concatSignature", () => {
     expect(result.slice(0, 2)).toBe("01");
     expect(result.slice(2)).not.toBe(sig);
   });
+
+  it("throws for invalid recovery id", () => {
+    const sig = "1".repeat(128);
+    expect(() => concatSignature(sig, 2)).toThrow("Invalid recovery id");
+    expect(() => concatSignature(sig, -1)).toThrow("Invalid recovery id");
+  });
+
+  it("throws for invalid signature length", () => {
+    expect(() => concatSignature("aa", 0)).toThrow("Invalid signature");
+    expect(() => concatSignature("a".repeat(127), 0)).toThrow("Invalid signature");
+  });
 });
 
 
@@ -174,7 +185,6 @@ describe("untilBurnHeightForCycles", () => {
 
   it("calculates burn height for given cycles", () => {
     const result = untilBurnHeightForCycles(1, mockPoxInfo);
-    // P=1000, cycleLen=2100, result = 1000 + 1*2100 - 1 = 3099
     expect(result).toBe(3099);
   });
 

@@ -42,18 +42,19 @@ export function validateAmount(amount: string | number): boolean {
 /** Validate a Stacks account address with a network flag. */
 export function validateAddress(addr: string, testnet: boolean): boolean {
   if (testnet) {
-    if (!/^ST[A-Z0-9]+$/.test(addr)) return false;
+    if (!/^S[TN][A-Z0-9]+$/.test(addr)) return false;
   } else {
-    if (!/^SP[A-Z0-9]+$/.test(addr)) return false;
+    if (!/^S[PM][A-Z0-9]+$/.test(addr)) return false;
   }
 
   try {
     const [version, data] = c32addressDecode(addr) as [number, string];
 
-    // Expected version by network (single-sig accounts)
-    // ST → 26 (testnet), SP → 22 (mainnet)
-    const expectedVersion = testnet ? 26 : 22;
-    if (version !== expectedVersion) return false;
+    // Expected versions by network:
+    // Testnet: ST → 26, SN → 21
+    // Mainnet: SP → 22, SM → 20
+    const validVersions = testnet ? [26, 21] : [22, 20];
+    if (!validVersions.includes(version)) return false;
 
     // Payload must be 20 bytes (HASH160)
     return /^[0-9a-fA-F]{40}$/.test(data);
@@ -135,6 +136,7 @@ export function microToToken(
 }
 
 // Concatenate a full signature (r + s) with recovery id v to form a single hex string.
+// Validates inputs, normalizes high-S signatures per BIP-146, and returns VRS format.
 export function concatSignature(fullSig: string, v: number): string {
   if (v !== 0 && v !== 1) {
     throw new Error(`Invalid recovery id: expected 0 or 1, got ${v}`);
@@ -143,12 +145,19 @@ export function concatSignature(fullSig: string, v: number): string {
     throw new Error(`Invalid signature: expected 128 hex chars, got ${fullSig.length}`);
   }
 
-  const parsed = Secp256k1Signature.fromCompact(fullSig);
   let normalizedSig = fullSig;
   let normalizedV = v;
-  if (parsed.hasHighS()) {
-    normalizedSig = parsed.normalizeS().toCompactHex();
-    normalizedV = v ^ 1;
+
+  try {
+    const parsed = Secp256k1Signature.fromCompact(fullSig);
+    if (parsed.hasHighS()) {
+      normalizedSig = parsed.normalizeS().toCompactHex();
+      // When S is negated (S' = n - S), the y-coordinate parity of the recovered point flips,
+      // so the recovery id must flip: v' = v XOR 1
+      normalizedV = v ^ 1;
+    }
+  } catch (error) {
+    throw new Error(`Invalid signature: failed to parse as secp256k1 signature - ${error instanceof Error ? error.message : error}`);
   }
 
   const vHex = normalizedV === 0 ? "00" : "01";
