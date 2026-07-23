@@ -4,7 +4,7 @@ import { ActionType } from "../pool/types";
 import { StackingPools, TokenType } from "../services/types";
 import { validateAmount } from "../utils/helpers";
 import { helperConstants, poolInfo } from "../utils/constants";
-import { parseOptionalFee, parseOptionalNonce } from "../utils/validation";
+import { parseOptionalAmount, parseOptionalFee, parseOptionalNonce } from "../utils/validation";
 
 const apiService = apiServiceSingleton;
 
@@ -622,7 +622,7 @@ export const replaceTransaction: Handler = async (req, res, next) => {
     }
 
     const newFee = parseOptionalFee(req.body.newFee)!;
-    const newAmount = parseOptionalFee(req.body.newAmount);
+    const newAmount = parseOptionalAmount(req.body.newAmount);
     const nonceOverride = parseOptionalNonce(req.body.nonceOverride);
 
     if (!originalTxId && nonceOverride === undefined) {
