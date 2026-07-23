@@ -165,6 +165,8 @@ export class ApiService {
             params.newRecipient,
             params.newAmount,
             params.nonceOverride,
+            params.note,
+            params.externalId,
           );
           break;
         case ActionType.GET_CONTRACT_CALL_HISTORY:
