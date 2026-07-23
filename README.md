@@ -131,11 +131,11 @@ Environment variables (via `.env`) control SDK behavior:
 FIREBLOCKS_BASE_PATH=https://api.fireblocks.io/v1
 FIREBLOCKS_API_KEY=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 FIREBLOCKS_SECRET_KEY_PATH=./secrets/fireblocks_secret.key
-STACKS_NETWORK=TESTNET
+NETWORK=TESTNET
 PORT=3000
 ```
 
-Note: Setting STACKS_NETWORK to anything other than TESTNET (or testnet) will set the network as mainnet.
+Note: Setting NETWORK to anything other than TESTNET (or testnet) will set the network as mainnet.
 
 > 🔒 Never commit your `.env` file or secret key to source control.
 
@@ -375,7 +375,7 @@ If a transaction is stuck in the mempool due to a low fee, you can replace it by
 // The original tx is looked up automatically — same nonce, same args, higher fee.
 const replacement = await sdk.replaceTransaction(
   "0xabc123...", // original tx ID
-  0.01,          // new fee in STX (must be ≥ RBF_MIN_FEE_MULTIPLIER × original fee)
+  0.01,          // new fee in STX (must exceed original fee by at least RBF_MIN_FEE_BUMP_USTX)
 );
 
 // For token_transfer only: optionally change recipient or amount
@@ -479,18 +479,12 @@ history.forEach((tx) => {
 | `newAmount`     | number  | No       | New transfer amount in STX. Defaults to the original amount                  |
 | `nonceOverride` | integer | No       | Nonce to use directly, bypassing the Hiro indexer lookup. Required when the original tx is a future-nonce tx not visible in the explorer. When set, `newRecipient` and `newAmount` are also required. |
 
-### **Stacking Endpoints**
+### **Account Status & Protocol Info**
 
-| Method | Route                                               | Description                                          |
-| ------ | --------------------------------------------------- | ---------------------------------------------------- |
-| GET    | `/api/:vaultId/check-status`                        | Check account stacking status and delegation info    |
-| GET    | `/api/poxInfo`                                      | Fetch current PoX info from blockchain               |
-| POST   | `/api/:vaultId/stacking/solo`                       | Solo stack STX                                       |
-| POST   | `/api/:vaultId/stacking/solo/increase`              | Increase the STX amount of an existing solo position |
-| POST   | `/api/:vaultId/stacking/solo/extend`                | Extend the lock period of an existing solo position  |
-| POST   | `/api/:vaultId/stacking/pool/delegate`              | Delegate amount of STX to a stacking pool            |
-| POST   | `/api/:vaultId/stacking/pool/allow-contract-caller` | Allow a pool contract to lock your STX               |
-| POST   | `/api/:vaultId/revoke-delegation`                   | Revoke any active STX delegation                     |
+| Method | Route                         | Description                                        |
+| ------ | ----------------------------- | --------------------------------------------------- |
+| GET    | `/api/:vaultId/check-status`  | Check account stacking status and delegation info  |
+| GET    | `/api/poxInfo`                | Fetch current PoX-4 info from blockchain           |
 
 ### **PoX-5 Staking Endpoints**
 
@@ -531,9 +525,10 @@ history.forEach((tx) => {
 
 ### **Utility Endpoints**
 
-| Method | Route          | Description                           |
-| ------ | -------------- | ------------------------------------- |
-| GET    | `/api/metrics` | Pool metrics (instance counts)        |
+| Method | Route                 | Description                                             |
+| ------ | ---------------------- | -------------------------------------------------------- |
+| GET    | `/api/metrics`         | Pool metrics (instance counts)                          |
+| POST   | `/api/:vaultId/faucet` | Fund vault address via STX faucet (testnet only)        |
 
 ---
 
@@ -573,7 +568,7 @@ history.forEach((tx) => {
 - ❌ Less control over reward address
 
 - Note: For pool stacking, delegate the amount you want to stack to the pool and allow the pool contract as contract-caller to lock your STX,
-  the pool will handle the rest and lock STX when ready and distirbute rewards at the end of locking period.
+  the pool will handle the rest and lock STX when ready and distribute rewards at the end of locking period.
 
 **Solo Stacking:**
 
@@ -688,26 +683,11 @@ curl -X POST http://localhost:3000/api/123/replace-transaction \
   }'
 ```
 
-### **Solo Stack STX**
-```bash
-curl -X 'POST' \
-  'http://localhost:3000/api/123/stacking/solo' \
-  -H 'accept: application/json' \
-  -H 'Content-Type: application/json' \
-  -d '{
-  "signerKey": "02778d476704afa540ac01438f62c371dc387",
-  "signerSig65Hex": "1997445c32fc1720b202995f656396b50c355",
-  "amount": 6520000,
-  "lockPeriod": 1,
-  "authId": "1"
-}'
-```
-
 ### **Check Stacking Status**
 
 ```bash
 curl -X 'GET' \
-  'http://localhost:3000/api/123/status' \
+  'http://localhost:3000/api/123/check-status' \
   -H 'accept: application/json'
 ```
 
@@ -715,7 +695,7 @@ curl -X 'GET' \
 
 ```bash
 curl -X 'GET' \
-  'http://localhost:3000/api/123/tx/0xabcd1234...' \
+  'http://localhost:3000/api/transactions/0xabcd1234...' \
   -H 'accept: application/json'
 ```
 
