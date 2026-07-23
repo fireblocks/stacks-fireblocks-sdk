@@ -136,27 +136,39 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
     nextAvailable: bigint;
   }> => {
     try {
-      const [nonceResponse, mempoolResponse] = await Promise.all([
-        this.axiosClient.get(`${this.stackBaseUrl}/v2/accounts/${address}?proof=0`),
-        this.axiosClient.get(
-          `${this.stackBaseUrl}/extended/v1/tx/mempool?sender_address=${address}&limit=50`,
-        ),
-      ]);
+      const pageSize = helperConstants.stacks_api_page_size;
+      const nonceRequest = this.axiosClient.get(`${this.stackBaseUrl}/v2/accounts/${address}?proof=0`);
 
+      const pendingNonces = new Set<bigint>();
+      let pendingTxCount = 0;
+      let offset = 0;
+      while (true) {
+        const mempoolResponse = await this.axiosClient.get(
+          `${this.stackBaseUrl}/extended/v1/tx/mempool`,
+          { params: { sender_address: address, limit: pageSize, offset } },
+        );
+        if (!mempoolResponse?.data || mempoolResponse.status !== 200) {
+          throw new Error(`HTTP ${mempoolResponse.status}`);
+        }
+        const pending: any[] = mempoolResponse.data?.results ?? [];
+        pendingTxCount += pending.length;
+        for (const tx of pending) pendingNonces.add(BigInt(tx.nonce));
+        if (pending.length < pageSize) break;
+        offset += pageSize;
+      }
+
+      const nonceResponse = await nonceRequest;
       if (!nonceResponse?.data || nonceResponse.status !== 200) {
         throw new Error(`HTTP ${nonceResponse.status}`);
       }
-
       const confirmedNonce = BigInt(nonceResponse.data.nonce);
-      const pending: any[] = mempoolResponse.data?.results ?? [];
-      const pendingNonces = new Set(pending.map((tx: any) => BigInt(tx.nonce)));
 
       let nextAvailable = confirmedNonce;
       while (pendingNonces.has(nextAvailable)) {
         nextAvailable++;
       }
 
-      return { confirmedNonce, pendingTxCount: pending.length, nextAvailable };
+      return { confirmedNonce, pendingTxCount, nextAvailable };
     } catch (error) {
       console.error(`Error fetching account nonce: ${formatErrorMessage(error)}`);
       throw new Error(
