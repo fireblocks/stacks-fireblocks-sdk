@@ -374,14 +374,14 @@ If a transaction is stuck in the mempool due to a low fee, you can replace it by
 // Replace any pending transaction visible to the Hiro indexer.
 // The original tx is looked up automatically — same nonce, same args, higher fee.
 const replacement = await sdk.replaceTransaction(
-  "0xabc123...", // original tx ID
   0.01,          // new fee in STX (must exceed original fee by at least RBF_MIN_FEE_BUMP_USTX)
+  "0xabc123...", // original tx ID
 );
 
 // For token_transfer only: optionally change recipient or amount
 const replacement = await sdk.replaceTransaction(
-  "0xabc123...",
   0.01,
+  "0xabc123...",
   "ST2CY5V39NHDPWSXMW9QDT3HC3GD6Q6XX4CFRK9AG", // newRecipient
   10.5,  // newAmount in STX
 );
@@ -390,8 +390,8 @@ const replacement = await sdk.replaceTransaction(
 // nonceOverride bypasses the indexer lookup. Only STX transfers are supported
 // on this path since contract call args cannot be inferred.
 const replacement = await sdk.replaceTransaction(
-  "0xabc123...",
   0.01,
+  undefined, // originalTxId is unused on the nonceOverride path
   "ST2CY5V39NHDPWSXMW9QDT3HC3GD6Q6XX4CFRK9AG", // newRecipient (required)
   10.5,  // newAmount in STX (required)
   7,     // nonceOverride
