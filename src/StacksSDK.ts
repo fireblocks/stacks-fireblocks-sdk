@@ -118,7 +118,6 @@ import {
   isBondActiveAtHeight,
   firstPox5RewardCycle,
   bondPeriodToRewardCycle,
-  computeUnlockHeight,
   buildUnlockScript,
   buildRegisterMetadata,
   buildLockProof,
@@ -130,7 +129,6 @@ import * as btc from '@scure/btc-signer';
 import { sha256 } from '@noble/hashes/sha2';
 import { Signature as Secp256k1Signature } from '@noble/secp256k1';
 
-const BOND_LENGTH_CYCLES = 12; // fixed per PoX-5 spec; not in .d.ts but confirmed in dist/constants.js
 import { hexToBytes, bytesToHex, signatureVrsToRsv } from "@stacks/common";
 
 export class StacksSDK {
@@ -1905,8 +1903,6 @@ export class StacksSDK {
       // Step 4 — compute unlock height
       const firstBondCycle = firstPox5RewardCycle(pox);
       if (firstBondCycle === undefined) return { success: false, error: 'pox-5 not yet configured on this network' };
-      const firstRewardCycle = bondPeriodToRewardCycle({ bondIndex, poxInfo: pox });
-      const unlockHeight = computeUnlockHeight({ firstRewardCycle, numCycles: BOND_LENGTH_CYCLES, poxInfo: pox });
 
       // Step 5 — build lock script + derive P2WSH address
       const metadata = buildRegisterMetadata({
