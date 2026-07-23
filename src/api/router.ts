@@ -438,12 +438,15 @@ router.post(
  *           schema:
  *             type: object
  *             required:
- *               - originalTxId
  *               - newFee
+ *             description: >
+ *               Either originalTxId or nonceOverride must be provided (originalTxId is
+ *               omitted only on the nonceOverride path, which additionally requires
+ *               newRecipient and newAmount).
  *             properties:
  *               originalTxId:
  *                 type: string
- *                 description: Transaction ID of the pending transaction to replace.
+ *                 description: Transaction ID of the pending transaction to replace. Required unless nonceOverride is provided.
  *               newFee:
  *                 type: number
  *                 description: New fee in STX. Must be higher than the original fee.
@@ -689,14 +692,14 @@ router.get("/:vaultId/stacking/pox5/staker-info", validateVaultId, controller.ge
  *         application/json:
  *           schema:
  *             type: object
- *             required: [signerManager, signerKey]
+ *             required: [signerManager, authId]
  *             properties:
  *               signerManager:
  *                 type: string
  *                 description: Stacks address of the signer-manager contract.
- *               signerKey:
+ *               authId:
  *                 type: string
- *                 description: Signer public key to grant (compressed 33-byte hex).
+ *                 description: Positive integer (as a string) for replay protection. Must never be reused.
  *               nonce:
  *                 type: integer
  *               externalId:
