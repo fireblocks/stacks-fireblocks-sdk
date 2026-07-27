@@ -154,15 +154,19 @@ router.get(
   controller.getTxStatusById,
 );
 
-// Pox Info
+// Protocol info. Reports whichever PoX contract the configured node exposes, so this
+// returns pox-5 on networks where pox-5 is active. See /stacking/pox5/info for the
+// PoX-5 specific shape.
 /**
  * @openapi
  * /poxInfo:
  *   get:
  *     tags: [Protocol Info]
- *     summary: Get PoX info
+ *     summary: Get PoX info from the configured node
  *     description: >
- *       Retrieves information related to the Proof of Transfer (PoX) from blockchain
+ *       Retrieves Proof of Transfer information from the node's own PoX endpoint.
+ *       The contract reported depends on the network — pox-4 on mainnet, pox-5 where
+ *       pox-5 is active.
  *     responses:
  *       200:
  *         description: PoX info fetched successfully
@@ -449,7 +453,9 @@ router.post(
  *                 description: Transaction ID of the pending transaction to replace. Required unless nonceOverride is provided.
  *               newFee:
  *                 type: number
- *                 description: New fee in STX. Must be higher than the original fee.
+ *                 description: >
+ *                   New fee in STX. On the lookup path it must be at least
+ *                   RBF_MIN_FEE_MULTIPLIER (1.25) times the original fee.
  *               newRecipient:
  *                 type: string
  *                 description: >
@@ -481,6 +487,13 @@ router.post(
   validateVaultId,
   controller.replaceTransaction,
 );
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PoX-4 stacking — solo stacking and pool delegation.
+// Live on Stacks mainnet. Pool delegation routes reject on testnet.
+// Handlers: controller.stackSolo / increaseStackedAmount / extendStackingPeriod /
+// delegateToPool / allowContractCaller / revokeDelegation
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * @openapi
@@ -760,6 +773,12 @@ router.post(
   validateVaultId,
   controller.revokeDelegation,
 );
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PoX-5 STX-only staking — stake, update and unstake via a signer-manager.
+// Rewards are paid in sBTC. Targets the private-1 network; see pox5Network in
+// StacksSDK. Requires a signer-key grant (grant-signer-key) before staking.
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * @openapi
@@ -1093,6 +1112,12 @@ router.post("/:vaultId/stacking/pox5/revoke-signer-grant", validateVaultId, cont
  */
 router.get("/:vaultId/stacking/pox5/requirements", validateVaultId, controller.getRequirements);
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PoX-5 BTC bonds — pairs a native BTC P2WSH lock with an STX position.
+// Lifecycle: lock-address → fund-lock → create → renew → unlock.
+// Early exit spends the OP_ELSE branch and needs the external KMS cosigner.
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
  * @openapi
  * /{vaultId}/stacking/pox5/bond/create:
@@ -1423,6 +1448,11 @@ router.post("/:vaultId/stacking/pox5/bond/unlock", validateVaultId, controller.u
  */
 router.post("/:vaultId/stacking/pox5/bond/renew", validateVaultId, controller.renewBond);
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PoX-5 rewards — sBTC payouts for both bonded and STX-only positions.
+// calculate must settle before a claim; claim-stx covers positions without a bond.
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
  * @openapi
  * /{vaultId}/stacking/pox5/rewards/calculate:
@@ -1586,74 +1616,6 @@ router.get("/:vaultId/stacking/pox5/rewards/earned", validateVaultId, controller
  *         description: Internal server error
  */
 router.post("/:vaultId/faucet", validateVaultId, controller.fundVault);
-
-/**
- * @openapi
- * /{vaultId}/replace-transaction:
- *   post:
- *     summary: Replace a stuck pending transaction (bump fee)
- *     description: >
- *       Replaces a pending transaction that is stuck in the mempool by submitting a new one
- *       with the **same nonce** but a higher fee. The Stacks node will evict the original.
- *
- *       Supported transaction types: `token_transfer` and `contract_call`.
- *       The original transaction is looked up automatically — args are reconstructed from
- *       the Hiro indexer response, so only the fee (and optionally recipient/amount for
- *       token_transfer) need to be provided.
- *
- *       **Limitations**:
- *         - The new fee must be at least `RBF_MIN_FEE_MULTIPLIER` × the original fee (default 1.25×).
- *         - The original transaction must be in "pending" status (visible to the Hiro indexer).
- *         - `nonceOverride` path only supports STX token_transfer (contract args cannot be inferred).
- *     parameters:
- *       - $ref: '#/components/parameters/vaultId'
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - originalTxId
- *               - newFee
- *             properties:
- *               originalTxId:
- *                 type: string
- *                 description: Transaction ID of the pending transaction to replace.
- *               newFee:
- *                 type: number
- *                 description: New fee in STX. Must be higher than the original fee.
- *               newRecipient:
- *                 type: string
- *                 description: >
- *                   Optional new recipient Stacks address. Defaults to the original recipient.
- *               newAmount:
- *                 type: number
- *                 description: >
- *                   Optional new transfer amount in STX.
- *                   Defaults to the original amount. Required when nonceOverride is set.
- *               nonceOverride:
- *                 type: integer
- *                 minimum: 0
- *                 description: >
- *                   Provide the nonce directly to skip the transaction lookup.
- *                   Use this when the original transaction is not visible to the Hiro
- *                   indexer — for example, a future-nonce transaction that was accepted
- *                   by the node but does not appear in the explorer or getTxStatusById.
- *                   When set, newRecipient and newAmount are required.
- *     responses:
- *       200:
- *         description: Replacement transaction submitted successfully.
- *       400:
- *         description: Invalid input or transaction cannot be replaced.
- *       500:
- *         description: Internal server error
- */
-router.post(
-  "/:vaultId/replace-transaction",
-  validateVaultId,
-  controller.replaceTransaction,
-);
 
 // Pool metrics
 /**
