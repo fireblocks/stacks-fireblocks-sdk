@@ -65,6 +65,7 @@ import {
   getDecimalsFromFtInfo,
   getTokenInfo,
   isSafeToSubmit,
+  type PoxInfo,
   microToStx,
   microToToken,
   parseAssetId,
@@ -119,8 +120,11 @@ import {
   firstPox5RewardCycle,
   bondPeriodToRewardCycle,
   buildUnlockScript,
+  buildLockScript,
+  buildLockAddress,
   buildRegisterMetadata,
   buildLockProof,
+  computeBondUnlockHeight,
   computeRegisterPreimage,
   minUstxForSatsAmount,
   type PoxInfo as Pox5PoxInfo,
@@ -144,8 +148,11 @@ export class StacksSDK {
 
   /**
    * Sets the unlockBytes persistence backend (default: in-memory, non-durable).
-   * @param store - Durable implementation (e.g. Redis-backed) required for production,
-   * since loss of unlockBytes permanently strands the associated BTC bond.
+   *
+   * unlockBytes are currently derivable from the vault public key, so a lost entry
+   * falls back to re-derivation. A durable backend preserves the exact bytes committed
+   * to on-chain at bond creation, which is what a spend must reproduce if the
+   * derivation scheme ever changes.
    */
   public setUnlockBytesStore = (store: UnlockBytesStore): void => {
     this.unlockBytesStore = store;
@@ -727,16 +734,18 @@ export class StacksSDK {
    * with what GET /:vaultId/nonce reports.
    */
   private resolveNonce = async (nonce?: bigint): Promise<bigint> => {
-    const nonceInfo = await this.chainService.getAccountNonce(this.address!);
     if (nonce !== undefined) {
-      if (nonce < nonceInfo.confirmedNonce) {
+      // Validating an explicit nonce needs only the confirmed value, so the mempool scan is skipped.
+      const confirmedNonce = await this.chainService.getConfirmedNonce(this.address!);
+      if (nonce < confirmedNonce) {
         throw new ValidationError(
-          `Nonce ${nonce} is below the confirmed nonce (${nonceInfo.confirmedNonce}). This transaction would be rejected.`,
+          `Nonce ${nonce} is below the confirmed nonce (${confirmedNonce}). This transaction would be rejected.`,
         );
       }
       return nonce;
     }
-    return nonceInfo.nextAvailable;
+    const { nextAvailable } = await this.chainService.getAccountNonce(this.address!);
+    return nextAvailable;
   };
 
   /**
@@ -1390,10 +1399,12 @@ export class StacksSDK {
     }
   };
 
-  public getPox5Info = async (): Promise<any> => {
+  public getPox5Info = async (): Promise<{ success: boolean; data?: any; error?: string }> => {
     try {
       const info = await fetchPox5Info({ network: this.pox5Network });
-      return JSON.parse(JSON.stringify(info, (_, v) => typeof v === 'bigint' ? v.toString() : v));
+      // bigint fields are not JSON-serializable; stringify them for transport.
+      const data = JSON.parse(JSON.stringify(info, (_, v) => typeof v === 'bigint' ? v.toString() : v));
+      return { success: true, data };
     } catch (error) {
       return { success: false, error: `Failed to fetch PoX-5 info: ${formatErrorMessage(error)}` };
     }
@@ -1896,8 +1907,10 @@ export class StacksSDK {
 
       const accountStatus = await fetchAccountStatus({ address: this.address, network: this.pox5Network });
       const liquidStx = accountStatus.balance - accountStatus.locked;
-      if (amountUstx > liquidStx) {
-        return { success: false, error: `Insufficient liquid STX: need ${microToStx(amountUstx)} STX but only ${microToStx(liquidStx)} available` };
+      // The L1 BTC lock is funded before register-for-bond, so its fee must be covered up front.
+      const requiredUstx = amountUstx + DEFAULT_POX_FEE_USTX;
+      if (requiredUstx > liquidStx) {
+        return { success: false, error: `Insufficient liquid STX: need ${microToStx(requiredUstx)} STX (${microToStx(amountUstx)} stake + ${microToStx(DEFAULT_POX_FEE_USTX)} fee) but only ${microToStx(liquidStx)} available` };
       }
 
       // Step 4 — compute unlock height
@@ -1944,7 +1957,7 @@ export class StacksSDK {
         }
       }
 
-      // Persist unlockBytes BEFORE funding (losing this strands the BTC)
+      // Recorded before funding so the exact bytes committed to the lock script are retained.
       await this.unlockBytesStore.save(this.address, bondIndex, metadata.unlockBytes);
 
       // Step 7 — fund lock address.
@@ -2298,7 +2311,7 @@ export class StacksSDK {
         nextOpenBondIndex !== null ? fetchBondDetails(nextOpenBondIndex) : Promise.resolve(null),
       ]);
 
-      if (currentDetails === null && nextOpenDetails === null) {
+      if (currentDetails === null && nextOpenDetails === null && opts?.bondIndex === undefined) {
         return { success: true, data: { cycle, stx_only } };
       }
 
@@ -2462,30 +2475,29 @@ export class StacksSDK {
     // (override is used when membership has expired after the bond matured)
     if (membership && !membership.isL1Lock) return null;
 
-    let unlockBytes = await this.unlockBytesStore.load(addr, bondIndex);
-    if (!unlockBytes) {
-      unlockBytes = buildUnlockScript(hexToBytes(this.publicKey!));
-    }
-
     const bond = await fetchBond({ bondIndex, network: this.pox5Network });
     if (!bond) throw new Error(`Bond ${bondIndex} not found`);
 
-    const meta = buildRegisterMetadata({
-      bondIndex,
-      poxInfo: pox,
-      bitcoinPublicKey: this.publicKey!,
+    // The on-chain lock script commits to the unlockBytes used at bond creation, so a
+    // persisted value takes precedence over re-deriving from the current public key.
+    const unlockBytes = await this.unlockBytesStore.load(addr, bondIndex)
+      ?? buildUnlockScript(hexToBytes(this.publicKey!));
+
+    const unlockHeight = computeBondUnlockHeight({ bondIndex, poxInfo: pox });
+    const lockScriptOpts = {
       stxAddress: addr,
+      unlockHeight,
+      unlockBytes,
       earlyUnlockBytes: bond.earlyUnlockBytes,
-      network: this.pox5Network,
-    });
+    };
 
     return {
       bondIndex,
-      unlockHeight: meta.unlockHeight,
-      lockScript: meta.lockScript,
-      lockingAddress: meta.lockAddress,
+      unlockHeight,
+      lockScript: buildLockScript(lockScriptOpts),
+      lockingAddress: buildLockAddress({ ...lockScriptOpts, network: this.pox5Network }),
       earlyUnlockBytes: typeof bond.earlyUnlockBytes === 'string' ? hexToBytes(bond.earlyUnlockBytes) : bond.earlyUnlockBytes,
-      unlockBytes: meta.unlockBytes,
+      unlockBytes,
       amountSats: membership?.amountSats ?? BigInt(0),
       isL1Lock: membership?.isL1Lock ?? true,
     };
@@ -3138,8 +3150,10 @@ export class StacksSDK {
     console.log(`Checking account status for address: ${this.address}`);
 
     try {
-      const [delegationData, balanceResponse, pox5Info, stakerInfo, bondMembership] = await Promise.all([
-        this.chainService.checkDelegationStatus(this.address).catch(() => null),
+      const [delegationResult, balanceResponse, pox5Info, stakerInfo, bondMembership] = await Promise.all([
+        this.chainService.checkDelegationStatus(this.address)
+          .then((value) => ({ value, failed: false }))
+          .catch(() => ({ value: null, failed: true })),
         this.chainService.makeBalanceCalls(this.address),
         fetchPox5Info({ network: this.pox5Network }).catch(() => null),
         fetchStakerInfo({ address: this.address, network: this.pox5Network }).catch(() => null),
@@ -3158,6 +3172,7 @@ export class StacksSDK {
         balanceData.total_miner_rewards_received ?? "0",
       );
 
+      const delegationData = delegationResult.value;
       const isDelegated = !!(delegationData && delegationData.value);
 
       const amountDelegatedMicro = isDelegated
@@ -3192,17 +3207,18 @@ export class StacksSDK {
         balance: {
           stx_total: microToStx(stxBalMicro),
           stx_locked: microToStx(stxLockedMicro),
-          lock_tx_id: balanceData.stx.lock_tx_id || null,
-          lock_height: balanceData.stx.lock_height || null,
-          burnchain_lock_height: balanceData.stx.burnchain_lock_height || null,
+          lock_tx_id: balanceData.lock_tx_id || null,
+          lock_height: balanceData.lock_height || null,
+          burnchain_lock_height: balanceData.burnchain_lock_height || null,
           burnchain_unlock_height:
-            balanceData.stx.burnchain_unlock_height || null,
+            balanceData.burnchain_unlock_height || null,
           total_miner_rewards_received: microToStx(
             totalMinerRewardsRecievedMicro,
           ),
         },
         delegation: {
           is_delegated: isDelegated,
+          lookup_failed: delegationResult.failed,
           delegated_to: delegatedTo,
           amount_delegated: amountDelegatedMicro
             ? microToStx(amountDelegatedMicro)
@@ -3248,7 +3264,7 @@ export class StacksSDK {
    * @returns A promise that resolves to an object indicating eligibility and reason if not eligible.
    */
   public checkEligibility = async (
-    pox: Pox5PoxInfo,
+    pox: Pox5PoxInfo | PoxInfo,
     amountStx: number,
   ): Promise<{ eligible: boolean; reason?: string }> => {
     try {
@@ -3264,9 +3280,13 @@ export class StacksSDK {
       // Block submission when too close to the prepare phase boundary (not just during it)
       const safetyCheck = isSafeToSubmit(pox);
       if (!safetyCheck.safe) {
+        // Accepts either PoX shape: pox-4 uses snake_case, pox-5 camelCase.
+        const raw = pox as any;
+        const prepareLength = raw.prepare_phase_block_length ?? raw.prepareCycleLength;
+        const cycleId = raw.reward_cycle_id ?? raw.rewardCycleId;
         return {
           eligible: false,
-          reason: `Too close to prepare phase boundary. Try again in ${pox.prepareCycleLength + safetyCheck.blocksUntilBoundary} blocks (next cycle: ${pox.rewardCycleId + 1}).`,
+          reason: `Too close to prepare phase boundary. Try again in ${prepareLength + safetyCheck.blocksUntilBoundary} blocks (next cycle: ${cycleId + 1}).`,
         };
       }
 
@@ -3323,6 +3343,33 @@ export class StacksSDK {
 
       const poxResponse = await this.chainService.fetchPoxInfo();
       const pox = poxResponse.data;
+
+      // Delegation is a pox-4 concept, so the guard only applies when pox-4 is the active
+      // contract. On pox-5 networks get-delegation-info does not exist and the read fails.
+      const isPox4 = String(pox.contract_id ?? "").includes("pox-4");
+      if (isPox4) {
+        const status = await this.checkStatus();
+        if (!status.success || !status.data) {
+          return { success: false, error: `Failed to check account status before solo stacking: ${status.error}` };
+        }
+        // An unresolved lookup blocks: proceeding would burn a signature on a likely revert.
+        if (status.data.delegation.lookup_failed) {
+          return { success: false, error: `Could not determine delegation status. Retry once the Stacks API is reachable.` };
+        }
+        if (status.data.delegation.is_delegated) {
+          return {
+            success: false,
+            error: `Account has an active delegation to ${status.data.delegation.delegated_to}. Revoke it before solo stacking.`,
+          };
+        }
+      }
+
+      if (stxToMicro(amount) < BigInt(pox.min_amount_ustx)) {
+        return {
+          success: false,
+          error: `Amount to stack (${amount} STX) is below the minimum of ${microToStx(BigInt(pox.min_amount_ustx))} STX.`,
+        };
+      }
 
       const eligibilityCheck = await this.checkEligibility(pox, amount);
       if (!eligibilityCheck.eligible) {
@@ -3577,11 +3624,11 @@ export class StacksSDK {
         const nonce = nonceOverride;
         const amountUstx = stxToMicro(newAmount);
 
-        const nonceInfo = await this.chainService.getAccountNonce(this.address);
-        if (nonce < nonceInfo.confirmedNonce) {
+        const confirmedNonce = await this.chainService.getConfirmedNonce(this.address);
+        if (nonce < confirmedNonce) {
           return {
             success: false,
-            error: `nonceOverride (${nonce}) is below the confirmed nonce (${nonceInfo.confirmedNonce}). This transaction would be rejected.`,
+            error: `nonceOverride (${nonce}) is below the confirmed nonce (${confirmedNonce}). This transaction would be rejected.`,
           };
         }
 

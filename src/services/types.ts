@@ -84,6 +84,11 @@ export type CheckStatusData = {
   };
   delegation: {
     is_delegated: boolean;
+    /**
+     * True when the on-chain delegation read failed, meaning `is_delegated: false`
+     * reflects an unknown state rather than a confirmed absence of delegation.
+     */
+    lookup_failed: boolean;
     delegated_to: string | null;
     amount_delegated: number | null;
     until_burn_ht: number | null;

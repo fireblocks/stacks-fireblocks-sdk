@@ -130,6 +130,25 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
    *
    * @param address - The Stacks address to query.
    */
+  /**
+   * Returns only the confirmed on-chain nonce, skipping the mempool scan.
+   * @param address - The Stacks address to query.
+   */
+  public getConfirmedNonce = async (address: string): Promise<bigint> => {
+    try {
+      const response = await this.axiosClient.get(`${this.stackBaseUrl}/v2/accounts/${address}?proof=0`);
+      if (!response?.data || response.status !== 200) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      return BigInt(response.data.nonce);
+    } catch (error) {
+      console.error(`Error fetching confirmed nonce: ${formatErrorMessage(error)}`);
+      throw new Error(
+        `Failed to fetch confirmed nonce for address ${address}: ${formatErrorMessage(error)}`,
+      );
+    }
+  };
+
   public getAccountNonce = async (address: string): Promise<{
     confirmedNonce: bigint;
     pendingTxCount: number;
