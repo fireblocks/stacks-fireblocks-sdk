@@ -1,6 +1,7 @@
 import { BasePath, TransactionResponse } from "@fireblocks/ts-sdk";
 import { SdkManager } from "../pool/SdkManager";
 import { ActionType, ApiServiceConfig } from "../pool/types";
+import { PoolError } from "../pool/errors";
 import { StacksSDK } from "../StacksSDK";
 import { formatErrorMessage } from "../utils/errorHandling";
 import { SDKResponse } from "../services/types";
@@ -310,7 +311,9 @@ export class ApiService {
         `Error executing ${actionType} for vault ${vaultAccountId}:`,
         error,
       );
-      throw new Error(`Failed to execute action: ${formatErrorMessage(error)}`);
+      // PoolError messages already identify the vault and cause.
+      if (error instanceof PoolError) throw error;
+      throw new Error(`Failed to execute ${actionType}: ${formatErrorMessage(error)}`);
     } finally {
       // Always release the SDK back to the pool
       if (sdk) {

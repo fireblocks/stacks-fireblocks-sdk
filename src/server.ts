@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import router from "./api/router";
 import { swaggerUi, specs } from "./utils/swagger";
 import { ValidationError } from "./utils/validation";
+import { formatErrorMessage } from "./utils/errorHandling";
 
 // Load environment variables
 dotenv.config();
@@ -30,6 +31,16 @@ app.use((err: Error, _req: Request, res: Response, next: NextFunction) => {
     return;
   }
   next(err);
+});
+
+app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+  console.error("Unhandled API error:", err);
+  if (res.headersSent) return;
+  res.status(500).json({ success: false, error: formatErrorMessage(err) });
+});
+
+app.use("/api", (_req: Request, res: Response) => {
+  res.status(404).json({ success: false, error: "Not Found" });
 });
 
 // Start the server only if this file is run directly (not imported)

@@ -26,18 +26,51 @@ describe("formatErrorMessage", () => {
     expect(formatErrorMessage(0)).toBe("0");
   });
 
-  it("converts objects to string", () => {
+  it("reads the message field from plain objects", () => {
     const obj = { code: 500, message: "Server error" };
-    expect(formatErrorMessage(obj)).toBe("[object Object]");
+    expect(formatErrorMessage(obj)).toBe("Server error");
   });
 
-  it("converts null and undefined to string", () => {
-    expect(formatErrorMessage(null)).toBe("null");
-    expect(formatErrorMessage(undefined)).toBe("undefined");
+  it("serializes objects that carry no message field", () => {
+    expect(formatErrorMessage({ code: 500 })).toBe('{"code":500}');
+  });
+
+  it("returns a placeholder for null and undefined", () => {
+    expect(formatErrorMessage(null)).toBe("Unknown error");
+    expect(formatErrorMessage(undefined)).toBe("Unknown error");
   });
 
   it("converts boolean to string", () => {
     expect(formatErrorMessage(true)).toBe("true");
     expect(formatErrorMessage(false)).toBe("false");
+  });
+
+  it("extracts detail from an axios-style response body", () => {
+    const error = {
+      response: { data: { message: "Vault account not found", code: 1004 } },
+    };
+    expect(formatErrorMessage(error)).toBe("Vault account not found [1004]");
+  });
+
+  it("appends response detail to an Error message", () => {
+    const error = Object.assign(new Error("Request failed"), {
+      response: { data: { message: "Unauthorized" } },
+    });
+    expect(formatErrorMessage(error)).toBe("Request failed (Unauthorized)");
+  });
+
+  it("does not surface request config or headers", () => {
+    const error = {
+      message: "Request failed",
+      config: { headers: { Authorization: "Bearer super-secret-token" } },
+      response: { data: { message: "Forbidden" } },
+    };
+    expect(formatErrorMessage(error)).not.toContain("super-secret-token");
+  });
+
+  it("survives circular references", () => {
+    const circular: Record<string, unknown> = { code: 500 };
+    circular.self = circular;
+    expect(() => formatErrorMessage(circular)).not.toThrow();
   });
 });

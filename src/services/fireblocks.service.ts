@@ -176,10 +176,9 @@ export class FireblocksService {
       throw new Error(
         "No Segwit address found for the given vault account ID.",
       );
-    } catch (error: any) {
-      throw new Error(
-        `Failed to get BTC address for vault ID: ${formatErrorMessage(error)}`,
-      );
+    } catch (error) {
+      // Rethrown unchanged: callers already report the vault and failing operation.
+      throw error instanceof Error ? error : new Error(formatErrorMessage(error));
     }
   };
 
