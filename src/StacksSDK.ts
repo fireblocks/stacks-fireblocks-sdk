@@ -2855,21 +2855,35 @@ export class StacksSDK {
     return cycles;
   };
 
-  /** Fetches a bigint value per cycle in parallel and sums the results. */
+  /**
+   * Resolves a fetcher across cycles in fixed-size batches. Contract reads are issued
+   * one batch at a time to keep a wide cycle range from exhausting node connections.
+   */
+  private mapCyclesLimited = async (
+    cycles: number[],
+    fetcher: (cycle: number) => Promise<bigint>,
+    concurrency = 10,
+  ): Promise<bigint[]> => {
+    const values: bigint[] = [];
+    for (let i = 0; i < cycles.length; i += concurrency) {
+      values.push(...await Promise.all(cycles.slice(i, i + concurrency).map(fetcher)));
+    }
+    return values;
+  };
+
   private sumOverCycles = async (
     cycles: number[],
     fetcher: (cycle: number) => Promise<bigint>,
   ): Promise<bigint> => {
-    const values = await Promise.all(cycles.map(fetcher));
+    const values = await this.mapCyclesLimited(cycles, fetcher);
     return values.reduce((sum, v) => sum + v, BigInt(0));
   };
 
-  /** Fetches a bigint value per cycle in parallel and returns the cycles with a positive result. */
   private filterCyclesWithPositiveValue = async (
     cycles: number[],
     fetcher: (cycle: number) => Promise<bigint>,
   ): Promise<number[]> => {
-    const values = await Promise.all(cycles.map(fetcher));
+    const values = await this.mapCyclesLimited(cycles, fetcher);
     return cycles.filter((_, i) => values[i] > BigInt(0));
   };
 
@@ -3095,8 +3109,16 @@ export class StacksSDK {
         ? bondPeriodToRewardCycle({ bondIndex, poxInfo: pox })
         : undefined;
 
-      // Sum across all past cycles for a stable total
-      const startCycle = bondFirstRewardCycle ?? 0;
+      // Without a bondIndex the range is anchored to the staker's own first reward cycle;
+      // cycle 0 would scan the whole chain history.
+      let startCycle = bondFirstRewardCycle;
+      if (startCycle === undefined) {
+        const stakerInfo = this.address
+          ? await fetchStakerInfo({ address: this.address, network: this.pox5Network }).catch(() => null)
+          : null;
+        startCycle = stakerInfo?.staked ? stakerInfo.details.firstRewardCycle : pox.rewardCycleId;
+      }
+
       const pastCycles = this.cycleRange(startCycle, pox.rewardCycleId);
       const stakerAddress = this.address;
 
