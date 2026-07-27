@@ -1,10 +1,16 @@
 import { BasePath } from "@fireblocks/ts-sdk";
 import { StacksSDK } from "../StacksSDK";
+import { UnlockBytesStore } from "../staking/bonds/unlock-bytes-store";
 
 export interface PoolConfig {
   maxPoolSize: number;
   idleTimeoutMs: number;
   cleanupIntervalMs: number;
+  /**
+   * Shared across every pooled instance so PoX-5 bond unlockBytes outlive pool
+   * eviction and process restarts. Defaults to each instance's own in-memory store.
+   */
+  unlockBytesStore?: UnlockBytesStore;
 }
 
 export interface SdkPoolItem {
