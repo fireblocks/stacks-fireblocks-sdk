@@ -484,6 +484,285 @@ router.post(
 
 /**
  * @openapi
+ * /{vaultId}/stacking/solo:
+ *   post:
+ *     tags: [PoX-4 Stacking]
+ *     summary: Solo stack STX (PoX-4)
+ *     description: >
+ *       Locks STX directly via pox-4::stack-stx. Requires a signer key and a matching
+ *       signer signature generated with the same authId. Rejected if the account has an
+ *       active delegation or the amount is below the cycle minimum.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [signerKey, signerSig65Hex, amount, maxAmount, authId]
+ *             properties:
+ *               signerKey:
+ *                 type: string
+ *                 description: Signer public key (compressed 33-byte hex).
+ *               signerSig65Hex:
+ *                 type: string
+ *                 description: 65-byte signer signature (hex) over the stacking parameters.
+ *               amount:
+ *                 type: number
+ *                 description: STX amount to stack. Converted to microSTX internally.
+ *               maxAmount:
+ *                 type: string
+ *                 description: Maximum authorised amount in microSTX (integer string) used in the signer signature.
+ *               lockPeriod:
+ *                 type: integer
+ *                 minimum: 1
+ *                 maximum: 12
+ *                 default: 1
+ *                 description: Number of reward cycles to lock for (1–12).
+ *               authId:
+ *                 type: string
+ *                 description: Integer string for signer-sig replay protection. Must match the value used to generate the signature.
+ *               note:
+ *                 type: string
+ *               nonce:
+ *                 type: integer
+ *                 minimum: 0
+ *     responses:
+ *       200:
+ *         description: Solo stacking transaction submitted.
+ *       400:
+ *         description: Invalid input, active delegation present, or amount below the cycle minimum.
+ *       500:
+ *         description: Internal server error
+ */
+router.post("/:vaultId/stacking/solo", validateVaultId, controller.stackSolo);
+
+/**
+ * @openapi
+ * /{vaultId}/stacking/solo/increase:
+ *   post:
+ *     tags: [PoX-4 Stacking]
+ *     summary: Increase solo stacked amount (PoX-4)
+ *     description: Adds STX to an existing solo stacking position via pox-4::stack-increase.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [signerKey, signerSig65Hex, increaseBy, maxAmount, authId]
+ *             properties:
+ *               signerKey:
+ *                 type: string
+ *                 description: Signer public key (compressed 33-byte hex).
+ *               signerSig65Hex:
+ *                 type: string
+ *                 description: 65-byte signer signature (hex).
+ *               increaseBy:
+ *                 type: number
+ *                 description: Additional STX to add to the existing position.
+ *               maxAmount:
+ *                 type: string
+ *                 description: Maximum authorised amount in microSTX (integer string) used in the signer signature.
+ *               authId:
+ *                 type: string
+ *                 description: Integer string for signer-sig replay protection.
+ *               note:
+ *                 type: string
+ *               nonce:
+ *                 type: integer
+ *                 minimum: 0
+ *     responses:
+ *       200:
+ *         description: Stack-increase transaction submitted.
+ *       400:
+ *         description: Invalid input.
+ *       500:
+ *         description: Internal server error
+ */
+router.post("/:vaultId/stacking/solo/increase", validateVaultId, controller.increaseStackedAmount);
+
+/**
+ * @openapi
+ * /{vaultId}/stacking/solo/extend:
+ *   post:
+ *     tags: [PoX-4 Stacking]
+ *     summary: Extend solo stacking period (PoX-4)
+ *     description: Extends the lock period of an existing solo stacking position via pox-4::stack-extend.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [signerKey, signerSig65Hex, extendCycles, maxAmount, authId]
+ *             properties:
+ *               signerKey:
+ *                 type: string
+ *                 description: Signer public key (compressed 33-byte hex).
+ *               signerSig65Hex:
+ *                 type: string
+ *                 description: 65-byte signer signature (hex).
+ *               extendCycles:
+ *                 type: integer
+ *                 minimum: 1
+ *                 maximum: 12
+ *                 description: Additional reward cycles to extend by (1–12).
+ *               maxAmount:
+ *                 type: string
+ *                 description: Maximum authorised amount in microSTX (integer string) used in the signer signature.
+ *               authId:
+ *                 type: string
+ *                 description: Integer string for signer-sig replay protection.
+ *               note:
+ *                 type: string
+ *               nonce:
+ *                 type: integer
+ *                 minimum: 0
+ *     responses:
+ *       200:
+ *         description: Stack-extend transaction submitted.
+ *       400:
+ *         description: Invalid input.
+ *       500:
+ *         description: Internal server error
+ */
+router.post("/:vaultId/stacking/solo/extend", validateVaultId, controller.extendStackingPeriod);
+
+/**
+ * @openapi
+ * /{vaultId}/stacking/pool/delegate:
+ *   post:
+ *     tags: [PoX-4 Stacking]
+ *     summary: Delegate STX to a stacking pool (PoX-4)
+ *     description: >
+ *       Delegates STX to a pool via pox-4::delegate-stx. The pool performs the actual lock,
+ *       so `/stacking/pool/allow-contract-caller` must also be called for the same pool.
+ *       Not supported on testnet.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [amount]
+ *             properties:
+ *               amount:
+ *                 type: number
+ *                 description: STX amount to delegate. Converted to microSTX internally.
+ *               pool:
+ *                 type: string
+ *                 enum: [FAST_POOL]
+ *                 default: FAST_POOL
+ *                 description: Pool to delegate to.
+ *               lockPeriod:
+ *                 type: integer
+ *                 minimum: 1
+ *                 maximum: 12
+ *                 default: 1
+ *                 description: Number of reward cycles to delegate for (1–12).
+ *               nonce:
+ *                 type: integer
+ *                 minimum: 0
+ *     responses:
+ *       200:
+ *         description: Delegation transaction submitted.
+ *       400:
+ *         description: Invalid input or an active delegation already exists.
+ *       500:
+ *         description: Internal server error
+ */
+router.post(
+  "/:vaultId/stacking/pool/delegate",
+  validateVaultId,
+  controller.delegateToPool,
+);
+
+/**
+ * @openapi
+ * /{vaultId}/stacking/pool/allow-contract-caller:
+ *   post:
+ *     tags: [PoX-4 Stacking]
+ *     summary: Allow a pool contract to lock delegated STX (PoX-4)
+ *     description: >
+ *       Authorises the pool contract as a PoX contract caller via
+ *       pox-4::allow-contract-caller, permitting it to lock delegated STX.
+ *       Not supported on testnet.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               pool:
+ *                 type: string
+ *                 enum: [FAST_POOL]
+ *                 default: FAST_POOL
+ *                 description: Pool to authorise as contract caller.
+ *               nonce:
+ *                 type: integer
+ *                 minimum: 0
+ *     responses:
+ *       200:
+ *         description: Pool authorised as contract caller.
+ *       400:
+ *         description: Unsupported pool.
+ *       500:
+ *         description: Internal server error
+ */
+router.post(
+  "/:vaultId/stacking/pool/allow-contract-caller",
+  validateVaultId,
+  controller.allowContractCaller,
+);
+
+/**
+ * @openapi
+ * /{vaultId}/revoke-delegation:
+ *   post:
+ *     tags: [PoX-4 Stacking]
+ *     summary: Revoke an active STX delegation (PoX-4)
+ *     description: >
+ *       Revokes any active delegation via pox-4::revoke-delegate-stx. Required before
+ *       switching pools or moving to solo stacking. Not supported on testnet.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               nonce:
+ *                 type: integer
+ *                 minimum: 0
+ *     responses:
+ *       200:
+ *         description: Delegation revoked.
+ *       400:
+ *         description: vaultId missing.
+ *       500:
+ *         description: Internal server error
+ */
+router.post(
+  "/:vaultId/revoke-delegation",
+  validateVaultId,
+  controller.revokeDelegation,
+);
+
+/**
+ * @openapi
  * /{vaultId}/stacking/pox5/stake:
  *   post:
  *     tags: [PoX-5 Staking]

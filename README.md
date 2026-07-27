@@ -427,6 +427,19 @@ history.forEach((tx) => {
 | GET    | `/api/:vaultId/check-status`  | Check account stacking status and delegation info  |
 | GET    | `/api/poxInfo`                | Fetch current PoX-4 info from blockchain           |
 
+### **PoX-4 Stacking Endpoints**
+
+PoX-4 is the protocol currently live on Stacks mainnet. The PoX-5 endpoints below target the private-1 test network.
+
+| Method | Route                                               | Description                                          |
+| ------ | --------------------------------------------------- | ---------------------------------------------------- |
+| POST   | `/api/:vaultId/stacking/solo`                       | Solo stack STX                                       |
+| POST   | `/api/:vaultId/stacking/solo/increase`              | Increase the STX amount of an existing solo position |
+| POST   | `/api/:vaultId/stacking/solo/extend`                | Extend the lock period of an existing solo position  |
+| POST   | `/api/:vaultId/stacking/pool/delegate`              | Delegate STX to a stacking pool (mainnet only)       |
+| POST   | `/api/:vaultId/stacking/pool/allow-contract-caller` | Allow a pool contract to lock your STX (mainnet only) |
+| POST   | `/api/:vaultId/revoke-delegation`                   | Revoke any active STX delegation (mainnet only)      |
+
 ### **PoX-5 Staking Endpoints**
 
 | Method | Route                                              | Description                                               |

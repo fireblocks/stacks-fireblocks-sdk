@@ -30,6 +30,11 @@ const options = {
         description: "PoX protocol state and cycle info",
       },
       {
+        name: "PoX-4 Stacking",
+        description:
+          "STX solo stacking and pool delegation via PoX-4 — the protocol currently live on Stacks mainnet",
+      },
+      {
         name: "PoX-5 Staking",
         description: "STX staking and signer management via PoX-5",
       },
