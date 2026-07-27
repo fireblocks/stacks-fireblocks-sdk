@@ -43,6 +43,17 @@ app.use("/api", (_req: Request, res: Response) => {
   res.status(404).json({ success: false, error: "Not Found" });
 });
 
+// A rejected promise outside a request handler terminates the process by default,
+// which would take the API down on a transient upstream failure.
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled promise rejection:", formatErrorMessage(reason));
+});
+
+process.on("uncaughtException", (error) => {
+  console.error("Uncaught exception:", formatErrorMessage(error));
+  process.exit(1);
+});
+
 // Start the server only if this file is run directly (not imported)
 const PORT = process.env.PORT || 3000;
 

@@ -22,7 +22,11 @@ export class SdkManager {
 
     // Start cleanup interval
     this.cleanupInterval = setInterval(
-      () => this.cleanupIdleSdks(),
+      () => {
+        this.cleanupIdleSdks().catch((error) => {
+          console.error("SDK pool cleanup failed:", formatErrorMessage(error));
+        });
+      },
       this.poolConfig.cleanupIntervalMs
     );
   }
