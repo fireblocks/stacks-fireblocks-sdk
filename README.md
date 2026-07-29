@@ -467,8 +467,26 @@ npm test
 ### Build
 
 ```bash
-npm run build
+npm run build      # applies patches, emits dist/index.js + type declarations
+npm run typecheck  # tsc --noEmit
 ```
+
+`dist/` is committed to this branch and consumed directly via
+`github:fireblocks/stacks-fireblocks-sdk#app-version-btc-staking`, so **rebuild and
+commit `dist/` whenever `src/` changes**.
+
+The build emits a single CommonJS bundle (`dist/index.js`) with `@stacks/bitcoin-staking`,
+`@scure/btc-signer`, and `@scure/base` inlined. Those are bundled rather than left as
+runtime `require`s because `@stacks/bitcoin-staking` is CommonJS but depends on ESM-only
+`@scure/*` 2.x — a combination that throws `ERR_REQUIRE_ESM` in any CommonJS consumer
+(notably an Electron main process before Electron 28, which cannot use ESM). Bundling
+makes `dist/` safe to `require()` with no build-config changes on the consumer side.
+All other dependencies stay external.
+
+The `@stacks/bitcoin-staking` `unlock-burn-height` fix needed by `createBond`/`renewBond`
+lives in `patches/` and is applied automatically by `npm run build` (via `patch-package`),
+then vendored into the bundle — consumers do **not** need to patch their own
+`node_modules`.
 
 The SDK's Typedocs (generated from `src/`) are published at https://fireblocks.github.io/stacks-fireblocks-sdk/
 

@@ -1,0 +1,24 @@
+diff --git a/node_modules/@stacks/bitcoin-staking/dist/build.js b/node_modules/@stacks/bitcoin-staking/dist/build.js
+index d3d3835..7aea966 100644
+--- a/node_modules/@stacks/bitcoin-staking/dist/build.js
++++ b/node_modules/@stacks/bitcoin-staking/dist/build.js
+@@ -89,6 +89,7 @@ function lockupToCV(lockup) {
+             amount: transactions_1.Cl.uint(o.amount),
+         }))),
+         'staker-unlock-bytes': clBufferFrom(lockup.unlockBytes),
++        'unlock-burn-height': transactions_1.Cl.uint(lockup.unlockBurnHeight),
+     }));
+ }
+ async function buildUpdateBondRegistration(args) {
+diff --git a/node_modules/@stacks/bitcoin-staking/dist/types.d.ts b/node_modules/@stacks/bitcoin-staking/dist/types.d.ts
+index 3c0dcab..8f1fd8d 100644
+--- a/node_modules/@stacks/bitcoin-staking/dist/types.d.ts
++++ b/node_modules/@stacks/bitcoin-staking/dist/types.d.ts
+@@ -105,6 +105,7 @@ export interface BondL1LockupOutput {
+     txCount: number;
+     txIndex: number;
+     amount: bigint;
++    unlockBurnHeight: number;
+ }
+ export type BondLockup = {
+     kind: 'btc';

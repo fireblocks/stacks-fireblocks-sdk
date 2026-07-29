@@ -13,7 +13,10 @@
     "test": "jest --testPathIgnorePatterns=e2e",
     "test:coverage": "jest --coverage --testPathIgnorePatterns=e2e",
     "test:e2e": "jest --testPathPatterns=e2e --runInBand --testTimeout=300000",
-    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "patch": "patch-package",
+    "prebuild": "npm run patch",
+    "build": "rimraf dist && tsc -p tsconfig.build.json && node esbuild.config.mjs",
     "lint": "eslint src/"
   },
   "keywords": [],
@@ -25,8 +28,11 @@
     "@types/dotenv": "^6.1.1",
     "@types/jest": "^30.0.0",
     "@types/node": "^22.18.12",
+    "esbuild": "^0.28.1",
     "eslint": "^9.30.0",
     "jest": "^30.2.0",
+    "patch-package": "^8.0.1",
+    "rimraf": "^6.1.3",
     "ts-jest": "^29.4.6",
     "ts-node": "^10.9.2",
     "typedoc": "^0.28.15",
@@ -36,16 +42,15 @@
   "dependencies": {
     "@fireblocks/ts-sdk": "^10.1.1",
     "@noble/hashes": "^1.3.0",
+    "@noble/secp256k1": "^1.7.1",
     "@scure/btc-signer": "2.2.0",
     "@stacks/bitcoin-staking": "7.4.1-pr.1854.5",
-    "@noble/secp256k1": "^1.7.1",
     "@stacks/common": "^7.0.0",
     "@stacks/network": "^7.0.0",
     "@stacks/stacking": "^7.3.1",
     "@stacks/transactions": "^7.4.0",
     "axios": "^1.7.0",
     "c32check": "^2.0.0",
-    "dotenv": "^16.5.0",
-    "js-sha3": "^0.9.3"
+    "dotenv": "^16.5.0"
   }
 }
