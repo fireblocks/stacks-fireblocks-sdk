@@ -4,6 +4,7 @@ exports.ApiService = void 0;
 const ts_sdk_1 = require("@fireblocks/ts-sdk");
 const SdkManager_1 = require("../pool/SdkManager");
 const types_1 = require("../pool/types");
+const errors_1 = require("../pool/errors");
 const errorHandling_1 = require("../utils/errorHandling");
 class ApiService {
     constructor(config) {
@@ -73,7 +74,7 @@ class ApiService {
                         result = await sdk.extendStackingPeriod(params.signerKey, params.signerSig65Hex, params.extendCycles, params.maxAmount, params.authId, params.note, params.nonce);
                         break;
                     case types_1.ActionType.REPLACE_TRANSACTION:
-                        result = await sdk.replaceTransaction(params.newFee, params.originalTxId, params.newRecipient, params.newAmount, params.nonceOverride);
+                        result = await sdk.replaceTransaction(params.newFee, params.originalTxId, params.newRecipient, params.newAmount, params.nonceOverride, params.note, params.externalId);
                         break;
                     case types_1.ActionType.GET_CONTRACT_CALL_HISTORY:
                         result = await sdk.getContractCallHistory(params.limit, params.offset);
@@ -126,6 +127,12 @@ class ApiService {
                     case types_1.ActionType.ANNOUNCE_EARLY_EXIT:
                         result = await sdk.announceEarlyExit({ note: params.note, nonce: params.nonce, externalId: params.externalId });
                         break;
+                    case types_1.ActionType.SPEND_EARLY_EXIT:
+                        result = await sdk.spendEarlyExitUtxo(params.destinationBtcAddress, { feeSats: params.feeSats, bondIndex: params.bondIndex });
+                        break;
+                    case types_1.ActionType.GET_EARLY_EXIT_PUBLIC_KEY:
+                        result = await sdk.getEarlyExitPublicKey();
+                        break;
                     case types_1.ActionType.GET_REQUIREMENTS:
                         result = await sdk.getRequirements({ bondIndex: params.bondIndex, btcAmountSats: params.btcAmountSats });
                         break;
@@ -140,6 +147,9 @@ class ApiService {
                         break;
                     case types_1.ActionType.CLAIM_REWARDS:
                         result = await sdk.claimRewards(params.bondIndices, { note: params.note, nonce: params.nonce });
+                        break;
+                    case types_1.ActionType.CLAIM_STX_ONLY_REWARDS:
+                        result = await sdk.claimStxOnlyRewards({ note: params.note, nonce: params.nonce });
                         break;
                     case types_1.ActionType.GET_EARNED_REWARDS:
                         result = await sdk.getEarnedRewards(params.signerManager, params.bondIndex);
@@ -161,7 +171,10 @@ class ApiService {
             }
             catch (error) {
                 console.error(`Error executing ${actionType} for vault ${vaultAccountId}:`, error);
-                throw new Error(`Failed to execute action: ${(0, errorHandling_1.formatErrorMessage)(error)}`);
+                // PoolError messages already identify the vault and cause.
+                if (error instanceof errors_1.PoolError)
+                    throw error;
+                throw new Error(`Failed to execute ${actionType}: ${(0, errorHandling_1.formatErrorMessage)(error)}`);
             }
             finally {
                 // Always release the SDK back to the pool

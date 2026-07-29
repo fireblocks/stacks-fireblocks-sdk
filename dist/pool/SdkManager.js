@@ -68,6 +68,9 @@ class SdkManager {
             try {
                 console.log(`Creating new SDK instance for vault ${vaultAccountId}`);
                 const sdk = await StacksSDK_1.StacksSDK.create(vaultAccountId, config, this.chainApiKey);
+                if (this.poolConfig.unlockBytesStore) {
+                    sdk.setUnlockBytesStore(this.poolConfig.unlockBytesStore);
+                }
                 return sdk;
             }
             catch (error) {
@@ -128,16 +131,14 @@ class SdkManager {
                 totalInstances: this.sdkPool.size,
                 activeInstances: 0,
                 idleInstances: 0,
-                instancesByVaultAccount: {},
             };
-            for (const [key, value] of this.sdkPool.entries()) {
+            for (const [, value] of this.sdkPool.entries()) {
                 if (value.isInUse) {
                     metrics.activeInstances++;
                 }
                 else {
                     metrics.idleInstances++;
                 }
-                metrics.instancesByVaultAccount[key] = value.isInUse;
             }
             return metrics;
         };
@@ -156,9 +157,14 @@ class SdkManager {
             maxPoolSize: (poolConfig === null || poolConfig === void 0 ? void 0 : poolConfig.maxPoolSize) || 100,
             idleTimeoutMs: (poolConfig === null || poolConfig === void 0 ? void 0 : poolConfig.idleTimeoutMs) || 30 * 60 * 1000, // 30 minutes
             cleanupIntervalMs: (poolConfig === null || poolConfig === void 0 ? void 0 : poolConfig.cleanupIntervalMs) || 5 * 60 * 1000, // 5 minutes
+            unlockBytesStore: poolConfig === null || poolConfig === void 0 ? void 0 : poolConfig.unlockBytesStore,
         };
         // Start cleanup interval
-        this.cleanupInterval = setInterval(() => this.cleanupIdleSdks(), this.poolConfig.cleanupIntervalMs);
+        this.cleanupInterval = setInterval(() => {
+            this.cleanupIdleSdks().catch((error) => {
+                console.error("SDK pool cleanup failed:", (0, errorHandling_1.formatErrorMessage)(error));
+            });
+        }, this.poolConfig.cleanupIntervalMs);
     }
 }
 exports.SdkManager = SdkManager;

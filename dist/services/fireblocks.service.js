@@ -139,7 +139,8 @@ class FireblocksService {
                 throw new Error("No Segwit address found for the given vault account ID.");
             }
             catch (error) {
-                throw new Error(`Failed to get BTC address for vault ID: ${(0, errorHandling_1.formatErrorMessage)(error)}`);
+                // Rethrown unchanged: callers already report the vault and failing operation.
+                throw error instanceof Error ? error : new Error((0, errorHandling_1.formatErrorMessage)(error));
             }
         };
         /**
@@ -155,7 +156,9 @@ class FireblocksService {
          **/
         this.createBitcoinTransaction = async (destination, amountSats, vaultAccountId, note, externalId) => {
             const assetId = this.testnet ? 'BTC_TEST' : 'BTC';
-            const amountBtc = (Number(amountSats) / 1e8).toFixed(8);
+            const whole = amountSats / BigInt(100000000);
+            const frac = (amountSats % BigInt(100000000)).toString().padStart(8, '0');
+            const amountBtc = `${whole.toString()}.${frac}`;
             const response = await this.fireblocksSDK.transactions.createTransaction({
                 transactionRequest: {
                     operation: ts_sdk_1.TransactionOperation.Transfer,

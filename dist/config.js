@@ -2,7 +2,7 @@
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
-var _a, _b, _c, _d, _e, _f, _g, _h;
+var _a, _b, _c, _d, _e, _f, _g, _h, _j;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.env = exports.config = void 0;
 const clientConfiguration_1 = require("@fireblocks/ts-sdk/dist/client/clientConfiguration");
@@ -25,4 +25,5 @@ exports.env = {
     POOL_CLEANUP_INTERVAL_MS: parseInt((_f = process.env.POOL_CLEANUP_INTERVAL_MS) !== null && _f !== void 0 ? _f : "300000", 10),
     NETWORK: ((_g = process.env.NETWORK) !== null && _g !== void 0 ? _g : "").toLowerCase(),
     TESTNET: ((_h = process.env.NETWORK) !== null && _h !== void 0 ? _h : "").toLowerCase() === "testnet",
+    EARLY_EXIT_SIGNER_URL: (_j = process.env.EARLY_EXIT_SIGNER_URL) !== null && _j !== void 0 ? _j : "",
 };

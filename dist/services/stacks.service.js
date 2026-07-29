@@ -72,21 +72,40 @@ class StacksService {
         this.getAccountNonce = async (address) => {
             var _a, _b;
             try {
-                const [nonceResponse, mempoolResponse] = await Promise.all([
-                    this.axiosClient.get(`${this.stackBaseUrl}/v2/accounts/${address}?proof=0`),
-                    this.axiosClient.get(`${this.stackBaseUrl}/extended/v1/tx/mempool?sender_address=${address}&limit=50`),
-                ]);
+                const pageSize = constants_1.helperConstants.stacks_api_page_size;
+                let nonceError;
+                const nonceRequest = this.axiosClient
+                    .get(`${this.stackBaseUrl}/v2/accounts/${address}?proof=0`)
+                    .catch((e) => { nonceError = e; return undefined; });
+                const pendingNonces = new Set();
+                let pendingTxCount = 0;
+                let offset = 0;
+                const maxPages = 20;
+                for (let page = 0; page < maxPages; page++) {
+                    const mempoolResponse = await this.axiosClient.get(`${this.stackBaseUrl}/extended/v1/tx/mempool`, { params: { sender_address: address, limit: pageSize, offset } });
+                    if (!(mempoolResponse === null || mempoolResponse === void 0 ? void 0 : mempoolResponse.data) || mempoolResponse.status !== 200) {
+                        throw new Error(`HTTP ${mempoolResponse.status}`);
+                    }
+                    const pending = (_b = (_a = mempoolResponse.data) === null || _a === void 0 ? void 0 : _a.results) !== null && _b !== void 0 ? _b : [];
+                    pendingTxCount += pending.length;
+                    for (const tx of pending)
+                        pendingNonces.add(BigInt(tx.nonce));
+                    if (pending.length < pageSize)
+                        break;
+                    offset += pageSize;
+                }
+                const nonceResponse = await nonceRequest;
+                if (nonceError)
+                    throw nonceError;
                 if (!(nonceResponse === null || nonceResponse === void 0 ? void 0 : nonceResponse.data) || nonceResponse.status !== 200) {
-                    throw new Error(`HTTP ${nonceResponse.status}`);
+                    throw new Error(`HTTP ${nonceResponse === null || nonceResponse === void 0 ? void 0 : nonceResponse.status}`);
                 }
                 const confirmedNonce = BigInt(nonceResponse.data.nonce);
-                const pending = (_b = (_a = mempoolResponse.data) === null || _a === void 0 ? void 0 : _a.results) !== null && _b !== void 0 ? _b : [];
-                const pendingNonces = new Set(pending.map((tx) => BigInt(tx.nonce)));
                 let nextAvailable = confirmedNonce;
                 while (pendingNonces.has(nextAvailable)) {
                     nextAvailable++;
                 }
-                return { confirmedNonce, pendingTxCount: pending.length, nextAvailable };
+                return { confirmedNonce, pendingTxCount, nextAvailable };
             }
             catch (error) {
                 console.error(`Error fetching account nonce: ${(0, errorHandling_1.formatErrorMessage)(error)}`);

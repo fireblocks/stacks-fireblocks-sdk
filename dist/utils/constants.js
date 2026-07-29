@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.POX5_BOND_ERRORS = exports.BTC_ESPLORA = exports.POX4_ERRORS = exports.poxInfo = exports.poolInfo = exports.ftInfo = exports.pagination_defaults = exports.stacks_info = exports.api_constants = exports.MAX_FEE_STX = exports.RBF_MIN_FEE_BUMP_USTX = exports.helperConstants = exports.derivationPath = void 0;
+exports.POX5_BOND_ERRORS = exports.EARLY_EXIT_SIGNER = exports.PRIVATE1_HIRO_API_BASE = exports.BTC_ESPLORA = exports.POX4_ERRORS = exports.poxInfo = exports.poolInfo = exports.ftInfo = exports.pagination_defaults = exports.stacks_info = exports.api_constants = exports.DEFAULT_POX_FEE_USTX = exports.MAX_FEE_STX = exports.RBF_MIN_FEE_BUMP_USTX = exports.helperConstants = exports.derivationPath = void 0;
 const types_1 = require("../services/types");
 exports.derivationPath = {
     purpose: 44,
@@ -19,6 +19,7 @@ exports.helperConstants = {
 exports.RBF_MIN_FEE_BUMP_USTX = BigInt(1);
 // Maximum fee accepted by the SDK in STX. Guards against typos (e.g. 100 instead of 0.001).
 exports.MAX_FEE_STX = 10;
+exports.DEFAULT_POX_FEE_USTX = BigInt(10000);
 exports.api_constants = {
     stacks_mainnet_rpc: "https://api.hiro.so",
     stacks_testnet_rpc: "https://api.testnet.hiro.so",
@@ -231,6 +232,15 @@ exports.POX4_ERRORS = {
 exports.BTC_ESPLORA = {
     mainnet: 'https://mempool.space/api',
     testnet: 'https://mempool.bitcoin.private-1.hiro.so/api',
+};
+// PoX-5 private testnet Stacks API (chainId 256, private-1).
+exports.PRIVATE1_HIRO_API_BASE = 'https://api.private-1.hiro.so';
+// External KMS cosigner for the bond early-exit (OP_ELSE) spend path.
+// Auth-less public endpoints — no secrets involved. Mainnet is not provisioned
+// yet; resolveCosignerUrl throws unless EARLY_EXIT_SIGNER_URL is set.
+exports.EARLY_EXIT_SIGNER = {
+    mainnet: '',
+    testnet: 'https://r25rniyw12.execute-api.eu-west-1.amazonaws.com/v1/v1',
 };
 exports.POX5_BOND_ERRORS = {
     7: { name: 'ERR_BOND_NOT_FOUND', message: 'Bond index not found — verify bondIndex.' },
