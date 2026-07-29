@@ -200,7 +200,7 @@ export function parseAssetId(assetId: string) {
 
 
 // PoX info structure for until_burn_ht calculation
-type PoxInfo = {
+export type PoxInfo = {
   prepare_phase_block_length: number | string;
   reward_phase_block_length: number | string;
   next_cycle: {

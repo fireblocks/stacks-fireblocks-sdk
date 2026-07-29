@@ -144,12 +144,16 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
   }> => {
     try {
       const pageSize = helperConstants.stacks_api_page_size;
-      const nonceRequest = this.axiosClient.get(`${this.stackBaseUrl}/v2/accounts/${address}?proof=0`);
+      let nonceError: unknown;
+      const nonceRequest = this.axiosClient
+        .get(`${this.stackBaseUrl}/v2/accounts/${address}?proof=0`)
+        .catch((e) => { nonceError = e; return undefined; });
 
       const pendingNonces = new Set<bigint>();
       let pendingTxCount = 0;
       let offset = 0;
-      while (true) {
+      const maxPages = 20;
+      for (let page = 0; page < maxPages; page++) {
         const mempoolResponse = await this.axiosClient.get(
           `${this.stackBaseUrl}/extended/v1/tx/mempool`,
           { params: { sender_address: address, limit: pageSize, offset } },
@@ -165,8 +169,9 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
       }
 
       const nonceResponse = await nonceRequest;
+      if (nonceError) throw nonceError;
       if (!nonceResponse?.data || nonceResponse.status !== 200) {
-        throw new Error(`HTTP ${nonceResponse.status}`);
+        throw new Error(`HTTP ${nonceResponse?.status}`);
       }
       const confirmedNonce = BigInt(nonceResponse.data.nonce);
 
@@ -560,7 +565,6 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
     nonce?: bigint,
     postConditions?: PostConditionWire[],
     postConditionMode?: PostConditionMode,
-    postConditions?: PostConditionWire[],
   ): Promise<StacksTransactionWire> => {
     try {
       if (!validateAddress(contractAddress, this.network === STACKS_TESTNET)) {
@@ -585,7 +589,6 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
         postConditions: postConditions ?? [],
         postConditionMode: postConditionMode ?? PostConditionMode.Deny,
         ...(nonce !== undefined ? { nonce } : {}),
-        ...(postConditions !== undefined ? { postConditions } : {}),
       });
 
       return unsignedContractCall;
@@ -710,7 +713,6 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
         nonce,
         postConditions,
         postConditionMode,
-        postConditions,
       );
 
       if (fee !== undefined) {
