@@ -1,10 +1,16 @@
 import { BasePath } from "@fireblocks/ts-sdk";
 import { StacksSDK } from "../StacksSDK";
+import { UnlockBytesStore } from "../staking/bonds/unlock-bytes-store";
 
 export interface PoolConfig {
   maxPoolSize: number;
   idleTimeoutMs: number;
   cleanupIntervalMs: number;
+  /**
+   * Shared across every pooled instance so PoX-5 bond unlockBytes outlive pool
+   * eviction and process restarts. Defaults to each instance's own in-memory store.
+   */
+  unlockBytesStore?: UnlockBytesStore;
 }
 
 export interface SdkPoolItem {
@@ -61,11 +67,14 @@ export enum ActionType {
   CREATE_BOND = "createBond",
   GET_BOND_POSITION = "getBondPosition",
   ANNOUNCE_EARLY_EXIT = "announceEarlyExit",
+  SPEND_EARLY_EXIT = "spendEarlyExit",
+  GET_EARLY_EXIT_PUBLIC_KEY = "getEarlyExitPublicKey",
   GET_REQUIREMENTS = "getRequirements",
   UNLOCK_BTC = "unlockMaturedBond",
   RENEW_BOND = "renewBond",
   CALCULATE_REWARDS = "calculateRewards",
   CLAIM_REWARDS = "claimRewards",
+  CLAIM_STX_ONLY_REWARDS = "claimStxOnlyRewards",
   GET_EARNED_REWARDS = "getEarnedRewards",
   GET_BOND_LOCK_ADDRESS = "getBondLockAddress",
   FUND_BOND_LOCK_ADDRESS = "fundBondLockAddress",

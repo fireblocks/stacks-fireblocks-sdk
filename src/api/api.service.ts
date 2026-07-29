@@ -1,6 +1,7 @@
 import { BasePath, TransactionResponse } from "@fireblocks/ts-sdk";
 import { SdkManager } from "../pool/SdkManager";
 import { ActionType, ApiServiceConfig } from "../pool/types";
+import { PoolError } from "../pool/errors";
 import { StacksSDK } from "../StacksSDK";
 import { formatErrorMessage } from "../utils/errorHandling";
 import { SDKResponse } from "../services/types";
@@ -267,6 +268,12 @@ export class ApiService {
         case ActionType.ANNOUNCE_EARLY_EXIT:
           result = await sdk.announceEarlyExit({ note: params.note, nonce: params.nonce, externalId: params.externalId });
           break;
+        case ActionType.SPEND_EARLY_EXIT:
+          result = await sdk.spendEarlyExitUtxo(params.destinationBtcAddress, { feeSats: params.feeSats, bondIndex: params.bondIndex });
+          break;
+        case ActionType.GET_EARLY_EXIT_PUBLIC_KEY:
+          result = await sdk.getEarlyExitPublicKey();
+          break;
         case ActionType.GET_REQUIREMENTS:
           result = await sdk.getRequirements({ bondIndex: params.bondIndex, btcAmountSats: params.btcAmountSats });
           break;
@@ -281,6 +288,9 @@ export class ApiService {
           break;
         case ActionType.CLAIM_REWARDS:
           result = await sdk.claimRewards(params.bondIndices, { note: params.note, nonce: params.nonce });
+          break;
+        case ActionType.CLAIM_STX_ONLY_REWARDS:
+          result = await sdk.claimStxOnlyRewards({ note: params.note, nonce: params.nonce });
           break;
         case ActionType.GET_EARNED_REWARDS:
           result = await sdk.getEarnedRewards(params.signerManager, params.bondIndex);
@@ -307,7 +317,9 @@ export class ApiService {
         `Error executing ${actionType} for vault ${vaultAccountId}:`,
         error,
       );
-      throw new Error(`Failed to execute action: ${formatErrorMessage(error)}`);
+      // PoolError messages already identify the vault and cause.
+      if (error instanceof PoolError) throw error;
+      throw new Error(`Failed to execute ${actionType}: ${formatErrorMessage(error)}`);
     } finally {
       // Always release the SDK back to the pool
       if (sdk) {

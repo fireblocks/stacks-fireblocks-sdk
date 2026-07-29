@@ -258,6 +258,9 @@ export const BTC_ESPLORA = {
   testnet: 'https://mempool.bitcoin.private-1.hiro.so/api',
 };
 
+// PoX-5 private testnet Stacks API (chainId 256, private-1).
+export const PRIVATE1_HIRO_API_BASE = 'https://api.private-1.hiro.so';
+
 // External KMS cosigner for the bond early-exit (OP_ELSE) spend path.
 // Auth-less public endpoints — no secrets involved. Mainnet is not provisioned
 // yet; resolveCosignerUrl throws unless EARLY_EXIT_SIGNER_URL is set.
