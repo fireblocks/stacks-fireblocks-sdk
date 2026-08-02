@@ -59,24 +59,34 @@ export class StacksService {
   private network: StacksNetwork;
   private testnet: boolean;
 
-  constructor(testnet: boolean = false , hiroApiKey?: string) {
+  /**
+   * @param testnet - Whether this is a testnet-class network (address versioning).
+   * @param profile - Optional explicit network settings. When provided (by
+   *   StacksSDK, the single owner of network resolution), the base URL,
+   *   chain id, and magic bytes come from the resolved profile so this service and
+   *   the PoX-5 client always describe the same chain. When omitted, falls back to
+   *   env/default resolution for standalone use.
+   * @param hiroApiKey - Optional Hiro API key, sent as `x-hiro-api-key` on every request.
+   */
+  constructor(
+    testnet: boolean = false,
+    profile?: { baseUrl: string; chainId: number; magicBytes: string },
+    hiroApiKey?: string,
+  ) {
     this.testnet = testnet;
     this.axiosClient = axios.create();
     if (hiroApiKey) {
       this.axiosClient.defaults.headers['x-hiro-api-key'] = hiroApiKey;
     }
-    this.stackBaseUrl = testnet
-      ? api_constants.stacks_testnet_rpc
-      : api_constants.stacks_mainnet_rpc;
-    this.network = testnet ? STACKS_TESTNET : STACKS_MAINNET;
-    const baseUrl = process.env.STACKS_API_URL
+    const baseUrl =
+      profile?.baseUrl
+      || process.env.STACKS_API_URL
       || (testnet ? api_constants.stacks_testnet_rpc : api_constants.stacks_mainnet_rpc);
     this.stackBaseUrl = baseUrl;
     const defaultNetwork = testnet ? STACKS_TESTNET : STACKS_MAINNET;
-    const isPrivate1 = baseUrl.includes('private-1.hiro.so');
     this.network = {
       ...defaultNetwork,
-      ...(isPrivate1 ? { chainId: 256, magicBytes: 'id' } : {}),
+      ...(profile ? { chainId: profile.chainId, magicBytes: profile.magicBytes } : {}),
       client: { baseUrl },
     };
   }

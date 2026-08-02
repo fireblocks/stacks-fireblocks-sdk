@@ -1,16 +1,18 @@
 import { BasePath } from "@fireblocks/ts-sdk";
 import { StacksSDK } from "../StacksSDK";
-import { UnlockBytesStore } from "../staking/bonds/unlock-bytes-store";
+import { LockRecordStore } from "../staking/bonds/unlock-bytes-store";
 
 export interface PoolConfig {
   maxPoolSize: number;
   idleTimeoutMs: number;
   cleanupIntervalMs: number;
   /**
-   * Shared across every pooled instance so PoX-5 bond unlockBytes outlive pool
+   * Shared across every pooled instance so PoX-5 bond lock records outlive pool
    * eviction and process restarts. Defaults to each instance's own in-memory store.
+   * A durable, shared backend is required in production for any deployment that
+   * creates native BTC bonds.
    */
-  unlockBytesStore?: UnlockBytesStore;
+  lockRecordStore?: LockRecordStore;
 }
 
 export interface SdkPoolItem {
@@ -60,11 +62,14 @@ export enum ActionType {
   UNSTAKE = "unstake",
   GRANT_SIGNER_KEY = "grantSignerKey",
   REVOKE_SIGNER_GRANT = "revokeSignerGrant",
+  UPDATE_BOND_REGISTRATION = "updateBondRegistration",
   GET_STAKER_INFO = "getStakerInfo",
   GET_POX5_INFO = "getPox5Info",
   VERIFY_SIGNER_GRANT = "verifySignerGrant",
   // PoX-5 BTC Bonds
   CREATE_BOND = "createBond",
+  CREATE_SBTC_BOND = "createSbtcBond",
+  UNSTAKE_SBTC = "unstakeSbtc",
   GET_BOND_POSITION = "getBondPosition",
   ANNOUNCE_EARLY_EXIT = "announceEarlyExit",
   SPEND_EARLY_EXIT = "spendEarlyExit",

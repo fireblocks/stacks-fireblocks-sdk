@@ -262,6 +262,22 @@ export class ApiService {
             { note: params.note, nonce: params.nonce, externalId: params.externalId, confirmations: params.confirmations, btcTxid: params.btcTxid, amountUstxOverride: params.amountUstxOverride },
           );
           break;
+        case ActionType.CREATE_SBTC_BOND:
+          result = await sdk.createSbtcBond(
+            params.bondIndex,
+            params.sbtcSats,
+            params.signerManager,
+            { sbtcAsset: params.sbtcAsset, amountUstxOverride: params.amountUstxOverride, note: params.note, nonce: params.nonce, externalId: params.externalId },
+          );
+          break;
+        case ActionType.UNSTAKE_SBTC:
+          result = await sdk.unstakeSbtc(
+            params.signerManager,
+            params.amountToWithdrawSats,
+            params.sbtcAsset,
+            { note: params.note, nonce: params.nonce, externalId: params.externalId },
+          );
+          break;
         case ActionType.GET_BOND_POSITION:
           result = await sdk.getBondPosition();
           break;
@@ -275,13 +291,16 @@ export class ApiService {
           result = await sdk.getEarlyExitPublicKey();
           break;
         case ActionType.GET_REQUIREMENTS:
-          result = await sdk.getRequirements({ bondIndex: params.bondIndex, btcAmountSats: params.btcAmountSats });
+          result = await sdk.getRequirements({ bondIndex: params.bondIndex, btcAmountSats: params.btcAmountSats, signerManager: params.signerManager });
           break;
         case ActionType.UNLOCK_BTC:
           result = await sdk.unlockMaturedBond(params.destinationBtcAddress, { feeSats: params.feeSats, bondIndex: params.bondIndex });
           break;
         case ActionType.RENEW_BOND:
           result = await sdk.renewBond(params.nextBondIndex, params.signerManager, { feeSats: params.feeSats, note: params.note, nonce: params.nonce, externalId: params.externalId, confirmations: params.confirmations });
+          break;
+        case ActionType.UPDATE_BOND_REGISTRATION:
+          result = await sdk.updateBondRegistration(params.bondIndex, params.signerManager, params.oldSignerManager, { note: params.note, nonce: params.nonce, externalId: params.externalId });
           break;
         case ActionType.CALCULATE_REWARDS:
           result = await sdk.calculateRewards({ note: params.note, nonce: params.nonce });
