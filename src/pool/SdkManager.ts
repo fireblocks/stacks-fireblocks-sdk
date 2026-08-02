@@ -19,11 +19,16 @@ export class SdkManager {
       maxPoolSize: poolConfig?.maxPoolSize || 100,
       idleTimeoutMs: poolConfig?.idleTimeoutMs || 30 * 60 * 1000, // 30 minutes
       cleanupIntervalMs: poolConfig?.cleanupIntervalMs || 5 * 60 * 1000, // 5 minutes
+      lockRecordStore: poolConfig?.lockRecordStore,
     };
 
     // Start cleanup interval
     this.cleanupInterval = setInterval(
-      () => this.cleanupIdleSdks(),
+      () => {
+        this.cleanupIdleSdks().catch((error) => {
+          console.error("SDK pool cleanup failed:", formatErrorMessage(error));
+        });
+      },
       this.poolConfig.cleanupIntervalMs
     );
   }
@@ -100,6 +105,9 @@ export class SdkManager {
     try {
       console.log(`Creating new SDK instance for vault ${vaultAccountId}`);
       const sdk = await StacksSDK.create(vaultAccountId, config, this.chainApiKey);
+      if (this.poolConfig.lockRecordStore) {
+        sdk.setLockRecordStore(this.poolConfig.lockRecordStore);
+      }
       return sdk;
     } catch (error) {
       console.error(`Failed to create SDK for vault ${vaultAccountId}:`, error);
@@ -169,16 +177,14 @@ export class SdkManager {
       totalInstances: this.sdkPool.size,
       activeInstances: 0,
       idleInstances: 0,
-      instancesByVaultAccount: {},
     };
 
-    for (const [key, value] of this.sdkPool.entries()) {
+    for (const [, value] of this.sdkPool.entries()) {
       if (value.isInUse) {
         metrics.activeInstances++;
       } else {
         metrics.idleInstances++;
       }
-      metrics.instancesByVaultAccount[key] = value.isInUse;
     }
 
     return metrics;

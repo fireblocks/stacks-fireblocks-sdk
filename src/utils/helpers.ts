@@ -7,6 +7,7 @@ import {
   pox4SignatureMessage,
   Pox4SignatureTopic,
 } from "@stacks/stacking";
+import { type PoxInfo as Pox5PoxInfo } from "@stacks/bitcoin-staking";
 import { StacksNetworkName } from "@stacks/network";
 import { encodeStructuredDataBytes } from "@stacks/transactions";
 import { sha256 } from "@noble/hashes/sha256";
@@ -199,7 +200,7 @@ export function parseAssetId(assetId: string) {
 
 
 // PoX info structure for until_burn_ht calculation
-type PoxInfo = {
+export type PoxInfo = {
   prepare_phase_block_length: number | string;
   reward_phase_block_length: number | string;
   next_cycle: {
@@ -209,6 +210,7 @@ type PoxInfo = {
   current_burnchain_block_height: number | string;
   first_burnchain_block_height: number | string;
 };
+
 
 /** Convert N cycles → until_burn_ht (inclusive) */
 export function untilBurnHeightForCycles(
@@ -267,24 +269,29 @@ export function safeStringify(obj: any) {
 
 /**
  * Returns true if we're in a "safe" window to submit a stacking request now.
+ * Accepts both PoX-4 (snake_case) and PoX-5 (camelCase) PoxInfo shapes.
  */
 export function isSafeToSubmit(
-  poxInput: PoxInfo | { data: PoxInfo },
+  poxInput: PoxInfo | Pox5PoxInfo | { data: PoxInfo },
   safetyBuffer = stacks_info.stacking.solo.safetyBlocks,
 ): { safe: boolean; blocksUntilBoundary: number; rewardIndex: number } {
-  const pox: PoxInfo = (poxInput as any).data ?? (poxInput as PoxInfo);
-  const current = Number(pox.current_burnchain_block_height);
-  const first = Number(pox.first_burnchain_block_height);
+  const raw: any = (poxInput as any).data ?? poxInput;
 
-  const rewardLen = Number(pox.reward_phase_block_length);
-  const prepLen = Number(pox.prepare_phase_block_length);
+  const current = Number(raw.current_burnchain_block_height ?? raw.currentBurnchainBlockHeight);
+  const first = Number(raw.first_burnchain_block_height ?? raw.firstBurnchainBlockHeight);
+  const prepLen = Number(raw.prepare_phase_block_length ?? raw.prepareCycleLength);
+  // PoX-4: reward_phase_block_length is the reward portion only.
+  // PoX-5: rewardCycleLength is the full cycle (reward + prepare), so subtract prepLen.
+  const rewardLen = raw.reward_phase_block_length !== undefined
+    ? Number(raw.reward_phase_block_length)
+    : Number(raw.rewardCycleLength) - prepLen;
+
   const cycleLen = rewardLen + prepLen;
-
   const rewardIndex = (current - first) % cycleLen; // position inside cycle
-  const safeEnd = cycleLen - prepLen; // boundary where prepare starts
+  const safeEnd = cycleLen - prepLen;               // block where prepare starts
   const blocksUntilBoundary = safeEnd - rewardIndex;
 
-  const safe = blocksUntilBoundary > safetyBuffer; // must be > buffer
+  const safe = blocksUntilBoundary > safetyBuffer;
   return { safe, blocksUntilBoundary, rewardIndex };
 }
 

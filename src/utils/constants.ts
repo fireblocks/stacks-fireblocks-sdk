@@ -26,6 +26,7 @@ export const RBF_MIN_FEE_BUMP_USTX = BigInt(1);
 
 // Maximum fee accepted by the SDK in STX. Guards against typos (e.g. 100 instead of 0.001).
 export const MAX_FEE_STX = 10;
+export const DEFAULT_POX_FEE_USTX = BigInt(10000);
 
 export const api_constants = {
   stacks_mainnet_rpc: "https://api.hiro.so",
@@ -250,4 +251,41 @@ export const POX4_ERRORS: Record<number, { name: string; message: string }> = {
     name: "ERR_STACKING_UNREACHABLE",
     message: "An unreachable code path was hit (internal error).",
   },
+};
+
+export const BTC_ESPLORA = {
+  mainnet: 'https://mempool.space/api',
+  testnet: 'https://mempool.bitcoin.private-1.hiro.so/api',
+};
+
+// PoX-5 private testnet Stacks API (chainId 256, private-1).
+export const PRIVATE1_HIRO_API_BASE = 'https://api.private-1.hiro.so';
+
+// External KMS cosigner for the bond early-exit (OP_ELSE) spend path.
+// Auth-less public endpoints — no secrets involved. Mainnet is not provisioned
+// yet; resolveCosignerUrl throws unless EARLY_EXIT_SIGNER_URL is set.
+export const EARLY_EXIT_SIGNER = {
+  mainnet: '',
+  testnet: 'https://r25rniyw12.execute-api.eu-west-1.amazonaws.com/v1/v1',
+};
+
+export const POX5_BOND_ERRORS: Record<number, { name: string; message: string }> = {
+  7:  { name: 'ERR_BOND_NOT_FOUND',                    message: 'Bond index not found — verify bondIndex.' },
+  8:  { name: 'ERR_INSUFFICIENT_STX',                  message: 'amountUstx below the required STX/BTC ratio minimum.' },
+  9:  { name: 'ERR_ALREADY_REGISTERED',                message: 'Overlapping bond membership already exists for this address.' },
+  10: { name: 'ERR_TOO_MUCH_SATS',                     message: 'BTC amount exceeds the allowlist cap for this address.' },
+  11: { name: 'ERR_NOT_ALLOWLISTED',                   message: 'Address has no allowance entry for this bond — contact the bond operator.' },
+  19: { name: 'ERR_ALREADY_STAKED',                    message: 'Address has an overlapping STX-only stake — unstake first.' },
+  23: { name: 'ERR_SIGNER_NOT_FOUND',                  message: 'Signer-manager not registered — run grantSignerKey first.' },
+  26: { name: 'ERR_UNAUTHORIZED_SIGNER_REGISTRATION',  message: 'Called pox-5 grant directly — use the signer-manager register-self path.' },
+  39: { name: 'ERR_READ_TX_OUT_OF_BOUNDS',             message: 'Raw BTC tx bytes malformed or truncated.' },
+  40: { name: 'ERR_INVALID_BTC_HEADER',                message: "Block header doesn't hash to the expected burn-chain header at that height." },
+  41: { name: 'ERR_INVALID_MERKLE_PROOF',              message: 'Merkle proof is wrong — check block hash and endianness.' },
+  42: { name: 'ERR_INVALID_LOCKUP_SCRIPT',             message: 'scriptPubKey ≠ expected P2WSH — script mismatch between SDK and contract.' },
+  43: { name: 'ERR_BOND_ALREADY_STARTED',              message: 'Registered after bond-start-height — no grace period.' },
+  45: { name: 'ERR_INVALID_LOCKUP_AMOUNT',             message: 'Proof amount ≠ decoded output value.' },
+  46: { name: 'ERR_DUPLICATE_LOCKUP_OUTPOINT',         message: 'Same (txid, vout) submitted twice.' },
+  47: { name: 'ERR_STAKE_IN_PREPARE_PHASE',            message: 'Landed in prepare phase — broadcast earlier in the cycle.' },
+  48: { name: 'ERR_ROLLOVER_TOO_EARLY',                message: 'Rollover attempted before prior bond L1 unlock window.' },
+  50: { name: 'ERR_L1_EARLY_EXIT_ALREADY_ANNOUNCED',  message: 'announceEarlyExit already called for this membership.' },
 };

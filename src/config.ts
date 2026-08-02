@@ -33,4 +33,5 @@ export const env = {
   ),
   NETWORK: (process.env.NETWORK ?? "").toLowerCase(),
   TESTNET: (process.env.NETWORK ?? "").toLowerCase() === "testnet",
+  EARLY_EXIT_SIGNER_URL: process.env.EARLY_EXIT_SIGNER_URL ?? "",
 } as const;

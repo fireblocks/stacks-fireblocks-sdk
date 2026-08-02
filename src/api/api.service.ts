@@ -1,6 +1,7 @@
 import { BasePath, TransactionResponse } from "@fireblocks/ts-sdk";
 import { SdkManager } from "../pool/SdkManager";
 import { ActionType, ApiServiceConfig } from "../pool/types";
+import { PoolError } from "../pool/errors";
 import { StacksSDK } from "../StacksSDK";
 import { formatErrorMessage } from "../utils/errorHandling";
 import { SDKResponse } from "../services/types";
@@ -165,6 +166,8 @@ export class ApiService {
             params.newRecipient,
             params.newAmount,
             params.nonceOverride,
+            params.note,
+            params.externalId,
           );
           break;
         case ActionType.GET_CONTRACT_CALL_HISTORY:
@@ -192,6 +195,134 @@ export class ApiService {
         case ActionType.GET_ACCOUNT_NONCE:
           result = await sdk.getAccountNonce();
           break;
+        case ActionType.STAKE:
+          result = await sdk.stake(
+            params.amount,
+            params.numCycles,
+            params.signerManager,
+            params.note,
+            params.nonce,
+            params.externalId,
+          );
+          break;
+        case ActionType.UPDATE_STAKE:
+          result = await sdk.updateStake(
+            params.signerManager,
+            params.oldSignerManager,
+            params.cyclesToExtend,
+            params.increaseBy,
+            params.note,
+            params.nonce,
+            params.externalId,
+          );
+          break;
+        case ActionType.UNSTAKE:
+          result = await sdk.unstake(
+            params.oldSignerManager,
+            params.note,
+            params.nonce,
+            params.externalId,
+          );
+          break;
+        case ActionType.GRANT_SIGNER_KEY:
+          result = await sdk.grantSignerKey(
+            params.signerManager,
+            params.authId,
+            params.note,
+            params.nonce,
+            params.externalId,
+          );
+          break;
+        case ActionType.REVOKE_SIGNER_GRANT:
+          result = await sdk.revokeSignerGrant(
+            params.signerManager,
+            params.signerKey,
+            params.note,
+            params.nonce,
+            params.externalId,
+          );
+          break;
+        case ActionType.GET_STAKER_INFO:
+          result = await sdk.getStakerInfo();
+          break;
+        case ActionType.GET_POX5_INFO:
+          result = await sdk.getPox5Info();
+          break;
+        case ActionType.VERIFY_SIGNER_GRANT:
+          result = await sdk.verifySignerGrant(
+            params.signerManager,
+            params.txid,
+          );
+          break;
+        case ActionType.CREATE_BOND:
+          result = await sdk.createBond(
+            params.bondIndex,
+            params.btcAmountSats,
+            params.signerManager,
+            { note: params.note, nonce: params.nonce, externalId: params.externalId, confirmations: params.confirmations, btcTxid: params.btcTxid, amountUstxOverride: params.amountUstxOverride },
+          );
+          break;
+        case ActionType.CREATE_SBTC_BOND:
+          result = await sdk.createSbtcBond(
+            params.bondIndex,
+            params.sbtcSats,
+            params.signerManager,
+            { sbtcAsset: params.sbtcAsset, amountUstxOverride: params.amountUstxOverride, note: params.note, nonce: params.nonce, externalId: params.externalId },
+          );
+          break;
+        case ActionType.UNSTAKE_SBTC:
+          result = await sdk.unstakeSbtc(
+            params.signerManager,
+            params.amountToWithdrawSats,
+            params.sbtcAsset,
+            { note: params.note, nonce: params.nonce, externalId: params.externalId },
+          );
+          break;
+        case ActionType.GET_BOND_POSITION:
+          result = await sdk.getBondPosition();
+          break;
+        case ActionType.ANNOUNCE_EARLY_EXIT:
+          result = await sdk.announceEarlyExit({ note: params.note, nonce: params.nonce, externalId: params.externalId });
+          break;
+        case ActionType.SPEND_EARLY_EXIT:
+          result = await sdk.spendEarlyExitUtxo(params.destinationBtcAddress, { feeSats: params.feeSats, bondIndex: params.bondIndex });
+          break;
+        case ActionType.GET_EARLY_EXIT_PUBLIC_KEY:
+          result = await sdk.getEarlyExitPublicKey();
+          break;
+        case ActionType.GET_REQUIREMENTS:
+          result = await sdk.getRequirements({ bondIndex: params.bondIndex, btcAmountSats: params.btcAmountSats, signerManager: params.signerManager });
+          break;
+        case ActionType.UNLOCK_BTC:
+          result = await sdk.unlockMaturedBond(params.destinationBtcAddress, { feeSats: params.feeSats, bondIndex: params.bondIndex });
+          break;
+        case ActionType.RENEW_BOND:
+          result = await sdk.renewBond(params.nextBondIndex, params.signerManager, { feeSats: params.feeSats, note: params.note, nonce: params.nonce, externalId: params.externalId, confirmations: params.confirmations });
+          break;
+        case ActionType.UPDATE_BOND_REGISTRATION:
+          result = await sdk.updateBondRegistration(params.bondIndex, params.signerManager, params.oldSignerManager, { note: params.note, nonce: params.nonce, externalId: params.externalId });
+          break;
+        case ActionType.CALCULATE_REWARDS:
+          result = await sdk.calculateRewards({ note: params.note, nonce: params.nonce });
+          break;
+        case ActionType.CLAIM_REWARDS:
+          result = await sdk.claimRewards(params.bondIndices, { note: params.note, nonce: params.nonce });
+          break;
+        case ActionType.CLAIM_STX_ONLY_REWARDS:
+          result = await sdk.claimStxOnlyRewards({ note: params.note, nonce: params.nonce });
+          break;
+        case ActionType.GET_EARNED_REWARDS:
+          result = await sdk.getEarnedRewards(params.signerManager, params.bondIndex);
+          break;
+        case ActionType.GET_BOND_LOCK_ADDRESS:
+          result = await sdk.getBondLockAddress(params.bondIndex);
+          break;
+        case ActionType.FUND_BOND_LOCK_ADDRESS:
+          result = await sdk.fundBondLockAddress(params.bondIndex);
+          break;
+        case ActionType.FUND_VAULT:
+          result = await sdk.fundVault(params.staking);
+          break;
         default:
           throw new Error(
             `InvalidType :
@@ -205,7 +336,9 @@ export class ApiService {
         `Error executing ${actionType} for vault ${vaultAccountId}:`,
         error,
       );
-      throw new Error(`Failed to execute action: ${formatErrorMessage(error)}`);
+      // PoolError messages already identify the vault and cause.
+      if (error instanceof PoolError) throw error;
+      throw new Error(`Failed to execute ${actionType}: ${formatErrorMessage(error)}`);
     } finally {
       // Always release the SDK back to the pool
       if (sdk) {

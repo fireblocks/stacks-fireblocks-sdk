@@ -6,7 +6,12 @@
  *
  * Handles configuration via environment variables or explicit configuration objects.
  */
-import { BasePath, Fireblocks } from "@fireblocks/ts-sdk";
+import {
+  BasePath,
+  Fireblocks,
+  TransactionOperation,
+  TransferPeerPathType,
+} from "@fireblocks/ts-sdk";
 import { config } from "../config";
 import fs, { readFileSync } from "fs";
 import {
@@ -171,10 +176,9 @@ export class FireblocksService {
       throw new Error(
         "No Segwit address found for the given vault account ID.",
       );
-    } catch (error: any) {
-      throw new Error(
-        `Failed to get BTC address for vault ID: ${formatErrorMessage(error)}`,
-      );
+    } catch (error) {
+      // Rethrown unchanged: callers already report the vault and failing operation.
+      throw error instanceof Error ? error : new Error(formatErrorMessage(error));
     }
   };
 
@@ -189,6 +193,40 @@ export class FireblocksService {
    * @returns A promise that resolves to the signature when the transaction is successfully signed.
    * @throws {Error} If any parameter is invalid or if the transaction fails.
    **/
+
+  public createBitcoinTransaction = async (
+    destination: string,
+    amountSats: bigint,
+    vaultAccountId: string | number,
+    note?: string,
+    externalId?: string,
+  ): Promise<{ fireblocksId: string; btcTxid: string }> => {
+    const assetId = this.testnet ? 'BTC_TEST' : 'BTC';
+    const whole = amountSats / BigInt(100000000);
+    const frac = (amountSats % BigInt(100000000)).toString().padStart(8, '0');
+    const amountBtc = `${whole.toString()}.${frac}`;
+
+    const response = await this.fireblocksSDK.transactions.createTransaction({
+      transactionRequest: {
+        operation: TransactionOperation.Transfer,
+        assetId,
+        source: { type: TransferPeerPathType.VaultAccount, id: String(vaultAccountId) },
+        destination: { type: TransferPeerPathType.OneTimeAddress, oneTimeAddress: { address: destination } },
+        amount: amountBtc,
+        note: note || 'BTC bond lock',
+        externalTxId: externalId,
+      },
+    });
+
+    const fireblocksId = response.data.id;
+    if (!fireblocksId) throw new Error('Fireblocks BTC transaction creation returned no ID');
+
+    const completedTx = await this.fireblocksSigner.getTxStatus(fireblocksId);
+    const btcTxid = completedTx.txHash;
+    if (!btcTxid) throw new Error(`BTC transaction ${fireblocksId} completed but has no txHash`);
+
+    return { fireblocksId, btcTxid };
+  };
 
   public signTransaction = async (
     content: string,

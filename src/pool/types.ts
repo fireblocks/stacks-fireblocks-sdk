@@ -1,10 +1,18 @@
 import { BasePath } from "@fireblocks/ts-sdk";
 import { StacksSDK } from "../StacksSDK";
+import { LockRecordStore } from "../staking/bonds/unlock-bytes-store";
 
 export interface PoolConfig {
   maxPoolSize: number;
   idleTimeoutMs: number;
   cleanupIntervalMs: number;
+  /**
+   * Shared across every pooled instance so PoX-5 bond lock records outlive pool
+   * eviction and process restarts. Defaults to each instance's own in-memory store.
+   * A durable, shared backend is required in production for any deployment that
+   * creates native BTC bonds.
+   */
+  lockRecordStore?: LockRecordStore;
 }
 
 export interface SdkPoolItem {
@@ -31,7 +39,6 @@ export enum ActionType {
   GET_ACCOUNT_ADDRESS = "getAddress",
   GET_ACCOUNT_PUBLIC_KEY = "getPublicKey",
   GET_BTC_REWARDS_ADDRESS = "getBtcRewardsAddress",
-  STACK_WITH_POOL = "stackWithPool",
   DELEGATE_TO_POOL = "delegateToPool",
   ALLOW_CONTRACT_CALLER = "allowContractCaller",
   REVOKE_DELEGATION = "revokeDelegation",
@@ -49,11 +56,38 @@ export enum ActionType {
   REPLACE_TRANSACTION = "replaceTransaction",
   GET_ACCOUNT_NONCE = "getAccountNonce",
   ESTIMATE_FEE = "estimateFee",
+  // PoX-5 Solo STX
+  STAKE = "stake",
+  UPDATE_STAKE = "updateStake",
+  UNSTAKE = "unstake",
+  GRANT_SIGNER_KEY = "grantSignerKey",
+  REVOKE_SIGNER_GRANT = "revokeSignerGrant",
+  UPDATE_BOND_REGISTRATION = "updateBondRegistration",
+  GET_STAKER_INFO = "getStakerInfo",
+  GET_POX5_INFO = "getPox5Info",
+  VERIFY_SIGNER_GRANT = "verifySignerGrant",
+  // PoX-5 BTC Bonds
+  CREATE_BOND = "createBond",
+  CREATE_SBTC_BOND = "createSbtcBond",
+  UNSTAKE_SBTC = "unstakeSbtc",
+  GET_BOND_POSITION = "getBondPosition",
+  ANNOUNCE_EARLY_EXIT = "announceEarlyExit",
+  SPEND_EARLY_EXIT = "spendEarlyExit",
+  GET_EARLY_EXIT_PUBLIC_KEY = "getEarlyExitPublicKey",
+  GET_REQUIREMENTS = "getRequirements",
+  UNLOCK_BTC = "unlockMaturedBond",
+  RENEW_BOND = "renewBond",
+  CALCULATE_REWARDS = "calculateRewards",
+  CLAIM_REWARDS = "claimRewards",
+  CLAIM_STX_ONLY_REWARDS = "claimStxOnlyRewards",
+  GET_EARNED_REWARDS = "getEarnedRewards",
+  GET_BOND_LOCK_ADDRESS = "getBondLockAddress",
+  FUND_BOND_LOCK_ADDRESS = "fundBondLockAddress",
+  FUND_VAULT = "fundVault",
 }
 
 export interface SdkManagerMetrics {
   totalInstances: number;
   activeInstances: number;
   idleInstances: number;
-  instancesByVaultAccount: Record<string, boolean>;
 }
