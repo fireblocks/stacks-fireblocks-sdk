@@ -17,7 +17,7 @@ export class SdkManager {
       maxPoolSize: poolConfig?.maxPoolSize || 100,
       idleTimeoutMs: poolConfig?.idleTimeoutMs || 30 * 60 * 1000, // 30 minutes
       cleanupIntervalMs: poolConfig?.cleanupIntervalMs || 5 * 60 * 1000, // 5 minutes
-      unlockBytesStore: poolConfig?.unlockBytesStore,
+      lockRecordStore: poolConfig?.lockRecordStore,
     };
 
     // Start cleanup interval
@@ -103,8 +103,8 @@ export class SdkManager {
     try {
       console.log(`Creating new SDK instance for vault ${vaultAccountId}`);
       const sdk = await StacksSDK.create(vaultAccountId, config);
-      if (this.poolConfig.unlockBytesStore) {
-        sdk.setUnlockBytesStore(this.poolConfig.unlockBytesStore);
+      if (this.poolConfig.lockRecordStore) {
+        sdk.setLockRecordStore(this.poolConfig.lockRecordStore);
       }
       return sdk;
     } catch (error) {

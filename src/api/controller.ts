@@ -869,7 +869,9 @@ export const getRequirements: Handler = async (req, res, next) => {
       btcAmountSats = BigInt(btcAmountSatsStr);
     }
 
-    const result = await apiService.executeAction(vaultId, ActionType.GET_REQUIREMENTS, { bondIndex, btcAmountSats });
+    const signerManager = req.query.signerManager ? String(req.query.signerManager).trim() : undefined;
+
+    const result = await apiService.executeAction(vaultId, ActionType.GET_REQUIREMENTS, { bondIndex, btcAmountSats, signerManager });
     res.json(result);
   } catch (err) {
     next(err);
@@ -911,6 +913,78 @@ export const createBond: Handler = async (req, res, next) => {
 
     const result = await apiService.executeAction(vaultId, ActionType.CREATE_BOND, {
       bondIndex, btcAmountSats, signerManager, note, nonce, externalId, confirmations, btcTxid, amountUstxOverride,
+    });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /:vaultId/stacking/pox5/bond/sbtc/create
+export const createSbtcBond: Handler = async (req, res, next) => {
+  try {
+    const vaultId = getVaultId(req);
+    const bondIndexStr = String(req.body.bondIndex ?? "");
+    const sbtcSatsStr = String(req.body.sbtcSats ?? "");
+    const signerManager = String(req.body.signerManager || "").trim();
+    // Optional override; defaults to the built-in sBTC contract for the network.
+    const sbtcAsset = req.body.sbtcAsset && req.body.sbtcAsset.contractAddress && req.body.sbtcAsset.contractName && req.body.sbtcAsset.assetName
+      ? req.body.sbtcAsset
+      : undefined;
+
+    if (!bondIndexStr || !sbtcSatsStr || !signerManager) {
+      res.status(400).json({ error: "Bad Request: bondIndex, sbtcSats, and signerManager are required" });
+      return;
+    }
+    const bondIndex = Number(bondIndexStr);
+    if (!Number.isInteger(bondIndex) || bondIndex < 0) {
+      res.status(400).json({ error: "Bad Request: bondIndex must be a non-negative integer" });
+      return;
+    }
+    if (!/^[0-9]+$/.test(sbtcSatsStr)) {
+      res.status(400).json({ error: "Bad Request: sbtcSats must be a positive integer string" });
+      return;
+    }
+    const sbtcSats = BigInt(sbtcSatsStr);
+    const note = req.body.note ? String(req.body.note) : undefined;
+    const nonce = parseOptionalNonce(req.body.nonce);
+    const externalId = req.body.externalId ? String(req.body.externalId) : undefined;
+    const amountUstxOverride = req.body.amountUstxOverride !== undefined ? BigInt(req.body.amountUstxOverride) : undefined;
+
+    const result = await apiService.executeAction(vaultId, ActionType.CREATE_SBTC_BOND, {
+      bondIndex, sbtcSats, signerManager, sbtcAsset, note, nonce, externalId, amountUstxOverride,
+    });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /:vaultId/stacking/pox5/bond/sbtc/unstake
+export const unstakeSbtc: Handler = async (req, res, next) => {
+  try {
+    const vaultId = getVaultId(req);
+    const signerManager = String(req.body.signerManager || "").trim();
+    const amountStr = String(req.body.amountToWithdrawSats ?? "");
+    if (!signerManager || !amountStr) {
+      res.status(400).json({ error: "Bad Request: signerManager and amountToWithdrawSats are required" });
+      return;
+    }
+    if (!/^[0-9]+$/.test(amountStr)) {
+      res.status(400).json({ error: "Bad Request: amountToWithdrawSats must be a positive integer string" });
+      return;
+    }
+    const amountToWithdrawSats = BigInt(amountStr);
+    // Optional: when provided, the sBTC withdrawal is bounded by a post-condition.
+    const sbtcAsset = req.body.sbtcAsset && req.body.sbtcAsset.contractAddress && req.body.sbtcAsset.contractName && req.body.sbtcAsset.assetName
+      ? req.body.sbtcAsset
+      : undefined;
+    const note = req.body.note ? String(req.body.note) : undefined;
+    const nonce = parseOptionalNonce(req.body.nonce);
+    const externalId = req.body.externalId ? String(req.body.externalId) : undefined;
+
+    const result = await apiService.executeAction(vaultId, ActionType.UNSTAKE_SBTC, {
+      signerManager, amountToWithdrawSats, sbtcAsset, note, nonce, externalId,
     });
     res.json(result);
   } catch (err) {
@@ -1047,6 +1121,32 @@ export const renewBond: Handler = async (req, res, next) => {
     const externalId = req.body.externalId ? String(req.body.externalId) : undefined;
     const confirmations = req.body.confirmations !== undefined ? Number(req.body.confirmations) : undefined;
     const result = await apiService.executeAction(vaultId, ActionType.RENEW_BOND, { nextBondIndex, signerManager, feeSats, note, nonce, externalId, confirmations });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /:vaultId/stacking/pox5/bond/update-registration
+export const updateBondRegistration: Handler = async (req, res, next) => {
+  try {
+    const vaultId = getVaultId(req);
+    const bondIndexStr = String(req.body.bondIndex ?? "");
+    const signerManager = String(req.body.signerManager || "").trim();
+    const oldSignerManager = String(req.body.oldSignerManager || "").trim();
+    if (!bondIndexStr || !signerManager || !oldSignerManager) {
+      res.status(400).json({ error: "Bad Request: bondIndex, signerManager, and oldSignerManager are required" });
+      return;
+    }
+    const bondIndex = Number(bondIndexStr);
+    if (!Number.isInteger(bondIndex) || bondIndex < 0) {
+      res.status(400).json({ error: "Bad Request: bondIndex must be a non-negative integer" });
+      return;
+    }
+    const note = req.body.note ? String(req.body.note) : undefined;
+    const nonce = parseOptionalNonce(req.body.nonce);
+    const externalId = req.body.externalId ? String(req.body.externalId) : undefined;
+    const result = await apiService.executeAction(vaultId, ActionType.UPDATE_BOND_REGISTRATION, { bondIndex, signerManager, oldSignerManager, note, nonce, externalId });
     res.json(result);
   } catch (err) {
     next(err);

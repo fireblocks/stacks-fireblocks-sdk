@@ -1,5 +1,11 @@
 import { Router, Request, Response, NextFunction } from "express";
 import * as controller from "./controller";
+import { enforceVaultAllowlist, loadAuthConfig } from "./auth";
+
+// Rejects operations on vaults outside the configured allowlist. Chained into
+// validateVaultId below so it only applies to genuinely vault-scoped routes
+// (not read-only endpoints like /transactions/:txId, /poxInfo, /metrics).
+const vaultAllowlist = enforceVaultAllowlist(loadAuthConfig());
 
 // Middleware to validate vaultAccountId parameter
 const validateVaultId = (
@@ -14,7 +20,7 @@ const validateVaultId = (
       .json({ error: "vaultAccountId (vaultId) parameter is required" });
     return;
   }
-  next();
+  vaultAllowlist(req, res, next);
 };
 
 const router = Router();
@@ -1183,6 +1189,32 @@ router.post("/:vaultId/stacking/pox5/bond/create", validateVaultId, controller.c
 
 /**
  * @openapi
+ * /{vaultId}/stacking/pox5/bond/sbtc/create:
+ *   post:
+ *     summary: Register an sBTC-backed bond (locks paired STX and transfers sBTC)
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *     responses:
+ *       200:
+ *         description: sBTC bond registered
+ */
+router.post("/:vaultId/stacking/pox5/bond/sbtc/create", validateVaultId, controller.createSbtcBond);
+
+/**
+ * @openapi
+ * /{vaultId}/stacking/pox5/bond/sbtc/unstake:
+ *   post:
+ *     summary: Withdraw sBTC from an sBTC-backed membership
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *     responses:
+ *       200:
+ *         description: sBTC withdrawal submitted
+ */
+router.post("/:vaultId/stacking/pox5/bond/sbtc/unstake", validateVaultId, controller.unstakeSbtc);
+
+/**
+ * @openapi
  * /{vaultId}/stacking/pox5/bond/position:
  *   get:
  *     tags: [PoX-5 BTC Bonds]
@@ -1447,6 +1479,19 @@ router.post("/:vaultId/stacking/pox5/bond/unlock", validateVaultId, controller.u
  *         description: Internal server error
  */
 router.post("/:vaultId/stacking/pox5/bond/renew", validateVaultId, controller.renewBond);
+
+/**
+ * @openapi
+ * /{vaultId}/stacking/pox5/bond/update-registration:
+ *   post:
+ *     summary: Rotate a paired bond's signer manager before the bond period starts
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *     responses:
+ *       200:
+ *         description: Signer manager rotated
+ */
+router.post("/:vaultId/stacking/pox5/bond/update-registration", validateVaultId, controller.updateBondRegistration);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PoX-5 rewards — sBTC payouts for both bonded and STX-only positions.

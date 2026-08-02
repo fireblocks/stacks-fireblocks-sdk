@@ -5,14 +5,29 @@ import router from "./api/router";
 import { swaggerUi, specs } from "./utils/swagger";
 import { ValidationError } from "./utils/validation";
 import { formatErrorMessage } from "./utils/errorHandling";
+import { loadAuthConfig, requireAuth } from "./api/auth";
 
 // Load environment variables
 dotenv.config();
 
+const authConfig = loadAuthConfig();
+
 // Create Express app
 const app = express();
 app.use(express.json());
-app.use(cors());
+
+// Restrict CORS to explicitly configured origins. With none set, cross-origin
+// browser requests are refused rather than allowed from anywhere.
+const corsOrigins = (process.env.CORS_ORIGINS || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+app.use(cors({ origin: corsOrigins.length ? corsOrigins : false }));
+
+// Authentication guards every endpoint below, including Swagger — the process
+// holds Fireblocks signing authority, so an unauthenticated caller must never
+// reach a fund-moving route.
+app.use(requireAuth(authConfig));
 
 // Swagger UI setup
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(specs));
