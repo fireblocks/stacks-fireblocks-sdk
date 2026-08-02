@@ -20,6 +20,12 @@ export type FireblocksConfig = {
     apiSecret: string;
     basePath?: BasePath;
     testnet?: boolean;
+    /**
+     * Explicit Stacks API base URL. Overrides the STACKS_API_URL env var and the
+     * per-network default. Applied to BOTH the PoX-5 client and StacksService so
+     * they always target the same node.
+     */
+    stacksApiUrl?: string;
 };
 export type CreateTransactionResponse = {
     success: boolean;
@@ -97,6 +103,11 @@ export type CheckStatusData = {
         total_miner_rewards_received: number | null;
     };
     delegation: {
+        /**
+         * False on PoX-5, which has no delegation surface. When false, `is_delegated`
+         * and `lookup_failed` are both false and were not evaluated.
+         */
+        applicable: boolean;
         is_delegated: boolean;
         delegated_to: string | null;
         amount_delegated: number | null;
@@ -240,7 +251,7 @@ export type RequirementsResponse = {
             current_bond: {
                 bond_index: number;
                 bond_phase: string;
-                can_participate: boolean;
+                open_and_allowlisted: boolean;
                 stx_value_ratio: string;
                 target_rate_bps: number;
                 min_ustx_ratio_bps: number;
@@ -249,7 +260,7 @@ export type RequirementsResponse = {
             next_open_bond: {
                 bond_index: number;
                 bond_phase: string;
-                can_participate: boolean;
+                open_and_allowlisted: boolean;
                 stx_value_ratio: string;
                 target_rate_bps: number;
                 min_ustx_ratio_bps: number;
@@ -260,13 +271,15 @@ export type RequirementsResponse = {
             requested_bond?: {
                 bond_index: number;
                 bond_phase: string;
-                can_participate: boolean;
+                open_and_allowlisted: boolean;
                 stx_value_ratio: string;
                 target_rate_bps: number;
                 min_ustx_ratio_bps: number;
                 your_allowance_sats: string;
                 min_stx_for_sats?: number;
                 min_ustx_for_sats?: string;
+                eligible?: boolean;
+                eligibility_reasons?: string[];
             };
         };
     };
@@ -281,6 +294,9 @@ export type DerivedLock = {
     unlockBytes: Uint8Array;
     amountSats: bigint;
     isL1Lock: boolean;
+    /** Funding outpoint from the durable record, when available. */
+    btcTxid?: string;
+    vout?: number;
 };
 export type UnlockBtcResponse = {
     success: boolean;

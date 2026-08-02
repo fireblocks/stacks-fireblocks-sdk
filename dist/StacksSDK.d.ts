@@ -1,5 +1,5 @@
 import { AnnounceEarlyExitResponse, BondPositionResponse, RequirementsResponse, CheckStatusResponse, CreateBondResult, CreateTransactionResponse, UnlockBtcResponse, SpendEarlyExitResponse, RenewBondResult, CalculateRewardsResponse, ClaimRewardsResponse, EarnedRewardsResponse, BondLockAddressResponse, FundBondLockResponse, FundVaultResponse, FireblocksConfig, GetContractCallHistoryResponse, GetAccountNonceResponse, GetFtBalancesResponse, GetNativeBalanceResponse, GetPoxInfoResponse, GetTransactionHistoryResponse, GetTransactionStatusResponse, StakerInfoResponse, VerifySignerGrantResponse, TokenType, TransactionType } from "./services/types";
-import { UnlockBytesStore } from "./staking/bonds/unlock-bytes-store";
+import { LockRecordStore } from "./staking/bonds/unlock-bytes-store";
 import { type PoxInfo } from "./utils/helpers";
 import { ClarityValue, PostConditionMode, PostConditionWire } from "@stacks/transactions";
 import { type PoxInfo as Pox5PoxInfo } from "@stacks/bitcoin-staking";
@@ -12,13 +12,25 @@ export declare class StacksSDK {
     private publicKey;
     private cachedTransactions;
     private testnet;
-    private unlockBytesStore;
+    private networkProfile;
+    private _pox5Network;
+    private lockRecordStore;
+    private lockRecordStoreIsDurable;
     /**
-     * Sets the unlockBytes persistence backend (default: in-memory, non-durable).
-     * @param store - Durable implementation (e.g. Redis-backed) required for production,
-     * since loss of unlockBytes permanently strands the associated BTC bond.
+     * Sets the durable bond lock-record backend (default: in-memory, non-durable).
+     *
+     * The record captures the immutable recovery state of a native BTC bond
+     * (unlock bytes, lock address, unlock height, locked amount, funding outpoint).
+     * A durable, shared backend is required for any deployment that creates native
+     * BTC bonds — losing a record for an unspent lock can strand BTC.
      */
-    setUnlockBytesStore: (store: UnlockBytesStore) => void;
+    setLockRecordStore: (store: LockRecordStore) => void;
+    /**
+     * Warns loudly before a native BTC bond is created against the non-durable
+     * in-memory lock-record store — a process restart or pool eviction between
+     * funding and recovery would lose the record and can strand BTC.
+     */
+    private warnIfLockStoreNotDurable;
     private constructor();
     /**
      * Creates an instance of StacksSDK.
@@ -125,6 +137,8 @@ export declare class StacksSDK {
      * value from getAccountNonce() is used, keeping our auto-nonce consistent
      * with what GET /:vaultId/nonce reports.
      */
+    private txChain;
+    private runNonceExclusive;
     private resolveNonce;
     /**
      *  Builds, signs, and sends an STX or fungible token transfer transaction.
@@ -138,7 +152,6 @@ export declare class StacksSDK {
     private buildSignSendTransfer;
     private buildSignSendContractCall;
     private pox5SignAndBroadcast;
-    private static readonly POX5_TESTNET;
     private get pox5Network();
     /**
      * Stakes STX through a signer-manager (PoX-5). Replaces pox-4 stackSolo.
@@ -285,6 +298,42 @@ export declare class StacksSDK {
      */
     private assembleLockupProof;
     /**
+     * Builds an unsigned `register-for-bond` contract call with the corrected output
+     * tuple. The pinned `@stacks/bitcoin-staking` `lockupToCV` omits the
+     * `unlock-burn-height` field that the pox-5 contract requires per output, so the
+     * node rejects every native enrollment/renewal with a `BadFunctionArgument`
+     * tuple-type mismatch — and only after the Bitcoin has already been committed.
+     * We construct the arguments locally against the current ABI instead of
+     * delegating to the dependency builder.
+     */
+    private buildRegisterForBondTx;
+    /**
+     * Builds an unsigned pox-5 contract call via the fork's `makeUnsignedContractCall`
+     * (top-level @stacks/transactions), which — unlike the `@stacks/bitcoin-staking`
+     * builders' pinned nested copy — understands the `staking`/`pox` post-condition
+     * wire types. Used for the fund-moving PoX-5 calls that must carry deny-mode
+     * post-conditions; the dependency builders cannot serialize those here.
+     */
+    private buildPox5Call;
+    /**
+     * Resolves the sBTC token asset for post-conditions. Prefers an explicit override,
+     * otherwise falls back to the built-in sBTC contract for this network (constants
+     * `ftInfo[TokenType.sBTC]`). Returns undefined only if neither is available.
+     */
+    private resolveSbtcAsset;
+    /** Renders `fetchEligibleRegisterForBond` reason codes into a readable string. */
+    private describeBondReasons;
+    /**
+     * Rotates a paired bond's signer manager before the bond period starts
+     * (canonical `update-bond-registration`). Runs the contract eligibility preflight
+     * first, then records the new manager so reward discovery routes to it.
+     */
+    updateBondRegistration: (bondIndex: number, signerManager: string, oldSignerManager: string, opts?: {
+        note?: string;
+        nonce?: bigint;
+        externalId?: string;
+    }) => Promise<CreateTransactionResponse>;
+    /**
      * Creates a native-BTC PoX-5 bond: locks BTC on L1 via Fireblocks and registers
      * the paired STX position on L2 with a full SPV proof.
      *
@@ -301,6 +350,44 @@ export declare class StacksSDK {
         btcTxid?: string;
         amountUstxOverride?: bigint;
     }) => Promise<CreateBondResult>;
+    /**
+     * Registers an sBTC-backed bond: locks the paired STX and transfers sBTC to the
+     * contract in a single L2 call (no Bitcoin L1 lock / SPV proof). The sBTC asset
+     * defaults to the built-in sBTC contract for this network; pass `sbtcAsset` to
+     * override it. Both legs (STX lock + sBTC transfer) are bounded by post-conditions.
+     *
+     * NOTE: sBTC paths are not yet exercised end-to-end on a live network; validate
+     * before production use.
+     */
+    createSbtcBond: (bondIndex: number, sbtcSats: bigint, signerManager: string, opts?: {
+        sbtcAsset?: {
+            contractAddress: string;
+            contractName: string;
+            assetName: string;
+        };
+        amountUstxOverride?: bigint;
+        note?: string;
+        nonce?: bigint;
+        externalId?: string;
+    }) => Promise<CreateTransactionResponse>;
+    /**
+     * Withdraws sBTC from an sBTC-backed membership (`unstake-sbtc`). The pox-5
+     * contract transfers the requested sBTC back to the staker, so when the deployed
+     * sBTC asset is supplied we bound that transfer with a deny-mode post-condition
+     * asserting the contract sends at most `amountToWithdrawSats`. Without the asset
+     * the call falls back to permissive mode (with a warning).
+     *
+     * NOTE: sBTC paths are not yet exercised end-to-end on a live network.
+     */
+    unstakeSbtc: (signerManager: string, amountToWithdrawSats: bigint, sbtcAsset?: {
+        contractAddress: string;
+        contractName: string;
+        assetName: string;
+    }, opts?: {
+        note?: string;
+        nonce?: bigint;
+        externalId?: string;
+    }) => Promise<CreateTransactionResponse>;
     /**
      * Returns the current PoX-5 bond position for this vault's address, enriched
      * with live L1 lock state (if BTC-locked) and accrued sats rewards.
@@ -335,6 +422,7 @@ export declare class StacksSDK {
     getRequirements: (opts?: {
         bondIndex?: number;
         btcAmountSats?: bigint;
+        signerManager?: string;
     }) => Promise<RequirementsResponse>;
     private get btcNetwork();
     private p2wshOutputScript;
@@ -344,6 +432,14 @@ export declare class StacksSDK {
     private btcSegwitSighash;
     private setP2wshWitness;
     private deriveLock;
+    /**
+     * Locates the lock UTXO to spend. Selects by the recorded funding
+     * outpoint when available; otherwise falls back to a single unspent output at
+     * the bond-specific lock address. A transport failure is surfaced as an error
+     * ("unknown"), never silently treated as "already spent" — the previous
+     * amount-equality match returned an empty list on both a zeroed amount and a
+     * failed read, making a still-locked output look spent.
+     */
     private findLockUtxo;
     /**
      * Spends the matured P2WSH UTXO back to a destination BTC address via the
@@ -385,6 +481,15 @@ export declare class StacksSDK {
         externalId?: string;
         confirmations?: number;
     }) => Promise<RenewBondResult>;
+    /**
+     * Derives the bond-period indices that can be active at the current burn height
+     * from the cycle, rather than scanning a fixed range from zero. Bond indices grow
+     * without bound, so a hardcoded cap silently operates on an empty set once the
+     * live index exceeds it. The window is anchored on the latest started bond and
+     * spans BOND_END_OFFSET_PERIODS periods (≤ 6 bonds).
+     */
+    private bondGapCycles;
+    private activeBondWindow;
     private getActiveBondsSorted;
     /**
      * Triggers the PoX-5 reward distribution waterfall for the current cycle.
@@ -414,9 +519,20 @@ export declare class StacksSDK {
      */
     private executeClaimCycle;
     /**
+     * Resolves the signer manager and first earning cycle for a bond independently
+     * of current membership. Prefers the live membership when it still refers to the
+     * bond, else falls back to the durable record saved at registration — so rewards
+     * stay discoverable after the bond period ends or the membership is overwritten.
+     */
+    private resolveBondSignerContext;
+    /**
      * Claims ALL accumulated sBTC rewards for the given bond indices.
      * Handles the full flow internally: calculate → distribute → claim staker share.
-     * User just passes bond indices and gets their sBTC.
+     *
+     * Reward context is resolved per bond from membership OR the durable record, so
+     * historical/expired bonds remain claimable, and claims are grouped by signer
+     * manager so bonds under different managers route to the correct contract. Each
+     * requested bond is probed per cycle (not just the lowest index).
      */
     claimRewards: (bondIndices: number[], opts?: {
         note?: string;

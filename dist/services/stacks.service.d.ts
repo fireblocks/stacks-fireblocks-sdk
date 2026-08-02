@@ -14,7 +14,20 @@ export declare class StacksService {
     private stackBaseUrl;
     private network;
     private testnet;
-    constructor(testnet?: boolean, hiroApiKey?: string);
+    /**
+     * @param testnet - Whether this is a testnet-class network (address versioning).
+     * @param profile - Optional explicit network settings. When provided (by
+     *   StacksSDK, the single owner of network resolution), the base URL,
+     *   chain id, and magic bytes come from the resolved profile so this service and
+     *   the PoX-5 client always describe the same chain. When omitted, falls back to
+     *   env/default resolution for standalone use.
+     * @param hiroApiKey - Optional Hiro API key, sent as `x-hiro-api-key` on every request.
+     */
+    constructor(testnet?: boolean, profile?: {
+        baseUrl: string;
+        chainId: number;
+        magicBytes: string;
+    }, hiroApiKey?: string);
     /**
      * Fetches the current PoX contract address and name.
      * @returns An object containing the PoX contract address and name
