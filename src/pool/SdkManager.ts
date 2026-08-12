@@ -6,6 +6,11 @@ import { PoolCapacityError, SdkInitializationError } from "./errors";
 
 export class SdkManager {
   private sdkPool: Map<string, SdkPoolItem> = new Map();
+  // In-flight constructions keyed the same way as sdkPool. Concurrent cold calls for
+  // one key share a single creation promise so exactly one instance is built — two
+  // instances for the same vault would have independent nonce queues and could
+  // collide on nonces.
+  private creating: Map<string, Promise<StacksSDK>> = new Map();
   private baseConfig: FireblocksConfig;
   private poolConfig: PoolConfig;
   private cleanupInterval: NodeJS.Timeout;
@@ -32,26 +37,40 @@ export class SdkManager {
   }
 
   /**
-   * Get an SDK instance for a specific vault account ID
+   * Pool key for a vault. Network identity is part of the key so an instance built
+   * for one network is never handed out for another.
+   */
+  private poolKey = (vaultAccountId: string): string =>
+    `${this.baseConfig.testnet ? "testnet" : "mainnet"}:${vaultAccountId}`;
+
+  /**
+   * Get an SDK instance for a specific vault account ID. Instance acquisition is
+   * atomic: the decision path below runs synchronously (no await) up to the point a
+   * single construction promise is registered, so concurrent cold calls for the same
+   * vault share one construction rather than building duplicate instances.
    * @param vaultAccountId Fireblocks vault account ID
    * @returns StacksSDK instance
    */
   public getSdk = async (vaultAccountId: string): Promise<StacksSDK> => {
-    // Check if we already have an instance for this vault account
-    const poolItem = this.sdkPool.get(vaultAccountId);
+    const key = this.poolKey(vaultAccountId);
 
-    // If instance exists and is not in use, return it
-    if (poolItem && !poolItem.isInUse) {
-      console.log(`Reusing existing SDK instance for vault ${vaultAccountId}`);
+    // A constructed instance already exists — reuse it.
+    const poolItem = this.sdkPool.get(key);
+    if (poolItem) {
       poolItem.lastUsed = new Date();
       poolItem.isInUse = true;
       return poolItem.sdk;
     }
 
-    // Check pool capacity
-    if (this.sdkPool.size >= this.poolConfig.maxPoolSize && !poolItem) {
-      // Try to find and remove an idle instance
-      const removed = await this.removeOldestIdleSdk();
+    // A construction is already in flight for this key — share it.
+    const inFlight = this.creating.get(key);
+    if (inFlight) return inFlight;
+
+    // Capacity check counts both constructed and in-flight instances. Evict an idle
+    // instance if at capacity; refuse if none can be evicted. removeOldestIdleSdk is
+    // synchronous, so no other call can interleave before the promise is registered.
+    if (this.sdkPool.size + this.creating.size >= this.poolConfig.maxPoolSize) {
+      const removed = this.removeOldestIdleSdk();
       if (!removed) {
         throw new PoolCapacityError(
           `SDK pool is at maximum capacity (${this.poolConfig.maxPoolSize}) with no idle connections`
@@ -59,21 +78,19 @@ export class SdkManager {
       }
     }
 
-    // Create a new SDK instance if needed
-    if (!poolItem) {
-      const sdk = await this.createSdkInstance(vaultAccountId);
-      this.sdkPool.set(vaultAccountId, {
-        sdk,
-        lastUsed: new Date(),
-        isInUse: true,
+    const creation = this.createSdkInstance(vaultAccountId)
+      .then((sdk) => {
+        this.sdkPool.set(key, { sdk, lastUsed: new Date(), isInUse: true });
+        return sdk;
+      })
+      .finally(() => {
+        // Clear the in-flight marker on both success and failure, so a failed
+        // construction allows a clean retry and a successful one does not leak.
+        this.creating.delete(key);
       });
-      return sdk;
-    } else {
-      // Instance exists but is in use
-      poolItem.lastUsed = new Date();
-      poolItem.isInUse = true;
-      return poolItem.sdk;
-    }
+
+    this.creating.set(key, creation);
+    return creation;
   };
 
   /**
@@ -81,7 +98,7 @@ export class SdkManager {
    * @param vaultAccountId Vault account ID
    */
   public releaseSdk = (vaultAccountId: string): void => {
-    const poolItem = this.sdkPool.get(vaultAccountId);
+    const poolItem = this.sdkPool.get(this.poolKey(vaultAccountId));
     if (poolItem) {
       poolItem.isInUse = false;
       poolItem.lastUsed = new Date();
@@ -120,7 +137,7 @@ export class SdkManager {
    * Find and remove the oldest idle SDK instance
    * @returns True if an instance was removed, false otherwise
    */
-  private removeOldestIdleSdk = async (): Promise<boolean> => {
+  private removeOldestIdleSdk = (): boolean => {
     let oldestKey: string | null = null;
     let oldestDate: Date = new Date();
 
