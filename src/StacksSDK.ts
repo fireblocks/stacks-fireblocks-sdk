@@ -63,6 +63,7 @@ import {
   validateNetworkProfile,
 } from "./utils/network";
 import { BondLockRecord, InMemoryLockRecordStore, LockRecordStore } from "./staking/bonds/unlock-bytes-store";
+import { SignerManagerRegistry } from "./staking/signer-manager-adapter";
 import { createHash } from "crypto";
 import { parseOptionalFee, ValidationError } from "./utils/validation";
 import { formatErrorMessage } from "./utils/errorHandling";
@@ -162,6 +163,7 @@ export class StacksSDK {
   private testnet: boolean = false;
   private maxBondStxUstx: bigint | undefined;
   private btcRecoveryAllowlist: string[] = [];
+  private signerManagerRegistry: SignerManagerRegistry = new SignerManagerRegistry();
   private networkProfile!: NetworkProfile;
   private _pox5Network!: StacksNetwork;
   private lockRecordStore: LockRecordStore = new InMemoryLockRecordStore();
@@ -235,6 +237,7 @@ export class StacksSDK {
       this.fireblocksService = new FireblocksService(fireblocksConfig);
       this.maxBondStxUstx = fireblocksConfig?.maxBondStxUstx;
       this.btcRecoveryAllowlist = fireblocksConfig?.btcRecoveryAllowlist ?? [];
+      this.signerManagerRegistry = new SignerManagerRegistry(fireblocksConfig?.signerManagerAdapters ?? []);
       // Single network profile shared by every consumer. An explicit `network` name
       // takes precedence over the legacy `testnet` boolean.
       this.networkProfile = resolveNetworkProfile({
@@ -4086,6 +4089,21 @@ export class StacksSDK {
       return { nonce, error: `signer-manager.claim-rewards broadcast failed at cycle ${cycle}: ${errMsg}` };
     }
 
+    // The staker payout is performed by the signer manager from its OWN balance
+    // (PoX-5 moves no sBTC on this leg — answers §3b), so the bound is manager-specific
+    // and comes from the registered signer-manager adapter. With no registered payout
+    // policy the claim is REFUSED rather than signed permissively.
+    const stakerPayoutPolicy = this.signerManagerRegistry.get(signerManager)?.payoutPolicy;
+    if (stakerBondIndices.length > 0 && !stakerPayoutPolicy) {
+      return {
+        nonce,
+        error: `No registered payout policy for signer manager ${signerManager} — refusing an unbounded staker reward claim at cycle ${cycle}. Register a signerManagerAdapters entry with a payout policy for this manager.`,
+      };
+    }
+    const stakerPayoutAssetId: `${string}.${string}` | undefined = stakerPayoutPolicy
+      ? `${stakerPayoutPolicy.asset.contractAddress}.${stakerPayoutPolicy.asset.contractName}`
+      : undefined;
+
     for (const bondIndex of stakerBondIndices) {
       const smStakerTx = await makeUnsignedContractCall({
         contractAddress: signerContractAddress,
@@ -4100,13 +4118,14 @@ export class StacksSDK {
         fee: DEFAULT_POX_FEE_USTX,
         nonce,
         network: this.pox5Network,
-        // The staker payout is performed by the signer manager from its OWN balance
-        // (PoX-5 moves no sBTC on this leg — answers §3b), so a correct bound is
-        // manager-specific and must come from a signer-manager adapter payout policy
-        // (FBS-45, tracked). Until an adapter is registered this leg stays permissive;
-        // the large PoX-5 -> manager transfer on the claim-rewards leg above is bounded.
-        postConditionMode: 'allow',
-        postConditions: [],
+        // Deny mode: the manager sends the staker at most maxPayoutSats of the
+        // policy asset (a deliberate upper bound, per answers §3a).
+        postConditionMode: 'deny',
+        postConditions: [
+          Pc.principal(signerManager)
+            .willSendLte(stakerPayoutPolicy!.maxPayoutSats)
+            .ft(stakerPayoutAssetId!, stakerPayoutPolicy!.asset.assetName),
+        ],
       });
       const defaultNote = bondIndex !== undefined
         ? `sm-claim-staker-rewards-cycle-${cycle}-bond-${bondIndex}`

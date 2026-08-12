@@ -1,4 +1,5 @@
 import { BasePath } from "@fireblocks/ts-sdk";
+import { SignerManagerAdapter } from "../staking/signer-manager-adapter";
 
 
 export type Network = "mainnet" | "testnet";
@@ -53,6 +54,12 @@ export type FireblocksConfig = {
    * derived BTC address; any other destination must appear here to be permitted.
    */
   btcRecoveryAllowlist?: string[];
+  /**
+   * Signer-manager adapters supported by this deployment. Each supplies the payout
+   * policy used to bound the `claim-staker-rewards` leg; a claim through a manager
+   * with no registered adapter/policy is refused rather than signed permissively.
+   */
+  signerManagerAdapters?: SignerManagerAdapter[];
 };
 
 export type CreateTransactionResponse = {
