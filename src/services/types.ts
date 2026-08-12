@@ -60,6 +60,13 @@ export type FireblocksConfig = {
    * with no registered adapter/policy is refused rather than signed permissively.
    */
   signerManagerAdapters?: SignerManagerAdapter[];
+  /**
+   * When true, native-BTC funding is refused unless the early-exit cosigner service
+   * is reachable AND holds the exact key committed into the bond's lock script. Off
+   * by default: a bond still recovers via natural maturity without the cosigner, so
+   * enabling this trades that fallback's availability for a guaranteed early-exit path.
+   */
+  verifyEarlyExitCosignerAtFunding?: boolean;
 };
 
 export type CreateTransactionResponse = {

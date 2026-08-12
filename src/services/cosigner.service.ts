@@ -1,5 +1,6 @@
 import { hexToBytes, bytesToHex } from "@stacks/common";
 import { Signature as Secp256k1Signature, verify as secp256k1Verify } from "@noble/secp256k1";
+import { HDKey } from "@scure/bip32";
 import { env } from "../config";
 import { EARLY_EXIT_SIGNER } from "../utils/constants";
 
@@ -79,6 +80,39 @@ export class CosignerService {
       throw new Error(`Cosigner public-key request failed (${res.status})`);
     }
     return res.json() as Promise<CosignerPublicKeyResponse>;
+  };
+
+  /**
+   * Derives the leaf public key (0/0 below the service's advertised account xpub —
+   * the key committed into a bond's early-unlock-bytes) straight from `/public-key`.
+   * Reaching the service also proves it is online and pins its advertised identity.
+   */
+  public getLeafPublicKey = async (): Promise<Uint8Array> => {
+    const info = await this.getPublicKey();
+    const account = HDKey.fromExtendedKey(info.xpub);
+    const leaf = account.deriveChild(0).deriveChild(0);
+    if (!leaf.publicKey) {
+      throw new Error("Cosigner xpub did not yield a leaf public key");
+    }
+    return leaf.publicKey;
+  };
+
+  /**
+   * Verifies BEFORE Bitcoin is funded that the cosigner service actually holds the
+   * key committed into the proposed lock script. The lock script's early-exit branch
+   * is `0x21 <P> 0xac` (buildUnlockScript(P)); if the service's derived leaf key does
+   * not reproduce the bond's early-unlock-bytes, early exit would be impossible, so
+   * funding must be refused. A 403 / unreachable service throws here as well, so the
+   * check fails closed and names the failing service.
+   */
+  public verifyCommittedKey = async (expectedUnlockBytes: Uint8Array): Promise<void> => {
+    const pubkey = await this.getLeafPublicKey();
+    const unlockScript = new Uint8Array([0x21, ...pubkey, 0xac]);
+    if (bytesToHex(unlockScript) !== bytesToHex(expectedUnlockBytes)) {
+      throw new Error(
+        `Early-exit cosigner key at ${this.baseUrl} does not match the bond's committed lock script — refusing to fund (early exit would be impossible for this bond).`,
+      );
+    }
   };
 
   public sign = async (req: CosignRequest): Promise<CosignResponse> => {

@@ -1,5 +1,6 @@
 import { hexToBytes, bytesToHex } from "@stacks/common";
 import { getPublicKey, sign } from "@noble/secp256k1";
+import { HDKey } from "@scure/bip32";
 import {
   CosignerService,
   resolveCosignerUrl,
@@ -59,6 +60,37 @@ describe("CosignerService", () => {
 
   afterAll(() => {
     global.fetch = originalFetch;
+  });
+
+  describe("verifyCommittedKey", () => {
+    const master = HDKey.fromMasterSeed(new Uint8Array(32).fill(9));
+    const XPUB = master.publicExtendedKey;
+    const LEAF = HDKey.fromExtendedKey(XPUB).deriveChild(0).deriveChild(0).publicKey!;
+    const EXPECTED_UNLOCK = new Uint8Array([0x21, ...LEAF, 0xac]);
+    const pubKeyResponse = (xpub: string) => ({
+      key_id: 0,
+      xpub,
+      derivation_path: "m/48'/1'/0'/2'",
+      fingerprint: "00000000",
+      network: "testnet",
+    });
+
+    it("passes when the derived leaf key matches the committed lock script", async () => {
+      mockFetchOnce(200, pubKeyResponse(XPUB));
+      await expect(service.verifyCommittedKey(EXPECTED_UNLOCK)).resolves.toBeUndefined();
+    });
+
+    it("throws when the committed lock script does not match the service key", async () => {
+      mockFetchOnce(200, pubKeyResponse(XPUB));
+      const tampered = new Uint8Array(EXPECTED_UNLOCK);
+      tampered[1] ^= 0xff;
+      await expect(service.verifyCommittedKey(tampered)).rejects.toThrow(/does not match/i);
+    });
+
+    it("fails closed when the cosigner service is unreachable", async () => {
+      mockFetchOnce(403, {});
+      await expect(service.verifyCommittedKey(EXPECTED_UNLOCK)).rejects.toThrow();
+    });
   });
 
   describe("cosignEarlyExit", () => {

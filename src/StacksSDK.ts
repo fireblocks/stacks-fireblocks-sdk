@@ -164,6 +164,7 @@ export class StacksSDK {
   private maxBondStxUstx: bigint | undefined;
   private btcRecoveryAllowlist: string[] = [];
   private signerManagerRegistry: SignerManagerRegistry = new SignerManagerRegistry();
+  private verifyEarlyExitCosignerAtFunding = false;
   private networkProfile!: NetworkProfile;
   private _pox5Network!: StacksNetwork;
   private lockRecordStore: LockRecordStore = new InMemoryLockRecordStore();
@@ -238,6 +239,7 @@ export class StacksSDK {
       this.maxBondStxUstx = fireblocksConfig?.maxBondStxUstx;
       this.btcRecoveryAllowlist = fireblocksConfig?.btcRecoveryAllowlist ?? [];
       this.signerManagerRegistry = new SignerManagerRegistry(fireblocksConfig?.signerManagerAdapters ?? []);
+      this.verifyEarlyExitCosignerAtFunding = fireblocksConfig?.verifyEarlyExitCosignerAtFunding ?? false;
       // Single network profile shared by every consumer. An explicit `network` name
       // takes precedence over the legacy `testnet` boolean.
       this.networkProfile = resolveNetworkProfile({
@@ -2489,6 +2491,22 @@ export class StacksSDK {
         const onchainScriptHex: string = inner.value;
         if (bytesToHex(metadata.outputScript) !== onchainScriptHex.replace(/^0x/, '')) {
           return { success: false, error: `Lockup script mismatch — SDK: ${bytesToHex(metadata.outputScript)}, contract: ${onchainScriptHex}` };
+        }
+      }
+
+      // Early-exit cosigner preflight (opt-in). Before any BTC is locked, verify the
+      // cosigner service is reachable AND holds the exact key committed into this
+      // bond's lock script — a mismatch or an unreachable service would make early
+      // exit impossible, so funding is refused when this policy is enabled.
+      if (this.verifyEarlyExitCosignerAtFunding) {
+        try {
+          const cosigner = new CosignerService(resolveCosignerUrl(this.testnet));
+          const earlyUnlockBytes = typeof bond.earlyUnlockBytes === 'string'
+            ? hexToBytes(bond.earlyUnlockBytes)
+            : bond.earlyUnlockBytes;
+          await cosigner.verifyCommittedKey(earlyUnlockBytes);
+        } catch (error) {
+          return { success: false, error: `Early-exit cosigner preflight failed (no BTC committed): ${formatErrorMessage(error)}` };
         }
       }
 
