@@ -4025,23 +4025,53 @@ export class StacksSDK {
     note: string | undefined,
     txHashes: string[],
   ): Promise<{ nonce: bigint; error?: string }> => {
+    // Bound the sBTC that PoX-5 sends to the signer manager during claim-rewards.
+    // total-rewards = get-earned(signer, cycle, none) + Σ get-earned(signer, cycle,
+    // some(idx)) over UNIQUE bond indices. The contract pays duplicate indices once
+    // but processes them sequentially, so they are deduplicated both before summing
+    // (a naive sum would double-count) and before the call.
+    const signerManager = `${signerContractAddress}.${signerContractName}`;
+    const uniqueBondIndices = [...new Set(claimBondIndices)].sort((a, b) => a - b);
+
+    const sbtcAsset = await this.resolveSbtcAsset();
+    if (!sbtcAsset) {
+      return { nonce, error: `Cannot resolve the network sBTC asset to bound claim-rewards at cycle ${cycle}; refusing to broadcast an unbounded reward claim.` };
+    }
+    const bootAddr = (this.pox5Network as any).bootAddress as string;
+    const pox5ContractId: `${string}.${string}` = `${bootAddr}.pox-5`;
+    const sbtcContractId: `${string}.${string}` = `${sbtcAsset.contractAddress}.${sbtcAsset.contractName}`;
+
+    let totalRewards: bigint;
+    try {
+      // A failed read must NOT default to 0 (that would understate the bound and
+      // abort the claim after signing) — Promise.all rejects on any failure.
+      const earned = await Promise.all([
+        fetchEarned({ signerManager, rewardCycle: cycle, network: this.pox5Network }),
+        ...uniqueBondIndices.map((idx) =>
+          fetchEarned({ signerManager, rewardCycle: cycle, bondIndex: idx, network: this.pox5Network }),
+        ),
+      ]);
+      totalRewards = earned.reduce((sum, e) => sum + e, BigInt(0));
+    } catch (error) {
+      return { nonce, error: `Could not read earned rewards to bound claim-rewards at cycle ${cycle}: ${formatErrorMessage(error)}` };
+    }
+
     const smClaimTx = await makeUnsignedContractCall({
       contractAddress: signerContractAddress,
       contractName: signerContractName,
       functionName: 'claim-rewards',
-      functionArgs: [Cl.list(claimBondIndices.map(i => Cl.uint(i))), Cl.uint(cycle)],
+      functionArgs: [Cl.list(uniqueBondIndices.map(i => Cl.uint(i))), Cl.uint(cycle)],
       publicKey: this.publicKey!,
       fee: DEFAULT_POX_FEE_USTX,
       nonce,
       network: this.pox5Network,
-      // Permissive by design: this calls the CALLER-SELECTED signer-manager
-      // contract, which is where sBTC reward custody and payout live — PoX-5 has no
-      // pool/pro-rata mechanism of its own, so the sBTC movement here is defined by
-      // the specific signer-manager, not by pox-5. A correct deny-mode FT
-      // post-condition therefore depends on that contract's implementation and must
-      // be supplied per-integration (it cannot be written generically here).
-      postConditionMode: 'allow',
-      postConditions: [],
+      // Deny mode: PoX-5 sends exactly total-rewards sBTC to the signer manager for
+      // this cycle. Computed immediately before signing from the same chain state and
+      // broadcast right after, so an exact bound is correct.
+      postConditionMode: 'deny',
+      postConditions: [
+        Pc.principal(pox5ContractId).willSendEq(totalRewards).ft(sbtcContractId, sbtcAsset.assetName),
+      ],
     });
     const smClaimResult = await this.pox5SignAndBroadcast(smClaimTx, `sm-claim-rewards-cycle-${cycle}`);
     if (smClaimResult?.txid && !smClaimResult.error && !smClaimResult.reason) {
@@ -4070,9 +4100,11 @@ export class StacksSDK {
         fee: DEFAULT_POX_FEE_USTX,
         nonce,
         network: this.pox5Network,
-        // Permissive by design: the staker payout is performed by the caller-selected
-        // signer-manager's own logic (see the claim-rewards note above), so it cannot
-        // be bounded generically here.
+        // The staker payout is performed by the signer manager from its OWN balance
+        // (PoX-5 moves no sBTC on this leg — answers §3b), so a correct bound is
+        // manager-specific and must come from a signer-manager adapter payout policy
+        // (FBS-45, tracked). Until an adapter is registered this leg stays permissive;
+        // the large PoX-5 -> manager transfer on the claim-rewards leg above is bounded.
         postConditionMode: 'allow',
         postConditions: [],
       });
