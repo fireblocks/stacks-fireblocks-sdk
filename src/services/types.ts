@@ -261,6 +261,24 @@ export type BondPositionResponse = {
   error?: string;
 };
 
+export type HistoricalBondPositionResponse = {
+  success: boolean;
+  data?: {
+    bond_index: number;
+    amount_sats: string;
+    amount_btc: string;
+    lock_address: string;
+    unlock_height: number;
+    btc_txid: string | null;
+    vout: number | null;
+    /** Live UTXO state; null when the Bitcoin lookup failed (unknown, not spent). */
+    still_locked: boolean | null;
+    recovered: boolean | null;
+    matured: boolean | null;
+  };
+  error?: string;
+};
+
 export type AnnounceEarlyExitResponse = {
   success: boolean;
   txHash?: string;

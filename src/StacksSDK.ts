@@ -25,6 +25,7 @@ import { CosignerService, resolveCosignerUrl } from "./services/cosigner.service
 import {
   AnnounceEarlyExitResponse,
   BondPositionResponse,
+  HistoricalBondPositionResponse,
   RequirementsResponse,
   CheckStatusData,
   CheckStatusResponse,
@@ -3462,6 +3463,69 @@ export class StacksSDK {
       });
     }
     return this.findLockUtxo(lock.lockingAddress);
+  };
+
+  /**
+   * Reports a native-BTC bond position by index from the immutable durable lock
+   * record plus live Bitcoin UTXO state — independent of Stacks membership, which
+   * `announce-l1-early-exit` zeroes and maturity drops. This keeps a mature or
+   * exited bond visible and recoverable after its on-chain membership disappears.
+   * A Bitcoin lookup failure is reported as UNKNOWN (null), never silently as spent.
+   */
+  public getHistoricalBondPosition = async (
+    bondIndex: number,
+  ): Promise<HistoricalBondPositionResponse> => {
+    try {
+      if (!this.address || !this.publicKey) throw new Error("Address or Public Key not set");
+
+      const lock = await this.deriveLock(undefined, bondIndex);
+      if (!lock) return { success: false, error: `No native-BTC lock found for bond ${bondIndex}` };
+
+      let still_locked: boolean | null = null;
+      let recovered: boolean | null = null;
+      let matured: boolean | null = null;
+      try {
+        const [utxosRes, tipText] = await Promise.all([
+          fetch(`${this.esploraBase()}/address/${lock.lockingAddress}/utxo`),
+          fetch(`${this.esploraBase()}/blocks/tip/height`).then((r) => r.text()),
+        ]);
+        if (!utxosRes.ok) throw new Error(`Esplora HTTP ${utxosRes.status}`);
+        const utxos: Array<{ txid: string; vout: number }> = await utxosRes.json();
+        const tipHeight = Number(tipText);
+
+        // Prefer the exact recorded outpoint; fall back to any output at the address.
+        const isUnspent =
+          lock.btcTxid !== undefined && lock.vout !== undefined
+            ? utxos.some((u) => u.txid === lock.btcTxid && u.vout === lock.vout)
+            : utxos.length > 0;
+        still_locked = isUnspent;
+        recovered = !isUnspent;
+        matured = Number.isFinite(tipHeight) ? tipHeight >= lock.unlockHeight : null;
+      } catch {
+        // Bitcoin lookup failed — indeterminate, not "recovered".
+        still_locked = null;
+        recovered = null;
+        matured = null;
+      }
+
+      return {
+        success: true,
+        data: {
+          bond_index: lock.bondIndex,
+          amount_sats: lock.amountSats.toString(),
+          amount_btc: (Number(lock.amountSats) / 1e8).toFixed(8),
+          lock_address: lock.lockingAddress,
+          unlock_height: lock.unlockHeight,
+          btc_txid: lock.btcTxid ?? null,
+          vout: lock.vout ?? null,
+          still_locked,
+          recovered,
+          matured,
+        },
+      };
+    } catch (error) {
+      return { success: false, error: `Failed to get historical bond position: ${formatErrorMessage(error)}` };
+    }
   };
 
   // ─── §6: unlockMaturedBond ────────────────────────────────────────────────
