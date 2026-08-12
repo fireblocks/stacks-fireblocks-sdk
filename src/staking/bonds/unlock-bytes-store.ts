@@ -15,6 +15,19 @@
  * lockRecordStore option). Losing a record for an unspent lock can strand BTC.
  */
 
+/**
+ * Durable stages of a native-BTC enrollment. Persisted so a retry after a crash or
+ * restart resumes at the last completed stage instead of re-funding Bitcoin.
+ */
+export type EnrollmentStage =
+  | "lock-fixed"              // lock script/address fixed, eligibility confirmed
+  | "funding-requested"      // Fireblocks BTC funding requested (external id assigned)
+  | "btc-broadcast"          // funding txid recorded
+  | "btc-confirmed"          // funding tx reached required confirmations
+  | "proof-built"            // SPV proof assembled, funding outpoint resolved
+  | "registration-submitted" // register-for-bond broadcast
+  | "registration-confirmed"; // register-for-bond settled successfully
+
 export interface BondLockRecord {
   bondIndex: number;
   /** Witness `staker-unlock-bytes` committed to the on-chain lock script. */
@@ -39,6 +52,15 @@ export interface BondLockRecord {
   signerManager?: string;
   /** First reward cycle the bond earns in — the lower bound for reward discovery. */
   firstRewardCycle?: number;
+  /**
+   * Deterministic Fireblocks external id used for the BTC funding transfer. Derived
+   * from vault + network + bondIndex + lockAddress so a retry reuses the same id and
+   * Fireblocks de-duplicates it — a second funding transfer is never created for the
+   * same enrollment.
+   */
+  fundingExternalId?: string;
+  /** Last completed durable enrollment stage — a retry resumes from here. */
+  stage?: EnrollmentStage;
 }
 
 export interface LockRecordStore {
@@ -51,6 +73,13 @@ export interface LockRecordStore {
     stxAddress: string,
     bondIndex: number,
   ): Promise<BondLockRecord | null>;
+  /**
+   * Optional startup health check. When present, a durable store proves it can be
+   * written and read (and is not corrupt) before native-BTC funding is allowed.
+   * Throws on failure. The in-memory default does not implement this and is treated
+   * as non-durable.
+   */
+  checkHealth?(): Promise<void>;
 }
 
 export class InMemoryLockRecordStore implements LockRecordStore {
