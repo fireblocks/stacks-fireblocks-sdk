@@ -1,18 +1,17 @@
 import request from "supertest";
 import express from "express";
-import { requireAuth, enforceVaultAllowlist, AuthConfig } from "../api/auth";
+import { requireAuth, assertAuthConfigured, AuthConfig } from "../api/auth";
 
 const buildApp = (config: AuthConfig) => {
   const app = express();
   app.use(express.json());
   app.use(requireAuth(config));
-  const enforce = enforceVaultAllowlist(config);
-  app.get("/api/:vaultId/balance", enforce, (_req, res) => res.json({ ok: true }));
+  app.get("/api/:vaultId/balance", (_req, res) => res.json({ ok: true }));
   app.get("/api/transactions/:txId", (_req, res) => res.json({ ok: true }));
   return app;
 };
 
-const base: AuthConfig = { token: "", vaultAllowlist: [], allowUnauthenticated: false };
+const base: AuthConfig = { token: "", allowUnauthenticated: false };
 
 describe("REST authentication (requireAuth)", () => {
   it("fails closed with 503 when no token is configured", async () => {
@@ -50,34 +49,18 @@ describe("REST authentication (requireAuth)", () => {
   });
 });
 
-describe("vault allowlist (enforceVaultAllowlist)", () => {
-  const authed = (extra: Partial<AuthConfig>): AuthConfig => ({
-    ...base,
-    token: "s3cret",
-    ...extra,
+describe("startup auth gate (assertAuthConfigured)", () => {
+  it("throws when no token is configured", () => {
+    expect(() => assertAuthConfigured({ ...base })).toThrow();
   });
 
-  it("permits any vault when the allowlist is empty", async () => {
-    const app = buildApp(authed({ vaultAllowlist: [] }));
-    const res = await request(app)
-      .get("/api/9/balance")
-      .set("Authorization", "Bearer s3cret");
-    expect(res.status).toBe(200);
+  it("does not throw when a token is configured", () => {
+    expect(() => assertAuthConfigured({ ...base, token: "s3cret" })).not.toThrow();
   });
 
-  it("rejects a vault outside the allowlist (403)", async () => {
-    const app = buildApp(authed({ vaultAllowlist: ["5"] }));
-    const res = await request(app)
-      .get("/api/9/balance")
-      .set("Authorization", "Bearer s3cret");
-    expect(res.status).toBe(403);
-  });
-
-  it("permits a vault inside the allowlist", async () => {
-    const app = buildApp(authed({ vaultAllowlist: ["5"] }));
-    const res = await request(app)
-      .get("/api/5/balance")
-      .set("Authorization", "Bearer s3cret");
-    expect(res.status).toBe(200);
+  it("does not throw when unauthenticated mode is explicitly enabled", () => {
+    expect(() =>
+      assertAuthConfigured({ ...base, allowUnauthenticated: true }),
+    ).not.toThrow();
   });
 });

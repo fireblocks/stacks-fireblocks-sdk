@@ -5,7 +5,7 @@ import router from "./api/router";
 import { swaggerUi, specs } from "./utils/swagger";
 import { ValidationError } from "./utils/validation";
 import { formatErrorMessage } from "./utils/errorHandling";
-import { loadAuthConfig, requireAuth } from "./api/auth";
+import { assertAuthConfigured, loadAuthConfig, requireAuth } from "./api/auth";
 
 // Load environment variables
 dotenv.config();
@@ -73,6 +73,8 @@ process.on("uncaughtException", (error) => {
 const PORT = process.env.PORT || 3000;
 
 if (require.main === module) {
+  // Fail closed: refuse to start as an open signing proxy when auth is unconfigured.
+  assertAuthConfigured(authConfig);
   app.listen(PORT, () => {
     console.log(`Stacks-Fireblocks SDK API server running on port ${PORT}`);
   });

@@ -1,14 +1,21 @@
 /**
- * Authentication and authorization for the REST server.
+ * Authentication for the REST server.
  *
- * Because Stacks operations are authorized through Fireblocks RAW signing, the
- * platform only ever sees an opaque digest and cannot enforce a destination- or
- * amount-based policy on them. The service boundary is therefore the only place
- * a caller can be authenticated and mapped to permitted vaults — the process
- * holds the signing privilege and will exercise it for whoever reaches the port.
+ * Stacks operations are authorized through Fireblocks RAW signing, so the platform
+ * only ever sees an opaque digest and cannot enforce a destination- or amount-based
+ * policy on them. The service boundary is where a caller is authenticated: the
+ * process holds the signing privilege and will exercise it for whoever reaches the
+ * port, so an unauthenticated caller must never reach a fund-moving route.
  *
- * These middlewares fail closed: without a configured API token the server
- * rejects every request rather than acting as an open signing proxy.
+ * Which vaults a deployment may sign for is NOT enforced here. That boundary belongs
+ * to Fireblocks — a dedicated API user per deployment, restricted to the vaults it
+ * should reach, together with a Transaction Authorization Policy (TAP). An in-process
+ * allowlist cannot be authoritative: the process already holds a credential that can
+ * sign for every vault that credential is entitled to.
+ *
+ * This module fails closed: without a configured API token the server refuses to
+ * start (assertAuthConfigured) and every request is rejected (requireAuth), rather
+ * than the server acting as an open signing proxy.
  */
 import { Request, Response, NextFunction } from "express";
 import { createHash, timingSafeEqual } from "crypto";
@@ -16,20 +23,32 @@ import { createHash, timingSafeEqual } from "crypto";
 export interface AuthConfig {
   /** Shared bearer token required on every request. Empty = not configured. */
   token: string;
-  /** When non-empty, only these vault ids may be operated on. */
-  vaultAllowlist: string[];
   /** Explicit, loudly-warned opt-out for local development only. */
   allowUnauthenticated: boolean;
 }
 
 export const loadAuthConfig = (): AuthConfig => ({
   token: process.env.API_AUTH_TOKEN || "",
-  vaultAllowlist: (process.env.VAULT_ALLOWLIST || "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean),
   allowUnauthenticated: process.env.ALLOW_UNAUTHENTICATED === "true",
 });
+
+/**
+ * Fails server startup when authentication is not configured. Called at boot (not on
+ * import), so the process refuses to run as an open signing proxy. An explicit
+ * `ALLOW_UNAUTHENTICATED=true` opt-out is honored for local development only.
+ */
+export const assertAuthConfigured = (config: AuthConfig): void => {
+  if (config.token) return;
+  if (config.allowUnauthenticated) {
+    console.warn(
+      "[SECURITY] API auth disabled (ALLOW_UNAUTHENTICATED=true) — do NOT use in production.",
+    );
+    return;
+  }
+  throw new Error(
+    "Server authentication is not configured. Set API_AUTH_TOKEN (or ALLOW_UNAUTHENTICATED=true for local dev only).",
+  );
+};
 
 const sha256 = (s: string): Buffer => createHash("sha256").update(s).digest();
 
@@ -43,9 +62,6 @@ export const requireAuth = (config: AuthConfig) => {
   return (req: Request, res: Response, next: NextFunction): void => {
     if (!expectedDigest) {
       if (config.allowUnauthenticated) {
-        console.warn(
-          "[SECURITY] API auth disabled (ALLOW_UNAUTHENTICATED=true) — do NOT use in production.",
-        );
         next();
         return;
       }
@@ -69,25 +85,6 @@ export const requireAuth = (config: AuthConfig) => {
       !timingSafeEqual(provided, expectedDigest)
     ) {
       res.status(401).json({ error: "Invalid token" });
-      return;
-    }
-    next();
-  };
-};
-
-/**
- * Rejects operations on any vault outside the configured allowlist. A no-op when
- * no allowlist is set; a production deployment should always set one.
- */
-export const enforceVaultAllowlist = (config: AuthConfig) => {
-  return (req: Request, res: Response, next: NextFunction): void => {
-    if (config.vaultAllowlist.length === 0) {
-      next();
-      return;
-    }
-    const vaultId = String(req.params.vaultId ?? "");
-    if (vaultId && !config.vaultAllowlist.includes(vaultId)) {
-      res.status(403).json({ error: `Vault ${vaultId} is not allowlisted` });
       return;
     }
     next();

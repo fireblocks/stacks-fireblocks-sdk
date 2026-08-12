@@ -1,13 +1,9 @@
 import { Router, Request, Response, NextFunction } from "express";
 import * as controller from "./controller";
-import { enforceVaultAllowlist, loadAuthConfig } from "./auth";
 
-// Rejects operations on vaults outside the configured allowlist. Chained into
-// validateVaultId below so it only applies to genuinely vault-scoped routes
-// (not read-only endpoints like /transactions/:txId, /poxInfo, /metrics).
-const vaultAllowlist = enforceVaultAllowlist(loadAuthConfig());
-
-// Middleware to validate vaultAccountId parameter
+// Validates the vaultAccountId route parameter. Vault-level access is enforced by
+// Fireblocks (a dedicated API user per deployment + TAP), not by the SDK, so this
+// only checks that a vault id is present.
 const validateVaultId = (
   req: Request,
   res: Response,
@@ -20,7 +16,7 @@ const validateVaultId = (
       .json({ error: "vaultAccountId (vaultId) parameter is required" });
     return;
   }
-  vaultAllowlist(req, res, next);
+  next();
 };
 
 const router = Router();
