@@ -3913,8 +3913,26 @@ export class StacksSDK {
     bondPeriodToRewardCycle({ bondIndex: 1, poxInfo: pox }) -
     bondPeriodToRewardCycle({ bondIndex: 0, poxInfo: pox });
 
-  private activeBondWindow = (pox: Pox5PoxInfo): number[] => {
-    const currentCycle = burnHeightToRewardCycle({ burnHeight: pox.currentBurnchainBlockHeight, poxInfo: pox });
+  /**
+   * Distribution "calculation height" — the burn height at which the reward waterfall
+   * snapshots the active-bond set. calculate-rewards must submit exactly the bonds
+   * active at THIS height, not at the drifting live burn height; near a reward-cycle
+   * boundary the two can fall in different cycles, which is the defect FBS-41 fixes.
+   *
+   * EDUCATED GUESS (verify on a live node, then replace with the real accessor): the
+   * protocol answers do not cover this and the dependency exposes no
+   * `distribution-cycle-to-burn-height` / `current-distribution-cycle` read-only
+   * function, so we approximate the plan's formula
+   * `distribution-cycle-to-burn-height(current-distribution-cycle) - 1` as one block
+   * before the current reward cycle's boundary. Fail-safe: a wrong height only makes
+   * the node REJECT calculate-rewards (no misdistribution), and
+   * fetchEligibleCalculateRewards gates the submission before any signature is spent.
+   */
+  private calculationHeight = (pox: Pox5PoxInfo): number =>
+    pox.firstBurnchainBlockHeight + pox.rewardCycleId * pox.rewardCycleLength - 1;
+
+  private activeBondWindow = (pox: Pox5PoxInfo, burnHeight: number): number[] => {
+    const currentCycle = burnHeightToRewardCycle({ burnHeight, poxInfo: pox });
     const firstBondCycle = bondPeriodToRewardCycle({ bondIndex: 0, poxInfo: pox });
     const gap = this.bondGapCycles(pox);
     const latest = currentCycle <= firstBondCycle
@@ -3928,12 +3946,16 @@ export class StacksSDK {
 
   private getActiveBondsSorted = async (): Promise<number[]> => {
     const pox = await fetchPox5Info({ network: this.pox5Network });
-    const candidates = this.activeBondWindow(pox);
+    // FBS-41: derive the active set at the distribution calculation height — shared by
+    // both the window and the per-bond active check — so calculate-rewards submits the
+    // set the contract expects rather than the drifting live-height set.
+    const calcHeight = this.calculationHeight(pox);
+    const candidates = this.activeBondWindow(pox, calcHeight);
     const results = await Promise.all(
       candidates.map(async i => {
         const bond = await fetchBond({ bondIndex: i, network: this.pox5Network }).catch(() => null);
         if (!bond) return null;
-        const active = isBondActiveAtHeight({ bondIndex: i, burnHeight: pox.currentBurnchainBlockHeight, poxInfo: pox });
+        const active = isBondActiveAtHeight({ bondIndex: i, burnHeight: calcHeight, poxInfo: pox });
         if (!active) return null;
         return { i, stxValueRatio: bond.stxValueRatio };
       }),
