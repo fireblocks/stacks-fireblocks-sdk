@@ -909,10 +909,11 @@ export const createBond: Handler = async (req, res, next) => {
     const externalId = req.body.externalId ? String(req.body.externalId) : undefined;
     const confirmations = req.body.confirmations !== undefined ? Number(req.body.confirmations) : undefined;
     const btcTxid = req.body.btcTxid ? String(req.body.btcTxid).trim() : undefined;
-    const amountUstxOverride = req.body.amountUstxOverride !== undefined ? BigInt(req.body.amountUstxOverride) : undefined;
+    // The paired-STX amount override is an expert, policy-gated path and is
+    // deliberately NOT exposed over REST — the amount is always derived here.
 
     const result = await apiService.executeAction(vaultId, ActionType.CREATE_BOND, {
-      bondIndex, btcAmountSats, signerManager, note, nonce, externalId, confirmations, btcTxid, amountUstxOverride,
+      bondIndex, btcAmountSats, signerManager, note, nonce, externalId, confirmations, btcTxid,
     });
     res.json(result);
   } catch (err) {
@@ -949,10 +950,11 @@ export const createSbtcBond: Handler = async (req, res, next) => {
     const note = req.body.note ? String(req.body.note) : undefined;
     const nonce = parseOptionalNonce(req.body.nonce);
     const externalId = req.body.externalId ? String(req.body.externalId) : undefined;
-    const amountUstxOverride = req.body.amountUstxOverride !== undefined ? BigInt(req.body.amountUstxOverride) : undefined;
+    // The paired-STX amount override is an expert, policy-gated path and is
+    // deliberately NOT exposed over REST — the amount is always derived here.
 
     const result = await apiService.executeAction(vaultId, ActionType.CREATE_SBTC_BOND, {
-      bondIndex, sbtcSats, signerManager, sbtcAsset, note, nonce, externalId, amountUstxOverride,
+      bondIndex, sbtcSats, signerManager, sbtcAsset, note, nonce, externalId,
     });
     res.json(result);
   } catch (err) {
@@ -1131,22 +1133,18 @@ export const renewBond: Handler = async (req, res, next) => {
 export const updateBondRegistration: Handler = async (req, res, next) => {
   try {
     const vaultId = getVaultId(req);
-    const bondIndexStr = String(req.body.bondIndex ?? "");
     const signerManager = String(req.body.signerManager || "").trim();
     const oldSignerManager = String(req.body.oldSignerManager || "").trim();
-    if (!bondIndexStr || !signerManager || !oldSignerManager) {
-      res.status(400).json({ error: "Bad Request: bondIndex, signerManager, and oldSignerManager are required" });
-      return;
-    }
-    const bondIndex = Number(bondIndexStr);
-    if (!Number.isInteger(bondIndex) || bondIndex < 0) {
-      res.status(400).json({ error: "Bad Request: bondIndex must be a non-negative integer" });
+    // No bondIndex: the affected bond is derived from the staker's on-chain
+    // membership, so a caller-supplied index cannot rotate the wrong record.
+    if (!signerManager || !oldSignerManager) {
+      res.status(400).json({ error: "Bad Request: signerManager and oldSignerManager are required" });
       return;
     }
     const note = req.body.note ? String(req.body.note) : undefined;
     const nonce = parseOptionalNonce(req.body.nonce);
     const externalId = req.body.externalId ? String(req.body.externalId) : undefined;
-    const result = await apiService.executeAction(vaultId, ActionType.UPDATE_BOND_REGISTRATION, { bondIndex, signerManager, oldSignerManager, note, nonce, externalId });
+    const result = await apiService.executeAction(vaultId, ActionType.UPDATE_BOND_REGISTRATION, { signerManager, oldSignerManager, note, nonce, externalId });
     res.json(result);
   } catch (err) {
     next(err);

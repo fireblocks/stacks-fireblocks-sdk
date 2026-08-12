@@ -62,6 +62,7 @@ import {
   validateNetworkProfile,
 } from "./utils/network";
 import { BondLockRecord, InMemoryLockRecordStore, LockRecordStore } from "./staking/bonds/unlock-bytes-store";
+import { createHash } from "crypto";
 import { parseOptionalFee, ValidationError } from "./utils/validation";
 import { formatErrorMessage } from "./utils/errorHandling";
 import { validateApiCredentials } from "./utils/fireblocks.utils";
@@ -158,6 +159,8 @@ export class StacksSDK {
   private publicKey: string | undefined;
   private cachedTransactions: Transaction[] = [];
   private testnet: boolean = false;
+  private maxBondStxUstx: bigint | undefined;
+  private btcRecoveryAllowlist: string[] = [];
   private networkProfile!: NetworkProfile;
   private _pox5Network!: StacksNetwork;
   private lockRecordStore: LockRecordStore = new InMemoryLockRecordStore();
@@ -177,18 +180,42 @@ export class StacksSDK {
   };
 
   /**
-   * Warns loudly before a native BTC bond is created against the non-durable
-   * in-memory lock-record store — a process restart or pool eviction between
-   * funding and recovery would lose the record and can strand BTC.
+   * Native-BTC funding is refused unless a durable, healthy lock-record store is
+   * configured. Losing a record for an unspent BTC lock can strand funds, so the
+   * default in-memory store (not durable across restarts / pool eviction) is not
+   * allowed to fund, and a configured durable store must pass its health check
+   * immediately before funding. Returns an error message when funding must be
+   * refused, or undefined when the store is safe to use.
    */
-  private warnIfLockStoreNotDurable = (): void => {
+  private assertDurableLockStore = async (): Promise<string | undefined> => {
     if (!this.lockRecordStoreIsDurable) {
-      console.warn(
-        "[SECURITY] Creating a native BTC bond with the default IN-MEMORY lock-record store. " +
-          "This is NOT durable across restarts/pool eviction and can STRAND BTC on recovery. " +
-          "Wire a durable, shared store via setLockRecordStore()/pool lockRecordStore before production use.",
+      return (
+        "Native-BTC funding requires a durable lock-record store (the default in-memory store " +
+        "is not durable across restarts/pool eviction and can STRAND BTC on recovery). " +
+        "Configure one via setLockRecordStore()/the pool lockRecordStore option before creating a bond."
       );
     }
+    if (this.lockRecordStore.checkHealth) {
+      try {
+        await this.lockRecordStore.checkHealth();
+      } catch (error) {
+        return `Lock-record store failed its health check — refusing to fund: ${formatErrorMessage(error)}`;
+      }
+    }
+    return undefined;
+  };
+
+  /**
+   * Deterministic Fireblocks external id for a bond's BTC funding transfer, derived
+   * from the vault, network, bond index, and lock address. Because it is stable for a
+   * given enrollment, a retry reuses the same id and Fireblocks de-duplicates the
+   * transfer — a second funding transaction is never created for the same lock, even
+   * across a process crash. A genuine replacement (e.g. fee bump) must use a new id.
+   */
+  private deriveFundingExternalId = (bondIndex: number, lockAddress: string): string => {
+    const material = `${this.vaultAccountId}:${this.networkProfile.name}:bond:${bondIndex}:${lockAddress}`;
+    const digest = createHash("sha256").update(material).digest("hex").slice(0, 40);
+    return `bond-fund-${digest}`;
   };
 
   private constructor(
@@ -205,12 +232,18 @@ export class StacksSDK {
         );
       }
       this.fireblocksService = new FireblocksService(fireblocksConfig);
-      this.testnet = fireblocksConfig?.testnet || false;
-      // Single network profile shared by every consumer.
+      this.maxBondStxUstx = fireblocksConfig?.maxBondStxUstx;
+      this.btcRecoveryAllowlist = fireblocksConfig?.btcRecoveryAllowlist ?? [];
+      // Single network profile shared by every consumer. An explicit `network` name
+      // takes precedence over the legacy `testnet` boolean.
       this.networkProfile = resolveNetworkProfile({
-        testnet: this.testnet,
+        network: fireblocksConfig?.network,
+        testnet: fireblocksConfig?.testnet,
         stacksApiUrl: fireblocksConfig?.stacksApiUrl,
       });
+      // Both testnet-family profiles (public-testnet, private-devnet) use testnet
+      // address formats, BTC networks, and faucet gating.
+      this.testnet = this.networkProfile.name !== "mainnet";
       this._pox5Network = stacksNetworkFromProfile(this.networkProfile);
       this.chainService = new StacksService(this.testnet, {
         baseUrl: this.networkProfile.stacksApiUrl,
@@ -1200,24 +1233,21 @@ export class StacksSDK {
       }
 
       const result = await this.runNonceExclusive(async () => {
-        // When increasing, the STX-lock post-condition must assert the RESULTING
-        // TOTAL lock (current position + increase), because that total — not the
-        // increment — is what the contract's SIP-044 lock event reports; guarding
-        // the increment would abort every increase after the signature is spent.
-        // The current-position read is done INSIDE the serialized section so a
-        // concurrent increase on the same vault cannot make it read a stale base.
-        // An extend-only / signer-rotation update changes no amount, so it asserts a
-        // PoX operation without an amount bound rather than a fixed lock total.
-        let postCondition: PostCondition;
-        if (amountIncrease > BigInt(0)) {
-          // A failed read must NOT fall back to 0, or the condition would understate
-          // the total and abort after signing.
-          const current = await fetchStakerInfo({ address: this.address!, network: this.pox5Network });
-          const currentAmountUstx = current?.staked ? BigInt(current.details.amountUstx) : BigInt(0);
-          postCondition = Pc.origin().willSendEq(currentAmountUstx + amountIncrease).ustxToLock();
-        } else {
-          postCondition = Pc.origin().willPerformPox();
+        // stake-update always re-locks the position, so the contract's SIP-044
+        // stacking-lock event reports the RESULTING TOTAL lock (current position +
+        // any increase) — not the increment, and not a generic PoX action. The
+        // node's action gate requires that exact total be covered whether the update
+        // increases the amount, extends cycles, or only rotates the signer. The
+        // current position is read INSIDE the serialized section so a concurrent
+        // update on the same vault cannot read a stale base; a failed or "not staked"
+        // read fails closed rather than understating the total (which would abort the
+        // transaction after the signature is spent).
+        const current = await fetchStakerInfo({ address: this.address!, network: this.pox5Network });
+        if (!current?.staked) {
+          return { error: "Cannot update stake: no active staking position found for this account." };
         }
+        const currentAmountUstx = BigInt(current.details.amountUstx);
+        const postCondition = Pc.origin().willSendEq(currentAmountUstx + amountIncrease).ustxToLock();
 
         const resolvedNonce = await this.resolveNonce(nonce);
         const tx = await this.buildPox5Call(
@@ -1460,9 +1490,12 @@ export class StacksSDK {
           [Cl.address(signerManager), Cl.buffer(hexToBytes(signerKey))],
           {
             nonce: resolvedNonce,
-            // Deny mode; revoking a signer grant performs no asset transfer.
+            // Deny mode with no post-conditions: revoking a signer grant records no
+            // PoX/Stacking action and moves no assets, so there is nothing for the
+            // node's action gate to cover. A will-perform-PoX condition here would be
+            // uncovered and the node would reject the transaction after signing.
             postConditionMode: PostConditionMode.Deny,
-            postConditions: [Pc.origin().willPerformPox()],
+            postConditions: [],
           },
         );
         return this.pox5SignAndBroadcast(tx, note || "revoke signer grant", externalId);
@@ -2110,7 +2143,9 @@ export class StacksSDK {
       fee: DEFAULT_POX_FEE_USTX,
       nonce: args.nonce,
       network: this.pox5Network,
-      postConditionMode: args.postConditionMode ?? PostConditionMode.Allow,
+      // Fail closed: fund-moving PoX-5 calls must opt IN to any asset movement, so
+      // the default is Deny with no conditions rather than permissive Allow.
+      postConditionMode: args.postConditionMode ?? PostConditionMode.Deny,
       postConditions: args.postConditions ?? [],
     });
   };
@@ -2141,24 +2176,87 @@ export class StacksSDK {
       fee: DEFAULT_POX_FEE_USTX,
       nonce: opts.nonce,
       network: this.pox5Network,
-      postConditionMode: opts.postConditionMode ?? PostConditionMode.Allow,
+      // Fail closed: default to Deny with no conditions so a caller must explicitly
+      // authorize any asset movement rather than inheriting permissive Allow.
+      postConditionMode: opts.postConditionMode ?? PostConditionMode.Deny,
       postConditions: opts.postConditions ?? [],
     });
   };
 
   /**
-   * Resolves the sBTC token asset for post-conditions. Prefers an explicit override,
-   * otherwise falls back to the built-in sBTC contract for this network (constants
-   * `ftInfo[TokenType.sBTC]`). Returns undefined only if neither is available.
+   * Resolves the sBTC token asset for post-conditions from the SELECTED NETWORK's
+   * pox-5 configuration — the `pox_5_sbtc_contract` field of GET /v2/pox on the same
+   * node used to build and broadcast the transaction. A static mainnet asset id is
+   * meaningless on another network, so there is deliberately no table fallback. The
+   * asset identifier is `<pox_5_sbtc_contract>::sbtc-token`.
+   *
+   * Fails closed (returns undefined) when the field is absent, malformed, or its
+   * contract address does not belong to the network this SDK operates on. An explicit
+   * override is honored ONLY when it exactly matches the contract the node reports; it
+   * cannot bypass network validation or select a different token.
    */
-  private resolveSbtcAsset = (
+  private resolveSbtcAsset = async (
     override?: { contractAddress: string; contractName: string; assetName: string },
-  ): { contractAddress: string; contractName: string; assetName: string } | undefined => {
-    if (override) return override;
-    const info = getTokenInfo(TokenType.sBTC, this.testnet ? "testnet" : "mainnet");
-    return info
-      ? { contractAddress: info.contractAddress, contractName: info.contractName, assetName: info.assetName }
-      : undefined;
+  ): Promise<{ contractAddress: string; contractName: string; assetName: string } | undefined> => {
+    let sbtcContractId: string | undefined;
+    try {
+      const res = await fetch(`${this.networkProfile.stacksApiUrl}/v2/pox`);
+      if (!res.ok) return undefined;
+      const body = (await res.json()) as { pox_5_sbtc_contract?: unknown };
+      if (typeof body.pox_5_sbtc_contract === "string") {
+        sbtcContractId = body.pox_5_sbtc_contract;
+      }
+    } catch {
+      return undefined;
+    }
+    if (!sbtcContractId) return undefined;
+
+    const [contractAddress, contractName] = sbtcContractId.split(".");
+    if (!contractAddress || !contractName) return undefined;
+
+    // The contract must belong to the selected network — this rejects a mainnet asset
+    // resolved against a testnet node and vice versa.
+    if (!validateAddress(contractAddress, this.testnet)) return undefined;
+
+    const resolved = { contractAddress, contractName, assetName: "sbtc-token" };
+
+    // An override may only re-select the exact contract the node reports; it cannot
+    // point the post-condition at a different token or bypass network validation.
+    if (
+      override &&
+      (override.contractAddress !== resolved.contractAddress ||
+        override.contractName !== resolved.contractName ||
+        override.assetName !== resolved.assetName)
+    ) {
+      return undefined;
+    }
+
+    return resolved;
+  };
+
+  /**
+   * Resolves the paired-STX lock amount for a bond. The amount is normally derived
+   * from the bond's sats value (`contractMin`). An explicit override is an EXPERT
+   * path: it is only honored when a `maxBondStxUstx` policy is configured on the SDK,
+   * and only within `[contractMin, maxBondStxUstx]`. This prevents an erroneous or
+   * malicious override from locking an unbounded amount of STX for the full bond
+   * term. The override is intentionally NOT reachable through the REST server.
+   */
+  private resolveBondStxAmount = (
+    contractMin: bigint,
+    override?: bigint,
+  ): { amountUstx: bigint } | { error: string } => {
+    if (override === undefined) return { amountUstx: contractMin };
+    if (this.maxBondStxUstx === undefined) {
+      return { error: "A paired-STX amount override requires an explicit maxBondStxUstx policy on the SDK; none is configured." };
+    }
+    if (override < contractMin) {
+      return { error: `Paired-STX override ${microToStx(override)} STX is below the contract minimum ${microToStx(contractMin)} STX for this bond.` };
+    }
+    if (override > this.maxBondStxUstx) {
+      return { error: `Paired-STX override ${microToStx(override)} STX exceeds the configured maxBondStxUstx ceiling ${microToStx(this.maxBondStxUstx)} STX.` };
+    }
+    return { amountUstx: override };
   };
 
   /** Renders `fetchEligibleRegisterForBond` reason codes into a readable string. */
@@ -2176,7 +2274,6 @@ export class StacksSDK {
    * first, then records the new manager so reward discovery routes to it.
    */
   public updateBondRegistration = async (
-    bondIndex: number,
     signerManager: string,
     oldSignerManager: string,
     opts?: { note?: string; nonce?: bigint; externalId?: string },
@@ -2184,6 +2281,16 @@ export class StacksSDK {
     try {
       if (!this.address || !this.publicKey || !this.vaultAccountId) {
         throw new Error("Address, Public Key or Vault ID are not set");
+      }
+
+      // The contract rotates the signer of the staker's CURRENT bond membership; it
+      // receives no bond index. Read that membership here (fetchBondMembership throws
+      // on a read failure, so a transport error fails closed before any signature is
+      // spent) so the local record is updated under the chain-derived bond, never a
+      // stale caller-supplied index.
+      const membershipBefore = await fetchBondMembership({ address: this.address, network: this.pox5Network });
+      if (!membershipBefore) {
+        return { success: false, error: "No active bond membership to rotate the signer for." };
       }
 
       const eligible = await fetchEligibleUpdateBondRegistration({
@@ -2204,12 +2311,14 @@ export class StacksSDK {
           [Cl.address(signerManager), Cl.address(oldSignerManager), Cl.none()],
           {
             nonce: resolvedNonce,
-            // Deny mode with no conditions: a pre-start signer swap moves no assets.
+            // Deny mode; a pre-start signer swap moves no assets but the contract
+            // still records a PoX action, which the node's action gate requires be
+            // covered by a will-perform-PoX condition.
             postConditionMode: PostConditionMode.Deny,
-            postConditions: [],
+            postConditions: [Pc.origin().willPerformPox()],
           },
         );
-        return this.pox5SignAndBroadcast(tx, opts?.note ?? `update-bond-registration-${bondIndex}`, opts?.externalId);
+        return this.pox5SignAndBroadcast(tx, opts?.note ?? `update-bond-registration-${membershipBefore.bondIndex}`, opts?.externalId);
       });
 
       if (!result?.txid || result.error || result.reason) {
@@ -2221,12 +2330,31 @@ export class StacksSDK {
         return { success: false, error: settled.data?.tx_error ?? "update-bond-registration failed on-chain", txHash: result.txid };
       }
 
+      // Re-read membership after settlement. If the affected bond changed during the
+      // operation, report the mismatch rather than silently rewriting another bond's
+      // record. A failed re-read falls back to the pre-call bond (this call rotates
+      // the signer of the same bond; it does not move the staker between bonds).
+      const membershipAfter = await fetchBondMembership({ address: this.address, network: this.pox5Network }).catch(() => null);
+      if (membershipAfter && membershipAfter.bondIndex !== membershipBefore.bondIndex) {
+        return {
+          success: true,
+          txHash: result.txid,
+          warning: `Signer rotation confirmed, but the active bond changed from ${membershipBefore.bondIndex} to ${membershipAfter.bondIndex} during the operation; local record not updated — re-run reward discovery to reconcile.`,
+        };
+      }
+
+      const derivedBondIndex = membershipBefore.bondIndex;
+      const existing = await this.lockRecordStore.loadRecord(this.address, derivedBondIndex).catch(() => null);
+      if (!existing) {
+        return {
+          success: true,
+          txHash: result.txid,
+          warning: `Signer rotation confirmed for bond ${derivedBondIndex}, but no durable lock record exists to update — reward routing for this bond may be stale until a record is present.`,
+        };
+      }
       // Record the rotated manager so reward discovery uses it for this bond
       // (pre-start rotation governs the whole bond period).
-      const existing = await this.lockRecordStore.loadRecord(this.address, bondIndex).catch(() => null);
-      if (existing) {
-        await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...existing, signerManager });
-      }
+      await this.lockRecordStore.saveRecord(this.address, derivedBondIndex, { ...existing, signerManager });
 
       return { success: true, txHash: result.txid };
     } catch (error) {
@@ -2255,7 +2383,8 @@ export class StacksSDK {
       if (!this.address || !this.publicKey || !this.vaultAccountId) {
         throw new Error('Address, Public Key or Vault ID are not set');
       }
-      this.warnIfLockStoreNotDurable();
+      const storeError = await this.assertDurableLockStore();
+      if (storeError) return { success: false, error: storeError };
 
       // Step 1 — allowlist check
       const allowance = await fetchBondAllowance({ bondIndex, address: this.address, network: this.pox5Network });
@@ -2270,22 +2399,30 @@ export class StacksSDK {
       ]);
       if (!bond) return { success: false, error: `Bond ${bondIndex} not found` };
 
-      // Step 3 — required paired STX
-      const amountUstx = opts?.amountUstxOverride ?? minUstxForSatsAmount({
+      // Step 3 — required paired STX. The amount is derived from the bond's sats
+      // value; any override is bounded by the SDK's maxBondStxUstx policy.
+      const contractMinUstx = minUstxForSatsAmount({
         sats: btcAmountSats,
         stxValueRatio: bond.stxValueRatio,
         minUstxRatioBps: bond.minUstxRatioBps,
       });
+      const amountResolution = this.resolveBondStxAmount(contractMinUstx, opts?.amountUstxOverride);
+      if ("error" in amountResolution) return { success: false, error: amountResolution.error };
+      const amountUstx = amountResolution.amountUstx;
 
       const accountStatus = await fetchAccountStatus({ address: this.address, network: this.pox5Network });
-      // The node's /v2/accounts `balance` is the spendable amount and already
-      // excludes `locked`; subtracting locked again would double-count it and
-      // falsely reject accounts whose lock exceeds their spendable balance.
-      const spendableStx = accountStatus.balance;
-      // The L1 BTC lock is funded before register-for-bond, so its fee must be covered up front.
-      const requiredUstx = amountUstx + DEFAULT_POX_FEE_USTX;
-      if (requiredUstx > spendableStx) {
-        return { success: false, error: `Insufficient liquid STX: need ${microToStx(requiredUstx)} STX (${microToStx(amountUstx)} stake + ${microToStx(DEFAULT_POX_FEE_USTX)} fee) but only ${microToStx(spendableStx)} available` };
+      // Fee-first liquidity rule, matching the contract: the Stacks transaction fee
+      // must be paid from UNLOCKED balance, and the required paired-STX lock may be
+      // satisfied by unlocked-after-fee PLUS already-locked STX (so a rollover that
+      // reuses a still-locked position is not falsely rejected). The node's
+      // /v2/accounts `balance` is the unlocked amount and already excludes `locked`.
+      const unlockedStx = accountStatus.balance;
+      const lockedStx = accountStatus.locked ?? BigInt(0);
+      if (unlockedStx < DEFAULT_POX_FEE_USTX) {
+        return { success: false, error: `Insufficient unlocked STX for the transaction fee: need ${microToStx(DEFAULT_POX_FEE_USTX)} STX unlocked but only ${microToStx(unlockedStx)} available` };
+      }
+      if ((unlockedStx - DEFAULT_POX_FEE_USTX) + lockedStx < amountUstx) {
+        return { success: false, error: `Insufficient STX to lock ${microToStx(amountUstx)} STX: unlocked-after-fee ${microToStx(unlockedStx - DEFAULT_POX_FEE_USTX)} + locked ${microToStx(lockedStx)} is short` };
       }
 
       // Step 3b — evaluate every deterministic contract gate BEFORE moving any
@@ -2351,9 +2488,18 @@ export class StacksSDK {
         }
       }
 
-      // Persist the immutable lock record BEFORE funding, so a crash after
-      // the BTC send still leaves enough to recover the outpoint by lock address.
-      // The funding outpoint (btcTxid/vout) is filled in once known below.
+      // Deterministic funding id + idempotent resume. Load any prior attempt for this
+      // (address, bondIndex) first: if the exact same lock was already funded, we must
+      // NOT send a second Bitcoin transaction — resume from the recorded txid instead.
+      const fundingExternalId = this.deriveFundingExternalId(bondIndex, metadata.lockAddress);
+      const priorRecord = await this.lockRecordStore.loadRecord(this.address, bondIndex).catch(() => null);
+      const canResumeFunding =
+        priorRecord?.btcTxid !== undefined &&
+        priorRecord.lockAddress === metadata.lockAddress;
+
+      // Persist the immutable lock record BEFORE funding, so a crash after the BTC send
+      // still leaves enough to recover the outpoint by lock address. The funding
+      // outpoint (btcTxid/vout) is filled in once known below.
       const lockRecord: BondLockRecord = {
         bondIndex,
         unlockBytes: metadata.unlockBytes,
@@ -2363,27 +2509,38 @@ export class StacksSDK {
         isL1Lock: true,
         signerManager,
         firstRewardCycle: bondPeriodToRewardCycle({ bondIndex, poxInfo: pox }),
+        fundingExternalId,
+        stage: "lock-fixed",
       };
-      await this.lockRecordStore.saveRecord(this.address, bondIndex, lockRecord);
 
-      // Step 7 — fund lock address.
-      // If btcTxid is provided (e.g. funded via faucet on regtest), skip Fireblocks send.
+      // Step 7 — fund lock address (idempotent).
       let btcTxid: string;
       if (opts?.btcTxid) {
+        // Caller-supplied funding (e.g. faucet on regtest) takes precedence.
         btcTxid = opts.btcTxid;
+        await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, btcTxid, stage: "btc-broadcast" });
+      } else if (canResumeFunding) {
+        // Resume: this exact lock was already funded — never send BTC twice.
+        btcTxid = priorRecord!.btcTxid!;
       } else {
+        // Record intent (with the deterministic external id) before calling Fireblocks,
+        // so a crash mid-send is recoverable and a retry reuses the same id — which
+        // Fireblocks de-duplicates, preventing a double funding transfer.
+        await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, stage: "funding-requested" });
         const result = await this.fireblocksService.createBitcoinTransaction(
           metadata.lockAddress,
           btcAmountSats,
           this.vaultAccountId.toString(),
           opts?.note || `BTC bond ${bondIndex} lock`,
-          opts?.externalId ? `${opts.externalId}-lock` : undefined,
+          fundingExternalId,
         );
         btcTxid = result.btcTxid;
+        await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, btcTxid, stage: "btc-broadcast" });
       }
 
       // Step 8 — wait for Bitcoin confirmations
       const { blockHash } = await this.waitForBtcConfirmations(btcTxid, opts?.confirmations ?? 3);
+      await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, btcTxid, stage: "btc-confirmed" });
 
       // Step 9 — assemble SPV proof
       const lockupProof = await this.assembleLockupProof(btcTxid, blockHash, metadata.outputScript, metadata.unlockHeight);
@@ -2393,6 +2550,7 @@ export class StacksSDK {
         ...lockRecord,
         btcTxid,
         vout: lockupProof.outputIndex,
+        stage: "proof-built",
       });
 
       // Re-run eligibility with the SPV proof attached to cover the block-header
@@ -2441,12 +2599,20 @@ export class StacksSDK {
         return { success: false, error: errMsg, btcTxid, vout: lockupProof.outputIndex };
       }
 
+      await this.lockRecordStore.saveRecord(this.address, bondIndex, {
+        ...lockRecord, btcTxid, vout: lockupProof.outputIndex, stage: "registration-submitted",
+      });
+
       const settled = await this.waitForTxSettlement(result.txid);
       console.log('register-for-bond settlement:', JSON.stringify({ tx_status: settled.data?.tx_status, tx_result: settled.data?.tx_result }));
       if (!settled.success || settled.data?.tx_status !== 'success') {
         const txRepr: string = (settled.data?.tx_result as any)?.repr ?? settled.data?.tx_error ?? '';
         return { success: false, error: `[${settled.data?.tx_status}] ${txRepr}`.trim(), stacksTxid: result.txid, btcTxid, vout: lockupProof.outputIndex };
       }
+
+      await this.lockRecordStore.saveRecord(this.address, bondIndex, {
+        ...lockRecord, btcTxid, vout: lockupProof.outputIndex, stage: "registration-confirmed",
+      });
 
       return {
         success: true,
@@ -2489,9 +2655,9 @@ export class StacksSDK {
         throw new Error('Address, Public Key or Vault ID are not set');
       }
 
-      const sbtcAsset = this.resolveSbtcAsset(opts?.sbtcAsset);
+      const sbtcAsset = await this.resolveSbtcAsset(opts?.sbtcAsset);
       if (!sbtcAsset) {
-        return { success: false, error: 'No sBTC asset configured for this network; pass sbtcAsset explicitly.' };
+        return { success: false, error: 'Could not resolve the network sBTC asset (/v2/pox pox_5_sbtc_contract); refusing to build. Any override must exactly match the contract the node reports.' };
       }
 
       const [pox, bond] = await Promise.all([
@@ -2500,11 +2666,14 @@ export class StacksSDK {
       ]);
       if (!bond) return { success: false, error: `Bond ${bondIndex} not found` };
 
-      const amountUstx = opts?.amountUstxOverride ?? minUstxForSatsAmount({
+      const contractMinUstx = minUstxForSatsAmount({
         sats: sbtcSats,
         stxValueRatio: bond.stxValueRatio,
         minUstxRatioBps: bond.minUstxRatioBps,
       });
+      const amountResolution = this.resolveBondStxAmount(contractMinUstx, opts?.amountUstxOverride);
+      if ("error" in amountResolution) return { success: false, error: amountResolution.error };
+      const amountUstx = amountResolution.amountUstx;
 
       // Evaluate all deterministic gates before moving any sBTC.
       const preflight = await fetchEligibleRegisterForBond({
@@ -2570,10 +2739,11 @@ export class StacksSDK {
 
   /**
    * Withdraws sBTC from an sBTC-backed membership (`unstake-sbtc`). The pox-5
-   * contract transfers the requested sBTC back to the staker, so when the deployed
-   * sBTC asset is supplied we bound that transfer with a deny-mode post-condition
-   * asserting the contract sends at most `amountToWithdrawSats`. Without the asset
-   * the call falls back to permissive mode (with a warning).
+   * contract transfers the requested sBTC back to the staker, so the call runs in
+   * Deny mode with two post-conditions: a will-perform-PoX condition for the PoX
+   * action, and an exact FT condition asserting the contract sends exactly
+   * `amountToWithdrawSats`. If the sBTC asset cannot be resolved for this network
+   * the call refuses to build rather than signing an unbounded withdrawal.
    *
    * NOTE: sBTC paths are not yet exercised end-to-end on a live network.
    */
@@ -2599,22 +2769,25 @@ export class StacksSDK {
         return { success: false, error: `Cannot unstake sBTC: ${this.describeBondReasons(reasons)}` };
       }
 
-      // The pox-5 contract is the sender of the returned sBTC. Bound it to no more
-      // than requested using the resolved sBTC asset (built-in default or override).
-      const resolvedSbtc = this.resolveSbtcAsset(sbtcAsset);
-      let postConditionMode: PostConditionMode = PostConditionMode.Allow;
-      let postConditions: PostCondition[] = [];
-      if (resolvedSbtc) {
-        const bootAddr = (this.pox5Network as any).bootAddress as string;
-        const pox5ContractId: `${string}.${string}` = `${bootAddr}.pox-5`;
-        const sbtcContractId: `${string}.${string}` = `${resolvedSbtc.contractAddress}.${resolvedSbtc.contractName}`;
-        postConditionMode = PostConditionMode.Deny;
-        postConditions = [
-          Pc.principal(pox5ContractId).willSendLte(amountToWithdrawSats).ft(sbtcContractId, resolvedSbtc.assetName),
-        ];
-      } else {
-        console.warn('unstakeSbtc: no sBTC asset resolved — the returned sBTC is not bounded by a post-condition.');
+      // unstake-sbtc records a PoX action AND returns the withdrawn sBTC from the
+      // pox-5 contract to the staker. Both must be covered in Deny mode: a
+      // will-perform-PoX condition for the PoX action, and an exact FT condition on
+      // the contract for the outgoing sBTC. Refuse to build when the sBTC asset
+      // cannot be resolved for this network — signing an unbounded (Allow-mode) sBTC
+      // withdrawal is not acceptable under RAW signing, where Fireblocks cannot see
+      // the payload.
+      const resolvedSbtc = await this.resolveSbtcAsset(sbtcAsset);
+      if (!resolvedSbtc) {
+        return { success: false, error: 'Could not resolve the network sBTC asset (/v2/pox pox_5_sbtc_contract); refusing to build an unbounded sBTC withdrawal.' };
       }
+      const bootAddr = (this.pox5Network as any).bootAddress as string;
+      const pox5ContractId: `${string}.${string}` = `${bootAddr}.pox-5`;
+      const sbtcContractId: `${string}.${string}` = `${resolvedSbtc.contractAddress}.${resolvedSbtc.contractName}`;
+      const postConditionMode: PostConditionMode = PostConditionMode.Deny;
+      const postConditions: PostCondition[] = [
+        Pc.origin().willPerformPox(),
+        Pc.principal(pox5ContractId).willSendEq(amountToWithdrawSats).ft(sbtcContractId, resolvedSbtc.assetName),
+      ];
 
       const result = await this.runNonceExclusive(async () => {
         const resolvedNonce = await this.resolveNonce(opts?.nonce);
@@ -3181,6 +3354,7 @@ export class StacksSDK {
   private findLockUtxo = async (
     lockingAddress: string,
     outpoint?: { txid?: string; vout?: number },
+    opts?: { expectedAmountSats?: bigint; isOperatorOverride?: boolean },
   ): Promise<{ txid: string; vout: number; value: number }> => {
     let utxos: Array<{ txid: string; vout: number; value: number }>;
     try {
@@ -3193,12 +3367,26 @@ export class StacksSDK {
       );
     }
 
-    // Preferred: select by the immutable recorded outpoint.
+    // Preferred: select by the exact recorded (or operator-supplied) outpoint.
     if (outpoint?.txid !== undefined && outpoint.vout !== undefined) {
+      // Membership in the address's UTXO set proves the outpoint is UNSPENT and its
+      // scriptPubKey is the bond's P2WSH (Esplora only returns outputs paying that
+      // address) — an unrelated dust output at the same address is ignored.
       const match = utxos.find((u) => u.txid === outpoint.txid && u.vout === outpoint.vout);
       if (!match) {
         throw new Error(
-          `Recorded lock outpoint ${outpoint.txid}:${outpoint.vout} not found at ${lockingAddress} — it may already be spent.`,
+          `Lock outpoint ${outpoint.txid}:${outpoint.vout} not found at ${lockingAddress} — it may already be spent, or the override is wrong.`,
+        );
+      }
+      // A trusted recorded outpoint is spent as-is; an OPERATOR OVERRIDE must also
+      // match the expected lock amount before it can be signed.
+      if (
+        opts?.isOperatorOverride &&
+        opts.expectedAmountSats !== undefined &&
+        BigInt(match.value) !== opts.expectedAmountSats
+      ) {
+        throw new Error(
+          `Override outpoint ${outpoint.txid}:${outpoint.vout} has value ${match.value} sats but the expected lock amount is ${opts.expectedAmountSats} sats — rejecting.`,
         );
       }
       return match;
@@ -3210,8 +3398,70 @@ export class StacksSDK {
       throw new Error(`No unspent lock output found at ${lockingAddress}.`);
     }
     throw new Error(
-      `Ambiguous lock UTXO: ${utxos.length} unspent outputs at ${lockingAddress}; a durable lock record is required to select the correct outpoint.`,
+      `Ambiguous lock UTXO: ${utxos.length} unspent outputs at ${lockingAddress}; a durable lock record or an explicit outpoint override is required to select the correct one.`,
     );
+  };
+
+  /**
+   * Resolves the exact lock UTXO to spend for a recovery. Prefers the immutable
+   * recorded funding outpoint; when no record exists, an operator may supply an
+   * explicit outpoint, which is validated (unspent, correct P2WSH address/script,
+   * and exact expected value) before it is returned. Only when neither is present
+   * does it fall back to a single unambiguous output at the lock address.
+   */
+  /** True if `addr` is a well-formed BTC address for the active Bitcoin network. */
+  private isValidBtcAddressForNetwork = (addr: string): boolean => {
+    try {
+      btc.Address(this.btcNetwork).decode(addr);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  /**
+   * Resolves the destination for a native-BTC recovery spend. Under RAW signing the
+   * destination is invisible to Fireblocks, so recovery DEFAULTS to the vault's own
+   * derived BTC address; any other (external) destination must be explicitly approved
+   * via `btcRecoveryAllowlist`. Wrong-network / malformed addresses are rejected
+   * before signing.
+   */
+  private resolveRecoveryDestination = (
+    requested?: string,
+  ): { address: string } | { error: string } => {
+    const vaultAddress = this.getBtcVaultAddress();
+    if (!vaultAddress) {
+      return { error: "Cannot resolve the vault BTC address (public key not set)." };
+    }
+    if (!requested) return { address: vaultAddress };
+
+    if (!this.isValidBtcAddressForNetwork(requested)) {
+      return { error: `Destination ${requested} is not a valid BTC address for this network.` };
+    }
+    if (requested !== vaultAddress && !this.btcRecoveryAllowlist.includes(requested)) {
+      return {
+        error:
+          `External BTC destination ${requested} is not approved. Recovery defaults to the vault's ` +
+          `own address; add the destination to btcRecoveryAllowlist to permit it.`,
+      };
+    }
+    return { address: requested };
+  };
+
+  private resolveRecoveryUtxo = async (
+    lock: { lockingAddress: string; btcTxid?: string; vout?: number; amountSats: bigint },
+    override?: { txid: string; vout: number },
+  ): Promise<{ txid: string; vout: number; value: number }> => {
+    if (lock.btcTxid !== undefined && lock.vout !== undefined) {
+      return this.findLockUtxo(lock.lockingAddress, { txid: lock.btcTxid, vout: lock.vout });
+    }
+    if (override) {
+      return this.findLockUtxo(lock.lockingAddress, override, {
+        expectedAmountSats: lock.amountSats,
+        isOperatorOverride: true,
+      });
+    }
+    return this.findLockUtxo(lock.lockingAddress);
   };
 
   // ─── §6: unlockMaturedBond ────────────────────────────────────────────────
@@ -3222,10 +3472,14 @@ export class StacksSDK {
    * BTC chain. No early-exit signer set required — unilateral staker signature.
    */
   public unlockMaturedBond = async (
-    destinationBtcAddress: string,
-    opts?: { feeSats?: bigint; bondIndex?: number },
+    destinationBtcAddress?: string,
+    opts?: { feeSats?: bigint; bondIndex?: number; outpointOverride?: { txid: string; vout: number } },
   ): Promise<UnlockBtcResponse> => {
     try {
+      const dest = this.resolveRecoveryDestination(destinationBtcAddress);
+      if ('error' in dest) return { success: false, error: dest.error };
+      const destination = dest.address;
+
       const lock = await this.deriveLock(undefined, opts?.bondIndex);
       if (!lock) return { success: false, error: 'No L1-locked bond membership found' };
 
@@ -3235,7 +3489,7 @@ export class StacksSDK {
         return { success: false, error: `Bond not matured: BTC tip ${tipHeight} < unlock height ${lock.unlockHeight}` };
       }
 
-      const utxo = await this.findLockUtxo(lock.lockingAddress, { txid: lock.btcTxid, vout: lock.vout });
+      const utxo = await this.resolveRecoveryUtxo(lock, opts?.outpointOverride);
 
       const feeSats = opts?.feeSats ?? BigInt(500);
       const actualUtxoSats = BigInt(utxo.value);
@@ -3252,7 +3506,7 @@ export class StacksSDK {
         witnessUtxo: { script: p2wshScript, amount: actualUtxoSats },
         witnessScript: lock.lockScript,
       });
-      tx.addOutputAddress(destinationBtcAddress, outputAmount, this.btcNetwork);
+      tx.addOutputAddress(destination, outputAmount, this.btcNetwork);
 
       const sighash = this.btcSegwitSighash(tx, 0, lock.lockScript, actualUtxoSats);
       const stakerSig = await this.signBtcSighash(sighash);
@@ -3277,10 +3531,14 @@ export class StacksSDK {
    * pre-checked on-chain before the cosigner is contacted.
    */
   public spendEarlyExitUtxo = async (
-    destinationBtcAddress: string,
-    opts?: { feeSats?: bigint; bondIndex?: number },
+    destinationBtcAddress?: string,
+    opts?: { feeSats?: bigint; bondIndex?: number; outpointOverride?: { txid: string; vout: number } },
   ): Promise<SpendEarlyExitResponse> => {
     try {
+      const dest = this.resolveRecoveryDestination(destinationBtcAddress);
+      if ('error' in dest) return { success: false, error: dest.error };
+      const destination = dest.address;
+
       const lock = await this.deriveLock(undefined, opts?.bondIndex);
       if (!lock) return { success: false, error: 'No L1-locked bond membership found' };
 
@@ -3293,7 +3551,7 @@ export class StacksSDK {
         return { success: false, error: 'announce-l1-early-exit not settled — call announceEarlyExit first and wait for it to confirm' };
       }
 
-      const utxo = await this.findLockUtxo(lock.lockingAddress, { txid: lock.btcTxid, vout: lock.vout });
+      const utxo = await this.resolveRecoveryUtxo(lock, opts?.outpointOverride);
 
       const feeSats = opts?.feeSats ?? BigInt(500);
       const actualUtxoSats = BigInt(utxo.value);
@@ -3311,7 +3569,7 @@ export class StacksSDK {
         witnessUtxo: { script: p2wshScript, amount: actualUtxoSats },
         witnessScript: lock.lockScript,
       });
-      tx.addOutputAddress(destinationBtcAddress, outputAmount, this.btcNetwork);
+      tx.addOutputAddress(destination, outputAmount, this.btcNetwork);
 
       const sighash = this.btcSegwitSighash(tx, 0, lock.lockScript, actualUtxoSats);
       // Unsigned serialization (no scriptSig, no witness) — the cosigner
@@ -3371,7 +3629,8 @@ export class StacksSDK {
       if (!this.address || !this.publicKey || !this.vaultAccountId) {
         throw new Error('Address, Public Key or Vault ID are not set');
       }
-      this.warnIfLockStoreNotDurable();
+      const storeError = await this.assertDurableLockStore();
+      if (storeError) return { success: false, error: storeError };
 
       // 1. Resolve prior lock
       const prior = await this.deriveLock();

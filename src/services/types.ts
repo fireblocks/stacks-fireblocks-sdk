@@ -26,17 +26,45 @@ export type FireblocksConfig = {
   basePath?: BasePath;
   testnet?: boolean;
   /**
+   * Explicit network profile. Takes precedence over `testnet`. `public-testnet` is
+   * currently gated and fails construction until a node serving the PoX-5 boot
+   * contract is available. When omitted, `testnet: true` maps to `private-devnet`
+   * and `testnet` unset/false maps to `mainnet`.
+   */
+  network?: "mainnet" | "public-testnet" | "private-devnet";
+  /**
    * Explicit Stacks API base URL. Overrides the STACKS_API_URL env var and the
    * per-network default. Applied to BOTH the PoX-5 client and StacksService so
    * they always target the same node.
    */
   stacksApiUrl?: string;
+  /**
+   * Expert policy ceiling (µSTX) for a bond's paired-STX lock amount. The normal API
+   * derives the amount from the bond's sats value; an explicit per-call override is
+   * only accepted when this ceiling is configured, and only within
+   * [contract-minimum, maxBondStxUstx]. Prevents an erroneous override from locking
+   * an unbounded amount of STX for the full bond term. Not exposed over the REST
+   * server.
+   */
+  maxBondStxUstx?: bigint;
+  /**
+   * Approved EXTERNAL Bitcoin destinations for native-BTC recovery. Under RAW signing
+   * Fireblocks cannot see the destination, so recovery defaults to the vault's own
+   * derived BTC address; any other destination must appear here to be permitted.
+   */
+  btcRecoveryAllowlist?: string[];
 };
 
 export type CreateTransactionResponse = {
   success: boolean;
   txHash?: string;
   error?: string;
+  /**
+   * Non-fatal advisory for an operation that SUCCEEDED on-chain but left local
+   * bookkeeping incomplete (e.g. a signer rotation confirmed, but no durable record
+   * existed to update). Surfaced so the condition is visible rather than silent.
+   */
+  warning?: string;
 };
 
 export type GetTransactionHistoryResponse = {

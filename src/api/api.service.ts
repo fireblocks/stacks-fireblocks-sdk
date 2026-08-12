@@ -253,7 +253,7 @@ export class ApiService {
             params.bondIndex,
             params.btcAmountSats,
             params.signerManager,
-            { note: params.note, nonce: params.nonce, externalId: params.externalId, confirmations: params.confirmations, btcTxid: params.btcTxid, amountUstxOverride: params.amountUstxOverride },
+            { note: params.note, nonce: params.nonce, externalId: params.externalId, confirmations: params.confirmations, btcTxid: params.btcTxid },
           );
           break;
         case ActionType.CREATE_SBTC_BOND:
@@ -261,7 +261,7 @@ export class ApiService {
             params.bondIndex,
             params.sbtcSats,
             params.signerManager,
-            { sbtcAsset: params.sbtcAsset, amountUstxOverride: params.amountUstxOverride, note: params.note, nonce: params.nonce, externalId: params.externalId },
+            { sbtcAsset: params.sbtcAsset, note: params.note, nonce: params.nonce, externalId: params.externalId },
           );
           break;
         case ActionType.UNSTAKE_SBTC:
@@ -294,7 +294,7 @@ export class ApiService {
           result = await sdk.renewBond(params.nextBondIndex, params.signerManager, { feeSats: params.feeSats, note: params.note, nonce: params.nonce, externalId: params.externalId, confirmations: params.confirmations });
           break;
         case ActionType.UPDATE_BOND_REGISTRATION:
-          result = await sdk.updateBondRegistration(params.bondIndex, params.signerManager, params.oldSignerManager, { note: params.note, nonce: params.nonce, externalId: params.externalId });
+          result = await sdk.updateBondRegistration(params.signerManager, params.oldSignerManager, { note: params.note, nonce: params.nonce, externalId: params.externalId });
           break;
         case ActionType.CALCULATE_REWARDS:
           result = await sdk.calculateRewards({ note: params.note, nonce: params.nonce });
