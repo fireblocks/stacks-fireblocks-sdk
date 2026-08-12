@@ -257,17 +257,25 @@ export const POX4_ERRORS: Record<number, { name: string; message: string }> = {
 export const BTC_ESPLORA = {
   mainnet: 'https://mempool.space/api',
   testnet: 'https://mempool.bitcoin.private-1.hiro.so/api',
+  // Public Bitcoin testnet3 Esplora (used by the public-testnet profile).
+  public_testnet: 'https://blockstream.info/testnet/api',
 };
 
 // PoX-5 private testnet Stacks API (chainId 256, private-1).
 export const PRIVATE1_HIRO_API_BASE = 'https://api.private-1.hiro.so';
 
+// Public PoX-5 testnet Stacks API. Currently still serves PoX-4, so the
+// public-testnet profile is gated and fails startup validation until this (or a
+// configured override) serves the PoX-5 boot contract.
+export const PUBLIC_TESTNET_POX5_API = 'https://api.testnet-pox5.hiro.so';
+
 // External KMS cosigner for the bond early-exit (OP_ELSE) spend path.
-// Auth-less public endpoints — no secrets involved. Mainnet is not provisioned
-// yet; resolveCosignerUrl throws unless EARLY_EXIT_SIGNER_URL is set.
+// Auth-less public endpoints — no secrets involved. Mainnet and public testnet are
+// not provisioned yet; resolveCosignerUrl throws unless EARLY_EXIT_SIGNER_URL is set.
 export const EARLY_EXIT_SIGNER = {
   mainnet: '',
   testnet: 'https://r25rniyw12.execute-api.eu-west-1.amazonaws.com/v1/v1',
+  public_testnet: '',
 };
 
 export const POX5_BOND_ERRORS: Record<number, { name: string; message: string }> = {
