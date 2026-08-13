@@ -169,6 +169,11 @@ export class StacksSDK {
   private verifyEarlyExitCosignerAtFunding = false;
   // Cached immutable per-network sBTC asset (resolved from /v2/pox); success-only.
   private sbtcAssetCache: { contractAddress: string; contractName: string; assetName: string } | undefined;
+  // A recovery/rollover spend is ~1 P2WSH input + 1 output; conservative vsize used
+  // for Esplora fee estimation.
+  private readonly RECOVERY_SPEND_VBYTES = 150;
+  // Never create a Bitcoin output at or below this (P2WPKH dust threshold, sats).
+  private readonly BTC_DUST_LIMIT_SATS = BigInt(330);
   private networkProfile!: NetworkProfile;
   private _pox5Network!: StacksNetwork;
   private lockRecordStore: LockRecordStore = new InMemoryLockRecordStore();
@@ -2072,6 +2077,27 @@ export class StacksSDK {
     return this.networkProfile.esploraBaseUrl;
   }
 
+  /**
+   * Estimates a Bitcoin fee (sats) for a spend of ~`vbytes` from Esplora's
+   * `/fee-estimates`, so recovery/rollover spends are broadcast with an adequate fee
+   * rather than a fixed guess that can strand a transaction unconfirmed. Falls back to
+   * a conservative floor if the estimate is unavailable, so recovery is never blocked.
+   */
+  private estimateBtcFeeSats = async (vbytes: number, confTarget = 6): Promise<bigint> => {
+    try {
+      const res = await fetch(`${this.esploraBase()}/fee-estimates`);
+      if (!res.ok) throw new Error(`Esplora HTTP ${res.status}`);
+      const rates = (await res.json()) as Record<string, number>;
+      const rate = rates[String(confTarget)] ?? rates['6'] ?? rates['1'];
+      if (typeof rate !== 'number' || !(rate > 0)) throw new Error('no usable fee rate');
+      return BigInt(Math.ceil(rate * vbytes));
+    } catch {
+      // ~2 sat/vB floor (or 500 sats, whichever is higher) so a fee-estimate outage
+      // never blocks a recovery.
+      return BigInt(Math.max(500, vbytes * 2));
+    }
+  };
+
   private waitForBtcConfirmations = async (
     btcTxid: string,
     required = 3,
@@ -3679,10 +3705,13 @@ export class StacksSDK {
 
       const utxo = await this.resolveRecoveryUtxo(lock, opts?.outpointOverride);
 
-      const feeSats = opts?.feeSats ?? BigInt(500);
+      const feeSats = opts?.feeSats ?? await this.estimateBtcFeeSats(this.RECOVERY_SPEND_VBYTES);
       const actualUtxoSats = BigInt(utxo.value);
       const outputAmount = actualUtxoSats - feeSats;
-      if (outputAmount <= BigInt(0)) return { success: false, error: 'Fee exceeds locked amount' };
+      // Never create a dust output. BIP-125 replacement is done by re-invoking with a
+      // higher opts.feeSats — the spend signals RBF and rebuilds from the still-unspent
+      // lock outpoint, so a confirmed original is rejected by the UTXO lookup above.
+      if (outputAmount < this.BTC_DUST_LIMIT_SATS) return { success: false, error: `Fee ${feeSats} sats leaves ${outputAmount} sats, below the dust limit ${this.BTC_DUST_LIMIT_SATS} — lower the fee (locked ${actualUtxoSats} sats).` };
 
       const p2wshScript = this.p2wshOutputScript(lock.lockScript);
 
@@ -3741,10 +3770,13 @@ export class StacksSDK {
 
       const utxo = await this.resolveRecoveryUtxo(lock, opts?.outpointOverride);
 
-      const feeSats = opts?.feeSats ?? BigInt(500);
+      const feeSats = opts?.feeSats ?? await this.estimateBtcFeeSats(this.RECOVERY_SPEND_VBYTES);
       const actualUtxoSats = BigInt(utxo.value);
       const outputAmount = actualUtxoSats - feeSats;
-      if (outputAmount <= BigInt(0)) return { success: false, error: 'Fee exceeds locked amount' };
+      // Never create a dust output. BIP-125 replacement is done by re-invoking with a
+      // higher opts.feeSats — the spend signals RBF and rebuilds from the still-unspent
+      // lock outpoint, so a confirmed original is rejected by the UTXO lookup above.
+      if (outputAmount < this.BTC_DUST_LIMIT_SATS) return { success: false, error: `Fee ${feeSats} sats leaves ${outputAmount} sats, below the dust limit ${this.BTC_DUST_LIMIT_SATS} — lower the fee (locked ${actualUtxoSats} sats).` };
 
       const p2wshScript = this.p2wshOutputScript(lock.lockScript);
 
@@ -3864,10 +3896,13 @@ export class StacksSDK {
       // 3. Build the atomic BTC spend: prior P2WSH → next locking address.
       // Spend against the actual on-chain output value, not the mutable membership
       // amount (which early exit zeroes and maturity drops).
-      const feeSats = opts?.feeSats ?? BigInt(500);
+      const feeSats = opts?.feeSats ?? await this.estimateBtcFeeSats(this.RECOVERY_SPEND_VBYTES);
       const actualUtxoSats = BigInt(utxo.value);
       const outputAmount = actualUtxoSats - feeSats;
-      if (outputAmount <= BigInt(0)) return { success: false, error: 'Fee exceeds locked amount' };
+      // Never create a dust output. BIP-125 replacement is done by re-invoking with a
+      // higher opts.feeSats — the spend signals RBF and rebuilds from the still-unspent
+      // lock outpoint, so a confirmed original is rejected by the UTXO lookup above.
+      if (outputAmount < this.BTC_DUST_LIMIT_SATS) return { success: false, error: `Fee ${feeSats} sats leaves ${outputAmount} sats, below the dust limit ${this.BTC_DUST_LIMIT_SATS} — lower the fee (locked ${actualUtxoSats} sats).` };
 
       // Required paired STX for the next bond, derived from the re-locked amount.
       const amountUstx = minUstxForSatsAmount({
