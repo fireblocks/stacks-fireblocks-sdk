@@ -303,7 +303,7 @@ export class ApiService {
           result = await sdk.claimRewards(params.bondIndices, { note: params.note, nonce: params.nonce });
           break;
         case ActionType.CLAIM_STX_ONLY_REWARDS:
-          result = await sdk.claimStxOnlyRewards({ note: params.note, nonce: params.nonce });
+          result = await sdk.claimStxOnlyRewards({ note: params.note, nonce: params.nonce, fromCycle: params.fromCycle, toCycle: params.toCycle });
           break;
         case ActionType.GET_EARNED_REWARDS:
           result = await sdk.getEarnedRewards(params.signerManager, params.bondIndex);

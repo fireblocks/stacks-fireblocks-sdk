@@ -4303,67 +4303,66 @@ export class StacksSDK {
         ? Math.floor((lastComputeHeight - pox.firstBurnchainBlockHeight) / pox.rewardCycleLength)
         : pox.rewardCycleId - 1;
 
-      // The claim is a multi-transaction sequence with a contiguous nonce range,
-      // so the whole sequence is serialized against other operations for this vault.
+      // Planning phase (OUTSIDE the nonce lock): resolve the per-cycle signer and which
+      // requested bonds earned, via chain reads. The chain is the authority for which
+      // signer manager governs the staker each cycle — rotation changes future cycles,
+      // not past ones — so the local record is a cache only, and this also works after a
+      // restart with an empty cache. A read failure refuses rather than reading as "no
+      // rewards". Doing the scan here keeps the exclusive nonce lock held only for the
+      // broadcast sequence, not the whole read scan.
+      const plan: Array<{ cycle: number; signerAddr: string; signerName: string; bonds: number[] }> = [];
+      for (let cycle = minFirstCycle; cycle <= lastComputedCycle; cycle++) {
+        let cycleMembership: { amountUstx: bigint; signer: string } | undefined;
+        try {
+          cycleMembership = await fetchSignerCycleMembership({ staker, cycle, network: this.pox5Network });
+        } catch (e) {
+          return { success: false, error: `Could not resolve signer-cycle membership for cycle ${cycle} (unknown, not zero) — refusing to claim: ${formatErrorMessage(e)}` };
+        }
+        if (!cycleMembership) continue; // staker was not a member in this cycle
+
+        const signerManager = cycleMembership.signer;
+        // Which requested bonds could be earning by this cycle, and which actually
+        // earned under this cycle's signer. A read failure (sentinel -1) refuses rather
+        // than skipping a bond that may have rewards.
+        const candidateBonds = uniqueBonds.filter((b) => (firstCycleByBond.get(b) ?? 0) <= cycle);
+        const earned = await Promise.all(
+          candidateBonds.map(async (b) => ({
+            bond: b,
+            sats: await fetchEarned({ signerManager, rewardCycle: cycle, bondIndex: b, network: this.pox5Network }).catch(() => BigInt(-1)),
+          })),
+        );
+        const failedRead = earned.find((e) => e.sats < BigInt(0));
+        if (failedRead) {
+          return { success: false, error: `Could not read earned rewards for bond ${failedRead.bond} at cycle ${cycle} (unknown, not zero) — refusing to claim` };
+        }
+        const claimBonds = earned.filter((e) => e.sats > BigInt(0)).map((e) => e.bond);
+        if (claimBonds.length === 0) continue;
+        const dot = signerManager.lastIndexOf('.');
+        plan.push({ cycle, signerAddr: signerManager.slice(0, dot), signerName: signerManager.slice(dot + 1), bonds: claimBonds });
+      }
+
+      if (plan.length === 0) {
+        return {
+          success: false,
+          error: `No rewards available yet for bond(s) ${uniqueBonds.join(', ')} (last_computed_cycle: ${lastComputedCycle}, current_cycle: ${pox.rewardCycleId})`,
+        };
+      }
+
+      // Execution phase (INSIDE the nonce lock): the contiguous-nonce broadcast sequence.
       return await this.runNonceExclusive(async (): Promise<ClaimRewardsResponse> => {
         let nonce = await this.resolveNonce(opts?.nonce);
         const txHashes: string[] = [];
-        let anyClaimable = false;
-
-        // Chain is the authority for which signer manager governs the staker in each
-        // cycle — signer rotation changes future cycles but not past ones — so the
-        // signer is resolved PER CYCLE from get-signer-cycle-membership, not from the
-        // local record (a cache only). This also works after a restart with an empty
-        // cache, and a read FAILURE is refused rather than silently read as "no rewards".
-        for (let cycle = minFirstCycle; cycle <= lastComputedCycle; cycle++) {
-          let cycleMembership: { amountUstx: bigint; signer: string } | undefined;
-          try {
-            cycleMembership = await fetchSignerCycleMembership({ staker, cycle, network: this.pox5Network });
-          } catch (e) {
-            return { success: false, error: `Could not resolve signer-cycle membership for cycle ${cycle} (unknown, not zero) — refusing to claim: ${formatErrorMessage(e)}`, txHashes };
-          }
-          if (!cycleMembership) continue; // staker was not a member in this cycle
-
-          const signerManager = cycleMembership.signer;
-          const signerDotIdx = signerManager.lastIndexOf('.');
-          const signerContractAddress = signerManager.slice(0, signerDotIdx);
-          const signerContractName = signerManager.slice(signerDotIdx + 1);
-
-          // Which requested bonds could be earning by this cycle, and which actually
-          // earned under this cycle's signer. A read failure (sentinel -1) refuses
-          // rather than skipping a bond that may have rewards.
-          const candidateBonds = uniqueBonds.filter((b) => (firstCycleByBond.get(b) ?? 0) <= cycle);
-          const earned = await Promise.all(
-            candidateBonds.map(async (b) => ({
-              bond: b,
-              sats: await fetchEarned({ signerManager, rewardCycle: cycle, bondIndex: b, network: this.pox5Network }).catch(() => BigInt(-1)),
-            })),
-          );
-          const failedRead = earned.find((e) => e.sats < BigInt(0));
-          if (failedRead) {
-            return { success: false, error: `Could not read earned rewards for bond ${failedRead.bond} at cycle ${cycle} (unknown, not zero) — refusing to claim`, txHashes };
-          }
-          const claimBonds = earned.filter((e) => e.sats > BigInt(0)).map((e) => e.bond);
-          if (claimBonds.length === 0) continue;
-          anyClaimable = true;
-
+        for (const item of plan) {
           // claim-rewards takes (list 6 uint) — chunk to at most 6 bonds per call.
-          for (let i = 0; i < claimBonds.length; i += 6) {
-            const chunk = claimBonds.slice(i, i + 6);
+          for (let i = 0; i < item.bonds.length; i += 6) {
+            const chunk = item.bonds.slice(i, i + 6);
             const result = await this.executeClaimCycle(
-              signerContractAddress, signerContractName, cycle,
+              item.signerAddr, item.signerName, item.cycle,
               chunk, chunk, nonce, opts?.note, txHashes,
             );
             nonce = result.nonce;
             if (result.error) return { success: false, error: result.error, txHashes };
           }
-        }
-
-        if (!anyClaimable) {
-          return {
-            success: false,
-            error: `No rewards available yet for bond(s) ${uniqueBonds.join(', ')} (last_computed_cycle: ${lastComputedCycle}, current_cycle: ${pox.rewardCycleId})`,
-          };
         }
         return { success: true, txHashes };
       });
@@ -4408,42 +4407,46 @@ export class StacksSDK {
       }
       const endCycle = Math.min(opts?.toCycle ?? lastComputedCycle, lastComputedCycle);
 
+      // Planning phase (OUTSIDE the nonce lock): resolve the per-cycle signer and gate
+      // by the STAKER'S entitlement (get-earned-staker-rewards), not the signer-level
+      // total. A read failure refuses rather than reading as "no rewards".
+      const plan: Array<{ cycle: number; signerAddr: string; signerName: string }> = [];
+      for (let cycle = startCycle!; cycle <= endCycle; cycle++) {
+        let cycleMembership: { amountUstx: bigint; signer: string } | undefined;
+        try {
+          cycleMembership = await fetchSignerCycleMembership({ staker, cycle, network: this.pox5Network });
+        } catch (e) {
+          return { success: false, error: `Could not resolve signer-cycle membership for cycle ${cycle} (unknown, not zero) — refusing to claim: ${formatErrorMessage(e)}` };
+        }
+        if (!cycleMembership) continue;
+
+        const signerManager = cycleMembership.signer;
+        let stakerEarned: bigint;
+        try {
+          stakerEarned = await fetchEarnedStakerRewards({ signerManager, rewardCycle: cycle, staker, network: this.pox5Network });
+        } catch (e) {
+          return { success: false, error: `Could not read staker-earned rewards at cycle ${cycle} (unknown, not zero) — refusing to claim: ${formatErrorMessage(e)}` };
+        }
+        if (stakerEarned <= BigInt(0)) continue;
+        const dot = signerManager.lastIndexOf('.');
+        plan.push({ cycle, signerAddr: signerManager.slice(0, dot), signerName: signerManager.slice(dot + 1) });
+      }
+
+      if (plan.length === 0) {
+        return { success: false, error: `No STX-only rewards for this staker in cycles ${startCycle}-${endCycle} (last_computed_cycle: ${lastComputedCycle}, current_cycle: ${pox.rewardCycleId})` };
+      }
+
+      // Execution phase (INSIDE the nonce lock): the contiguous-nonce broadcast sequence.
       return await this.runNonceExclusive(async (): Promise<ClaimRewardsResponse> => {
         let nonce = await this.resolveNonce(opts?.nonce);
         const txHashes: string[] = [];
-        let anyClaimable = false;
-
-        for (let cycle = startCycle!; cycle <= endCycle; cycle++) {
-          let cycleMembership: { amountUstx: bigint; signer: string } | undefined;
-          try {
-            cycleMembership = await fetchSignerCycleMembership({ staker, cycle, network: this.pox5Network });
-          } catch (e) {
-            return { success: false, error: `Could not resolve signer-cycle membership for cycle ${cycle} (unknown, not zero) — refusing to claim: ${formatErrorMessage(e)}`, txHashes };
-          }
-          if (!cycleMembership) continue;
-
-          const signerManager = cycleMembership.signer;
-          // Gate by the STAKER'S own entitlement, not the signer-level total.
-          let stakerEarned: bigint;
-          try {
-            stakerEarned = await fetchEarnedStakerRewards({ signerManager, rewardCycle: cycle, staker, network: this.pox5Network });
-          } catch (e) {
-            return { success: false, error: `Could not read staker-earned rewards at cycle ${cycle} (unknown, not zero) — refusing to claim: ${formatErrorMessage(e)}`, txHashes };
-          }
-          if (stakerEarned <= BigInt(0)) continue;
-          anyClaimable = true;
-
-          const signerDotIdx = signerManager.lastIndexOf('.');
+        for (const item of plan) {
           const result = await this.executeClaimCycle(
-            signerManager.slice(0, signerDotIdx), signerManager.slice(signerDotIdx + 1), cycle,
+            item.signerAddr, item.signerName, item.cycle,
             [], [undefined], nonce, opts?.note, txHashes,
           );
           nonce = result.nonce;
           if (result.error) return { success: false, error: result.error, txHashes };
-        }
-
-        if (!anyClaimable) {
-          return { success: false, error: `No STX-only rewards for this staker in cycles ${startCycle}-${endCycle} (last_computed_cycle: ${lastComputedCycle}, current_cycle: ${pox.rewardCycleId})` };
         }
         return { success: true, txHashes };
       });
