@@ -40,6 +40,31 @@ describe("SdkManager atomic instance acquisition (FBS-11)", () => {
     }
   });
 
+  it("does not evict an instance a concurrent caller still holds", async () => {
+    createMock.mockImplementation(async () => ({ tag: "sdk" }));
+    const mgr = new SdkManager(baseConfig, { maxPoolSize: 1 });
+    try {
+      // Two concurrent holders of vault 7 (refCount 2 → one active instance).
+      await mgr.getSdk("7");
+      await mgr.getSdk("7");
+      expect(mgr.getMetrics().activeInstances).toBe(1);
+
+      // One releases; the instance is still held, so at capacity a different vault
+      // cannot displace it — it must NOT be evicted while in use.
+      mgr.releaseSdk("7");
+      await expect(mgr.getSdk("8")).rejects.toThrow(/maximum capacity/i);
+      expect(mgr.getMetrics().activeInstances).toBe(1);
+
+      // The final release makes it idle and therefore evictable.
+      mgr.releaseSdk("7");
+      expect(mgr.getMetrics().idleInstances).toBe(1);
+      const sdk8 = await mgr.getSdk("8");
+      expect(sdk8).toBeDefined();
+    } finally {
+      await mgr.shutdown();
+    }
+  });
+
   it("clears the in-flight marker on failure so a retry can succeed", async () => {
     let attempt = 0;
     createMock.mockImplementation(async () => {

@@ -165,6 +165,8 @@ export class StacksSDK {
   private btcRecoveryAllowlist: string[] = [];
   private signerManagerRegistry: SignerManagerRegistry = new SignerManagerRegistry();
   private verifyEarlyExitCosignerAtFunding = false;
+  // Cached immutable per-network sBTC asset (resolved from /v2/pox); success-only.
+  private sbtcAssetCache: { contractAddress: string; contractName: string; assetName: string } | undefined;
   private networkProfile!: NetworkProfile;
   private _pox5Network!: StacksNetwork;
   private lockRecordStore: LockRecordStore = new InMemoryLockRecordStore();
@@ -2227,27 +2229,40 @@ export class StacksSDK {
   private resolveSbtcAsset = async (
     override?: { contractAddress: string; contractName: string; assetName: string },
   ): Promise<{ contractAddress: string; contractName: string; assetName: string } | undefined> => {
-    let sbtcContractId: string | undefined;
-    try {
-      const res = await fetch(`${this.networkProfile.stacksApiUrl}/v2/pox`);
-      if (!res.ok) return undefined;
-      const body = (await res.json()) as { pox_5_sbtc_contract?: unknown };
-      if (typeof body.pox_5_sbtc_contract === "string") {
-        sbtcContractId = body.pox_5_sbtc_contract;
+    // The network's sBTC contract is immutable, so the successfully-resolved value is
+    // cached and reused on the common (no-override) path — e.g. the per-cycle reward
+    // claim loop — instead of re-reading /v2/pox each time. Only successes are cached.
+    let resolved = this.sbtcAssetCache;
+    if (!resolved) {
+      let sbtcContractId: string | undefined;
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 15_000);
+        try {
+          const res = await fetch(`${this.networkProfile.stacksApiUrl}/v2/pox`, { signal: controller.signal });
+          if (!res.ok) return undefined;
+          const body = (await res.json()) as { pox_5_sbtc_contract?: unknown };
+          if (typeof body.pox_5_sbtc_contract === "string") {
+            sbtcContractId = body.pox_5_sbtc_contract;
+          }
+        } finally {
+          clearTimeout(timer);
+        }
+      } catch {
+        return undefined;
       }
-    } catch {
-      return undefined;
+      if (!sbtcContractId) return undefined;
+
+      const [contractAddress, contractName] = sbtcContractId.split(".");
+      if (!contractAddress || !contractName) return undefined;
+
+      // The contract must belong to the selected network — this rejects a mainnet
+      // asset resolved against a testnet node and vice versa.
+      if (!validateAddress(contractAddress, this.testnet)) return undefined;
+
+      resolved = { contractAddress, contractName, assetName: "sbtc-token" };
+      this.sbtcAssetCache = resolved;
     }
-    if (!sbtcContractId) return undefined;
-
-    const [contractAddress, contractName] = sbtcContractId.split(".");
-    if (!contractAddress || !contractName) return undefined;
-
-    // The contract must belong to the selected network — this rejects a mainnet asset
-    // resolved against a testnet node and vice versa.
-    if (!validateAddress(contractAddress, this.testnet)) return undefined;
-
-    const resolved = { contractAddress, contractName, assetName: "sbtc-token" };
 
     // An override may only re-select the exact contract the node reports; it cannot
     // point the post-condition at a different token or bypass network validation.
@@ -2557,6 +2572,10 @@ export class StacksSDK {
         fundingExternalId,
         stage: "lock-fixed",
       };
+      // Persist the fixed lock parameters (address/script/amount/external id) BEFORE
+      // any funding attempt, so a crash before funding still leaves recoverable state.
+      // The funding branches below advance the stage and fill in the outpoint.
+      await this.lockRecordStore.saveRecord(this.address, bondIndex, lockRecord);
 
       // Step 7 — fund lock address (idempotent).
       let btcTxid: string;
@@ -3436,11 +3455,15 @@ export class StacksSDK {
           `Lock outpoint ${outpoint.txid}:${outpoint.vout} not found at ${lockingAddress} — it may already be spent, or the override is wrong.`,
         );
       }
-      // A trusted recorded outpoint is spent as-is; an OPERATOR OVERRIDE must also
-      // match the expected lock amount before it can be signed.
+      // A trusted recorded outpoint is spent as-is; an OPERATOR OVERRIDE is also
+      // cross-checked against the expected lock amount WHEN that amount is known
+      // (> 0). In the record-less recovery case the amount is unknown (0), so the
+      // value cannot be cross-checked — the unspent + at-lock-address (script) checks
+      // above still apply, which is the whole point of allowing the override there.
       if (
         opts?.isOperatorOverride &&
         opts.expectedAmountSats !== undefined &&
+        opts.expectedAmountSats > BigInt(0) &&
         BigInt(match.value) !== opts.expectedAmountSats
       ) {
         throw new Error(
@@ -3958,14 +3981,15 @@ export class StacksSDK {
    * EDUCATED GUESS (verify on a live node, then replace with the real accessor): the
    * protocol answers do not cover this and the dependency exposes no
    * `distribution-cycle-to-burn-height` / `current-distribution-cycle` read-only
-   * function, so we approximate the plan's formula
-   * `distribution-cycle-to-burn-height(current-distribution-cycle) - 1` as one block
-   * before the current reward cycle's boundary. Fail-safe: a wrong height only makes
-   * the node REJECT calculate-rewards (no misdistribution), and
+   * function, so we anchor to the START of the current reward cycle — a stable,
+   * deterministic snapshot within the current cycle rather than the drifting live
+   * height. We deliberately do NOT subtract a block (that would fall into the
+   * previous cycle and derive the active set one cycle off). Fail-safe: a wrong
+   * height only makes the node REJECT calculate-rewards (no misdistribution), and
    * fetchEligibleCalculateRewards gates the submission before any signature is spent.
    */
   private calculationHeight = (pox: Pox5PoxInfo): number =>
-    pox.firstBurnchainBlockHeight + pox.rewardCycleId * pox.rewardCycleLength - 1;
+    pox.firstBurnchainBlockHeight + pox.rewardCycleId * pox.rewardCycleLength;
 
   private activeBondWindow = (pox: Pox5PoxInfo, burnHeight: number): number[] => {
     const currentCycle = burnHeightToRewardCycle({ burnHeight, poxInfo: pox });

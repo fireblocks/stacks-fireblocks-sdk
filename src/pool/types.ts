@@ -18,7 +18,13 @@ export interface PoolConfig {
 export interface SdkPoolItem {
   sdk: StacksSDK;
   lastUsed: Date;
-  isInUse: boolean;
+  /**
+   * Number of concurrent callers currently holding this instance. Only an instance
+   * with refCount 0 is idle and therefore eligible for eviction — a shared instance
+   * must not be evicted while any caller is still mid-operation, or a replacement
+   * instance with an independent nonce queue could be built for the same vault.
+   */
+  refCount: number;
 }
 
 export interface ApiServiceConfig {

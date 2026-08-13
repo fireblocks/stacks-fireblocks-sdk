@@ -54,17 +54,27 @@ export class SdkManager {
   public getSdk = async (vaultAccountId: string): Promise<StacksSDK> => {
     const key = this.poolKey(vaultAccountId);
 
-    // A constructed instance already exists — reuse it.
+    // A constructed instance already exists — reuse it and count this caller.
     const poolItem = this.sdkPool.get(key);
     if (poolItem) {
+      poolItem.refCount++;
       poolItem.lastUsed = new Date();
-      poolItem.isInUse = true;
       return poolItem.sdk;
     }
 
-    // A construction is already in flight for this key — share it.
+    // A construction is already in flight for this key — share it, and count THIS
+    // caller once the instance lands (the initiating caller is counted at creation).
     const inFlight = this.creating.get(key);
-    if (inFlight) return inFlight;
+    if (inFlight) {
+      return inFlight.then((sdk) => {
+        const item = this.sdkPool.get(key);
+        if (item) {
+          item.refCount++;
+          item.lastUsed = new Date();
+        }
+        return sdk;
+      });
+    }
 
     // Capacity check counts both constructed and in-flight instances. Evict an idle
     // instance if at capacity; refuse if none can be evicted. removeOldestIdleSdk is
@@ -80,7 +90,9 @@ export class SdkManager {
 
     const creation = this.createSdkInstance(vaultAccountId)
       .then((sdk) => {
-        this.sdkPool.set(key, { sdk, lastUsed: new Date(), isInUse: true });
+        // Created with refCount 1 for THIS initiating caller, so the instance is
+        // never idle/evictable in the window before the caller receives it.
+        this.sdkPool.set(key, { sdk, lastUsed: new Date(), refCount: 1 });
         return sdk;
       })
       .finally(() => {
@@ -100,7 +112,8 @@ export class SdkManager {
   public releaseSdk = (vaultAccountId: string): void => {
     const poolItem = this.sdkPool.get(this.poolKey(vaultAccountId));
     if (poolItem) {
-      poolItem.isInUse = false;
+      // Only the LAST concurrent holder returning it makes it idle/evictable.
+      poolItem.refCount = Math.max(0, poolItem.refCount - 1);
       poolItem.lastUsed = new Date();
     }
   };
@@ -139,11 +152,14 @@ export class SdkManager {
    */
   private removeOldestIdleSdk = (): boolean => {
     let oldestKey: string | null = null;
-    let oldestDate: Date = new Date();
+    // Null sentinel (not `now`) so an instance whose lastUsed equals the current
+    // instant — e.g. released in the same millisecond as this eviction — still counts
+    // as idle and evictable.
+    let oldestDate: Date | null = null;
 
     // Find the oldest idle instance
     for (const [key, value] of this.sdkPool.entries()) {
-      if (!value.isInUse && value.lastUsed < oldestDate) {
+      if (value.refCount === 0 && (oldestDate === null || value.lastUsed < oldestDate)) {
         oldestDate = value.lastUsed;
         oldestKey = key;
       }
@@ -166,7 +182,7 @@ export class SdkManager {
     const keysToRemove: string[] = [];
 
     for (const [key, value] of this.sdkPool.entries()) {
-      if (!value.isInUse) {
+      if (value.refCount === 0) {
         const idleTime = now.getTime() - value.lastUsed.getTime();
         if (idleTime > this.poolConfig.idleTimeoutMs) {
           keysToRemove.push(key);
@@ -195,7 +211,7 @@ export class SdkManager {
     };
 
     for (const [, value] of this.sdkPool.entries()) {
-      if (value.isInUse) {
+      if (value.refCount > 0) {
         metrics.activeInstances++;
       } else {
         metrics.idleInstances++;
