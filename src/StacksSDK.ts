@@ -1084,6 +1084,10 @@ export class StacksSDK {
     tx: StacksTransactionWire,
     note: string,
     externalId?: string,
+    // Optional post-signing gate re-check. Returns a reason string when a
+    // time-dependent condition changed during approval (so the tx must be discarded),
+    // or undefined when it is still valid.
+    revalidate?: () => Promise<string | undefined>,
   ): Promise<{ txid?: string; error?: string; reason?: string }> => {
     const sigHash = tx.signBegin();
     const preSignSigHash = sigHashPreSign(
@@ -1097,6 +1101,18 @@ export class StacksSDK {
     );
     const signature = concatSignature(rawSignature.fullSig, rawSignature.v);
     (tx as any).auth.spendingCondition.signature = createMessageSignature(signature);
+
+    // Time-dependent gates (prepare phase, bond window, eligibility) can change while
+    // Fireblocks approval is pending. Re-check AFTER signing and BEFORE broadcast; if
+    // any required value changed, discard the signed transaction rather than
+    // broadcasting one the node will reject. No transaction is submitted in that case.
+    if (revalidate) {
+      const changed = await revalidate();
+      if (changed) {
+        return { error: `Transaction discarded after signing — ${changed}. No transaction was submitted; retry to sign against current state.` };
+      }
+    }
+
     return this.chainService.broadcastTransaction(tx, this.pox5Network);
   };
 
@@ -1340,7 +1356,14 @@ export class StacksSDK {
             postConditions: [Pc.origin().willPerformPox()],
           },
         );
-        return this.pox5SignAndBroadcast(tx, note || "unstake STX", externalId);
+        return this.pox5SignAndBroadcast(tx, note || "unstake STX", externalId, async () => {
+          // The chain may have advanced into the prepare phase while the signature was
+          // pending Fireblocks approval — unstake reverts there, so discard if so.
+          const nowPox = await fetchPox5Info({ network: this.pox5Network });
+          return isInPreparePhase({ burnHeight: nowPox.currentBurnchainBlockHeight, poxInfo: nowPox })
+            ? "the chain entered the prepare phase during approval"
+            : undefined;
+        });
       });
 
       if (!result || result.error || !result.txid || result.reason) {
@@ -2992,7 +3015,20 @@ export class StacksSDK {
             postConditions: [Pc.origin().willPerformPox()],
           },
         );
-        return this.pox5SignAndBroadcast(tx, opts?.note ?? 'announce-l1-early-exit', opts?.externalId);
+        return this.pox5SignAndBroadcast(tx, opts?.note ?? 'announce-l1-early-exit', opts?.externalId, async () => {
+          // Re-run the eligibility gate (covers prepare-phase and membership) after
+          // approval; discard the signed tx if it no longer holds.
+          const recheck = await fetchEligibleAnnounceL1EarlyExit({
+            staker: this.address!,
+            oldSignerManager: membership.signer,
+            network: this.pox5Network,
+          });
+          if (!recheck.ok) {
+            const reasons = (recheck as { reasons?: number[] }).reasons ?? [];
+            return `eligibility changed during approval: ${this.describeBondReasons(reasons)}`;
+          }
+          return undefined;
+        });
       });
       if (!result?.txid || result.error || result.reason) {
         return { success: false, error: result?.error ?? result?.reason ?? 'broadcast failed' };
