@@ -128,6 +128,7 @@ import {
   fetchEarned,
   fetchEarnedStakerRewards,
   fetchLastRewardComputeHeight,
+  fetchSignerCycleMembership,
   fetchConstructLockupOutputScript,
   isInPreparePhase,
   isBondActiveAtHeight,
@@ -4275,40 +4276,14 @@ export class StacksSDK {
   };
 
   /**
-   * Resolves the signer manager and first earning cycle for a bond independently
-   * of current membership. Prefers the live membership when it still refers to the
-   * bond, else falls back to the durable record saved at registration — so rewards
-   * stay discoverable after the bond period ends or the membership is overwritten.
-   */
-  private resolveBondSignerContext = async (
-    bondIndex: number,
-    pox: Pox5PoxInfo,
-    currentMembership: { bondIndex: number; signer: string } | null,
-  ): Promise<{ signerManager: string; firstEarningCycle: number } | null> => {
-    if (currentMembership && currentMembership.bondIndex === bondIndex) {
-      return {
-        signerManager: currentMembership.signer,
-        firstEarningCycle: bondPeriodToRewardCycle({ bondIndex, poxInfo: pox }),
-      };
-    }
-    const record = await this.lockRecordStore.loadRecord(this.address!, bondIndex);
-    if (record?.signerManager) {
-      return {
-        signerManager: record.signerManager,
-        firstEarningCycle: record.firstRewardCycle ?? bondPeriodToRewardCycle({ bondIndex, poxInfo: pox }),
-      };
-    }
-    return null;
-  };
-
-  /**
    * Claims ALL accumulated sBTC rewards for the given bond indices.
    * Handles the full flow internally: calculate → distribute → claim staker share.
    *
-   * Reward context is resolved per bond from membership OR the durable record, so
-   * historical/expired bonds remain claimable, and claims are grouped by signer
-   * manager so bonds under different managers route to the correct contract. Each
-   * requested bond is probed per cycle (not just the lowest index).
+   * The signer manager that governs each reward cycle is resolved from chain
+   * (get-signer-cycle-membership) rather than the local record, so signer rotation
+   * between cycles routes each cycle's claim to the correct manager and historical
+   * cycles remain claimable after a restart with an empty cache. A chain read failure
+   * refuses the claim (unknown, never silently "no rewards").
    */
   public claimRewards = async (
     bondIndices: number[],
@@ -4319,24 +4294,16 @@ export class StacksSDK {
       if (!this.address) throw new Error('Address not set');
       if (bondIndices.length === 0) return { success: false, error: 'No bond indices provided' };
 
+      const staker = this.address;
+      const uniqueBonds = [...new Set(bondIndices)].sort((a, b) => a - b);
       const pox = await fetchPox5Info({ network: this.pox5Network });
-      const membership = await fetchBondMembership({ address: this.address, network: this.pox5Network }).catch(() => null);
 
-      // Resolve (signerManager, firstEarningCycle) for every requested bond, then
-      // group by signer manager. Does not require a current membership.
-      const groups = new Map<string, { firstCycle: number; bonds: number[] }>();
-      const unresolved: number[] = [];
-      for (const bondIndex of bondIndices) {
-        const ctx = await this.resolveBondSignerContext(bondIndex, pox, membership);
-        if (!ctx) { unresolved.push(bondIndex); continue; }
-        const group = groups.get(ctx.signerManager) ?? { firstCycle: ctx.firstEarningCycle, bonds: [] };
-        group.firstCycle = Math.min(group.firstCycle, ctx.firstEarningCycle);
-        group.bonds.push(bondIndex);
-        groups.set(ctx.signerManager, group);
-      }
-      if (unresolved.length > 0) {
-        return { success: false, error: `No signer-manager history for bond(s) ${unresolved.join(', ')}; this vault has no record of registering them (supply recovery data or the originating vault).` };
-      }
+      // First earning cycle per bond is chain-derived (no local record required), used
+      // only to bound the cycle scan below.
+      const firstCycleByBond = new Map<number, number>(
+        uniqueBonds.map((b) => [b, bondPeriodToRewardCycle({ bondIndex: b, poxInfo: pox })]),
+      );
+      const minFirstCycle = Math.min(...firstCycleByBond.values());
 
       const lastComputeHeight = await fetchLastRewardComputeHeight({ network: this.pox5Network }).catch(() => 0);
       const lastComputedCycle = lastComputeHeight > 0
@@ -4344,45 +4311,52 @@ export class StacksSDK {
         : pox.rewardCycleId - 1;
 
       // The claim is a multi-transaction sequence with a contiguous nonce range,
-      // so the whole sequence is serialized against other operations for this vault
-      // (holding the lock across settlement waits is the accepted trade-off for a
-      // sequence that cannot tolerate an interleaved nonce).
+      // so the whole sequence is serialized against other operations for this vault.
       return await this.runNonceExclusive(async (): Promise<ClaimRewardsResponse> => {
-      let nonce = await this.resolveNonce(opts?.nonce);
-      const txHashes: string[] = [];
-      let anyClaimable = false;
+        let nonce = await this.resolveNonce(opts?.nonce);
+        const txHashes: string[] = [];
+        let anyClaimable = false;
 
-      for (const [signerManager, group] of groups) {
-        const signerDotIdx = signerManager.lastIndexOf('.');
-        const signerContractAddress = signerManager.slice(0, signerDotIdx);
-        const signerContractName = signerManager.slice(signerDotIdx + 1);
+        // Chain is the authority for which signer manager governs the staker in each
+        // cycle — signer rotation changes future cycles but not past ones — so the
+        // signer is resolved PER CYCLE from get-signer-cycle-membership, not from the
+        // local record (a cache only). This also works after a restart with an empty
+        // cache, and a read FAILURE is refused rather than silently read as "no rewards".
+        for (let cycle = minFirstCycle; cycle <= lastComputedCycle; cycle++) {
+          let cycleMembership: { amountUstx: bigint; signer: string } | undefined;
+          try {
+            cycleMembership = await fetchSignerCycleMembership({ staker, cycle, network: this.pox5Network });
+          } catch (e) {
+            return { success: false, error: `Could not resolve signer-cycle membership for cycle ${cycle} (unknown, not zero) — refusing to claim: ${formatErrorMessage(e)}`, txHashes };
+          }
+          if (!cycleMembership) continue; // staker was not a member in this cycle
 
-        // A cycle is claimable if ANY bond in the group earned in it (probe each).
-        const claimableCycles = await this.filterCyclesWithPositiveValue(
-          this.cycleRange(group.firstCycle, lastComputedCycle + 1),
-          async (cycle) => {
-            const perBond = await Promise.all(
-              group.bonds.map((bondIndex) =>
-                fetchEarned({ signerManager, rewardCycle: cycle, bondIndex, network: this.pox5Network }).catch(() => BigInt(0)),
-              ),
-            );
-            return perBond.reduce((sum, v) => sum + v, BigInt(0));
-          },
-        );
-        if (claimableCycles.length === 0) continue;
-        anyClaimable = true;
+          const signerManager = cycleMembership.signer;
+          const signerDotIdx = signerManager.lastIndexOf('.');
+          const signerContractAddress = signerManager.slice(0, signerDotIdx);
+          const signerContractName = signerManager.slice(signerDotIdx + 1);
 
-        // The contract's claim-rewards takes (list 6 uint), so chunk the group's
-        // bond indices to at most 6 per call rather than building an oversized list
-        // that the node would reject after a signature is spent.
-        const CLAIM_LIST_CAP = 6;
-        const bondChunks: number[][] = [];
-        for (let i = 0; i < group.bonds.length; i += CLAIM_LIST_CAP) {
-          bondChunks.push(group.bonds.slice(i, i + CLAIM_LIST_CAP));
-        }
+          // Which requested bonds could be earning by this cycle, and which actually
+          // earned under this cycle's signer. A read failure (sentinel -1) refuses
+          // rather than skipping a bond that may have rewards.
+          const candidateBonds = uniqueBonds.filter((b) => (firstCycleByBond.get(b) ?? 0) <= cycle);
+          const earned = await Promise.all(
+            candidateBonds.map(async (b) => ({
+              bond: b,
+              sats: await fetchEarned({ signerManager, rewardCycle: cycle, bondIndex: b, network: this.pox5Network }).catch(() => BigInt(-1)),
+            })),
+          );
+          const failedRead = earned.find((e) => e.sats < BigInt(0));
+          if (failedRead) {
+            return { success: false, error: `Could not read earned rewards for bond ${failedRead.bond} at cycle ${cycle} (unknown, not zero) — refusing to claim`, txHashes };
+          }
+          const claimBonds = earned.filter((e) => e.sats > BigInt(0)).map((e) => e.bond);
+          if (claimBonds.length === 0) continue;
+          anyClaimable = true;
 
-        for (const cycle of claimableCycles) {
-          for (const chunk of bondChunks) {
+          // claim-rewards takes (list 6 uint) — chunk to at most 6 bonds per call.
+          for (let i = 0; i < claimBonds.length; i += 6) {
+            const chunk = claimBonds.slice(i, i + 6);
             const result = await this.executeClaimCycle(
               signerContractAddress, signerContractName, cycle,
               chunk, chunk, nonce, opts?.note, txHashes,
@@ -4391,16 +4365,14 @@ export class StacksSDK {
             if (result.error) return { success: false, error: result.error, txHashes };
           }
         }
-      }
 
-      if (!anyClaimable) {
-        return {
-          success: false,
-          error: `No rewards available yet for bond(s) ${bondIndices.join(', ')} (last_computed_cycle: ${lastComputedCycle}, current_cycle: ${pox.rewardCycleId})`,
-        };
-      }
-
-      return { success: true, txHashes };
+        if (!anyClaimable) {
+          return {
+            success: false,
+            error: `No rewards available yet for bond(s) ${uniqueBonds.join(', ')} (last_computed_cycle: ${lastComputedCycle}, current_cycle: ${pox.rewardCycleId})`,
+          };
+        }
+        return { success: true, txHashes };
       });
     } catch (error) {
       return { success: false, error: `Failed to claim rewards: ${formatErrorMessage(error)}` };
