@@ -1127,6 +1127,16 @@ export class StacksSDK {
     return this._pox5Network;
   }
 
+  /**
+   * Encodes optional signer-manager calldata as a Clarity `(optional (buff))`. Some
+   * signer managers require calldata; when none is supplied this is `none`, preserving
+   * the prior hardcoded behavior.
+   */
+  private encodeSignerCalldata = (calldata?: Uint8Array | string): ClarityValue =>
+    calldata === undefined
+      ? Cl.none()
+      : Cl.some(typeof calldata === "string" ? Cl.bufferFromHex(calldata) : Cl.buffer(calldata));
+
   // ─── PoX-5 Solo STX ──────────────────────────────────────────────────────────
 
   /**
@@ -1145,6 +1155,7 @@ export class StacksSDK {
     note?: string,
     nonce?: bigint,
     externalId?: string,
+    signerCalldata?: Uint8Array | string,
   ): Promise<CreateTransactionResponse> => {
     try {
       if (!this.address || !this.publicKey || !this.vaultAccountId) {
@@ -1185,7 +1196,7 @@ export class StacksSDK {
             Cl.uint(amountUstx),
             Cl.uint(numCycles),
             Cl.uint(pox.currentBurnchainBlockHeight),
-            Cl.none(), // signer-calldata
+            this.encodeSignerCalldata(signerCalldata),
           ],
           {
             nonce: resolvedNonce,
@@ -1236,6 +1247,7 @@ export class StacksSDK {
     note?: string,
     nonce?: bigint,
     externalId?: string,
+    signerCalldata?: Uint8Array | string,
   ): Promise<CreateTransactionResponse> => {
     try {
       if (!this.address || !this.publicKey || !this.vaultAccountId) {
@@ -1283,7 +1295,7 @@ export class StacksSDK {
             Cl.address(oldSignerManager),
             Cl.uint(cyclesToExtend ?? 0),
             Cl.uint(amountIncrease),
-            Cl.none(), // signer-calldata
+            this.encodeSignerCalldata(signerCalldata),
           ],
           {
             nonce: resolvedNonce,
@@ -2131,6 +2143,7 @@ export class StacksSDK {
     nonce: bigint;
     postConditionMode?: PostConditionMode;
     postConditions?: PostCondition[];
+    signerCalldata?: Uint8Array | string;
   }): Promise<StacksTransactionWire> => {
     const buf = (v: Uint8Array | string) =>
       typeof v === "string" ? Cl.bufferFromHex(v) : Cl.buffer(v);
@@ -2170,7 +2183,7 @@ export class StacksSDK {
         Cl.address(args.signerManager),
         Cl.uint(args.amountUstx),
         lockupCV,
-        Cl.none(), // signer-calldata (optional buff) — not used on the native path
+        this.encodeSignerCalldata(args.signerCalldata),
       ],
       publicKey: this.publicKey!,
       fee: DEFAULT_POX_FEE_USTX,
@@ -2423,7 +2436,7 @@ export class StacksSDK {
     bondIndex: number,
     btcAmountSats: bigint,
     signerManager: string,
-    opts?: { note?: string; nonce?: bigint; externalId?: string; confirmations?: number; btcTxid?: string; amountUstxOverride?: bigint },
+    opts?: { note?: string; nonce?: bigint; externalId?: string; confirmations?: number; btcTxid?: string; amountUstxOverride?: bigint; signerCalldata?: Uint8Array | string },
   ): Promise<CreateBondResult> => {
     try {
       if (!this.address || !this.publicKey || !this.vaultAccountId) {
@@ -2652,6 +2665,7 @@ export class StacksSDK {
           outputs: [lockupProof],
           unlockBytes: metadata.unlockBytes,
           nonce: resolvedNonce,
+          signerCalldata: opts?.signerCalldata,
           // Bound the paired STX lock to exactly the required amount.
           postConditionMode: PostConditionMode.Deny,
           postConditions: [Pc.origin().willSendEq(amountUstx).ustxToLock()],
@@ -2740,6 +2754,7 @@ export class StacksSDK {
       note?: string;
       nonce?: bigint;
       externalId?: string;
+      signerCalldata?: Uint8Array | string;
     },
   ): Promise<CreateTransactionResponse> => {
     try {
@@ -2791,6 +2806,7 @@ export class StacksSDK {
           amountUstx,
           sbtcSats,
           nonce: resolvedNonce,
+          signerCalldata: opts?.signerCalldata,
           // Bound both legs: the paired STX lock and the exact sBTC transfer (the
           // staker is the tx origin, so origin sends both).
           postConditionMode: PostConditionMode.Deny,
