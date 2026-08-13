@@ -399,9 +399,29 @@ export type CalculateRewardsResponse = {
   error?: string;
 };
 
+/** One structured record per (bond, cycle) claim leg. */
+export type ClaimResultItem = {
+  /** null for an STX-only claim (bond index `none`). */
+  bondIndex: number | null;
+  rewardCycle: number;
+  signerManager: string;
+  /** Signer-cohort accrual for this bond+cycle (get-earned) — NOT the vault's payout. */
+  signerAccruedSats: string;
+  /** This staker's own entitlement (get-earned-staker-rewards); null if unread. */
+  stakerPaidSats: string | null;
+  /** signer-manager `claim-rewards` transaction id (shared across the cycle's bonds). */
+  signerClaimTxid: string | null;
+  /** `claim-staker-rewards` transaction id for this bond. */
+  stakerClaimTxid: string | null;
+  status: "claimed" | "failed";
+  error?: string;
+};
+
 export type ClaimRewardsResponse = {
   success: boolean;
   txHashes?: string[];
+  /** Structured per-(bond,cycle) results — accrual, payout, both tx ids, and status. */
+  results?: ClaimResultItem[];
   error?: string;
 };
 

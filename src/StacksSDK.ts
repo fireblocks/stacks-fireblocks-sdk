@@ -37,6 +37,7 @@ import {
   RenewBondResult,
   CalculateRewardsResponse,
   ClaimRewardsResponse,
+  ClaimResultItem,
   EarnedRewardsResponse,
   BondLockAddressResponse,
   FundBondLockResponse,
@@ -4147,6 +4148,7 @@ export class StacksSDK {
     nonce: bigint,
     note: string | undefined,
     txHashes: string[],
+    results: ClaimResultItem[],
   ): Promise<{ nonce: bigint; error?: string }> => {
     // Bound the sBTC that PoX-5 sends to the signer manager during claim-rewards.
     // total-rewards = get-earned(signer, cycle, none) + Σ get-earned(signer, cycle,
@@ -4165,6 +4167,9 @@ export class StacksSDK {
     const sbtcContractId: `${string}.${string}` = `${sbtcAsset.contractAddress}.${sbtcAsset.contractName}`;
 
     let totalRewards: bigint;
+    // Per-bond signer-cohort accrual (captured from the same reads) for reporting.
+    const accruedByBond = new Map<number, bigint>();
+    let noneAccrued = BigInt(0);
     try {
       // A failed read must NOT default to 0 (that would understate the bound and
       // abort the claim after signing) — Promise.all rejects on any failure.
@@ -4175,6 +4180,8 @@ export class StacksSDK {
         ),
       ]);
       totalRewards = earned.reduce((sum, e) => sum + e, BigInt(0));
+      noneAccrued = earned[0] ?? BigInt(0);
+      uniqueBondIndices.forEach((idx, i) => accruedByBond.set(idx, earned[i + 1] ?? BigInt(0)));
     } catch (error) {
       return { nonce, error: `Could not read earned rewards to bound claim-rewards at cycle ${cycle}: ${formatErrorMessage(error)}` };
     }
@@ -4208,6 +4215,7 @@ export class StacksSDK {
       const errMsg = [smClaimResult?.error, smClaimResult?.reason].filter(Boolean).join(' — ');
       return { nonce, error: `signer-manager.claim-rewards broadcast failed at cycle ${cycle}: ${errMsg}` };
     }
+    const signerClaimTxid = smClaimResult?.txid ?? null;
 
     // The staker payout is performed by the signer manager from its OWN balance
     // (PoX-5 moves no sBTC on this leg — answers §3b), so the bound is manager-specific
@@ -4225,6 +4233,28 @@ export class StacksSDK {
       : undefined;
 
     for (const bondIndex of stakerBondIndices) {
+      const signerAccruedSats = bondIndex !== undefined
+        ? (accruedByBond.get(bondIndex) ?? BigInt(0))
+        : noneAccrued;
+      // Best-effort read of THIS staker's own entitlement (distinct from the signer
+      // cohort's accrual). A reporting read only — a failure does not abort the claim.
+      const stakerPaidSats = await fetchEarnedStakerRewards({
+        signerManager, rewardCycle: cycle, bondIndex, staker: this.address!, network: this.pox5Network,
+      }).catch(() => null);
+
+      const recordResult = (status: 'claimed' | 'failed', stakerClaimTxid: string | null, error?: string) =>
+        results.push({
+          bondIndex: bondIndex ?? null,
+          rewardCycle: cycle,
+          signerManager,
+          signerAccruedSats: signerAccruedSats.toString(),
+          stakerPaidSats: stakerPaidSats !== null ? stakerPaidSats.toString() : null,
+          signerClaimTxid,
+          stakerClaimTxid,
+          status,
+          ...(error ? { error } : {}),
+        });
+
       const smStakerTx = await makeUnsignedContractCall({
         contractAddress: signerContractAddress,
         contractName: signerContractName,
@@ -4254,13 +4284,16 @@ export class StacksSDK {
       const smStakerResult = await this.pox5SignAndBroadcast(smStakerTx, note ?? defaultNote);
       if (!smStakerResult?.txid || smStakerResult.error || smStakerResult.reason) {
         const errMsg = [smStakerResult?.error, smStakerResult?.reason].filter(Boolean).join(' — ') || 'broadcast failed';
+        recordResult('failed', null, errMsg);
         return { nonce, error: `Failed at cycle ${cycle}${bondSuffix}: ${errMsg}` };
       }
       const settled = await this.waitForTxSettlement(smStakerResult.txid);
       if (!settled.success || settled.data?.tx_status !== 'success') {
         const stakerRepr: string = (settled.data?.tx_result as any)?.repr ?? settled.data?.tx_error ?? '';
+        recordResult('failed', smStakerResult.txid, stakerRepr);
         return { nonce, error: `Claim failed on-chain at cycle ${cycle}${bondSuffix}: ${stakerRepr}` };
       }
+      recordResult('claimed', smStakerResult.txid);
       txHashes.push(smStakerResult.txid);
       nonce = nonce + BigInt(1);
     }
@@ -4352,19 +4385,20 @@ export class StacksSDK {
       return await this.runNonceExclusive(async (): Promise<ClaimRewardsResponse> => {
         let nonce = await this.resolveNonce(opts?.nonce);
         const txHashes: string[] = [];
+        const results: ClaimResultItem[] = [];
         for (const item of plan) {
           // claim-rewards takes (list 6 uint) — chunk to at most 6 bonds per call.
           for (let i = 0; i < item.bonds.length; i += 6) {
             const chunk = item.bonds.slice(i, i + 6);
             const result = await this.executeClaimCycle(
               item.signerAddr, item.signerName, item.cycle,
-              chunk, chunk, nonce, opts?.note, txHashes,
+              chunk, chunk, nonce, opts?.note, txHashes, results,
             );
             nonce = result.nonce;
-            if (result.error) return { success: false, error: result.error, txHashes };
+            if (result.error) return { success: false, error: result.error, txHashes, results };
           }
         }
-        return { success: true, txHashes };
+        return { success: true, txHashes, results };
       });
     } catch (error) {
       return { success: false, error: `Failed to claim rewards: ${formatErrorMessage(error)}` };
@@ -4440,15 +4474,16 @@ export class StacksSDK {
       return await this.runNonceExclusive(async (): Promise<ClaimRewardsResponse> => {
         let nonce = await this.resolveNonce(opts?.nonce);
         const txHashes: string[] = [];
+        const results: ClaimResultItem[] = [];
         for (const item of plan) {
           const result = await this.executeClaimCycle(
             item.signerAddr, item.signerName, item.cycle,
-            [], [undefined], nonce, opts?.note, txHashes,
+            [], [undefined], nonce, opts?.note, txHashes, results,
           );
           nonce = result.nonce;
-          if (result.error) return { success: false, error: result.error, txHashes };
+          if (result.error) return { success: false, error: result.error, txHashes, results };
         }
-        return { success: true, txHashes };
+        return { success: true, txHashes, results };
       });
     } catch (error) {
       return { success: false, error: `Failed to claim STX-only rewards: ${formatErrorMessage(error)}` };
