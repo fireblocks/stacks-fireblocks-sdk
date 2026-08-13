@@ -4130,13 +4130,6 @@ export class StacksSDK {
     return values.reduce((sum, v) => sum + v, BigInt(0));
   };
 
-  private filterCyclesWithPositiveValue = async (
-    cycles: number[],
-    fetcher: (cycle: number) => Promise<bigint>,
-  ): Promise<number[]> => {
-    const values = await this.mapCyclesLimited(cycles, fetcher);
-    return cycles.filter((_, i) => values[i] > BigInt(0));
-  };
 
   /**
    * Executes the two-step signer-manager reward claim for a single reward cycle.
@@ -4381,24 +4374,21 @@ export class StacksSDK {
 
   /**
    * Claims accumulated sBTC rewards for an STX-only staker (no BTC bonds).
-   * Same two-step flow as claimRewards but uses none() for bond index and derives
-   * the signer-manager from the vault's active STX stake rather than bond membership.
+   *
+   * The signer manager is resolved PER CYCLE from get-signer-cycle-membership (not the
+   * current stake), so historical cycles route correctly across signer rotation and
+   * stay claimable after the stake expires when an explicit cycle range is supplied.
+   * Claimability is gated by the STAKER'S entitlement (get-earned-staker-rewards), not
+   * the signer-level total — a non-zero signer amount with a zero staker amount does
+   * not trigger a claim — and a read failure refuses rather than reading as "no rewards".
    */
   public claimStxOnlyRewards = async (
-    opts?: { note?: string; nonce?: bigint },
+    opts?: { note?: string; nonce?: bigint; fromCycle?: number; toCycle?: number },
   ): Promise<ClaimRewardsResponse> => {
     try {
       if (!this.publicKey || !this.vaultAccountId) throw new Error('SDK not initialized');
       if (!this.address) throw new Error('Address not set');
-
-      const stakerInfo = await fetchStakerInfo({ address: this.address, network: this.pox5Network }).catch(() => null);
-      if (!stakerInfo?.staked) return { success: false, error: 'No active STX-only stake found for this vault' };
-
-      const signerPrincipal: string = stakerInfo.details.signer;
-      const firstEarningCycle: number = stakerInfo.details.firstRewardCycle;
-      const signerDotIdx = signerPrincipal.lastIndexOf('.');
-      const signerContractAddress = signerPrincipal.slice(0, signerDotIdx);
-      const signerContractName = signerPrincipal.slice(signerDotIdx + 1);
+      const staker = this.address;
 
       const pox = await fetchPox5Info({ network: this.pox5Network });
       const lastComputeHeight = await fetchLastRewardComputeHeight({ network: this.pox5Network }).catch(() => 0);
@@ -4406,38 +4396,56 @@ export class StacksSDK {
         ? Math.floor((lastComputeHeight - pox.firstBurnchainBlockHeight) / pox.rewardCycleLength)
         : pox.rewardCycleId - 1;
 
-      const claimableCycles = await this.filterCyclesWithPositiveValue(
-        this.cycleRange(firstEarningCycle, lastComputedCycle + 1),
-        cycle => fetchEarned({
-          signerManager: signerPrincipal,
-          rewardCycle: cycle,
-          bondIndex: undefined,
-          network: this.pox5Network,
-        }).catch(() => BigInt(0)),
-      );
-
-      if (claimableCycles.length === 0) {
-        return {
-          success: false,
-          error: `No rewards available yet for STX-only stake (first_reward_cycle: ${firstEarningCycle}, last_computed_cycle: ${lastComputedCycle}, current_cycle: ${pox.rewardCycleId})`,
-        };
+      // An explicit fromCycle lets an EXPIRED stake still claim historical cycles;
+      // otherwise the active stake's first reward cycle bounds the scan.
+      let startCycle = opts?.fromCycle;
+      if (startCycle === undefined) {
+        const stakerInfo = await fetchStakerInfo({ address: staker, network: this.pox5Network }).catch(() => null);
+        if (!stakerInfo?.staked) {
+          return { success: false, error: 'No active STX-only stake found; supply fromCycle (and optionally toCycle) to claim historical cycles after expiry.' };
+        }
+        startCycle = stakerInfo.details.firstRewardCycle;
       }
+      const endCycle = Math.min(opts?.toCycle ?? lastComputedCycle, lastComputedCycle);
 
-      // Serialize the contiguous-nonce claim sequence against other vault operations.
       return await this.runNonceExclusive(async (): Promise<ClaimRewardsResponse> => {
-      let nonce = await this.resolveNonce(opts?.nonce);
-      const txHashes: string[] = [];
+        let nonce = await this.resolveNonce(opts?.nonce);
+        const txHashes: string[] = [];
+        let anyClaimable = false;
 
-      for (const cycle of claimableCycles) {
-        const result = await this.executeClaimCycle(
-          signerContractAddress, signerContractName, cycle,
-          [], [undefined], nonce, opts?.note, txHashes,
-        );
-        nonce = result.nonce;
-        if (result.error) return { success: false, error: result.error, txHashes };
-      }
+        for (let cycle = startCycle!; cycle <= endCycle; cycle++) {
+          let cycleMembership: { amountUstx: bigint; signer: string } | undefined;
+          try {
+            cycleMembership = await fetchSignerCycleMembership({ staker, cycle, network: this.pox5Network });
+          } catch (e) {
+            return { success: false, error: `Could not resolve signer-cycle membership for cycle ${cycle} (unknown, not zero) — refusing to claim: ${formatErrorMessage(e)}`, txHashes };
+          }
+          if (!cycleMembership) continue;
 
-      return { success: true, txHashes };
+          const signerManager = cycleMembership.signer;
+          // Gate by the STAKER'S own entitlement, not the signer-level total.
+          let stakerEarned: bigint;
+          try {
+            stakerEarned = await fetchEarnedStakerRewards({ signerManager, rewardCycle: cycle, staker, network: this.pox5Network });
+          } catch (e) {
+            return { success: false, error: `Could not read staker-earned rewards at cycle ${cycle} (unknown, not zero) — refusing to claim: ${formatErrorMessage(e)}`, txHashes };
+          }
+          if (stakerEarned <= BigInt(0)) continue;
+          anyClaimable = true;
+
+          const signerDotIdx = signerManager.lastIndexOf('.');
+          const result = await this.executeClaimCycle(
+            signerManager.slice(0, signerDotIdx), signerManager.slice(signerDotIdx + 1), cycle,
+            [], [undefined], nonce, opts?.note, txHashes,
+          );
+          nonce = result.nonce;
+          if (result.error) return { success: false, error: result.error, txHashes };
+        }
+
+        if (!anyClaimable) {
+          return { success: false, error: `No STX-only rewards for this staker in cycles ${startCycle}-${endCycle} (last_computed_cycle: ${lastComputedCycle}, current_cycle: ${pox.rewardCycleId})` };
+        }
+        return { success: true, txHashes };
       });
     } catch (error) {
       return { success: false, error: `Failed to claim STX-only rewards: ${formatErrorMessage(error)}` };
