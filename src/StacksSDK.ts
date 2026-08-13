@@ -2654,7 +2654,33 @@ export class StacksSDK {
           postConditionMode: PostConditionMode.Deny,
           postConditions: [Pc.origin().willSendEq(amountUstx).ustxToLock()],
         });
-        return this.pox5SignAndBroadcast(tx, opts?.note ?? 'register-for-bond', opts?.externalId ? `${opts.externalId}-register` : undefined);
+        return this.pox5SignAndBroadcast(
+          tx,
+          opts?.note ?? 'register-for-bond',
+          opts?.externalId ? `${opts.externalId}-register` : undefined,
+          async () => {
+            // BTC is already locked at this point; the bond window / eligibility can
+            // still change during L2 approval (e.g. ERR_BOND_ALREADY_STARTED). Re-check
+            // against the CURRENT height and discard rather than broadcast a doomed
+            // register — the BTC remains recoverable and the L2 tx can be retried.
+            const nowPox = await fetchPox5Info({ network: this.pox5Network });
+            const recheck = await fetchEligibleRegisterForBond({
+              bondIndex,
+              staker: this.address!,
+              amountUstx,
+              satsTotal: btcAmountSats,
+              signerManager,
+              poxInfo: nowPox,
+              outputs: [lockupProof],
+              network: this.pox5Network,
+            });
+            if (!recheck.ok) {
+              const reasons = (recheck as { reasons?: number[] }).reasons ?? [];
+              return `bond eligibility changed during approval: ${this.describeBondReasons(reasons)}`;
+            }
+            return undefined;
+          },
+        );
       });
       if (!result?.txid || result.error || result.reason) {
         console.error('register-for-bond broadcast failed:', JSON.stringify(result));
