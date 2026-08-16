@@ -4473,6 +4473,14 @@ export class StacksSDK {
    * between cycles routes each cycle's claim to the correct manager and historical
    * cycles remain claimable after a restart with an empty cache. A chain read failure
    * refuses the claim (unknown, never silently "no rewards").
+   *
+   * Resumable by design: the per-cycle plan is rebuilt from chain on every call and
+   * includes only cycles/bonds with a still-positive signer accrual or staker
+   * entitlement, so a re-invocation after a partial failure resumes at the first
+   * unclaimed leg without repeating confirmed work — the chain is the progress record,
+   * not a local file. Both claim legs are contract-idempotent, so re-running a leg that
+   * already settled is benign. On failure the response carries the partial `results`
+   * and `txHashes` plus the error; call again to resume.
    */
   public claimRewards = async (
     bondIndices: number[],
@@ -4517,21 +4525,29 @@ export class StacksSDK {
         if (!cycleMembership) continue; // staker was not a member in this cycle
 
         const signerManager = cycleMembership.signer;
-        // Which requested bonds could be earning by this cycle, and which actually
-        // earned under this cycle's signer. A read failure (sentinel -1) refuses rather
-        // than skipping a bond that may have rewards.
+        // Which requested bonds could be earning by this cycle, and which still have work
+        // to do under this cycle's signer. A bond is included when EITHER the signer-cohort
+        // accrual (leg 1, claim-rewards) OR this staker's own entitlement (leg 2,
+        // claim-staker-rewards) is still positive — so a claim that crashed AFTER the
+        // signer leg but BEFORE the staker payout resumes on re-invocation instead of
+        // stranding the payout (the chain is the progress record; both legs are contract-
+        // idempotent so re-running the already-settled leg is benign). A read failure
+        // (sentinel -1) refuses rather than skipping a bond that may have rewards.
         const candidateBonds = uniqueBonds.filter((b) => (firstCycleByBond.get(b) ?? 0) <= cycle);
         const earned = await Promise.all(
-          candidateBonds.map(async (b) => ({
-            bond: b,
-            sats: await fetchEarned({ signerManager, rewardCycle: cycle, bondIndex: b, network: this.pox5Network }).catch(() => BigInt(-1)),
-          })),
+          candidateBonds.map(async (b) => {
+            const [signerSats, stakerSats] = await Promise.all([
+              fetchEarned({ signerManager, rewardCycle: cycle, bondIndex: b, network: this.pox5Network }).catch(() => BigInt(-1)),
+              fetchEarnedStakerRewards({ signerManager, rewardCycle: cycle, bondIndex: b, staker, network: this.pox5Network }).catch(() => BigInt(-1)),
+            ]);
+            return { bond: b, signerSats, stakerSats };
+          }),
         );
-        const failedRead = earned.find((e) => e.sats < BigInt(0));
+        const failedRead = earned.find((e) => e.signerSats < BigInt(0) || e.stakerSats < BigInt(0));
         if (failedRead) {
           return { success: false, error: `Could not read earned rewards for bond ${failedRead.bond} at cycle ${cycle} (unknown, not zero) — refusing to claim` };
         }
-        const claimBonds = earned.filter((e) => e.sats > BigInt(0)).map((e) => e.bond);
+        const claimBonds = earned.filter((e) => e.signerSats > BigInt(0) || e.stakerSats > BigInt(0)).map((e) => e.bond);
         if (claimBonds.length === 0) continue;
         const dot = signerManager.lastIndexOf('.');
         plan.push({ cycle, signerAddr: signerManager.slice(0, dot), signerName: signerManager.slice(dot + 1), bonds: claimBonds });
