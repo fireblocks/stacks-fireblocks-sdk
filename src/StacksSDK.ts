@@ -4203,6 +4203,9 @@ export class StacksSDK {
     cycle: number,
     claimBondIndices: number[],
     stakerBondIndices: (number | undefined)[],
+    // Explicit starting nonce (from the caller), consumed by the FIRST leg of the whole
+    // claim and validated by resolveNonce; every later leg auto-resolves.
+    nonceHolder: { value?: bigint },
     note: string | undefined,
     txHashes: string[],
     results: ClaimResultItem[],
@@ -4245,16 +4248,20 @@ export class StacksSDK {
 
     // Broadcasts one claim leg under a SHORT nonce lock (resolve nonce → build → sign →
     // broadcast), then polls settlement OUTSIDE the lock — so a stalled multi-cycle
-    // claim never holds the vault's nonce lock across settlement waits (FBS-31). Nonces
-    // stay unique and gap-free because resolveNonce is mempool-aware: the just-broadcast
-    // leg advances nextAvailable, so the next leg (and any concurrent op) picks the
-    // following nonce.
+    // claim never holds the vault's nonce lock across settlement waits (FBS-31). A
+    // claim's OWN legs never collide because each waits for the prior to settle before
+    // resolving. Against CONCURRENT vault operations, nonce uniqueness relies on the
+    // same mempool-aware resolveNonce + short-lock pattern used everywhere else in this
+    // SDK — consistent with the rest of the code, not a stronger guarantee.
     const broadcastLeg = async (
       buildTx: (nonce: bigint) => Promise<StacksTransactionWire>,
       legNote: string,
     ): Promise<{ txid: string; settled: GetTransactionStatusResponse } | { broadcastError: string }> => {
       const result = await this.runNonceExclusive(async () => {
-        const n = await this.resolveNonce();
+        // Honor + validate a caller-supplied starting nonce on the first leg only.
+        const explicit = nonceHolder.value;
+        nonceHolder.value = undefined;
+        const n = await this.resolveNonce(explicit);
         const tx = await buildTx(n);
         return this.pox5SignAndBroadcast(tx, legNote);
       });
@@ -4489,13 +4496,15 @@ export class StacksSDK {
       // via mempool-aware resolveNonce; each dependent leg waits for the prior to settle.
       const txHashes: string[] = [];
       const results: ClaimResultItem[] = [];
+      // A caller-supplied nonce pins only the first leg; later legs auto-resolve.
+      const nonceHolder = { value: opts?.nonce };
       for (const item of plan) {
         // claim-rewards takes (list 6 uint) — chunk to at most 6 bonds per call.
         for (let i = 0; i < item.bonds.length; i += 6) {
           const chunk = item.bonds.slice(i, i + 6);
           const result = await this.executeClaimCycle(
             item.signerAddr, item.signerName, item.cycle,
-            chunk, chunk, opts?.note, txHashes, results,
+            chunk, chunk, nonceHolder, opts?.note, txHashes, results,
           );
           if (result.error) return { success: false, unsettled: result.unsettled, error: result.error, txHashes, results };
         }
@@ -4576,10 +4585,12 @@ export class StacksSDK {
       // other vault operations. Nonces stay unique via mempool-aware resolveNonce.
       const txHashes: string[] = [];
       const results: ClaimResultItem[] = [];
+      // A caller-supplied nonce pins only the first leg; later legs auto-resolve.
+      const nonceHolder = { value: opts?.nonce };
       for (const item of plan) {
         const result = await this.executeClaimCycle(
           item.signerAddr, item.signerName, item.cycle,
-          [], [undefined], opts?.note, txHashes, results,
+          [], [undefined], nonceHolder, opts?.note, txHashes, results,
         );
         if (result.error) return { success: false, unsettled: result.unsettled, error: result.error, txHashes, results };
       }
