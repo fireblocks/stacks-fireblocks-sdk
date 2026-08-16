@@ -4203,11 +4203,10 @@ export class StacksSDK {
     cycle: number,
     claimBondIndices: number[],
     stakerBondIndices: (number | undefined)[],
-    nonce: bigint,
     note: string | undefined,
     txHashes: string[],
     results: ClaimResultItem[],
-  ): Promise<{ nonce: bigint; error?: string; unsettled?: boolean }> => {
+  ): Promise<{ error?: string; unsettled?: boolean }> => {
     // Bound the sBTC that PoX-5 sends to the signer manager during claim-rewards.
     // total-rewards = get-earned(signer, cycle, none) + Σ get-earned(signer, cycle,
     // some(idx)) over UNIQUE bond indices. The contract pays duplicate indices once
@@ -4218,7 +4217,7 @@ export class StacksSDK {
 
     const sbtcAsset = await this.resolveSbtcAsset();
     if (!sbtcAsset) {
-      return { nonce, error: `Cannot resolve the network sBTC asset to bound claim-rewards at cycle ${cycle}; refusing to broadcast an unbounded reward claim.` };
+      return { error: `Cannot resolve the network sBTC asset to bound claim-rewards at cycle ${cycle}; refusing to broadcast an unbounded reward claim.` };
     }
     const bootAddr = (this.pox5Network as any).bootAddress as string;
     const pox5ContractId: `${string}.${string}` = `${bootAddr}.pox-5`;
@@ -4241,8 +4240,30 @@ export class StacksSDK {
       noneAccrued = earned[0] ?? BigInt(0);
       uniqueBondIndices.forEach((idx, i) => accruedByBond.set(idx, earned[i + 1] ?? BigInt(0)));
     } catch (error) {
-      return { nonce, error: `Could not read earned rewards to bound claim-rewards at cycle ${cycle}: ${formatErrorMessage(error)}` };
+      return { error: `Could not read earned rewards to bound claim-rewards at cycle ${cycle}: ${formatErrorMessage(error)}` };
     }
+
+    // Broadcasts one claim leg under a SHORT nonce lock (resolve nonce → build → sign →
+    // broadcast), then polls settlement OUTSIDE the lock — so a stalled multi-cycle
+    // claim never holds the vault's nonce lock across settlement waits (FBS-31). Nonces
+    // stay unique and gap-free because resolveNonce is mempool-aware: the just-broadcast
+    // leg advances nextAvailable, so the next leg (and any concurrent op) picks the
+    // following nonce.
+    const broadcastLeg = async (
+      buildTx: (nonce: bigint) => Promise<StacksTransactionWire>,
+      legNote: string,
+    ): Promise<{ txid: string; settled: GetTransactionStatusResponse } | { broadcastError: string }> => {
+      const result = await this.runNonceExclusive(async () => {
+        const n = await this.resolveNonce();
+        const tx = await buildTx(n);
+        return this.pox5SignAndBroadcast(tx, legNote);
+      });
+      if (!result?.txid || result.error || result.reason) {
+        return { broadcastError: [result?.error, result?.reason].filter(Boolean).join(' — ') || 'broadcast failed' };
+      }
+      const settled = await this.waitForTxSettlement(result.txid);
+      return { txid: result.txid, settled };
+    };
 
     // Records a per-bond FAILED result for this cycle when the SHARED claim-rewards leg
     // fails before the per-bond staker loop runs, so the structured results still show
@@ -4263,40 +4284,39 @@ export class StacksSDK {
       }
     };
 
-    const smClaimTx = await makeUnsignedContractCall({
-      contractAddress: signerContractAddress,
-      contractName: signerContractName,
-      functionName: 'claim-rewards',
-      functionArgs: [Cl.list(uniqueBondIndices.map(i => Cl.uint(i))), Cl.uint(cycle)],
-      publicKey: this.publicKey!,
-      fee: DEFAULT_POX_FEE_USTX,
-      nonce,
-      network: this.pox5Network,
-      // Deny mode: PoX-5 sends exactly total-rewards sBTC to the signer manager for
-      // this cycle. Computed immediately before signing from the same chain state and
-      // broadcast right after, so an exact bound is correct.
-      postConditionMode: 'deny',
-      postConditions: [
-        Pc.principal(pox5ContractId).willSendEq(totalRewards).ft(sbtcContractId, sbtcAsset.assetName),
-      ],
-    });
-    const smClaimResult = await this.pox5SignAndBroadcast(smClaimTx, `sm-claim-rewards-cycle-${cycle}`);
-    if (smClaimResult?.txid && !smClaimResult.error && !smClaimResult.reason) {
-      nonce = nonce + BigInt(1);
-      const smClaimSettled = await this.waitForTxSettlement(smClaimResult.txid);
-      const smClaimRepr: string = (smClaimSettled.data?.tx_result as any)?.repr ?? smClaimSettled.data?.tx_error ?? '';
-      if (smClaimSettled.data?.tx_status !== 'success' && !smClaimRepr.includes('u30') && !smClaimRepr.includes('u32')) {
-        const msg = `signer-manager.claim-rewards failed at cycle ${cycle}: ${smClaimRepr}`;
-        recordCycleFailure(msg, smClaimResult?.txid ?? null);
-        return { nonce, unsettled: !smClaimSettled.success, error: msg };
-      }
-    } else if (smClaimResult?.error || smClaimResult?.reason) {
-      const errMsg = [smClaimResult?.error, smClaimResult?.reason].filter(Boolean).join(' — ');
-      const msg = `signer-manager.claim-rewards broadcast failed at cycle ${cycle}: ${errMsg}`;
+    // ── Leg 1: signer-manager claim-rewards (PoX-5 sends total-rewards sBTC to the manager) ──
+    const smClaim = await broadcastLeg(
+      (n) => makeUnsignedContractCall({
+        contractAddress: signerContractAddress,
+        contractName: signerContractName,
+        functionName: 'claim-rewards',
+        functionArgs: [Cl.list(uniqueBondIndices.map(i => Cl.uint(i))), Cl.uint(cycle)],
+        publicKey: this.publicKey!,
+        fee: DEFAULT_POX_FEE_USTX,
+        nonce: n,
+        network: this.pox5Network,
+        // Deny mode: PoX-5 sends exactly total-rewards sBTC to the signer manager for
+        // this cycle. Computed from the same chain state read just above.
+        postConditionMode: 'deny',
+        postConditions: [
+          Pc.principal(pox5ContractId).willSendEq(totalRewards).ft(sbtcContractId, sbtcAsset.assetName),
+        ],
+      }),
+      `sm-claim-rewards-cycle-${cycle}`,
+    );
+    if ('broadcastError' in smClaim) {
+      const msg = `signer-manager.claim-rewards broadcast failed at cycle ${cycle}: ${smClaim.broadcastError}`;
       recordCycleFailure(msg, null);
-      return { nonce, error: msg };
+      return { error: msg };
     }
-    const signerClaimTxid = smClaimResult?.txid ?? null;
+    // u30 (ERR_DISTRIBUTION_ALREADY_COMPUTED) / u32 are benign — rewards already collected.
+    const smClaimRepr: string = (smClaim.settled.data?.tx_result as any)?.repr ?? smClaim.settled.data?.tx_error ?? '';
+    if (smClaim.settled.data?.tx_status !== 'success' && !smClaimRepr.includes('u30') && !smClaimRepr.includes('u32')) {
+      const msg = `signer-manager.claim-rewards failed at cycle ${cycle}: ${smClaimRepr}`;
+      recordCycleFailure(msg, smClaim.txid);
+      return { unsettled: !smClaim.settled.success, error: msg };
+    }
+    const signerClaimTxid: string = smClaim.txid;
 
     // The staker payout is performed by the signer manager from its OWN balance
     // (PoX-5 moves no sBTC on this leg — answers §3b), so the bound is manager-specific
@@ -4305,7 +4325,6 @@ export class StacksSDK {
     const stakerPayoutPolicy = this.signerManagerRegistry.get(signerManager)?.payoutPolicy;
     if (stakerBondIndices.length > 0 && !stakerPayoutPolicy) {
       return {
-        nonce,
         error: `No registered payout policy for signer manager ${signerManager} — refusing an unbounded staker reward claim at cycle ${cycle}. Register a signerManagerAdapters entry with a payout policy for this manager.`,
       };
     }
@@ -4338,50 +4357,50 @@ export class StacksSDK {
           ...(error ? { error } : {}),
         });
 
-      const smStakerTx = await makeUnsignedContractCall({
-        contractAddress: signerContractAddress,
-        contractName: signerContractName,
-        functionName: 'claim-staker-rewards',
-        functionArgs: [
-          Cl.address(this.address!),
-          Cl.uint(cycle),
-          bondIndex !== undefined ? Cl.some(Cl.uint(bondIndex)) : Cl.none(),
-        ],
-        publicKey: this.publicKey!,
-        fee: DEFAULT_POX_FEE_USTX,
-        nonce,
-        network: this.pox5Network,
-        // Deny mode: the manager sends the staker at most maxPayoutSats of the
-        // policy asset (a deliberate upper bound, per answers §3a).
-        postConditionMode: 'deny',
-        postConditions: [
-          Pc.principal(signerManager)
-            .willSendLte(stakerPayoutPolicy!.maxPayoutSats)
-            .ft(stakerPayoutAssetId!, stakerPayoutPolicy!.asset.assetName),
-        ],
-      });
       const defaultNote = bondIndex !== undefined
         ? `sm-claim-staker-rewards-cycle-${cycle}-bond-${bondIndex}`
         : `sm-claim-staker-stx-rewards-cycle-${cycle}`;
       const bondSuffix = bondIndex !== undefined ? ` bond ${bondIndex}` : '';
-      const smStakerResult = await this.pox5SignAndBroadcast(smStakerTx, note ?? defaultNote);
-      if (!smStakerResult?.txid || smStakerResult.error || smStakerResult.reason) {
-        const errMsg = [smStakerResult?.error, smStakerResult?.reason].filter(Boolean).join(' — ') || 'broadcast failed';
-        recordResult('failed', null, errMsg);
-        return { nonce, error: `Failed at cycle ${cycle}${bondSuffix}: ${errMsg}` };
+
+      const smStaker = await broadcastLeg(
+        (n) => makeUnsignedContractCall({
+          contractAddress: signerContractAddress,
+          contractName: signerContractName,
+          functionName: 'claim-staker-rewards',
+          functionArgs: [
+            Cl.address(this.address!),
+            Cl.uint(cycle),
+            bondIndex !== undefined ? Cl.some(Cl.uint(bondIndex)) : Cl.none(),
+          ],
+          publicKey: this.publicKey!,
+          fee: DEFAULT_POX_FEE_USTX,
+          nonce: n,
+          network: this.pox5Network,
+          // Deny mode: the manager sends the staker at most maxPayoutSats of the
+          // policy asset (a deliberate upper bound, per answers §3a).
+          postConditionMode: 'deny',
+          postConditions: [
+            Pc.principal(signerManager)
+              .willSendLte(stakerPayoutPolicy!.maxPayoutSats)
+              .ft(stakerPayoutAssetId!, stakerPayoutPolicy!.asset.assetName),
+          ],
+        }),
+        note ?? defaultNote,
+      );
+      if ('broadcastError' in smStaker) {
+        recordResult('failed', null, smStaker.broadcastError);
+        return { error: `Failed at cycle ${cycle}${bondSuffix}: ${smStaker.broadcastError}` };
       }
-      const settled = await this.waitForTxSettlement(smStakerResult.txid);
-      if (!settled.success || settled.data?.tx_status !== 'success') {
-        const stakerRepr: string = (settled.data?.tx_result as any)?.repr ?? settled.data?.tx_error ?? '';
-        recordResult('failed', smStakerResult.txid, stakerRepr);
-        return { nonce, unsettled: !settled.success, error: `Claim failed on-chain at cycle ${cycle}${bondSuffix}: ${stakerRepr}` };
+      if (!smStaker.settled.success || smStaker.settled.data?.tx_status !== 'success') {
+        const stakerRepr: string = (smStaker.settled.data?.tx_result as any)?.repr ?? smStaker.settled.data?.tx_error ?? '';
+        recordResult('failed', smStaker.txid, stakerRepr);
+        return { unsettled: !smStaker.settled.success, error: `Claim failed on-chain at cycle ${cycle}${bondSuffix}: ${stakerRepr}` };
       }
-      recordResult('claimed', smStakerResult.txid);
-      txHashes.push(smStakerResult.txid);
-      nonce = nonce + BigInt(1);
+      recordResult('claimed', smStaker.txid);
+      txHashes.push(smStaker.txid);
     }
 
-    return { nonce };
+    return {};
   };
 
   /**
@@ -4464,25 +4483,24 @@ export class StacksSDK {
         };
       }
 
-      // Execution phase (INSIDE the nonce lock): the contiguous-nonce broadcast sequence.
-      return await this.runNonceExclusive(async (): Promise<ClaimRewardsResponse> => {
-        let nonce = await this.resolveNonce(opts?.nonce);
-        const txHashes: string[] = [];
-        const results: ClaimResultItem[] = [];
-        for (const item of plan) {
-          // claim-rewards takes (list 6 uint) — chunk to at most 6 bonds per call.
-          for (let i = 0; i < item.bonds.length; i += 6) {
-            const chunk = item.bonds.slice(i, i + 6);
-            const result = await this.executeClaimCycle(
-              item.signerAddr, item.signerName, item.cycle,
-              chunk, chunk, nonce, opts?.note, txHashes, results,
-            );
-            nonce = result.nonce;
-            if (result.error) return { success: false, unsettled: result.unsettled, error: result.error, txHashes, results };
-          }
+      // Execution: NO outer nonce lock — executeClaimCycle takes a SHORT lock per leg
+      // and polls settlement outside it (FBS-31), so a stalled multi-cycle claim does
+      // not block other vault operations. Legs stay correctly ordered and nonces unique
+      // via mempool-aware resolveNonce; each dependent leg waits for the prior to settle.
+      const txHashes: string[] = [];
+      const results: ClaimResultItem[] = [];
+      for (const item of plan) {
+        // claim-rewards takes (list 6 uint) — chunk to at most 6 bonds per call.
+        for (let i = 0; i < item.bonds.length; i += 6) {
+          const chunk = item.bonds.slice(i, i + 6);
+          const result = await this.executeClaimCycle(
+            item.signerAddr, item.signerName, item.cycle,
+            chunk, chunk, opts?.note, txHashes, results,
+          );
+          if (result.error) return { success: false, unsettled: result.unsettled, error: result.error, txHashes, results };
         }
-        return { success: true, txHashes, results };
-      });
+      }
+      return { success: true, txHashes, results };
     } catch (error) {
       return { success: false, error: `Failed to claim rewards: ${formatErrorMessage(error)}` };
     }
@@ -4553,21 +4571,19 @@ export class StacksSDK {
         return { success: false, error: `No STX-only rewards for this staker in cycles ${startCycle}-${endCycle} (last_computed_cycle: ${lastComputedCycle}, current_cycle: ${pox.rewardCycleId})` };
       }
 
-      // Execution phase (INSIDE the nonce lock): the contiguous-nonce broadcast sequence.
-      return await this.runNonceExclusive(async (): Promise<ClaimRewardsResponse> => {
-        let nonce = await this.resolveNonce(opts?.nonce);
-        const txHashes: string[] = [];
-        const results: ClaimResultItem[] = [];
-        for (const item of plan) {
-          const result = await this.executeClaimCycle(
-            item.signerAddr, item.signerName, item.cycle,
-            [], [undefined], nonce, opts?.note, txHashes, results,
-          );
-          nonce = result.nonce;
-          if (result.error) return { success: false, unsettled: result.unsettled, error: result.error, txHashes, results };
-        }
-        return { success: true, txHashes, results };
-      });
+      // Execution: NO outer nonce lock — executeClaimCycle takes a SHORT lock per leg
+      // and polls settlement outside it (FBS-31), so a stalled claim does not block
+      // other vault operations. Nonces stay unique via mempool-aware resolveNonce.
+      const txHashes: string[] = [];
+      const results: ClaimResultItem[] = [];
+      for (const item of plan) {
+        const result = await this.executeClaimCycle(
+          item.signerAddr, item.signerName, item.cycle,
+          [], [undefined], opts?.note, txHashes, results,
+        );
+        if (result.error) return { success: false, unsettled: result.unsettled, error: result.error, txHashes, results };
+      }
+      return { success: true, txHashes, results };
     } catch (error) {
       return { success: false, error: `Failed to claim STX-only rewards: ${formatErrorMessage(error)}` };
     }
