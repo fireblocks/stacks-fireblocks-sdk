@@ -290,6 +290,9 @@ export class ApiService {
         case ActionType.UNLOCK_MATURED_BOND:
           result = await sdk.unlockMaturedBond(params.destinationBtcAddress, { feeSats: params.feeSats, bondIndex: params.bondIndex });
           break;
+        case ActionType.REPLACE_BTC_RECOVERY_FEE:
+          result = await sdk.replaceBtcRecoveryFee(params.originalTxid, params.newFeeSats, { bondIndex: params.bondIndex, kind: params.kind });
+          break;
         case ActionType.RENEW_BOND:
           result = await sdk.renewBond(params.nextBondIndex, params.signerManager, { feeSats: params.feeSats, note: params.note, nonce: params.nonce, externalId: params.externalId, confirmations: params.confirmations });
           break;

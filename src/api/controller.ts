@@ -1102,6 +1102,35 @@ export const unlockMaturedBond: Handler = async (req, res, next) => {
   }
 };
 
+// POST /:vaultId/stacking/pox5/bond/replace-fee
+export const replaceBtcRecoveryFee: Handler = async (req, res, next) => {
+  try {
+    const vaultId = getVaultId(req);
+    const originalTxid = String(req.body.originalTxid || "").trim();
+    if (!originalTxid) {
+      res.status(400).json({ error: "Bad Request: originalTxid is required" });
+      return;
+    }
+    if (req.body.newFeeSats === undefined) {
+      res.status(400).json({ error: "Bad Request: newFeeSats is required" });
+      return;
+    }
+    let newFeeSats: bigint;
+    try {
+      newFeeSats = BigInt(String(req.body.newFeeSats));
+    } catch {
+      res.status(400).json({ error: "Bad Request: newFeeSats must be an integer number of sats" });
+      return;
+    }
+    const bondIndex = req.body.bondIndex !== undefined ? Number(req.body.bondIndex) : undefined;
+    const kind = req.body.kind === 'matured' || req.body.kind === 'early-exit' ? req.body.kind : undefined;
+    const result = await apiService.executeAction(vaultId, ActionType.REPLACE_BTC_RECOVERY_FEE, { originalTxid, newFeeSats, bondIndex, kind });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
 // POST /:vaultId/stacking/pox5/bond/renew
 export const renewBond: Handler = async (req, res, next) => {
   try {

@@ -395,6 +395,29 @@ export type SpendEarlyExitResponse = {
   error?: string;
 };
 
+/**
+ * Result of a BIP-125 fee replacement of a recovery spend. `replacement` carries the
+ * before/after values a UI must display before the replacement is authorized: the old
+ * and new absolute fee, the old and new amount the destination receives (the recovery
+ * spend has a single output, so the fee increase is taken from the destination amount),
+ * and the corresponding fee rates.
+ */
+export type BtcFeeReplacementResponse = {
+  success: boolean;
+  btcTxid?: string;
+  error?: string;
+  replacement?: {
+    oldFeeSats: string;
+    newFeeSats: string;
+    oldDestinationSats: string;
+    newDestinationSats: string;
+    feeRateOldSatVb: string;
+    feeRateNewSatVb: string;
+    destination: string;
+    branch: 'matured' | 'early-exit';
+  };
+};
+
 export type RenewBondResult = {
   success: boolean;
   btcTxid?: string;

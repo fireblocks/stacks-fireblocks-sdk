@@ -75,6 +75,7 @@ export enum ActionType {
   GET_EARLY_EXIT_PUBLIC_KEY = "getEarlyExitPublicKey",
   GET_REQUIREMENTS = "getRequirements",
   UNLOCK_MATURED_BOND = "unlockMaturedBond",
+  REPLACE_BTC_RECOVERY_FEE = "replaceBtcRecoveryFee",
   RENEW_BOND = "renewBond",
   CALCULATE_REWARDS = "calculateRewards",
   CLAIM_REWARDS = "claimRewards",

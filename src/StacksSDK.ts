@@ -34,6 +34,7 @@ import {
   DerivedLock,
   UnlockBtcResponse,
   SpendEarlyExitResponse,
+  BtcFeeReplacementResponse,
   RenewBondResult,
   CalculateRewardsResponse,
   ClaimRewardsResponse,
@@ -68,6 +69,7 @@ import { SignerManagerRegistry } from "./staking/signer-manager-adapter";
 import { createHash } from "crypto";
 import { parseOptionalFee, ValidationError } from "./utils/validation";
 import { formatErrorMessage } from "./utils/errorHandling";
+import { checkFeeReplacement, ParsedRecoveryTx } from "./utils/rbf";
 import { validateApiCredentials } from "./utils/fireblocks.utils";
 import {
   assertResultSuccess,
@@ -3878,6 +3880,122 @@ export class StacksSDK {
       return { success: true, btcTxid };
     } catch (error) {
       return { success: false, error: `Failed to spend early exit UTXO: ${formatErrorMessage(error)}` };
+    }
+  };
+
+  /**
+   * Replaces a still-unconfirmed recovery spend (from unlockMaturedBond or
+   * spendEarlyExitUtxo) with a higher-fee transaction (BIP-125 RBF).
+   *
+   * A recovery spend is one input (the lock UTXO) and one output (the destination), so
+   * the fee can only be raised by REDUCING the destination amount — this method never
+   * claims to preserve the received amount. It:
+   *   - preserves the original lock input and destination address;
+   *   - requires the new absolute fee to exceed the original AND to clear the BIP-125
+   *     rule-4 increment (≥ 1 sat/vB over the original, so the replacement pays for its
+   *     own relay bandwidth) — since the size is fixed, a higher absolute fee is also a
+   *     higher fee rate;
+   *   - refuses to create a dust output;
+   *   - rebuilds, re-authorizes, and re-signs through Fireblocks (fresh signatures);
+   *   - rejects if the original is already confirmed or can no longer be found
+   *     (dropped/replaced), and if the still-unspent lock UTXO has been spent by a
+   *     confirmed transaction the rebuild's UTXO lookup rejects it.
+   * The response carries old/new fee and old/new destination amount for display.
+   *
+   * @param originalTxid - The txid of the recovery spend being replaced.
+   * @param newFeeSats - The new absolute fee in sats (must exceed the original fee).
+   * @param opts.kind - Force the spend branch; defaults to inferring from bond maturity.
+   */
+  public replaceBtcRecoveryFee = async (
+    originalTxid: string,
+    newFeeSats: bigint,
+    opts?: { bondIndex?: number; kind?: 'matured' | 'early-exit' },
+  ): Promise<BtcFeeReplacementResponse> => {
+    try {
+      if (!/^[0-9a-fA-F]{64}$/.test(originalTxid)) {
+        return { success: false, error: `Invalid original txid: ${originalTxid}` };
+      }
+      if (newFeeSats <= BigInt(0)) {
+        return { success: false, error: 'newFeeSats must be positive' };
+      }
+
+      // 1. Fetch the original tx; reject if confirmed or gone (already replaced/dropped).
+      let orig: any;
+      try {
+        const res = await fetch(`${this.esploraBase()}/tx/${originalTxid}`);
+        if (res.status === 404) {
+          return { success: false, error: `Original tx ${originalTxid} not found — it may already be confirmed and pruned, or replaced/dropped from the mempool. Read its current state before replacing.` };
+        }
+        if (!res.ok) throw new Error(`Esplora HTTP ${res.status}`);
+        orig = await res.json();
+      } catch (error) {
+        return { success: false, error: `Could not read original tx ${originalTxid} (treat as UNKNOWN, not replaceable): ${formatErrorMessage(error)}` };
+      }
+      if (orig?.status?.confirmed) {
+        return { success: false, error: `Original tx ${originalTxid} is already confirmed (block ${orig.status.block_height}) — nothing to replace.` };
+      }
+
+      // 2. Resolve the bond lock so the replacement can be verified to spend THIS bond's
+      //    lock output (and never an unrelated transaction).
+      const lock = await this.deriveLock(undefined, opts?.bondIndex);
+      if (!lock) return { success: false, error: 'No L1-locked bond found to replace a recovery spend for.' };
+
+      // 3. Parse the original tx and run the pure BIP-125 fee-rule + shape validation.
+      const vin0 = Array.isArray(orig.vin) ? orig.vin[0] : undefined;
+      const parsed: ParsedRecoveryTx = {
+        confirmed: !!orig?.status?.confirmed,
+        blockHeight: orig?.status?.block_height,
+        feeSats: BigInt(orig.fee ?? 0),
+        // vsize from weight (ceil(weight/4)); Esplora reports weight, not vsize directly.
+        vsize: orig.weight ? Math.ceil(Number(orig.weight) / 4) : this.RECOVERY_SPEND_VBYTES,
+        destination: Array.isArray(orig.vout) ? orig.vout[0]?.scriptpubkey_address : undefined,
+        destinationSats: BigInt((Array.isArray(orig.vout) ? orig.vout[0]?.value : 0) ?? 0),
+        outputCount: Array.isArray(orig.vout) ? orig.vout.length : 0,
+        lockOutpoint: vin0 ? { txid: vin0.txid as string, vout: vin0.vout as number } : undefined,
+        prevoutAddress: vin0?.prevout?.scriptpubkey_address,
+      };
+      const check = checkFeeReplacement(
+        parsed, newFeeSats, lock.lockingAddress,
+        lock.btcTxid !== undefined && lock.vout !== undefined ? { txid: lock.btcTxid, vout: lock.vout } : undefined,
+      );
+      if (!check.ok) return { success: false, error: (check as { error: string }).error };
+
+      // 4. Determine the spend branch. Default: matured OP_IF once past unlockHeight,
+      //    otherwise the OP_ELSE early-exit path.
+      let branch = opts?.kind;
+      if (!branch) {
+        const tipHeight = await fetch(`${this.esploraBase()}/blocks/tip/height`).then(r => r.text()).then(Number);
+        branch = Number.isFinite(tipHeight) && tipHeight >= lock.unlockHeight ? 'matured' : 'early-exit';
+      }
+
+      // 5. Rebuild through the existing spend path with the new fee, preserving the
+      //    original destination (re-authorized inside the spend) and lock outpoint. The
+      //    spend refuses a dust output and re-signs fresh, satisfying the dust and
+      //    fresh-authorization rules.
+      const spendOpts = { feeSats: newFeeSats, bondIndex: opts?.bondIndex, outpointOverride: check.lockOutpoint };
+      const spend = branch === 'matured'
+        ? await this.unlockMaturedBond(check.destination, spendOpts)
+        : await this.spendEarlyExitUtxo(check.destination, spendOpts);
+      if (!spend.success || !spend.btcTxid) {
+        return { success: false, error: spend.error ?? 'Replacement spend failed.' };
+      }
+
+      return {
+        success: true,
+        btcTxid: spend.btcTxid,
+        replacement: {
+          oldFeeSats: check.oldFeeSats.toString(),
+          newFeeSats: check.newFeeSats.toString(),
+          oldDestinationSats: check.oldDestinationSats.toString(),
+          newDestinationSats: check.newDestinationSats.toString(),
+          feeRateOldSatVb: check.feeRateOldSatVb,
+          feeRateNewSatVb: check.feeRateNewSatVb,
+          destination: check.destination,
+          branch,
+        },
+      };
+    } catch (error) {
+      return { success: false, error: `Failed to replace recovery fee: ${formatErrorMessage(error)}` };
     }
   };
 

@@ -1432,6 +1432,54 @@ router.post("/:vaultId/stacking/pox5/bond/unlock", validateVaultId, controller.u
 
 /**
  * @openapi
+ * /{vaultId}/stacking/pox5/bond/replace-fee:
+ *   post:
+ *     tags: [PoX-5 BTC Bonds]
+ *     summary: Replace a recovery spend's fee (BIP-125 RBF)
+ *     description: >
+ *       Replaces a still-unconfirmed recovery spend (from unlock or early-exit) with a
+ *       higher-fee transaction. The recovery spend has a single output, so the fee is
+ *       raised by reducing the destination amount; the original lock input and destination
+ *       are preserved. The new absolute fee must exceed the original and clear the BIP-125
+ *       rule-4 increment. Rejects an already-confirmed or already-replaced original.
+ *       The response includes the old/new fee and old/new destination amount for display.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - originalTxid
+ *               - newFeeSats
+ *             properties:
+ *               originalTxid:
+ *                 type: string
+ *                 description: Txid of the unconfirmed recovery spend to replace.
+ *               newFeeSats:
+ *                 type: integer
+ *                 description: New absolute fee in sats (must exceed the original fee).
+ *               bondIndex:
+ *                 type: integer
+ *                 description: Bond index, when the bond membership has already expired on-chain.
+ *               kind:
+ *                 type: string
+ *                 enum: [matured, early-exit]
+ *                 description: Force the spend branch; defaults to inferring from bond maturity.
+ *     responses:
+ *       200:
+ *         description: Replacement broadcast; returns btcTxid and the fee/amount deltas.
+ *       400:
+ *         description: Original already confirmed/replaced, fee too low, or dust output.
+ *       500:
+ *         description: Internal server error
+ */
+router.post("/:vaultId/stacking/pox5/bond/replace-fee", validateVaultId, controller.replaceBtcRecoveryFee);
+
+/**
+ * @openapi
  * /{vaultId}/stacking/pox5/bond/renew:
  *   post:
  *     tags: [PoX-5 BTC Bonds]
