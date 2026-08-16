@@ -50,6 +50,7 @@ export enum ActionType {
   CHECK_STATUS = "checkStatus",
   STACK_SOLO = "stackSolo",
   GET_TX_STATUS_BY_ID = "getTxStatusById",
+  GET_BTC_TX_STATUS = "getBtcTxStatus",
   GET_POX_INFO = "getPoxInfo",
   INCREASE_STACKED_AMOUNT = "increaseStackedAmount",
   EXTEND_STACKING_PERIOD = "extendStackingPeriod",

@@ -87,6 +87,9 @@ export class ApiService {
         case ActionType.GET_TX_STATUS_BY_ID:
           result = await sdk.getTxStatusById(params.txId);
           break;
+        case ActionType.GET_BTC_TX_STATUS:
+          result = await sdk.getBtcTxStatus(params.btcTxid);
+          break;
 
         case ActionType.DELEGATE_TO_POOL:
           result = await sdk.delegateToPool(

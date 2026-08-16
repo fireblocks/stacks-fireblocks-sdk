@@ -156,6 +156,37 @@ router.get(
   controller.getTxStatusById,
 );
 
+/**
+ * @openapi
+ *  /btc/transactions/{btcTxid}:
+ *   get:
+ *     tags: [Transactions]
+ *     summary: Get Bitcoin transaction status by txid (Esplora)
+ *     description: >
+ *       Retrieves the confirmation status of a BITCOIN transaction from the selected
+ *       Esplora API. Use this for any btcTxid returned by the bond/recovery endpoints —
+ *       a Bitcoin txid must never be polled through the Stacks /transactions endpoint.
+ *       Returns found:false (not an error) when Esplora does not yet know the txid.
+ *     parameters:
+ *       - in: path
+ *         name: btcTxid
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Bitcoin transaction ID (64 hex chars) to fetch.
+ *     responses:
+ *       200:
+ *         description: Bitcoin transaction status fetched successfully
+ *       400:
+ *         description: Invalid btcTxid
+ *       500:
+ *         description: Internal server error
+ */
+router.get(
+  "/btc/transactions/:btcTxid",
+  controller.getBtcTxStatus,
+);
+
 // Protocol info. Reports whichever PoX contract the configured node exposes, so this
 // returns pox-5 on networks where pox-5 is active. See /stacking/pox5/info for the
 // PoX-5 specific shape.

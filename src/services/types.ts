@@ -110,7 +110,28 @@ export type TransactionDetails = {
 
 export type GetTransactionStatusResponse = {
   success: boolean;
+  /** The chain this status was read from — always Stacks for this endpoint. */
+  chain?: 'stacks';
   data?: TransactionDetails;
+  error?: string;
+};
+
+/**
+ * Status of a Bitcoin transaction read from the selected Esplora API. A Bitcoin txid must
+ * be polled here, never through the Stacks status endpoint. `found: false` means the txid
+ * is not (yet) known to Esplora — distinct from a read failure, which sets `success:false`.
+ */
+export type BtcTxStatusResponse = {
+  success: boolean;
+  chain: 'bitcoin';
+  data?: {
+    txid: string;
+    found: boolean;
+    confirmed: boolean;
+    block_height?: number | null;
+    block_hash?: string | null;
+    confirmations: number;
+  };
   error?: string;
 };
 

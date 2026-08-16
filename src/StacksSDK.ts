@@ -50,6 +50,7 @@ import {
   GetPoxInfoResponse,
   GetTransactionHistoryResponse,
   GetTransactionStatusResponse,
+  BtcTxStatusResponse,
   StakerInfoResponse,
   VerifySignerGrantResponse,
   TokenType,
@@ -462,6 +463,7 @@ export class StacksSDK {
 
       return {
         success: true,
+        chain: 'stacks',
         data: txDetails,
       };
     } catch (error) {
@@ -470,8 +472,54 @@ export class StacksSDK {
       );
       return {
         success: false,
+        chain: 'stacks',
         error: formatErrorMessage(error),
       };
+    }
+  };
+
+  /**
+   * Retrieves the status of a BITCOIN transaction from the selected Esplora API.
+   *
+   * A Bitcoin txid (returned as `btcTxid` by createBond, renewBond, unlockMaturedBond,
+   * spendEarlyExitUtxo, and replaceBtcRecoveryFee) MUST be polled here, never through
+   * getTxStatusById — that endpoint queries the Stacks API and a BTC txid would never be
+   * found there. The response is tagged `chain: 'bitcoin'`. A txid Esplora does not know
+   * yet returns `found: false` (not an error); a transport failure returns `success:false`
+   * (UNKNOWN, never silently "not confirmed").
+   */
+  public getBtcTxStatus = async (btcTxid: string): Promise<BtcTxStatusResponse> => {
+    if (!/^[0-9a-fA-F]{64}$/.test(btcTxid)) {
+      return { success: false, chain: 'bitcoin', error: `Invalid BTC txid: ${btcTxid}` };
+    }
+    try {
+      const res = await fetch(`${this.esploraBase()}/tx/${btcTxid}`);
+      if (res.status === 404) {
+        return { success: true, chain: 'bitcoin', data: { txid: btcTxid, found: false, confirmed: false, confirmations: 0 } };
+      }
+      if (!res.ok) throw new Error(`Esplora HTTP ${res.status}`);
+      const tx = await res.json();
+      const confirmed = !!tx?.status?.confirmed;
+      const blockHeight: number | null = tx?.status?.block_height ?? null;
+      let confirmations = 0;
+      if (confirmed && typeof blockHeight === 'number') {
+        const tip = await fetch(`${this.esploraBase()}/blocks/tip/height`).then(r => r.text()).then(Number);
+        confirmations = Number.isFinite(tip) ? Math.max(0, tip - blockHeight + 1) : 0;
+      }
+      return {
+        success: true,
+        chain: 'bitcoin',
+        data: {
+          txid: btcTxid,
+          found: true,
+          confirmed,
+          block_height: blockHeight,
+          block_hash: tx?.status?.block_hash ?? null,
+          confirmations,
+        },
+      };
+    } catch (error) {
+      return { success: false, chain: 'bitcoin', error: `Could not read BTC tx ${btcTxid} status (UNKNOWN, not "unconfirmed"): ${formatErrorMessage(error)}` };
     }
   };
 

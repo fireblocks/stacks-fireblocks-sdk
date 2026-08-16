@@ -408,6 +408,25 @@ export const getTxStatusById: Handler = async (req, res, next) => {
   }
 };
 
+// GET /:vaultId/btc/transactions/:btcTxid
+export const getBtcTxStatus: Handler = async (req, res, next) => {
+  try {
+    const { btcTxid } = req.params;
+    if (!btcTxid || typeof btcTxid !== "string") {
+      res.status(400).json({ error: "Bad Request: btcTxid is required" });
+      return;
+    }
+    const tx = await apiService.executeAction(
+      helperConstants.vaultIdForReadOnlyActions,
+      ActionType.GET_BTC_TX_STATUS,
+      { btcTxid },
+    );
+    res.json(tx);
+  } catch (err) {
+    next(err);
+  }
+};
+
 // POST /:vaultId/stacking/solo
 export const stackSolo: Handler = async (req, res, next) => {
   try {
