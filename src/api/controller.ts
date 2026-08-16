@@ -1196,8 +1196,8 @@ export const claimStxOnlyRewards: Handler = async (req, res, next) => {
     // Optional historical range so an EXPIRED STX-only stake can still claim past cycles.
     const fromCycle = req.body.fromCycle !== undefined ? Number(req.body.fromCycle) : undefined;
     const toCycle = req.body.toCycle !== undefined ? Number(req.body.toCycle) : undefined;
-    if ((fromCycle !== undefined && !Number.isInteger(fromCycle)) || (toCycle !== undefined && !Number.isInteger(toCycle))) {
-      res.status(400).json({ error: "Bad Request: fromCycle/toCycle must be integers" });
+    if ((fromCycle !== undefined && (!Number.isInteger(fromCycle) || fromCycle < 0)) || (toCycle !== undefined && (!Number.isInteger(toCycle) || toCycle < 0))) {
+      res.status(400).json({ error: "Bad Request: fromCycle/toCycle must be non-negative integers" });
       return;
     }
     const result = await apiService.executeAction(vaultId, ActionType.CLAIM_STX_ONLY_REWARDS, { note, nonce, fromCycle, toCycle });

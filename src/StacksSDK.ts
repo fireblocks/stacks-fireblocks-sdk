@@ -2097,8 +2097,10 @@ export class StacksSDK {
       if (typeof rate !== 'number' || !(rate > 0)) throw new Error('no usable fee rate');
       return BigInt(Math.ceil(rate * vbytes));
     } catch {
-      // ~2 sat/vB floor (or 500 sats, whichever is higher) so a fee-estimate outage
-      // never blocks a recovery.
+      // Fee-estimate endpoint unavailable: fall back to a 500-sat floor (or 2 sat/vB
+      // for larger spends) so recovery is never blocked. This is a flat fallback, so an
+      // RBF bump during an outage still needs an explicit higher opts.feeSats to satisfy
+      // BIP-125's fee-increase rule.
       return BigInt(Math.max(500, vbytes * 2));
     }
   };
@@ -4242,6 +4244,25 @@ export class StacksSDK {
       return { nonce, error: `Could not read earned rewards to bound claim-rewards at cycle ${cycle}: ${formatErrorMessage(error)}` };
     }
 
+    // Records a per-bond FAILED result for this cycle when the SHARED claim-rewards leg
+    // fails before the per-bond staker loop runs, so the structured results still show
+    // the cycle rather than silently omitting it.
+    const recordCycleFailure = (error: string, signerClaimTxid: string | null) => {
+      for (const b of stakerBondIndices) {
+        results.push({
+          bondIndex: b ?? null,
+          rewardCycle: cycle,
+          signerManager,
+          signerAccruedSats: (b !== undefined ? (accruedByBond.get(b) ?? BigInt(0)) : noneAccrued).toString(),
+          stakerPaidSats: null,
+          signerClaimTxid,
+          stakerClaimTxid: null,
+          status: 'failed',
+          error,
+        });
+      }
+    };
+
     const smClaimTx = await makeUnsignedContractCall({
       contractAddress: signerContractAddress,
       contractName: signerContractName,
@@ -4265,11 +4286,15 @@ export class StacksSDK {
       const smClaimSettled = await this.waitForTxSettlement(smClaimResult.txid);
       const smClaimRepr: string = (smClaimSettled.data?.tx_result as any)?.repr ?? smClaimSettled.data?.tx_error ?? '';
       if (smClaimSettled.data?.tx_status !== 'success' && !smClaimRepr.includes('u30') && !smClaimRepr.includes('u32')) {
-        return { nonce, unsettled: !smClaimSettled.success, error: `signer-manager.claim-rewards failed at cycle ${cycle}: ${smClaimRepr}` };
+        const msg = `signer-manager.claim-rewards failed at cycle ${cycle}: ${smClaimRepr}`;
+        recordCycleFailure(msg, smClaimResult?.txid ?? null);
+        return { nonce, unsettled: !smClaimSettled.success, error: msg };
       }
     } else if (smClaimResult?.error || smClaimResult?.reason) {
       const errMsg = [smClaimResult?.error, smClaimResult?.reason].filter(Boolean).join(' — ');
-      return { nonce, error: `signer-manager.claim-rewards broadcast failed at cycle ${cycle}: ${errMsg}` };
+      const msg = `signer-manager.claim-rewards broadcast failed at cycle ${cycle}: ${errMsg}`;
+      recordCycleFailure(msg, null);
+      return { nonce, error: msg };
     }
     const signerClaimTxid = smClaimResult?.txid ?? null;
 
@@ -4304,7 +4329,9 @@ export class StacksSDK {
           rewardCycle: cycle,
           signerManager,
           signerAccruedSats: signerAccruedSats.toString(),
-          stakerPaidSats: stakerPaidSats !== null ? stakerPaidSats.toString() : null,
+          // Only report a paid amount when the payout actually settled; a failed leg
+          // paid nothing, so it must not carry the pre-claim entitlement.
+          stakerPaidSats: status === 'claimed' && stakerPaidSats !== null ? stakerPaidSats.toString() : null,
           signerClaimTxid,
           stakerClaimTxid,
           status,
@@ -4537,7 +4564,7 @@ export class StacksSDK {
             [], [undefined], nonce, opts?.note, txHashes, results,
           );
           nonce = result.nonce;
-          if (result.error) return { success: false, error: result.error, txHashes, results };
+          if (result.error) return { success: false, unsettled: result.unsettled, error: result.error, txHashes, results };
         }
         return { success: true, txHashes, results };
       });
