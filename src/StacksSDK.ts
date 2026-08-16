@@ -1223,6 +1223,7 @@ export class StacksSDK {
       if (!txStatus.success || txStatus.data?.tx_status !== "success") {
         return {
           success: false,
+          unsettled: !txStatus.success,
           error: txStatus.error || txStatus.data?.tx_error || "Stake transaction failed at the contract level.",
           txHash: result.txid,
         };
@@ -1319,6 +1320,7 @@ export class StacksSDK {
       if (!txStatus.success || txStatus.data?.tx_status !== "success") {
         return {
           success: false,
+          unsettled: !txStatus.success,
           error: txStatus.error || txStatus.data?.tx_error || "Update-stake transaction failed at the contract level.",
           txHash: result.txid,
         };
@@ -1395,6 +1397,7 @@ export class StacksSDK {
       if (!txStatus.success || txStatus.data?.tx_status !== "success") {
         return {
           success: false,
+          unsettled: !txStatus.success,
           error: txStatus.error || txStatus.data?.tx_error || "Unstake transaction failed at the contract level.",
           txHash: result.txid,
         };
@@ -1502,6 +1505,7 @@ export class StacksSDK {
       if (!txStatus.success || txStatus.data?.tx_status !== "success") {
         return {
           success: false,
+          unsettled: !txStatus.success,
           error: txStatus.error || txStatus.data?.tx_error || "register-self transaction failed at the contract level.",
           txHash: result.txid,
         };
@@ -1559,6 +1563,7 @@ export class StacksSDK {
       if (!txStatus.success || txStatus.data?.tx_status !== "success") {
         return {
           success: false,
+          unsettled: !txStatus.success,
           error: txStatus.error || txStatus.data?.tx_error || "Revoke signer grant transaction failed at the contract level.",
           txHash: result.txid,
         };
@@ -2412,7 +2417,7 @@ export class StacksSDK {
 
       const settled = await this.waitForTxSettlement(result.txid);
       if (!settled.success || settled.data?.tx_status !== "success") {
-        return { success: false, error: settled.data?.tx_error ?? "update-bond-registration failed on-chain", txHash: result.txid };
+        return { success: false, unsettled: !settled.success, error: settled.data?.tx_error ?? "update-bond-registration failed on-chain", txHash: result.txid };
       }
 
       // Re-read membership after settlement. If the affected bond changed during the
@@ -2739,7 +2744,7 @@ export class StacksSDK {
       console.log('register-for-bond settlement:', JSON.stringify({ tx_status: settled.data?.tx_status, tx_result: settled.data?.tx_result }));
       if (!settled.success || settled.data?.tx_status !== 'success') {
         const txRepr: string = (settled.data?.tx_result as any)?.repr ?? settled.data?.tx_error ?? '';
-        return { success: false, error: `[${settled.data?.tx_status}] ${txRepr}`.trim(), stacksTxid: result.txid, btcTxid, vout: lockupProof.outputIndex };
+        return { success: false, unsettled: !settled.success, error: `[${settled.data?.tx_status}] ${txRepr}`.trim(), stacksTxid: result.txid, btcTxid, vout: lockupProof.outputIndex };
       }
 
       await this.lockRecordStore.saveRecord(this.address, bondIndex, {
@@ -2850,7 +2855,7 @@ export class StacksSDK {
       const settled = await this.waitForTxSettlement(result.txid);
       if (!settled.success || settled.data?.tx_status !== 'success') {
         const repr: string = (settled.data?.tx_result as any)?.repr ?? settled.data?.tx_error ?? '';
-        return { success: false, error: `[${settled.data?.tx_status}] ${repr}`.trim(), txHash: result.txid };
+        return { success: false, unsettled: !settled.success, error: `[${settled.data?.tx_status}] ${repr}`.trim(), txHash: result.txid };
       }
 
       // Record for reward discovery (sBTC-backed; no BTC outpoint).
@@ -2938,7 +2943,7 @@ export class StacksSDK {
       }
       const settled = await this.waitForTxSettlement(result.txid);
       if (!settled.success || settled.data?.tx_status !== 'success') {
-        return { success: false, error: settled.data?.tx_error ?? 'unstake-sbtc failed on-chain', txHash: result.txid };
+        return { success: false, unsettled: !settled.success, error: settled.data?.tx_error ?? 'unstake-sbtc failed on-chain', txHash: result.txid };
       }
       return { success: true, txHash: result.txid };
     } catch (error) {
@@ -3125,7 +3130,7 @@ export class StacksSDK {
 
       const settled = await this.waitForTxSettlement(result.txid);
       if (!settled.success || settled.data?.tx_status !== 'success') {
-        return { success: false, error: settled.data?.tx_error ?? 'announce-l1-early-exit failed on-chain', txHash: result.txid };
+        return { success: false, unsettled: !settled.success, error: settled.data?.tx_error ?? 'announce-l1-early-exit failed on-chain', txHash: result.txid };
       }
 
       return { success: true, txHash: result.txid };
@@ -4019,7 +4024,7 @@ export class StacksSDK {
       const settled = await this.waitForTxSettlement(result.txid);
       if (!settled.success || settled.data?.tx_status !== 'success') {
         const txRepr: string = (settled.data?.tx_result as any)?.repr ?? settled.data?.tx_error ?? '';
-        return { success: false, error: `[${settled.data?.tx_status}] ${txRepr}`.trim(), stacksTxid: result.txid, btcTxid, vout: lockupProof.outputIndex };
+        return { success: false, unsettled: !settled.success, error: `[${settled.data?.tx_status}] ${txRepr}`.trim(), stacksTxid: result.txid, btcTxid, vout: lockupProof.outputIndex };
       }
 
       return {
@@ -4144,7 +4149,7 @@ export class StacksSDK {
       }
       const settled = await this.waitForTxSettlement(result.txid);
       if (!settled.success || settled.data?.tx_status !== 'success') {
-        return { success: false, error: settled.data?.tx_error ?? 'calculate-rewards failed on-chain', txHash: result.txid };
+        return { success: false, unsettled: !settled.success, error: settled.data?.tx_error ?? 'calculate-rewards failed on-chain', txHash: result.txid };
       }
       return { success: true, txHash: result.txid };
     } catch (error) {
@@ -4200,7 +4205,7 @@ export class StacksSDK {
     note: string | undefined,
     txHashes: string[],
     results: ClaimResultItem[],
-  ): Promise<{ nonce: bigint; error?: string }> => {
+  ): Promise<{ nonce: bigint; error?: string; unsettled?: boolean }> => {
     // Bound the sBTC that PoX-5 sends to the signer manager during claim-rewards.
     // total-rewards = get-earned(signer, cycle, none) + Σ get-earned(signer, cycle,
     // some(idx)) over UNIQUE bond indices. The contract pays duplicate indices once
@@ -4260,7 +4265,7 @@ export class StacksSDK {
       const smClaimSettled = await this.waitForTxSettlement(smClaimResult.txid);
       const smClaimRepr: string = (smClaimSettled.data?.tx_result as any)?.repr ?? smClaimSettled.data?.tx_error ?? '';
       if (smClaimSettled.data?.tx_status !== 'success' && !smClaimRepr.includes('u30') && !smClaimRepr.includes('u32')) {
-        return { nonce, error: `signer-manager.claim-rewards failed at cycle ${cycle}: ${smClaimRepr}` };
+        return { nonce, unsettled: !smClaimSettled.success, error: `signer-manager.claim-rewards failed at cycle ${cycle}: ${smClaimRepr}` };
       }
     } else if (smClaimResult?.error || smClaimResult?.reason) {
       const errMsg = [smClaimResult?.error, smClaimResult?.reason].filter(Boolean).join(' — ');
@@ -4342,7 +4347,7 @@ export class StacksSDK {
       if (!settled.success || settled.data?.tx_status !== 'success') {
         const stakerRepr: string = (settled.data?.tx_result as any)?.repr ?? settled.data?.tx_error ?? '';
         recordResult('failed', smStakerResult.txid, stakerRepr);
-        return { nonce, error: `Claim failed on-chain at cycle ${cycle}${bondSuffix}: ${stakerRepr}` };
+        return { nonce, unsettled: !settled.success, error: `Claim failed on-chain at cycle ${cycle}${bondSuffix}: ${stakerRepr}` };
       }
       recordResult('claimed', smStakerResult.txid);
       txHashes.push(smStakerResult.txid);
@@ -4446,7 +4451,7 @@ export class StacksSDK {
               chunk, chunk, nonce, opts?.note, txHashes, results,
             );
             nonce = result.nonce;
-            if (result.error) return { success: false, error: result.error, txHashes, results };
+            if (result.error) return { success: false, unsettled: result.unsettled, error: result.error, txHashes, results };
           }
         }
         return { success: true, txHashes, results };
@@ -4711,6 +4716,9 @@ export class StacksSDK {
           current_burn_height: pox5Info?.currentBurnchainBlockHeight ?? 0,
           current_cycle_id: pox5Info?.rewardCycleId ?? 0,
           is_prepare_phase: inPreparePhase,
+          // True when the PoX read failed: the burn-height/cycle/prepare-phase fields
+          // above are UNKNOWN (defaulted to 0/false), not authoritative zeros.
+          pox_lookup_failed: pox5Info === null,
         },
         bond: bondMembership ? {
           bond_index: bondMembership.bondIndex,
@@ -4882,6 +4890,7 @@ export class StacksSDK {
       if (!txStatus.success || txStatus.data?.tx_status !== "success") {
         return {
           success: false,
+          unsettled: !txStatus.success,
           error: txStatus.error || txStatus.data?.tx_error || "Transaction failed at the contract level.",
           txHash: result.txid,
         };
@@ -4952,6 +4961,7 @@ export class StacksSDK {
       if (!txStatus.success || txStatus.data?.tx_status !== "success") {
         return {
           success: false,
+          unsettled: !txStatus.success,
           error: txStatus.error || txStatus.data?.tx_error || "Transaction failed at the contract level.",
           txHash: result.txid,
         };
@@ -5022,6 +5032,7 @@ export class StacksSDK {
       if (!txStatus.success || txStatus.data?.tx_status !== "success") {
         return {
           success: false,
+          unsettled: !txStatus.success,
           error: txStatus.error || txStatus.data?.tx_error || "Transaction failed at the contract level.",
           txHash: result.txid,
         };

@@ -79,6 +79,13 @@ export type CreateTransactionResponse = {
    * existed to update). Surfaced so the condition is visible rather than silent.
    */
   warning?: string;
+  /**
+   * True when settlement polling TIMED OUT — the transaction was broadcast but its
+   * final on-chain state is UNKNOWN and may still succeed. Distinct from a confirmed
+   * contract failure (where `unsettled` is falsy). Callers must NOT treat this as a
+   * definite failure or re-submit blindly; poll `txHash` on its chain instead.
+   */
+  unsettled?: boolean;
 };
 
 export type GetTransactionHistoryResponse = {
@@ -157,6 +164,8 @@ export type CheckStatusData = {
     current_burn_height: number;
     current_cycle_id: number;
     is_prepare_phase: boolean;
+    /** True when the PoX read failed: the height/cycle/prepare fields are unknown, not authoritative. */
+    pox_lookup_failed: boolean;
   };
   bond: {
     bond_index: number;
@@ -241,6 +250,8 @@ export type CreateBondResult = {
   unlockHeight?: number;
   amountUstx?: string;
   error?: string;
+  /** Settlement timed out — state unknown, may still succeed (not a confirmed failure). */
+  unsettled?: boolean;
 };
 
 export type BondPositionData = {
@@ -297,6 +308,8 @@ export type AnnounceEarlyExitResponse = {
   success: boolean;
   txHash?: string;
   error?: string;
+  /** Settlement timed out — state unknown, may still succeed (not a confirmed failure). */
+  unsettled?: boolean;
 };
 
 export type RequirementsResponse = {
@@ -391,12 +404,16 @@ export type RenewBondResult = {
   unlockHeight?: number;
   amountUstx?: string;
   error?: string;
+  /** Settlement timed out — state unknown, may still succeed (not a confirmed failure). */
+  unsettled?: boolean;
 };
 
 export type CalculateRewardsResponse = {
   success: boolean;
   txHash?: string;
   error?: string;
+  /** Settlement timed out — state unknown, may still succeed (not a confirmed failure). */
+  unsettled?: boolean;
 };
 
 /** One structured record per (bond, cycle) claim leg. */
@@ -423,6 +440,8 @@ export type ClaimRewardsResponse = {
   /** Structured per-(bond,cycle) results — accrual, payout, both tx ids, and status. */
   results?: ClaimResultItem[];
   error?: string;
+  /** A leg's settlement timed out — state unknown, may still succeed (not a confirmed failure). */
+  unsettled?: boolean;
 };
 
 export type EarnedRewardsResponse = {
