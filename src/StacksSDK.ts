@@ -71,6 +71,7 @@ import { createHash } from "crypto";
 import { parseOptionalFee, ValidationError } from "./utils/validation";
 import { formatErrorMessage } from "./utils/errorHandling";
 import { checkFeeReplacement, ParsedRecoveryTx } from "./utils/rbf";
+import { validateBondScheduleAgainstChain, BondScheduleValidation } from "./utils/bondScheduleChain";
 import { validateApiCredentials } from "./utils/fireblocks.utils";
 import {
   assertResultSuccess,
@@ -1775,6 +1776,22 @@ export class StacksSDK {
     } catch (error) {
       return { success: false, error: `Failed to fetch PoX-5 info: ${formatErrorMessage(error)}` };
     }
+  };
+
+  /**
+   * Validates the SDK's local bond-schedule constants (BOND_GAP_CYCLES / BOND_LENGTH_CYCLES)
+   * against the deployed PoX-5 contract's get-bond-l1-unlock-height accessor. Returns the
+   * per-index comparison plus a mismatch list; `success:false` means either a definite
+   * schedule mismatch or an UNKNOWN chain read failure (see error). The REST server also
+   * runs this at boot and refuses to start on a definite mismatch.
+   */
+  public validateBondSchedule = async (
+    opts?: { bondIndices?: number[] },
+  ): Promise<{ success: boolean; data?: BondScheduleValidation; error?: string }> => {
+    const result = await validateBondScheduleAgainstChain({ profile: this.networkProfile, bondIndices: opts?.bondIndices });
+    return result.ok
+      ? { success: true, data: result }
+      : { success: false, data: result, error: result.error };
   };
 
   /**

@@ -6,6 +6,8 @@ import { swaggerUi, specs } from "./utils/swagger";
 import { ValidationError } from "./utils/validation";
 import { formatErrorMessage } from "./utils/errorHandling";
 import { assertAuthConfigured, loadAuthConfig, requireAuth } from "./api/auth";
+import { resolveNetworkProfile, NetworkName } from "./utils/network";
+import { validateBondScheduleAgainstChain } from "./utils/bondScheduleChain";
 
 // Load environment variables
 dotenv.config();
@@ -72,11 +74,46 @@ process.on("uncaughtException", (error) => {
 // Start the server only if this file is run directly (not imported)
 const PORT = process.env.PORT || 3000;
 
-if (require.main === module) {
+// Resolves the same network profile the SDK pool uses, from the NETWORK env var.
+function resolveServerProfile() {
+  const network = (process.env.NETWORK ?? "").toLowerCase();
+  const named = ["mainnet", "private-devnet", "public-testnet"];
+  return named.includes(network)
+    ? resolveNetworkProfile({ network: network as NetworkName })
+    : resolveNetworkProfile({ testnet: network === "testnet" });
+}
+
+async function boot() {
   // Fail closed: refuse to start as an open signing proxy when auth is unconfigured.
   assertAuthConfigured(authConfig);
+
+  // Validate the local bond-schedule constants against the deployed PoX-5 contract before
+  // accepting any request. A definite mismatch is fatal — operating against a bond
+  // schedule the contract does not enforce would lock or spend funds at the wrong height.
+  // A transient read failure (UNKNOWN) is logged but not fatal, unless
+  // STRICT_BOND_SCHEDULE_CHECK is set, so a momentary upstream outage does not brick boot.
+  const schedule = await validateBondScheduleAgainstChain({ profile: resolveServerProfile() });
+  if (schedule.diff && !schedule.ok) {
+    console.error(`FATAL: ${schedule.error}`);
+    process.exit(1);
+  }
+  if (!schedule.ok) {
+    const strict = (process.env.STRICT_BOND_SCHEDULE_CHECK ?? "").toLowerCase() === "true";
+    console.error(`${strict ? "FATAL" : "WARNING"}: ${schedule.error}`);
+    if (strict) process.exit(1);
+  } else {
+    console.log(`Bond schedule validated against chain (BOND_GAP_CYCLES=${schedule.gapCycles}, BOND_LENGTH_CYCLES=${schedule.lengthCycles}).`);
+  }
+
   app.listen(PORT, () => {
     console.log(`Stacks-Fireblocks SDK API server running on port ${PORT}`);
+  });
+}
+
+if (require.main === module) {
+  boot().catch((err) => {
+    console.error("FATAL: server boot failed:", formatErrorMessage(err));
+    process.exit(1);
   });
 }
 

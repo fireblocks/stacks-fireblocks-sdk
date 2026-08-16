@@ -187,6 +187,37 @@ router.get(
   controller.getBtcTxStatus,
 );
 
+/**
+ * @openapi
+ *  /stacking/pox5/bond/validate-schedule:
+ *   get:
+ *     tags: [PoX-5 BTC Bonds]
+ *     summary: Validate the bond schedule against the deployed contract
+ *     description: >
+ *       Compares the SDK's local BOND_GAP_CYCLES / BOND_LENGTH_CYCLES against the PoX-5
+ *       contract's get-bond-l1-unlock-height accessor for a set of bond indices. Returns
+ *       the per-index comparison and any mismatches. success:false means either a definite
+ *       schedule mismatch or an UNKNOWN chain read failure.
+ *     parameters:
+ *       - in: query
+ *         name: bondIndices
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Comma-separated bond indices to check (defaults to the six active cohorts plus one boundary index).
+ *     responses:
+ *       200:
+ *         description: Comparison result.
+ *       400:
+ *         description: Invalid bondIndices.
+ *       500:
+ *         description: Internal server error
+ */
+router.get(
+  "/stacking/pox5/bond/validate-schedule",
+  controller.validateBondSchedule,
+);
+
 // Protocol info. Reports whichever PoX contract the configured node exposes, so this
 // returns pox-5 on networks where pox-5 is active. See /stacking/pox5/info for the
 // PoX-5 specific shape.

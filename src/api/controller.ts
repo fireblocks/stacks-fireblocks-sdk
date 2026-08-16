@@ -408,6 +408,30 @@ export const getTxStatusById: Handler = async (req, res, next) => {
   }
 };
 
+// GET /stacking/pox5/bond/validate-schedule
+export const validateBondSchedule: Handler = async (req, res, next) => {
+  try {
+    let bondIndices: number[] | undefined;
+    const raw = req.query.bondIndices ?? req.body?.bondIndices;
+    if (raw !== undefined) {
+      const arr = Array.isArray(raw) ? raw : String(raw).split(",");
+      bondIndices = arr.map((v: any) => Number(v));
+      if (bondIndices.some((n) => !Number.isInteger(n) || n < 0)) {
+        res.status(400).json({ error: "Bad Request: bondIndices must be non-negative integers" });
+        return;
+      }
+    }
+    const result = await apiService.executeAction(
+      helperConstants.vaultIdForReadOnlyActions,
+      ActionType.VALIDATE_BOND_SCHEDULE,
+      { bondIndices },
+    );
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
 // GET /:vaultId/btc/transactions/:btcTxid
 export const getBtcTxStatus: Handler = async (req, res, next) => {
   try {

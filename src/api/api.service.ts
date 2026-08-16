@@ -90,6 +90,9 @@ export class ApiService {
         case ActionType.GET_BTC_TX_STATUS:
           result = await sdk.getBtcTxStatus(params.btcTxid);
           break;
+        case ActionType.VALIDATE_BOND_SCHEDULE:
+          result = await sdk.validateBondSchedule({ bondIndices: params.bondIndices });
+          break;
 
         case ActionType.DELEGATE_TO_POOL:
           result = await sdk.delegateToPool(
