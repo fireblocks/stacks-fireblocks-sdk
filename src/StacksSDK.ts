@@ -2334,6 +2334,18 @@ export class StacksSDK {
    * malicious override from locking an unbounded amount of STX for the full bond
    * term. The override is intentionally NOT reachable through the REST server.
    */
+  /**
+   * When a signer-manager adapter allowlist is configured (registry non-empty), refuse
+   * a manager that is not on it BEFORE any funds move — defense in depth over the
+   * contract's own signer-grant gate. An empty registry imposes no allowlist.
+   */
+  private signerManagerAllowedError = (signerManager: string): string | undefined => {
+    if (this.signerManagerRegistry.size > 0 && !this.signerManagerRegistry.has(signerManager)) {
+      return `Signer manager ${signerManager} is not in the configured signerManagerAdapters allowlist — refusing to proceed.`;
+    }
+    return undefined;
+  };
+
   private resolveBondStxAmount = (
     contractMin: bigint,
     override?: bigint,
@@ -2477,6 +2489,9 @@ export class StacksSDK {
       }
       const storeError = await this.assertDurableLockStore();
       if (storeError) return { success: false, error: storeError };
+
+      const smAllowError = this.signerManagerAllowedError(signerManager);
+      if (smAllowError) return { success: false, error: smAllowError };
 
       // Step 1 — allowlist check
       const allowance = await fetchBondAllowance({ bondIndex, address: this.address, network: this.pox5Network });
@@ -2794,6 +2809,9 @@ export class StacksSDK {
       if (!this.address || !this.publicKey || !this.vaultAccountId) {
         throw new Error('Address, Public Key or Vault ID are not set');
       }
+
+      const smAllowError = this.signerManagerAllowedError(signerManager);
+      if (smAllowError) return { success: false, error: smAllowError };
 
       const sbtcAsset = await this.resolveSbtcAsset(opts?.sbtcAsset);
       if (!sbtcAsset) {

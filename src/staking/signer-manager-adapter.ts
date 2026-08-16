@@ -47,4 +47,9 @@ export class SignerManagerRegistry {
   has(principal: string): boolean {
     return this.byPrincipal.has(principal);
   }
+
+  /** Number of registered adapters. 0 = no allowlist configured (all managers allowed). */
+  get size(): number {
+    return this.byPrincipal.size;
+  }
 }
