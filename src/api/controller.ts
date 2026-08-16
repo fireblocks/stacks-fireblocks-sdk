@@ -1141,7 +1141,14 @@ export const replaceBtcRecoveryFee: Handler = async (req, res, next) => {
       res.status(400).json({ error: "Bad Request: newFeeSats must be an integer number of sats" });
       return;
     }
-    const bondIndex = req.body.bondIndex !== undefined ? Number(req.body.bondIndex) : undefined;
+    let bondIndex: number | undefined;
+    if (req.body.bondIndex !== undefined) {
+      bondIndex = Number(req.body.bondIndex);
+      if (!Number.isInteger(bondIndex) || bondIndex < 0) {
+        res.status(400).json({ error: "Bad Request: bondIndex must be a non-negative integer" });
+        return;
+      }
+    }
     const kind = req.body.kind === 'matured' || req.body.kind === 'early-exit' ? req.body.kind : undefined;
     const result = await apiService.executeAction(vaultId, ActionType.REPLACE_BTC_RECOVERY_FEE, { originalTxid, newFeeSats, bondIndex, kind });
     res.json(result);

@@ -1217,6 +1217,9 @@ export class StacksSDK {
         throw new Error("Address, Public Key or Vault ID are not set");
       }
 
+      const smAllowError = this.signerManagerAllowedError(signerManager);
+      if (smAllowError) return { success: false, error: smAllowError };
+
       const pox = await fetchPox5Info({ network: this.pox5Network });
 
       const eligibilityCheck = await this.checkEligibility(pox, amountStx);
@@ -1328,6 +1331,10 @@ export class StacksSDK {
       if (!this.address || !this.publicKey || !this.vaultAccountId) {
         throw new Error("Address, Public Key or Vault ID are not set");
       }
+
+      // Gate the manager the position rotates TO against the configured allowlist.
+      const smAllowError = this.signerManagerAllowedError(signerManager);
+      if (smAllowError) return { success: false, error: smAllowError };
 
       const amountIncrease = increaseByStx ? stxToMicro(increaseByStx) : BigInt(0);
 
@@ -4009,11 +4016,16 @@ export class StacksSDK {
       if (!check.ok) return { success: false, error: (check as { error: string }).error };
 
       // 4. Determine the spend branch. Default: matured OP_IF once past unlockHeight,
-      //    otherwise the OP_ELSE early-exit path.
+      //    otherwise the OP_ELSE early-exit path. A failed tip read is UNKNOWN — refuse
+      //    rather than silently assuming "not matured" (which would misroute a matured
+      //    bond into the early-exit path and fail with a misleading announce error).
       let branch = opts?.kind;
       if (!branch) {
         const tipHeight = await fetch(`${this.esploraBase()}/blocks/tip/height`).then(r => r.text()).then(Number);
-        branch = Number.isFinite(tipHeight) && tipHeight >= lock.unlockHeight ? 'matured' : 'early-exit';
+        if (!Number.isFinite(tipHeight)) {
+          return { success: false, error: 'Could not read the BTC tip height to determine the spend branch; pass opts.kind (matured | early-exit) explicitly.' };
+        }
+        branch = tipHeight >= lock.unlockHeight ? 'matured' : 'early-exit';
       }
 
       // 5. Rebuild through the existing spend path with the new fee, preserving the
@@ -4512,38 +4524,47 @@ export class StacksSDK {
     };
 
     // ── Leg 1: signer-manager claim-rewards (PoX-5 sends total-rewards sBTC to the manager) ──
-    const smClaim = await broadcastLeg(
-      (n) => makeUnsignedContractCall({
-        contractAddress: signerContractAddress,
-        contractName: signerContractName,
-        functionName: 'claim-rewards',
-        functionArgs: [Cl.list(uniqueBondIndices.map(i => Cl.uint(i))), Cl.uint(cycle)],
-        publicKey: this.publicKey!,
-        fee: DEFAULT_POX_FEE_USTX,
-        nonce: n,
-        network: this.pox5Network,
-        // Deny mode: PoX-5 sends exactly total-rewards sBTC to the signer manager for
-        // this cycle. Computed from the same chain state read just above.
-        postConditionMode: 'deny',
-        postConditions: [
-          Pc.principal(pox5ContractId).willSendEq(totalRewards).ft(sbtcContractId, sbtcAsset.assetName),
-        ],
-      }),
-      `sm-claim-rewards-cycle-${cycle}`,
-    );
-    if ('broadcastError' in smClaim) {
-      const msg = `signer-manager.claim-rewards broadcast failed at cycle ${cycle}: ${smClaim.broadcastError}`;
-      recordCycleFailure(msg, null);
-      return { error: msg };
+    // Skip the broadcast entirely when there is no unclaimed signer accrual for this cycle
+    // (already distributed on a prior run, or nothing accrued). PoX-5 would abort such a
+    // call with u30, but an aborted transaction is still mined and costs a real STX fee —
+    // so a resume that re-selected this cycle only to pay the staker (leg 2) must not
+    // re-broadcast leg 1. When accrual is present, a u30/u32 remains benign (a concurrent
+    // claim may have distributed between the read and the broadcast).
+    let signerClaimTxid: string | null = null;
+    if (totalRewards > BigInt(0)) {
+      const smClaim = await broadcastLeg(
+        (n) => makeUnsignedContractCall({
+          contractAddress: signerContractAddress,
+          contractName: signerContractName,
+          functionName: 'claim-rewards',
+          functionArgs: [Cl.list(uniqueBondIndices.map(i => Cl.uint(i))), Cl.uint(cycle)],
+          publicKey: this.publicKey!,
+          fee: DEFAULT_POX_FEE_USTX,
+          nonce: n,
+          network: this.pox5Network,
+          // Deny mode: PoX-5 sends exactly total-rewards sBTC to the signer manager for
+          // this cycle. Computed from the same chain state read just above.
+          postConditionMode: 'deny',
+          postConditions: [
+            Pc.principal(pox5ContractId).willSendEq(totalRewards).ft(sbtcContractId, sbtcAsset.assetName),
+          ],
+        }),
+        `sm-claim-rewards-cycle-${cycle}`,
+      );
+      if ('broadcastError' in smClaim) {
+        const msg = `signer-manager.claim-rewards broadcast failed at cycle ${cycle}: ${smClaim.broadcastError}`;
+        recordCycleFailure(msg, null);
+        return { error: msg };
+      }
+      // u30 (ERR_DISTRIBUTION_ALREADY_COMPUTED) / u32 are benign — rewards already collected.
+      const smClaimRepr: string = (smClaim.settled.data?.tx_result as any)?.repr ?? smClaim.settled.data?.tx_error ?? '';
+      if (smClaim.settled.data?.tx_status !== 'success' && !smClaimRepr.includes('u30') && !smClaimRepr.includes('u32')) {
+        const msg = `signer-manager.claim-rewards failed at cycle ${cycle}: ${smClaimRepr}`;
+        recordCycleFailure(msg, smClaim.txid);
+        return { unsettled: !smClaim.settled.success, error: msg };
+      }
+      signerClaimTxid = smClaim.txid;
     }
-    // u30 (ERR_DISTRIBUTION_ALREADY_COMPUTED) / u32 are benign — rewards already collected.
-    const smClaimRepr: string = (smClaim.settled.data?.tx_result as any)?.repr ?? smClaim.settled.data?.tx_error ?? '';
-    if (smClaim.settled.data?.tx_status !== 'success' && !smClaimRepr.includes('u30') && !smClaimRepr.includes('u32')) {
-      const msg = `signer-manager.claim-rewards failed at cycle ${cycle}: ${smClaimRepr}`;
-      recordCycleFailure(msg, smClaim.txid);
-      return { unsettled: !smClaim.settled.success, error: msg };
-    }
-    const signerClaimTxid: string = smClaim.txid;
 
     // The staker payout is performed by the signer manager from its OWN balance
     // (PoX-5 moves no sBTC on this leg — answers §3b), so the bound is manager-specific
