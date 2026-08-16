@@ -1210,7 +1210,26 @@ export class StacksSDK {
             postConditions: [Pc.origin().willSendEq(amountUstx).ustxToLock()],
           },
         );
-        return this.pox5SignAndBroadcast(tx, note || `stake ${amountStx} STX for ${numCycles} cycles`, externalId);
+        return this.pox5SignAndBroadcast(tx, note || `stake ${amountStx} STX for ${numCycles} cycles`, externalId, async () => {
+          // Re-run the authoritative contract-gate check at the current tip: the chain
+          // may have advanced (into the prepare phase, past the signer grant, or into a
+          // cycle where the tx's start-burn-ht is stale) while the signature was pending
+          // Fireblocks approval. startBurnHt stays the value baked into the signed tx.
+          const recheck = await fetchEligibleStake({
+            staker: this.address!,
+            signerManager,
+            amountUstx,
+            numCycles,
+            startBurnHt: pox.currentBurnchainBlockHeight,
+            poxInfo: await fetchPox5Info({ network: this.pox5Network }),
+            network: this.pox5Network,
+          });
+          if (!recheck.ok) {
+            const reasons = (recheck as { reasons?: number[] }).reasons ?? [];
+            return `staking eligibility changed during approval: ${this.describeBondReasons(reasons)}`;
+          }
+          return undefined;
+        });
       });
 
       if (!result || result.error || !result.txid || result.reason) {
@@ -1309,7 +1328,24 @@ export class StacksSDK {
             postConditions: [postCondition],
           },
         );
-        return this.pox5SignAndBroadcast(tx, note || "update stake position", externalId);
+        return this.pox5SignAndBroadcast(tx, note || "update stake position", externalId, async () => {
+          // Re-run the authoritative contract-gate check at the current tip: the position,
+          // signer grant, or phase may have changed while the signature was pending
+          // Fireblocks approval.
+          const recheck = await fetchEligibleStakeUpdate({
+            staker: this.address!,
+            signerManager,
+            oldSignerManager,
+            cyclesToExtend: cyclesToExtend ?? 0,
+            amountIncrease,
+            network: this.pox5Network,
+          });
+          if (!recheck.ok) {
+            const reasons = (recheck as { reasons?: number[] }).reasons ?? [];
+            return `stake-update eligibility changed during approval: ${this.describeBondReasons(reasons)}`;
+          }
+          return undefined;
+        });
       });
 
       if (!result || result.error || !result.txid || result.reason) {
