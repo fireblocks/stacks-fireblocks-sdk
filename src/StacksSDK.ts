@@ -2997,19 +2997,31 @@ export class StacksSDK {
             Pc.origin().willSendEq(sbtcSats).ft(sbtcContractId, sbtcAsset.assetName),
           ],
         });
-        return this.pox5SignAndBroadcast(tx, opts?.note ?? `register-sbtc-bond-${bondIndex}`, opts?.externalId);
+        return this.pox5SignAndBroadcast(tx, opts?.note ?? `register-sbtc-bond-${bondIndex}`, opts?.externalId, async () => {
+          // Re-run the register-for-bond gate at the current tip: the chain may have
+          // entered the prepare phase or the bond may have started while the signature
+          // was pending Fireblocks approval, which would reject the tx and waste the nonce.
+          const recheck = await fetchEligibleRegisterForBond({
+            bondIndex, staker: this.address!, amountUstx, satsTotal: sbtcSats, signerManager,
+            poxInfo: await fetchPox5Info({ network: this.pox5Network }), network: this.pox5Network,
+          });
+          if (!recheck.ok) {
+            const reasons = (recheck as { reasons?: number[] }).reasons ?? [];
+            return `sBTC bond eligibility changed during approval: ${this.describeBondReasons(reasons)}`;
+          }
+          return undefined;
+        });
       });
 
       if (!result?.txid || result.error || result.reason) {
         return { success: false, error: result?.error ?? result?.reason ?? 'broadcast failed' };
       }
-      const settled = await this.waitForTxSettlement(result.txid);
-      if (!settled.success || settled.data?.tx_status !== 'success') {
-        const repr: string = (settled.data?.tx_result as any)?.repr ?? settled.data?.tx_error ?? '';
-        return { success: false, unsettled: !settled.success, error: `[${settled.data?.tx_status}] ${repr}`.trim(), txHash: result.txid };
-      }
 
-      // Record for reward discovery (sBTC-backed; no BTC outpoint).
+      // Persist the position record BEFORE the slow settlement wait so a crash or a
+      // settlement-poll timeout between broadcast and confirmation does not lose it
+      // (matches renewBond). sBTC records are a chain-authoritative cache, so a phantom
+      // record left by a later contract-level abort is inert (recovery skips sBTC records
+      // and reward routing reads chain).
       await this.lockRecordStore.saveRecord(this.address, bondIndex, {
         bondIndex,
         unlockBytes: new Uint8Array(),
@@ -3020,6 +3032,12 @@ export class StacksSDK {
         signerManager,
         firstRewardCycle: bondPeriodToRewardCycle({ bondIndex, poxInfo: pox }),
       });
+
+      const settled = await this.waitForTxSettlement(result.txid);
+      if (!settled.success || settled.data?.tx_status !== 'success') {
+        const repr: string = (settled.data?.tx_result as any)?.repr ?? settled.data?.tx_error ?? '';
+        return { success: false, unsettled: !settled.success, error: `[${settled.data?.tx_status}] ${repr}`.trim(), txHash: result.txid };
+      }
 
       return { success: true, txHash: result.txid };
     } catch (error) {
@@ -3138,19 +3156,28 @@ export class StacksSDK {
           postConditionMode: PostConditionMode.Deny,
           postConditions,
         });
-        return this.pox5SignAndBroadcast(tx, opts?.note ?? `roll-sbtc-bond-${nextBondIndex}`, opts?.externalId);
+        return this.pox5SignAndBroadcast(tx, opts?.note ?? `roll-sbtc-bond-${nextBondIndex}`, opts?.externalId, async () => {
+          // Re-run the register-for-bond gate at the current tip (see createSbtcBond):
+          // prepare-phase entry or bond start during approval would reject the tx.
+          const recheck = await fetchEligibleRegisterForBond({
+            bondIndex: nextBondIndex, staker: this.address!, amountUstx, satsTotal: newSbtcSats, signerManager,
+            poxInfo: await fetchPox5Info({ network: this.pox5Network }), network: this.pox5Network,
+          });
+          if (!recheck.ok) {
+            const reasons = (recheck as { reasons?: number[] }).reasons ?? [];
+            return `sBTC bond eligibility changed during approval: ${this.describeBondReasons(reasons)}`;
+          }
+          return undefined;
+        });
       });
 
       if (!result?.txid || result.error || result.reason) {
         return { success: false, error: result?.error ?? result?.reason ?? 'broadcast failed' };
       }
-      const settled = await this.waitForTxSettlement(result.txid);
-      if (!settled.success || settled.data?.tx_status !== 'success') {
-        const repr: string = (settled.data?.tx_result as any)?.repr ?? settled.data?.tx_error ?? '';
-        return { success: false, unsettled: !settled.success, error: `[${settled.data?.tx_status}] ${repr}`.trim(), txHash: result.txid };
-      }
 
-      // Record the new position for reward discovery (sBTC-backed; no BTC outpoint).
+      // Persist the new position BEFORE the settlement wait (see createSbtcBond) so a
+      // crash / poll-timeout does not lose it. This writes a record at nextBondIndex; the
+      // prior position's record is untouched.
       await this.lockRecordStore.saveRecord(this.address, nextBondIndex, {
         bondIndex: nextBondIndex,
         unlockBytes: new Uint8Array(),
@@ -3161,6 +3188,12 @@ export class StacksSDK {
         signerManager,
         firstRewardCycle: bondPeriodToRewardCycle({ bondIndex: nextBondIndex, poxInfo: pox }),
       });
+
+      const settled = await this.waitForTxSettlement(result.txid);
+      if (!settled.success || settled.data?.tx_status !== 'success') {
+        const repr: string = (settled.data?.tx_result as any)?.repr ?? settled.data?.tx_error ?? '';
+        return { success: false, unsettled: !settled.success, error: `[${settled.data?.tx_status}] ${repr}`.trim(), txHash: result.txid };
+      }
 
       return { success: true, txHash: result.txid };
     } catch (error) {
