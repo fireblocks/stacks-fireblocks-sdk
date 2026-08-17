@@ -502,10 +502,20 @@ export class StacksSDK {
       const tx = await res.json();
       const confirmed = !!tx?.status?.confirmed;
       const blockHeight: number | null = tx?.status?.block_height ?? null;
-      let confirmations = 0;
-      if (confirmed && typeof blockHeight === 'number') {
-        const tip = await fetch(`${this.esploraBase()}/blocks/tip/height`).then(r => r.text()).then(Number);
-        confirmations = Number.isFinite(tip) ? Math.max(0, tip - blockHeight + 1) : 0;
+      // Not confirmed → depth 0. Confirmed → compute depth from the tip; but a failed tip
+      // read (or a missing block height) must NOT discard the known confirmed status —
+      // report confirmations: null (confirmed, depth unknown) instead of failing the call.
+      let confirmations: number | null = 0;
+      if (confirmed) {
+        confirmations = null;
+        if (typeof blockHeight === 'number') {
+          try {
+            const tip = await fetch(`${this.esploraBase()}/blocks/tip/height`).then(r => r.text()).then(Number);
+            if (Number.isFinite(tip)) confirmations = Math.max(0, tip - blockHeight + 1);
+          } catch {
+            // leave confirmations as null (confirmed, depth unknown)
+          }
+        }
       }
       return {
         success: true,

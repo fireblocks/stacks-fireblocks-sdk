@@ -413,9 +413,12 @@ export const validateBondSchedule: Handler = async (req, res, next) => {
   try {
     let bondIndices: number[] | undefined;
     const raw = req.query.bondIndices ?? req.body?.bondIndices;
-    if (raw !== undefined) {
+    // Treat an absent OR empty value as "use the default cohort span" rather than [0]
+    // (an empty query string splits to [''] → [0], which would under-check the schedule).
+    const hasValue = Array.isArray(raw) ? raw.length > 0 : raw !== undefined && String(raw).trim() !== "";
+    if (hasValue) {
       const arr = Array.isArray(raw) ? raw : String(raw).split(",");
-      bondIndices = arr.map((v: any) => Number(v));
+      bondIndices = arr.map((v: any) => Number(String(v).trim()));
       if (bondIndices.some((n) => !Number.isInteger(n) || n < 0)) {
         res.status(400).json({ error: "Bad Request: bondIndices must be non-negative integers" });
         return;

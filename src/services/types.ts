@@ -130,7 +130,10 @@ export type BtcTxStatusResponse = {
     confirmed: boolean;
     block_height?: number | null;
     block_hash?: string | null;
-    confirmations: number;
+    // Confirmation depth. `null` means confirmed but the depth is UNKNOWN (the tip read
+    // failed, or Esplora reported no block height yet) — distinct from 0, which means
+    // not yet confirmed.
+    confirmations: number | null;
   };
   error?: string;
 };

@@ -6,7 +6,7 @@ import { swaggerUi, specs } from "./utils/swagger";
 import { ValidationError } from "./utils/validation";
 import { formatErrorMessage } from "./utils/errorHandling";
 import { assertAuthConfigured, loadAuthConfig, requireAuth } from "./api/auth";
-import { resolveNetworkProfile, NetworkName } from "./utils/network";
+import { resolveNetworkProfile } from "./utils/network";
 import { validateBondScheduleAgainstChain } from "./utils/bondScheduleChain";
 
 // Load environment variables
@@ -74,13 +74,15 @@ process.on("uncaughtException", (error) => {
 // Start the server only if this file is run directly (not imported)
 const PORT = process.env.PORT || 3000;
 
-// Resolves the same network profile the SDK pool uses, from the NETWORK env var.
+// Resolves the SAME network profile the SDK pool serves requests on. The pool derives
+// its network solely from the testnet boolean (api.service.ts: testnet = NETWORK ===
+// "testnet"), so boot validation MUST use that same derivation — otherwise it could
+// validate the schedule against a different chain than requests actually run on. (A
+// NETWORK name like "public-testnet" is not honored by the REST pool today; supporting
+// named profiles there is a separate change that must update both paths together.)
 function resolveServerProfile() {
-  const network = (process.env.NETWORK ?? "").toLowerCase();
-  const named = ["mainnet", "private-devnet", "public-testnet"];
-  return named.includes(network)
-    ? resolveNetworkProfile({ network: network as NetworkName })
-    : resolveNetworkProfile({ testnet: network === "testnet" });
+  const testnet = (process.env.NETWORK ?? "").toLowerCase() === "testnet";
+  return resolveNetworkProfile({ testnet });
 }
 
 async function boot() {
