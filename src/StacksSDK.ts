@@ -72,6 +72,7 @@ import { parseOptionalFee, ValidationError } from "./utils/validation";
 import { formatErrorMessage } from "./utils/errorHandling";
 import { checkFeeReplacement, ParsedRecoveryTx } from "./utils/rbf";
 import { validateBondScheduleAgainstChain, BondScheduleValidation } from "./utils/bondScheduleChain";
+import { planSbtcRollover } from "./staking/bonds/sbtc-rollover";
 import { validateApiCredentials } from "./utils/fireblocks.utils";
 import {
   assertResultSuccess,
@@ -114,6 +115,7 @@ import {
   fetchEligibleAnnounceL1EarlyExit,
   fetchEligibleUpdateBondRegistration,
   fetchEligibleUnstakeSbtc,
+  fetchStakerCustodiedSbtc,
   fetchEligibleStake,
   fetchEligibleStakeUpdate,
   fetchEligibleUnstake,
@@ -2938,11 +2940,20 @@ export class StacksSDK {
         return { success: false, error: 'Could not resolve the network sBTC asset (/v2/pox pox_5_sbtc_contract); refusing to build. Any override must exactly match the contract the node reports.' };
       }
 
-      const [pox, bond] = await Promise.all([
+      const [pox, bond, custodiedSats] = await Promise.all([
         fetchPox5Info({ network: this.pox5Network }),
         fetchBond({ bondIndex, network: this.pox5Network }),
+        fetchStakerCustodiedSbtc({ staker: this.address, network: this.pox5Network }),
       ]);
       if (!bond) return { success: false, error: `Bond ${bondIndex} not found` };
+
+      // createSbtcBond is FIRST registration only, so the gross willSendEq(sbtcSats) sBTC
+      // post-condition below is correct. If the staker already has custodied sBTC this is
+      // a rollover — the contract would move only the net difference, so asserting the
+      // gross amount would abort. Refuse and direct the caller to the net-delta path.
+      if (custodiedSats > BigInt(0)) {
+        return { success: false, error: `Staker already has ${custodiedSats} sats of custodied sBTC — use rollSbtcBond for a rollover (which moves only the net difference), not createSbtcBond.` };
+      }
 
       const contractMinUstx = minUstxForSatsAmount({
         sats: sbtcSats,
@@ -3013,6 +3024,147 @@ export class StacksSDK {
       return { success: true, txHash: result.txid };
     } catch (error) {
       return { success: false, error: `Failed to create sBTC bond: ${formatErrorMessage(error)}` };
+    }
+  };
+
+  /**
+   * Rolls an existing sBTC-backed position into the next bond period at a (possibly)
+   * different sBTC amount. Distinct from the native-BTC `renewBond` (which spends a
+   * Bitcoin L1 UTXO); an sBTC rollover is a pure L2 `register-for-bond` that moves only
+   * the NET sBTC difference (answers.md §3c):
+   *   - increase (new > custodied): the staker sends `new − custodied`;
+   *   - decrease (new < custodied): the PoX-5 boot contract sends `custodied − new` back;
+   *   - unchanged: no sBTC moves, so no sBTC post-condition is attached.
+   * The paired STX leg always asserts the FULL resulting STX lock (answers.md §2a/§2c/§4).
+   * The prior custody is read from the contract via `get-staker-custodied-sbtc` so the
+   * delta is bounded from chain state, never from a caller-supplied "old" amount.
+   *
+   * NOTE: sBTC paths are not yet exercised end-to-end on a live network (PoX-5 testnet is
+   * not active — answers.md §7); the deterministic post-condition logic is unit-tested,
+   * but validate the full flow against a live node before production use.
+   *
+   * @param nextBondIndex - The bond index to roll into.
+   * @param newSbtcSats - The target sBTC amount (sats) for the new position.
+   * @param signerManager - The signer-manager principal governing the new position.
+   */
+  public rollSbtcBond = async (
+    nextBondIndex: number,
+    newSbtcSats: bigint,
+    signerManager: string,
+    opts?: {
+      sbtcAsset?: { contractAddress: string; contractName: string; assetName: string };
+      amountUstxOverride?: bigint;
+      note?: string;
+      nonce?: bigint;
+      externalId?: string;
+      signerCalldata?: Uint8Array | string;
+    },
+  ): Promise<CreateTransactionResponse> => {
+    try {
+      if (!this.address || !this.publicKey || !this.vaultAccountId) {
+        throw new Error('Address, Public Key or Vault ID are not set');
+      }
+      if (newSbtcSats < BigInt(0)) {
+        return { success: false, error: 'newSbtcSats must be non-negative' };
+      }
+
+      const smAllowError = this.signerManagerAllowedError(signerManager);
+      if (smAllowError) return { success: false, error: smAllowError };
+
+      const sbtcAsset = await this.resolveSbtcAsset(opts?.sbtcAsset);
+      if (!sbtcAsset) {
+        return { success: false, error: 'Could not resolve the network sBTC asset (/v2/pox pox_5_sbtc_contract); refusing to build. Any override must exactly match the contract the node reports.' };
+      }
+
+      const [pox, bond, custodiedSats] = await Promise.all([
+        fetchPox5Info({ network: this.pox5Network }),
+        fetchBond({ bondIndex: nextBondIndex, network: this.pox5Network }),
+        fetchStakerCustodiedSbtc({ staker: this.address, network: this.pox5Network }),
+      ]);
+      if (!bond) return { success: false, error: `Bond ${nextBondIndex} not found` };
+
+      const contractMinUstx = minUstxForSatsAmount({
+        sats: newSbtcSats,
+        stxValueRatio: bond.stxValueRatio,
+        minUstxRatioBps: bond.minUstxRatioBps,
+      });
+      const amountResolution = this.resolveBondStxAmount(contractMinUstx, opts?.amountUstxOverride);
+      if ("error" in amountResolution) return { success: false, error: amountResolution.error };
+      const amountUstx = amountResolution.amountUstx;
+
+      // Evaluate all deterministic gates before moving any sBTC.
+      const preflight = await fetchEligibleRegisterForBond({
+        bondIndex: nextBondIndex,
+        staker: this.address,
+        amountUstx,
+        satsTotal: newSbtcSats,
+        signerManager,
+        poxInfo: pox,
+        network: this.pox5Network,
+      });
+      if (!preflight.ok) {
+        const reasons = (preflight as { reasons?: number[] }).reasons ?? [];
+        return { success: false, error: `Not eligible to roll sBTC bond into ${nextBondIndex}: ${this.describeBondReasons(reasons)}` };
+      }
+
+      // Net-delta sBTC post-condition, bounded from chain-read prior custody.
+      const rollover = planSbtcRollover(custodiedSats, newSbtcSats);
+      const sbtcContractId: `${string}.${string}` = `${sbtcAsset.contractAddress}.${sbtcAsset.contractName}`;
+      const bootAddr = (this.pox5Network as any).bootAddress as string;
+      const pox5ContractId: `${string}.${string}` = `${bootAddr}.pox-5`;
+
+      const postConditions: PostCondition[] = [
+        // Paired STX: assert the FULL resulting STX lock (register-for-bond records a
+        // Stacking action for the full resulting lock — answers.md §2a).
+        Pc.origin().willSendEq(amountUstx).ustxToLock(),
+      ];
+      if (rollover.direction === 'origin-sends') {
+        postConditions.push(Pc.origin().willSendEq(rollover.amountSats).ft(sbtcContractId, sbtcAsset.assetName));
+      } else if (rollover.direction === 'boot-sends') {
+        postConditions.push(Pc.principal(pox5ContractId).willSendEq(rollover.amountSats).ft(sbtcContractId, sbtcAsset.assetName));
+      }
+      // 'none' → no sBTC moves, so no sBTC post-condition (Deny mode already forbids any
+      // unexpected transfer).
+
+      const result = await this.runNonceExclusive(async () => {
+        const resolvedNonce = await this.resolveNonce(opts?.nonce);
+        const tx = await this.buildRegisterForBondTx({
+          bondIndex: nextBondIndex,
+          signerManager,
+          amountUstx,
+          sbtcSats: newSbtcSats,
+          nonce: resolvedNonce,
+          signerCalldata: opts?.signerCalldata,
+          postConditionMode: PostConditionMode.Deny,
+          postConditions,
+        });
+        return this.pox5SignAndBroadcast(tx, opts?.note ?? `roll-sbtc-bond-${nextBondIndex}`, opts?.externalId);
+      });
+
+      if (!result?.txid || result.error || result.reason) {
+        return { success: false, error: result?.error ?? result?.reason ?? 'broadcast failed' };
+      }
+      const settled = await this.waitForTxSettlement(result.txid);
+      if (!settled.success || settled.data?.tx_status !== 'success') {
+        const repr: string = (settled.data?.tx_result as any)?.repr ?? settled.data?.tx_error ?? '';
+        return { success: false, unsettled: !settled.success, error: `[${settled.data?.tx_status}] ${repr}`.trim(), txHash: result.txid };
+      }
+
+      // Record the new position for reward discovery (sBTC-backed; no BTC outpoint).
+      await this.lockRecordStore.saveRecord(this.address, nextBondIndex, {
+        bondIndex: nextBondIndex,
+        unlockBytes: new Uint8Array(),
+        lockAddress: '',
+        unlockHeight: 0,
+        amountSats: newSbtcSats,
+        isL1Lock: false,
+        signerManager,
+        firstRewardCycle: bondPeriodToRewardCycle({ bondIndex: nextBondIndex, poxInfo: pox }),
+      });
+
+      return { success: true, txHash: result.txid };
+    } catch (error) {
+      return { success: false, error: `Failed to roll sBTC bond: ${formatErrorMessage(error)}` };
     }
   };
 

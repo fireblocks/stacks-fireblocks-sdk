@@ -70,6 +70,7 @@ export enum ActionType {
   // PoX-5 BTC Bonds
   CREATE_BOND = "createBond",
   CREATE_SBTC_BOND = "createSbtcBond",
+  ROLL_SBTC_BOND = "rollSbtcBond",
   UNSTAKE_SBTC = "unstakeSbtc",
   GET_BOND_POSITION = "getBondPosition",
   ANNOUNCE_EARLY_EXIT = "announceEarlyExit",

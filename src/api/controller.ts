@@ -1008,6 +1008,45 @@ export const createSbtcBond: Handler = async (req, res, next) => {
   }
 };
 
+// POST /:vaultId/stacking/pox5/bond/sbtc/roll
+export const rollSbtcBond: Handler = async (req, res, next) => {
+  try {
+    const vaultId = getVaultId(req);
+    const nextBondIndexStr = String(req.body.nextBondIndex ?? "");
+    const newSbtcSatsStr = String(req.body.newSbtcSats ?? "");
+    const signerManager = String(req.body.signerManager || "").trim();
+    const sbtcAsset = req.body.sbtcAsset && req.body.sbtcAsset.contractAddress && req.body.sbtcAsset.contractName && req.body.sbtcAsset.assetName
+      ? req.body.sbtcAsset
+      : undefined;
+
+    if (!nextBondIndexStr || !newSbtcSatsStr || !signerManager) {
+      res.status(400).json({ error: "Bad Request: nextBondIndex, newSbtcSats, and signerManager are required" });
+      return;
+    }
+    const nextBondIndex = Number(nextBondIndexStr);
+    if (!Number.isInteger(nextBondIndex) || nextBondIndex < 0) {
+      res.status(400).json({ error: "Bad Request: nextBondIndex must be a non-negative integer" });
+      return;
+    }
+    // A decrease-to-zero rollover is valid, so allow 0 (unlike create's positive-only).
+    if (!/^[0-9]+$/.test(newSbtcSatsStr)) {
+      res.status(400).json({ error: "Bad Request: newSbtcSats must be a non-negative integer string" });
+      return;
+    }
+    const newSbtcSats = BigInt(newSbtcSatsStr);
+    const note = req.body.note ? String(req.body.note) : undefined;
+    const nonce = parseOptionalNonce(req.body.nonce);
+    const externalId = req.body.externalId ? String(req.body.externalId) : undefined;
+
+    const result = await apiService.executeAction(vaultId, ActionType.ROLL_SBTC_BOND, {
+      nextBondIndex, newSbtcSats, signerManager, sbtcAsset, note, nonce, externalId,
+    });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
 // POST /:vaultId/stacking/pox5/bond/sbtc/unstake
 export const unstakeSbtc: Handler = async (req, res, next) => {
   try {

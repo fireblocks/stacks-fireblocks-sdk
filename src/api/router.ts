@@ -1260,6 +1260,40 @@ router.post("/:vaultId/stacking/pox5/bond/sbtc/create", validateVaultId, control
 
 /**
  * @openapi
+ * /{vaultId}/stacking/pox5/bond/sbtc/roll:
+ *   post:
+ *     summary: Roll an sBTC-backed position into the next bond period (net-delta sBTC)
+ *     description: >
+ *       Rolls an existing sBTC position into nextBondIndex at newSbtcSats. Only the NET
+ *       sBTC difference vs the chain-read custodied amount moves: an increase sends
+ *       new−custodied from the staker; a decrease returns custodied−new from the PoX-5
+ *       contract; an unchanged amount moves no sBTC. The paired STX leg asserts the full
+ *       resulting STX lock. Distinct from native-BTC renew.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [nextBondIndex, newSbtcSats, signerManager]
+ *             properties:
+ *               nextBondIndex:
+ *                 type: integer
+ *               newSbtcSats:
+ *                 type: string
+ *                 description: Target sBTC amount in sats (non-negative integer string).
+ *               signerManager:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: sBTC rollover submitted
+ */
+router.post("/:vaultId/stacking/pox5/bond/sbtc/roll", validateVaultId, controller.rollSbtcBond);
+
+/**
+ * @openapi
  * /{vaultId}/stacking/pox5/bond/sbtc/unstake:
  *   post:
  *     summary: Withdraw sBTC from an sBTC-backed membership

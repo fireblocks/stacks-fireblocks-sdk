@@ -270,6 +270,14 @@ export class ApiService {
             { sbtcAsset: params.sbtcAsset, note: params.note, nonce: params.nonce, externalId: params.externalId },
           );
           break;
+        case ActionType.ROLL_SBTC_BOND:
+          result = await sdk.rollSbtcBond(
+            params.nextBondIndex,
+            params.newSbtcSats,
+            params.signerManager,
+            { sbtcAsset: params.sbtcAsset, note: params.note, nonce: params.nonce, externalId: params.externalId },
+          );
+          break;
         case ActionType.UNSTAKE_SBTC:
           result = await sdk.unstakeSbtc(
             params.signerManager,
