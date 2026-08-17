@@ -2906,6 +2906,45 @@ export class StacksSDK {
   };
 
   /**
+   * Post-signing re-check for a register-for-bond broadcast (createSbtcBond / rollSbtcBond).
+   * Re-runs the eligibility gate at the CURRENT tip so a signature that sat in Fireblocks
+   * approval is not broadcast into a now-certain contract rejection (prepare-phase entry,
+   * bond start). Returns a reason string to discard the tx, or undefined to proceed.
+   *
+   * `requireZeroCustody` guards createSbtcBond specifically: its sBTC post-condition asserts
+   * the GROSS amount, which is only valid with no prior custody. If custody appeared during
+   * the approval window the call is now a rollover — register-for-bond would move only the
+   * net difference and the gross post-condition would abort — so discard and route to
+   * rollSbtcBond instead.
+   */
+  private revalidateRegisterForBond = async (args: {
+    bondIndex: number;
+    amountUstx: bigint;
+    satsTotal: bigint;
+    signerManager: string;
+    requireZeroCustody: boolean;
+  }): Promise<string | undefined> => {
+    const nowPox = await fetchPox5Info({ network: this.pox5Network });
+    const [recheck, custodied] = await Promise.all([
+      fetchEligibleRegisterForBond({
+        bondIndex: args.bondIndex, staker: this.address!, amountUstx: args.amountUstx,
+        satsTotal: args.satsTotal, signerManager: args.signerManager, poxInfo: nowPox, network: this.pox5Network,
+      }),
+      args.requireZeroCustody
+        ? fetchStakerCustodiedSbtc({ staker: this.address!, network: this.pox5Network })
+        : Promise.resolve(BigInt(0)),
+    ]);
+    if (args.requireZeroCustody && custodied > BigInt(0)) {
+      return `staker gained ${custodied} sats of custodied sBTC during approval — this is now a rollover; use rollSbtcBond (net-delta) instead of createSbtcBond (gross).`;
+    }
+    if (!recheck.ok) {
+      const reasons = (recheck as { reasons?: number[] }).reasons ?? [];
+      return `sBTC bond eligibility changed during approval: ${this.describeBondReasons(reasons)}`;
+    }
+    return undefined;
+  };
+
+  /**
    * Registers an sBTC-backed bond: locks the paired STX and transfers sBTC to the
    * contract in a single L2 call (no Bitcoin L1 lock / SPV proof). The sBTC asset
    * defaults to the built-in sBTC contract for this network; pass `sbtcAsset` to
@@ -2997,20 +3036,8 @@ export class StacksSDK {
             Pc.origin().willSendEq(sbtcSats).ft(sbtcContractId, sbtcAsset.assetName),
           ],
         });
-        return this.pox5SignAndBroadcast(tx, opts?.note ?? `register-sbtc-bond-${bondIndex}`, opts?.externalId, async () => {
-          // Re-run the register-for-bond gate at the current tip: the chain may have
-          // entered the prepare phase or the bond may have started while the signature
-          // was pending Fireblocks approval, which would reject the tx and waste the nonce.
-          const recheck = await fetchEligibleRegisterForBond({
-            bondIndex, staker: this.address!, amountUstx, satsTotal: sbtcSats, signerManager,
-            poxInfo: await fetchPox5Info({ network: this.pox5Network }), network: this.pox5Network,
-          });
-          if (!recheck.ok) {
-            const reasons = (recheck as { reasons?: number[] }).reasons ?? [];
-            return `sBTC bond eligibility changed during approval: ${this.describeBondReasons(reasons)}`;
-          }
-          return undefined;
-        });
+        return this.pox5SignAndBroadcast(tx, opts?.note ?? `register-sbtc-bond-${bondIndex}`, opts?.externalId,
+          () => this.revalidateRegisterForBond({ bondIndex, amountUstx, satsTotal: sbtcSats, signerManager, requireZeroCustody: true }));
       });
 
       if (!result?.txid || result.error || result.reason) {
@@ -3156,19 +3183,8 @@ export class StacksSDK {
           postConditionMode: PostConditionMode.Deny,
           postConditions,
         });
-        return this.pox5SignAndBroadcast(tx, opts?.note ?? `roll-sbtc-bond-${nextBondIndex}`, opts?.externalId, async () => {
-          // Re-run the register-for-bond gate at the current tip (see createSbtcBond):
-          // prepare-phase entry or bond start during approval would reject the tx.
-          const recheck = await fetchEligibleRegisterForBond({
-            bondIndex: nextBondIndex, staker: this.address!, amountUstx, satsTotal: newSbtcSats, signerManager,
-            poxInfo: await fetchPox5Info({ network: this.pox5Network }), network: this.pox5Network,
-          });
-          if (!recheck.ok) {
-            const reasons = (recheck as { reasons?: number[] }).reasons ?? [];
-            return `sBTC bond eligibility changed during approval: ${this.describeBondReasons(reasons)}`;
-          }
-          return undefined;
-        });
+        return this.pox5SignAndBroadcast(tx, opts?.note ?? `roll-sbtc-bond-${nextBondIndex}`, opts?.externalId,
+          () => this.revalidateRegisterForBond({ bondIndex: nextBondIndex, amountUstx, satsTotal: newSbtcSats, signerManager, requireZeroCustody: false }));
       });
 
       if (!result?.txid || result.error || result.reason) {
