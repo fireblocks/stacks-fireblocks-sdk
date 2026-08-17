@@ -3832,7 +3832,7 @@ export class StacksSDK {
    */
   public unlockMaturedBond = async (
     destinationBtcAddress?: string,
-    opts?: { feeSats?: bigint; bondIndex?: number; outpointOverride?: { txid: string; vout: number } },
+    opts?: { feeSats?: bigint; bondIndex?: number; outpointOverride?: { txid: string; vout: number }; knownUtxo?: { txid: string; vout: number; value: number } },
   ): Promise<UnlockBtcResponse> => {
     try {
       const dest = this.resolveRecoveryDestination(destinationBtcAddress);
@@ -3848,7 +3848,12 @@ export class StacksSDK {
         return { success: false, error: `Bond not matured: BTC tip ${tipHeight} < unlock height ${lock.unlockHeight}` };
       }
 
-      const utxo = await this.resolveRecoveryUtxo(lock, opts?.outpointOverride);
+      // A fee replacement supplies the lock outpoint + value directly (knownUtxo): the
+      // outpoint is already spent in the mempool by the transaction being replaced, so it
+      // is no longer in the address UTXO set and resolveRecoveryUtxo would (correctly, for
+      // a fresh spend) reject it. The RBF caller has already verified the original is
+      // unconfirmed and spends this lock.
+      const utxo = opts?.knownUtxo ?? await this.resolveRecoveryUtxo(lock, opts?.outpointOverride);
 
       const feeSats = opts?.feeSats ?? await this.estimateBtcFeeSats(this.RECOVERY_SPEND_VBYTES);
       const actualUtxoSats = BigInt(utxo.value);
@@ -3894,7 +3899,7 @@ export class StacksSDK {
    */
   public spendEarlyExitUtxo = async (
     destinationBtcAddress?: string,
-    opts?: { feeSats?: bigint; bondIndex?: number; outpointOverride?: { txid: string; vout: number } },
+    opts?: { feeSats?: bigint; bondIndex?: number; outpointOverride?: { txid: string; vout: number }; knownUtxo?: { txid: string; vout: number; value: number } },
   ): Promise<SpendEarlyExitResponse> => {
     try {
       const dest = this.resolveRecoveryDestination(destinationBtcAddress);
@@ -3913,7 +3918,9 @@ export class StacksSDK {
         return { success: false, error: 'announce-l1-early-exit not settled — call announceEarlyExit first and wait for it to confirm' };
       }
 
-      const utxo = await this.resolveRecoveryUtxo(lock, opts?.outpointOverride);
+      // See unlockMaturedBond: a fee replacement supplies the spent-in-mempool lock
+      // outpoint directly, since it is no longer in the address UTXO set.
+      const utxo = opts?.knownUtxo ?? await this.resolveRecoveryUtxo(lock, opts?.outpointOverride);
 
       const feeSats = opts?.feeSats ?? await this.estimateBtcFeeSats(this.RECOVERY_SPEND_VBYTES);
       const actualUtxoSats = BigInt(utxo.value);
@@ -4058,8 +4065,20 @@ export class StacksSDK {
       // 5. Rebuild through the existing spend path with the new fee, preserving the
       //    original destination (re-authorized inside the spend) and lock outpoint. The
       //    spend refuses a dust output and re-signs fresh, satisfying the dust and
-      //    fresh-authorization rules.
-      const spendOpts = { feeSats: newFeeSats, bondIndex: opts?.bondIndex, outpointOverride: check.lockOutpoint };
+      //    fresh-authorization rules. The lock outpoint is passed as knownUtxo because it
+      //    is spent-in-mempool by the original and so is absent from the address UTXO set;
+      //    its value comes from the original's prevout, falling back to the recorded lock
+      //    amount. Refuse if neither yields a positive value (a zero witnessUtxo amount
+      //    would produce an invalid BIP-143 sighash).
+      const lockValueSats = Number(vin0?.prevout?.value ?? lock.amountSats ?? 0);
+      if (!Number.isFinite(lockValueSats) || lockValueSats <= 0) {
+        return { success: false, error: 'Could not determine the lock UTXO value for the replacement (missing prevout value and no recorded lock amount).' };
+      }
+      const spendOpts = {
+        feeSats: newFeeSats,
+        bondIndex: opts?.bondIndex,
+        knownUtxo: { txid: check.lockOutpoint.txid, vout: check.lockOutpoint.vout, value: lockValueSats },
+      };
       const spend = branch === 'matured'
         ? await this.unlockMaturedBond(check.destination, spendOpts)
         : await this.spendEarlyExitUtxo(check.destination, spendOpts);

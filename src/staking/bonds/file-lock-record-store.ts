@@ -20,7 +20,7 @@
 import { promises as fs } from "fs";
 import { createHash } from "crypto";
 import * as path from "path";
-import { BondLockRecord, LockRecordStore } from "./unlock-bytes-store";
+import { BondLockRecord, EnrollmentStage, LockRecordStore } from "./unlock-bytes-store";
 
 const SCHEMA_VERSION = 1;
 
@@ -36,6 +36,10 @@ interface SerializedRecord {
   vout?: number;
   signerManager?: string;
   firstRewardCycle?: number;
+  // Persisted so a crash + restart resumes at the last completed enrollment stage
+  // instead of re-funding Bitcoin (FBS-02).
+  fundingExternalId?: string;
+  stage?: EnrollmentStage;
 }
 
 interface StoreFile {
@@ -69,6 +73,8 @@ const serializeRecord = (r: BondLockRecord): SerializedRecord => ({
   ...(r.vout !== undefined ? { vout: r.vout } : {}),
   ...(r.signerManager !== undefined ? { signerManager: r.signerManager } : {}),
   ...(r.firstRewardCycle !== undefined ? { firstRewardCycle: r.firstRewardCycle } : {}),
+  ...(r.fundingExternalId !== undefined ? { fundingExternalId: r.fundingExternalId } : {}),
+  ...(r.stage !== undefined ? { stage: r.stage } : {}),
 });
 
 const deserializeRecord = (s: SerializedRecord): BondLockRecord => ({
@@ -82,6 +88,8 @@ const deserializeRecord = (s: SerializedRecord): BondLockRecord => ({
   vout: s.vout,
   signerManager: s.signerManager,
   firstRewardCycle: s.firstRewardCycle,
+  fundingExternalId: s.fundingExternalId,
+  stage: s.stage,
 });
 
 /** Deterministic JSON so the checksum is stable regardless of key insertion order. */
@@ -212,11 +220,22 @@ export class FileLockRecordStore implements LockRecordStore {
       await fh.close();
     }
 
-    // Keep at least one verified backup of the prior good file before replacing it.
+    // Keep at least one VERIFIED backup of the prior good file before replacing it. Only
+    // back up the current primary when it is itself intact — if the primary is corrupt
+    // (and loadAll therefore recovered from the existing backup), copying it over the
+    // backup would destroy the last good copy, so leave the backup untouched instead.
     try {
-      await fs.copyFile(this.filePath, this.bakPath);
+      const currentPrimary = await this.readFile(this.filePath); // throws if corrupt
+      if (currentPrimary) {
+        await fs.copyFile(this.filePath, this.bakPath);
+      }
+      // null → primary missing (new store): nothing to back up.
     } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+      if (e instanceof CorruptLockStoreError) {
+        // Primary is corrupt: preserve the existing verified backup rather than clobber it.
+      } else if ((e as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw e;
+      }
     }
 
     await fs.rename(tmp, this.filePath);

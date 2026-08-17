@@ -18,6 +18,8 @@ const makeRecord = (bondIndex: number): BondLockRecord => ({
   vout: 0,
   signerManager: "ST000000000000000000002AMW42H.signer-manager",
   firstRewardCycle: 42,
+  fundingExternalId: `bond-fund-${bondIndex}`,
+  stage: "btc-confirmed",
 });
 
 describe("FileLockRecordStore (FBS-35/52 durable store)", () => {
@@ -44,6 +46,34 @@ describe("FileLockRecordStore (FBS-35/52 durable store)", () => {
     expect(Array.from(loaded!.unlockBytes)).toEqual([1, 2, 3, 4]);
     expect(loaded!.lockAddress).toBe(rec.lockAddress);
     expect(loaded!.signerManager).toBe(rec.signerManager);
+  });
+
+  it("persists the resume fields (stage, fundingExternalId) across reload", async () => {
+    // A fresh store instance reads only what was written to disk — no in-memory carry-over.
+    const rec = makeRecord(5);
+    await new FileLockRecordStore(file).saveRecord("STADDR", 5, rec);
+
+    const loaded = await new FileLockRecordStore(file).loadRecord("STADDR", 5);
+    expect(loaded!.stage).toBe("btc-confirmed");
+    expect(loaded!.fundingExternalId).toBe("bond-fund-5");
+  });
+
+  it("does not clobber the verified backup with a corrupt primary on the next save", async () => {
+    const store = new FileLockRecordStore(file);
+    await store.saveRecord("STADDR", 1, makeRecord(1)); // primary={1}, no bak
+    await store.saveRecord("STADDR", 2, makeRecord(2)); // bak={1}, primary={1,2}
+
+    await fs.writeFile(file, "corrupt", "utf8"); // primary corrupt; bak still {1}
+
+    // This save recovers from the backup and must NOT copy the corrupt primary over it.
+    await store.saveRecord("STADDR", 3, makeRecord(3));
+
+    // Corrupt the primary a second time: if the backup had been clobbered, record 1 would
+    // now be unrecoverable. With the backup preserved, it is still readable.
+    await fs.writeFile(file, "corrupt again", "utf8");
+    const recovered = await store.loadRecord("STADDR", 1);
+    expect(recovered).not.toBeNull();
+    expect(recovered!.bondIndex).toBe(1);
   });
 
   it("treats a genuinely missing store as empty (not an error)", async () => {
