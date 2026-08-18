@@ -116,6 +116,7 @@ import {
   fetchEligibleUpdateBondRegistration,
   fetchEligibleUnstakeSbtc,
   fetchStakerCustodiedSbtc,
+  fetchStakerSharesStakedForCycle,
   fetchEligibleStake,
   fetchEligibleStakeUpdate,
   fetchEligibleUnstake,
@@ -4870,6 +4871,22 @@ export class StacksSDK {
       }
     };
 
+    // The staker payout (leg 2) is performed by the signer manager from its OWN balance,
+    // so the bound is manager-specific and comes from the registered adapter. With no
+    // registered payout policy the WHOLE claim is refused BEFORE leg 1 broadcasts —
+    // otherwise the fund-moving claim-rewards leg would settle (crystallizing sBTC into
+    // the manager and burning a fee and a RAW signature) only for the claim to fail here
+    // on every retry with nothing recorded for the caller.
+    const stakerPayoutPolicy = this.signerManagerRegistry.get(signerManager)?.payoutPolicy;
+    if (stakerBondIndices.length > 0 && !stakerPayoutPolicy) {
+      return {
+        error: `No registered payout policy for signer manager ${signerManager} — refusing the reward claim at cycle ${cycle} before any leg broadcasts. Register a signerManagerAdapters entry with a payout policy for this manager.`,
+      };
+    }
+    const stakerPayoutAssetId: `${string}.${string}` | undefined = stakerPayoutPolicy
+      ? `${stakerPayoutPolicy.asset.contractAddress}.${stakerPayoutPolicy.asset.contractName}`
+      : undefined;
+
     // ── Leg 1: signer-manager claim-rewards (PoX-5 sends total-rewards sBTC to the manager) ──
     // Skip the broadcast entirely when there is no unclaimed signer accrual for this cycle
     // (already distributed on a prior run, or nothing accrued). PoX-5 would abort such a
@@ -4911,21 +4928,10 @@ export class StacksSDK {
         return { unsettled: !smClaim.settled.success, error: msg };
       }
       signerClaimTxid = smClaim.txid;
+      // Leg 1 is a real broadcast fund-moving transaction — surface it in txHashes so
+      // the caller can see, audit and reconcile it (not only in the structured results).
+      txHashes.push(smClaim.txid);
     }
-
-    // The staker payout is performed by the signer manager from its OWN balance
-    // (PoX-5 moves no sBTC on this leg — answers §3b), so the bound is manager-specific
-    // and comes from the registered signer-manager adapter. With no registered payout
-    // policy the claim is REFUSED rather than signed permissively.
-    const stakerPayoutPolicy = this.signerManagerRegistry.get(signerManager)?.payoutPolicy;
-    if (stakerBondIndices.length > 0 && !stakerPayoutPolicy) {
-      return {
-        error: `No registered payout policy for signer manager ${signerManager} — refusing an unbounded staker reward claim at cycle ${cycle}. Register a signerManagerAdapters entry with a payout policy for this manager.`,
-      };
-    }
-    const stakerPayoutAssetId: `${string}.${string}` | undefined = stakerPayoutPolicy
-      ? `${stakerPayoutPolicy.asset.contractAddress}.${stakerPayoutPolicy.asset.contractName}`
-      : undefined;
 
     for (const bondIndex of stakerBondIndices) {
       const signerAccruedSats = bondIndex !== undefined
@@ -5036,7 +5042,13 @@ export class StacksSDK {
       );
       const minFirstCycle = Math.min(...firstCycleByBond.values());
 
-      const lastComputeHeight = await fetchLastRewardComputeHeight({ network: this.pox5Network }).catch(() => 0);
+      // A failed read is UNKNOWN — refuse rather than guessing the computed-cycle bound.
+      let lastComputeHeight: number;
+      try {
+        lastComputeHeight = await fetchLastRewardComputeHeight({ network: this.pox5Network });
+      } catch (e) {
+        return { success: false, error: `Could not read the last reward compute height (unknown, not zero) — refusing to claim: ${formatErrorMessage(e)}` };
+      }
       const lastComputedCycle = lastComputeHeight > 0
         ? Math.floor((lastComputeHeight - pox.firstBurnchainBlockHeight) / pox.rewardCycleLength)
         : pox.rewardCycleId - 1;
@@ -5125,9 +5137,12 @@ export class StacksSDK {
    * The signer manager is resolved PER CYCLE from get-signer-cycle-membership (not the
    * current stake), so historical cycles route correctly across signer rotation and
    * stay claimable after the stake expires when an explicit cycle range is supplied.
-   * Claimability is gated by the STAKER'S entitlement (get-earned-staker-rewards), not
-   * the signer-level total — a non-zero signer amount with a zero staker amount does
-   * not trigger a claim — and a read failure refuses rather than reading as "no rewards".
+   * Claimability per cycle is the complementary pair: the staker entitlement
+   * (get-earned-staker-rewards, positive only AFTER someone runs claim-rewards) OR the
+   * signer-level accrual (get-earned, positive only BEFORE) — the latter additionally
+   * requiring this staker to hold shares for the cycle. Gating on the staker read alone
+   * would deadlock a self-managed signer, whose first claim-rewards is reachable only
+   * through this method. A read failure refuses rather than reading as "no rewards".
    */
   public claimStxOnlyRewards = async (
     opts?: { note?: string; nonce?: bigint; fromCycle?: number; toCycle?: number },
@@ -5137,8 +5152,18 @@ export class StacksSDK {
       if (!this.address) throw new Error('Address not set');
       const staker = this.address;
 
+      if (opts?.fromCycle !== undefined && opts?.toCycle !== undefined && opts.fromCycle > opts.toCycle) {
+        return { success: false, error: `Invalid cycle range: fromCycle ${opts.fromCycle} > toCycle ${opts.toCycle}` };
+      }
+
       const pox = await fetchPox5Info({ network: this.pox5Network });
-      const lastComputeHeight = await fetchLastRewardComputeHeight({ network: this.pox5Network }).catch(() => 0);
+      // A failed read is UNKNOWN — refuse rather than guessing the computed-cycle bound.
+      let lastComputeHeight: number;
+      try {
+        lastComputeHeight = await fetchLastRewardComputeHeight({ network: this.pox5Network });
+      } catch (e) {
+        return { success: false, error: `Could not read the last reward compute height (unknown, not zero) — refusing to claim: ${formatErrorMessage(e)}` };
+      }
       const lastComputedCycle = lastComputeHeight > 0
         ? Math.floor((lastComputeHeight - pox.firstBurnchainBlockHeight) / pox.rewardCycleLength)
         : pox.rewardCycleId - 1;
@@ -5156,8 +5181,8 @@ export class StacksSDK {
       const endCycle = Math.min(opts?.toCycle ?? lastComputedCycle, lastComputedCycle);
 
       // Planning phase (OUTSIDE the nonce lock): resolve the per-cycle signer and gate
-      // by the STAKER'S entitlement (get-earned-staker-rewards), not the signer-level
-      // total. A read failure refuses rather than reading as "no rewards".
+      // by the staker-entitlement-OR-signer-accrual pair (see the method doc).
+      // A read failure refuses rather than reading as "no rewards".
       const plan: Array<{ cycle: number; signerAddr: string; signerName: string }> = [];
       for (let cycle = startCycle!; cycle <= endCycle; cycle++) {
         let cycleMembership: { amountUstx: bigint; signer: string } | undefined;
@@ -5169,13 +5194,31 @@ export class StacksSDK {
         if (!cycleMembership) continue;
 
         const signerManager = cycleMembership.signer;
+        // Claimability is a COMPLEMENTARY pair: before anyone runs claim-rewards for the
+        // cycle, the signer-level accrual (get-earned) is positive while the staker
+        // entitlement is still zero (settle-rewards has not run); after it they swap.
+        // Either being positive means this staker has work to do here. Gating on the
+        // staker read alone deadlocks a self-managed signer — leg 1, the only
+        // settle-rewards trigger, is reachable solely through this method — so the first
+        // claim could never self-initiate. A signer-accrual-only cycle additionally
+        // requires this staker to hold shares, or the manager's claim-staker-rewards
+        // would abort on its (> earned u0) assert after leg 1 crystallizes.
+        let signerEarned: bigint;
         let stakerEarned: bigint;
+        let stakerShares: bigint;
         try {
-          stakerEarned = await fetchEarnedStakerRewards({ signerManager, rewardCycle: cycle, staker, network: this.pox5Network });
+          [signerEarned, stakerEarned, stakerShares] = await Promise.all([
+            fetchEarned({ signerManager, rewardCycle: cycle, network: this.pox5Network }),
+            fetchEarnedStakerRewards({ signerManager, rewardCycle: cycle, staker, network: this.pox5Network }),
+            fetchStakerSharesStakedForCycle({ staker, signer: signerManager, rewardCycle: cycle, network: this.pox5Network }),
+          ]);
         } catch (e) {
-          return { success: false, error: `Could not read staker-earned rewards at cycle ${cycle} (unknown, not zero) — refusing to claim: ${formatErrorMessage(e)}` };
+          return { success: false, error: `Could not read earned rewards at cycle ${cycle} (unknown, not zero) — refusing to claim: ${formatErrorMessage(e)}` };
         }
-        if (stakerEarned <= BigInt(0)) continue;
+        const claimable =
+          stakerEarned > BigInt(0) ||
+          (signerEarned > BigInt(0) && stakerShares > BigInt(0));
+        if (!claimable) continue;
         const dot = signerManager.lastIndexOf('.');
         plan.push({ cycle, signerAddr: signerManager.slice(0, dot), signerName: signerManager.slice(dot + 1) });
       }
