@@ -72,11 +72,18 @@ export function checkFeeReplacement(
   if (orig.prevoutAddress && orig.prevoutAddress !== lockAddress) {
     return { ok: false, error: `Original tx does not spend this bond's lock address (${lockAddress}); refusing to replace an unrelated transaction.` };
   }
+  const outpointCheckable = recordedOutpoint?.txid !== undefined && recordedOutpoint.vout !== undefined;
   if (
-    recordedOutpoint?.txid !== undefined && recordedOutpoint.vout !== undefined &&
-    (orig.lockOutpoint.txid !== recordedOutpoint.txid || orig.lockOutpoint.vout !== recordedOutpoint.vout)
+    outpointCheckable &&
+    (orig.lockOutpoint.txid !== recordedOutpoint!.txid || orig.lockOutpoint.vout !== recordedOutpoint!.vout)
   ) {
-    return { ok: false, error: `Original tx input ${orig.lockOutpoint.txid}:${orig.lockOutpoint.vout} does not match the recorded lock outpoint ${recordedOutpoint.txid}:${recordedOutpoint.vout}.` };
+    return { ok: false, error: `Original tx input ${orig.lockOutpoint.txid}:${orig.lockOutpoint.vout} does not match the recorded lock outpoint ${recordedOutpoint!.txid}:${recordedOutpoint!.vout}.` };
+  }
+  // Fail closed when NEITHER identity check could run (Esplora omitted the prevout data
+  // AND no durable record exists): the "refuse to replace an unrelated transaction"
+  // invariant must be enforced by at least one of them, not silently skipped.
+  if (!orig.prevoutAddress && !outpointCheckable) {
+    return { ok: false, error: `Cannot verify the original transaction spends this bond's lock (no prevout address from Esplora and no recorded outpoint) — refusing to replace an unverified transaction.` };
   }
 
   const oldFeeSats = orig.feeSats;

@@ -65,6 +65,22 @@ describe("checkFeeReplacement", () => {
     expect(err(r)).toMatch(/unrelated transaction/);
   });
 
+  it("fails closed when neither identity check can run (no prevout, no record)", () => {
+    const r = checkFeeReplacement(makeParsed({ prevoutAddress: undefined }), BigInt(1000), LOCK_ADDR);
+    expect(r.ok).toBe(false);
+    expect(err(r)).toMatch(/unverified transaction/);
+  });
+
+  it("passes with no prevout data when the recorded outpoint matches", () => {
+    const r = checkFeeReplacement(
+      makeParsed({ prevoutAddress: undefined }),
+      BigInt(1000),
+      LOCK_ADDR,
+      { txid: LOCK_TXID, vout: 0 },
+    );
+    expect(r.ok).toBe(true);
+  });
+
   it("rejects when the input disagrees with the recorded lock outpoint", () => {
     const r = checkFeeReplacement(makeParsed(), BigInt(1000), LOCK_ADDR, { txid: "dd".repeat(32), vout: 1 });
     expect(r.ok).toBe(false);

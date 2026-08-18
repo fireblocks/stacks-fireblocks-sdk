@@ -228,6 +228,16 @@ export class FileLockRecordStore implements LockRecordStore {
       const currentPrimary = await this.readFile(this.filePath); // throws if corrupt
       if (currentPrimary) {
         await fs.copyFile(this.filePath, this.bakPath);
+        // fsync the backup before the primary rename proceeds — without it a crash
+        // shortly after writeAll could leave .bak truncated/stale even though the new
+        // primary was durably renamed, breaking the "one verified backup" guarantee
+        // exactly when loadAll would need it.
+        const bh = await fs.open(this.bakPath, "r+");
+        try {
+          await bh.sync();
+        } finally {
+          await bh.close();
+        }
       }
       // null → primary missing (new store): nothing to back up.
     } catch (e) {

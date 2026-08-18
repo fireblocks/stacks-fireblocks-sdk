@@ -2536,6 +2536,12 @@ export class StacksSDK {
         throw new Error("Address, Public Key or Vault ID are not set");
       }
 
+      // This entrypoint's entire job is rotating the bond onto a new signer manager, so
+      // the adapter allowlist must gate it like every other manager-selecting call —
+      // the contract's own signer-grant check proves registration, not operator trust.
+      const smAllowError = this.signerManagerAllowedError(signerManager);
+      if (smAllowError) return { success: false, error: smAllowError };
+
       // The contract rotates the signer of the staker's CURRENT bond membership; it
       // receives no bond index. Read that membership here (fetchBondMembership throws
       // on a read failure, so a transport error fails closed before any signature is
