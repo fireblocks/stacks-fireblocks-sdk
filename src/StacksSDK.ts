@@ -1258,7 +1258,10 @@ export class StacksSDK {
         return { success: false, error: `Account not eligible for staking: ${this.describeBondReasons(reasons)}` };
       }
 
+      // Read INSIDE the serialized section so the refund condition is baked from the
+      // freshest custody state; the post-signing hook re-checks it against live custody.
       const result = await this.runNonceExclusive(async () => {
+        const custodyRefund = await this.custodyRefundPostConditions();
         const resolvedNonce = await this.resolveNonce(nonce);
         const tx = await this.buildPox5Call(
           "stake",
@@ -1271,9 +1274,14 @@ export class StacksSDK {
           ],
           {
             nonce: resolvedNonce,
-            // Deny mode bounding the STX lock to exactly the staked amount.
             postConditionMode: PostConditionMode.Deny,
-            postConditions: [Pc.origin().willSendEq(amountUstx).ustxToLock()],
+            postConditions: [
+              // Deny mode bounding the STX lock to exactly the staked amount.
+              Pc.origin().willSendEq(amountUstx).ustxToLock(),
+              // An sBTC-bond holder rolling into a solo STX stake is refunded their
+              // entire custodied sBTC from pox-5 during this call — cover it or abort.
+              ...custodyRefund.conditions,
+            ],
           },
         );
         return this.pox5SignAndBroadcast(tx, note || `stake ${amountStx} STX for ${numCycles} cycles`, externalId, async () => {
@@ -1281,15 +1289,23 @@ export class StacksSDK {
           // may have advanced (into the prepare phase, past the signer grant, or into a
           // cycle where the tx's start-burn-ht is stale) while the signature was pending
           // Fireblocks approval. startBurnHt stays the value baked into the signed tx.
-          const recheck = await fetchEligibleStake({
-            staker: this.address!,
-            signerManager,
-            amountUstx,
-            numCycles,
-            startBurnHt: pox.currentBurnchainBlockHeight,
-            poxInfo: await fetchPox5Info({ network: this.pox5Network }),
-            network: this.pox5Network,
-          });
+          const [recheck, nowCustodied] = await Promise.all([
+            fetchEligibleStake({
+              staker: this.address!,
+              signerManager,
+              amountUstx,
+              numCycles,
+              startBurnHt: pox.currentBurnchainBlockHeight,
+              poxInfo: await fetchPox5Info({ network: this.pox5Network }),
+              network: this.pox5Network,
+            }),
+            fetchStakerCustodiedSbtc({ staker: this.address!, network: this.pox5Network }),
+          ]);
+          // The custody-refund condition was baked from the pre-signing custody read;
+          // if custody moved during approval the signed conditions no longer match.
+          if (nowCustodied !== custodyRefund.custodiedSats) {
+            return `custodied sBTC changed during approval (${custodyRefund.custodiedSats} → ${nowCustodied} sats) — retry to rebuild against current custody`;
+          }
           if (!recheck.ok) {
             const reasons = (recheck as { reasons?: number[] }).reasons ?? [];
             return `staking eligibility changed during approval: ${this.describeBondReasons(reasons)}`;
@@ -1402,14 +1418,24 @@ export class StacksSDK {
           // Re-run the authoritative contract-gate check at the current tip: the position,
           // signer grant, or phase may have changed while the signature was pending
           // Fireblocks approval.
-          const recheck = await fetchEligibleStakeUpdate({
-            staker: this.address!,
-            signerManager,
-            oldSignerManager,
-            cyclesToExtend: cyclesToExtend ?? 0,
-            amountIncrease,
-            network: this.pox5Network,
-          });
+          const [recheck, nowInfo] = await Promise.all([
+            fetchEligibleStakeUpdate({
+              staker: this.address!,
+              signerManager,
+              oldSignerManager,
+              cyclesToExtend: cyclesToExtend ?? 0,
+              amountIncrease,
+              network: this.pox5Network,
+            }),
+            fetchStakerInfo({ address: this.address!, network: this.pox5Network }),
+          ]);
+          // The SentEq post-condition was baked from the pre-signing position read; if
+          // the position moved during approval the recorded total no longer matches and
+          // the node would abort the broadcast — discard and rebuild instead.
+          const nowAmountUstx = nowInfo?.staked ? BigInt(nowInfo.details.amountUstx) : null;
+          if (nowAmountUstx !== currentAmountUstx) {
+            return `staked amount changed during approval (${currentAmountUstx} → ${nowAmountUstx ?? 'not staked'} µSTX) — retry to rebuild against the current position`;
+          }
           if (!recheck.ok) {
             const reasons = (recheck as { reasons?: number[] }).reasons ?? [];
             return `stake-update eligibility changed during approval: ${this.describeBondReasons(reasons)}`;
@@ -2605,6 +2631,11 @@ export class StacksSDK {
     signerManager: string,
     opts?: { note?: string; nonce?: bigint; externalId?: string; confirmations?: number; btcTxid?: string; amountUstxOverride?: bigint; signerCalldata?: Uint8Array | string },
   ): Promise<CreateBondResult> => {
+    // Tracks the funding outpoint once BTC is committed, so even the catch-all error
+    // return carries the pointer to the locked Bitcoin (the durable record persists it
+    // too; this keeps the immediate caller's diagnostics complete when a later step —
+    // e.g. the post-signing re-check — throws).
+    const committedBtc: { btcTxid?: string; vout?: number } = {};
     try {
       if (!this.address || !this.publicKey || !this.vaultAccountId) {
         throw new Error('Address, Public Key or Vault ID are not set');
@@ -2787,12 +2818,15 @@ export class StacksSDK {
         await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, btcTxid, stage: "btc-broadcast" });
       }
 
+      committedBtc.btcTxid = btcTxid;
+
       // Step 8 — wait for Bitcoin confirmations
       const { blockHash } = await this.waitForBtcConfirmations(btcTxid, opts?.confirmations ?? 3);
       await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, btcTxid, stage: "btc-confirmed" });
 
       // Step 9 — assemble SPV proof
       const lockupProof = await this.assembleLockupProof(btcTxid, blockHash, metadata.outputScript, metadata.unlockHeight);
+      committedBtc.vout = lockupProof.outputIndex;
 
       // Record the resolved funding outpoint so recovery selects by outpoint.
       await this.lockRecordStore.saveRecord(this.address, bondIndex, {
@@ -2827,6 +2861,10 @@ export class StacksSDK {
       // Step 10 — register on L2. Only the nonce→sign→broadcast is serialized;
       // the Bitcoin confirmation waits above ran outside the lock.
       const result = await this.runNonceExclusive(async () => {
+        // A native lockup custodies no sBTC, so any currently custodied sBTC is
+        // refunded from pox-5 during register-for-bond — cover it or Deny mode aborts
+        // AFTER the Bitcoin is already locked.
+        const custodyRefund = await this.custodyRefundPostConditions();
         const resolvedNonce = await this.resolveNonce(opts?.nonce);
         const tx = await this.buildRegisterForBondTx({
           bondIndex,
@@ -2838,34 +2876,20 @@ export class StacksSDK {
           signerCalldata: opts?.signerCalldata,
           // Bound the paired STX lock to exactly the required amount.
           postConditionMode: PostConditionMode.Deny,
-          postConditions: [Pc.origin().willSendEq(amountUstx).ustxToLock()],
+          postConditions: [Pc.origin().willSendEq(amountUstx).ustxToLock(), ...custodyRefund.conditions],
         });
         return this.pox5SignAndBroadcast(
           tx,
           opts?.note ?? 'register-for-bond',
           opts?.externalId ? `${opts.externalId}-register` : undefined,
-          async () => {
-            // BTC is already locked at this point; the bond window / eligibility can
-            // still change during L2 approval (e.g. ERR_BOND_ALREADY_STARTED). Re-check
-            // against the CURRENT height and discard rather than broadcast a doomed
-            // register — the BTC remains recoverable and the L2 tx can be retried.
-            const nowPox = await fetchPox5Info({ network: this.pox5Network });
-            const recheck = await fetchEligibleRegisterForBond({
-              bondIndex,
-              staker: this.address!,
-              amountUstx,
-              satsTotal: btcAmountSats,
-              signerManager,
-              poxInfo: nowPox,
-              outputs: [lockupProof],
-              network: this.pox5Network,
-            });
-            if (!recheck.ok) {
-              const reasons = (recheck as { reasons?: number[] }).reasons ?? [];
-              return `bond eligibility changed during approval: ${this.describeBondReasons(reasons)}`;
-            }
-            return undefined;
-          },
+          // BTC is already locked at this point; the bond window / eligibility / custody
+          // can still change during L2 approval (e.g. ERR_BOND_ALREADY_STARTED). Re-check
+          // against the CURRENT height and discard rather than broadcast a doomed
+          // register — the BTC remains recoverable and the L2 tx can be retried.
+          () => this.revalidateRegisterForBond({
+            bondIndex, amountUstx, satsTotal: btcAmountSats, signerManager,
+            outputs: [lockupProof], expectedCustodySats: custodyRefund.custodiedSats,
+          }),
         );
       });
       if (!result?.txid || result.error || result.reason) {
@@ -2901,47 +2925,99 @@ export class StacksSDK {
       };
     } catch (error) {
       console.error('createBond error:', error);
-      return { success: false, error: `Failed to create bond: ${formatErrorMessage(error)}` };
+      return { success: false, error: `Failed to create bond: ${formatErrorMessage(error)}`, ...committedBtc };
     }
   };
 
   /**
-   * Post-signing re-check for a register-for-bond broadcast (createSbtcBond / rollSbtcBond).
-   * Re-runs the eligibility gate at the CURRENT tip so a signature that sat in Fireblocks
-   * approval is not broadcast into a now-certain contract rejection (prepare-phase entry,
-   * bond start). Returns a reason string to discard the tx, or undefined to proceed.
+   * Post-signing re-check for a register-for-bond broadcast (createBond, createSbtcBond,
+   * rollSbtcBond, renewBond). Re-runs the eligibility gate at the CURRENT tip — with a
+   * freshly fetched poxInfo, never a pre-broadcast snapshot — so a signature that sat in
+   * Fireblocks approval is not broadcast into a now-certain contract rejection
+   * (prepare-phase entry, bond start, closed rollover window). Returns a reason string to
+   * discard the tx, or undefined to proceed.
    *
    * `requireZeroCustody` guards createSbtcBond specifically: its sBTC post-condition asserts
    * the GROSS amount, which is only valid with no prior custody. If custody appeared during
    * the approval window the call is now a rollover — register-for-bond would move only the
    * net difference and the gross post-condition would abort — so discard and route to
    * rollSbtcBond instead.
+   *
+   * `expectedCustodySats` guards every path whose post-conditions were BUILT from a custody
+   * read (the net-delta rollover, and the pox-5 custody-refund condition on native paths):
+   * if live custody differs from the baked value, the signed conditions no longer match
+   * what the contract will transfer, so discard rather than broadcast a doomed abort.
+   *
+   * `outputs` threads the SPV lockup proof through for the native-BTC paths, whose
+   * eligibility check covers the proof-dependent gates as well.
    */
   private revalidateRegisterForBond = async (args: {
     bondIndex: number;
     amountUstx: bigint;
     satsTotal: bigint;
     signerManager: string;
-    requireZeroCustody: boolean;
+    requireZeroCustody?: boolean;
+    expectedCustodySats?: bigint;
+    outputs?: Awaited<ReturnType<StacksSDK["assembleLockupProof"]>>[];
   }): Promise<string | undefined> => {
     const nowPox = await fetchPox5Info({ network: this.pox5Network });
+    const needCustody = args.requireZeroCustody || args.expectedCustodySats !== undefined;
     const [recheck, custodied] = await Promise.all([
       fetchEligibleRegisterForBond({
         bondIndex: args.bondIndex, staker: this.address!, amountUstx: args.amountUstx,
-        satsTotal: args.satsTotal, signerManager: args.signerManager, poxInfo: nowPox, network: this.pox5Network,
+        satsTotal: args.satsTotal, signerManager: args.signerManager, poxInfo: nowPox,
+        ...(args.outputs ? { outputs: args.outputs } : {}),
+        network: this.pox5Network,
       }),
-      args.requireZeroCustody
+      needCustody
         ? fetchStakerCustodiedSbtc({ staker: this.address!, network: this.pox5Network })
         : Promise.resolve(BigInt(0)),
     ]);
     if (args.requireZeroCustody && custodied > BigInt(0)) {
       return `staker gained ${custodied} sats of custodied sBTC during approval — this is now a rollover; use rollSbtcBond (net-delta) instead of createSbtcBond (gross).`;
     }
+    if (args.expectedCustodySats !== undefined && custodied !== args.expectedCustodySats) {
+      return `custodied sBTC changed during approval (${args.expectedCustodySats} → ${custodied} sats) — the signed post-conditions no longer match the transfer the contract will make; retry to rebuild against current custody.`;
+    }
     if (!recheck.ok) {
       const reasons = (recheck as { reasons?: number[] }).reasons ?? [];
-      return `sBTC bond eligibility changed during approval: ${this.describeBondReasons(reasons)}`;
+      return `bond eligibility changed during approval: ${this.describeBondReasons(reasons)}`;
     }
     return undefined;
+  };
+
+  /**
+   * pox-5→staker sBTC custody-refund post-condition for calls that custody NO sBTC.
+   *
+   * `register-for-bond` (native lockup) and the STX-only `stake` path both run the
+   * contract's internal roll-sbtc with a new sBTC amount of 0, so when the staker
+   * currently custodies sBTC the contract refunds the ENTIRE custodied amount from
+   * pox-5 during the call. In Deny mode that transfer must be covered or the node
+   * aborts the transaction after the signature is spent — on the bond paths, after
+   * the Bitcoin is already committed.
+   *
+   * Returns the FT condition (empty when custody is 0) plus the custody amount so the
+   * caller can bake it into its post-signing re-check. Throws when custody is non-zero
+   * but the network sBTC asset cannot be resolved: an uncovered refund must refuse to
+   * build rather than sign permissively.
+   */
+  private custodyRefundPostConditions = async (): Promise<{ conditions: PostCondition[]; custodiedSats: bigint }> => {
+    const custodiedSats = await fetchStakerCustodiedSbtc({ staker: this.address!, network: this.pox5Network });
+    if (custodiedSats <= BigInt(0)) return { conditions: [], custodiedSats: BigInt(0) };
+    const sbtcAsset = await this.resolveSbtcAsset();
+    if (!sbtcAsset) {
+      throw new Error(
+        `Staker custodies ${custodiedSats} sats of sBTC that this call would refund from pox-5, ` +
+          'but the network sBTC asset could not be resolved (/v2/pox pox_5_sbtc_contract) — refusing to build without covering the refund.',
+      );
+    }
+    const bootAddr = (this.pox5Network as any).bootAddress as string;
+    const pox5ContractId: `${string}.${string}` = `${bootAddr}.pox-5`;
+    const sbtcContractId: `${string}.${string}` = `${sbtcAsset.contractAddress}.${sbtcAsset.contractName}`;
+    return {
+      conditions: [Pc.principal(pox5ContractId).willSendEq(custodiedSats).ft(sbtcContractId, sbtcAsset.assetName)],
+      custodiedSats,
+    };
   };
 
   /**
@@ -3184,7 +3260,9 @@ export class StacksSDK {
           postConditions,
         });
         return this.pox5SignAndBroadcast(tx, opts?.note ?? `roll-sbtc-bond-${nextBondIndex}`, opts?.externalId,
-          () => this.revalidateRegisterForBond({ bondIndex: nextBondIndex, amountUstx, satsTotal: newSbtcSats, signerManager, requireZeroCustody: false }));
+          // The net-delta post-conditions were baked from custodiedSats; a custody change
+          // during approval invalidates them, so the re-check compares against it.
+          () => this.revalidateRegisterForBond({ bondIndex: nextBondIndex, amountUstx, satsTotal: newSbtcSats, signerManager, expectedCustodySats: custodiedSats }));
       });
 
       if (!result?.txid || result.error || result.reason) {
@@ -4338,6 +4416,11 @@ export class StacksSDK {
       const storeError = await this.assertDurableLockStore();
       if (storeError) return { success: false, error: storeError };
 
+      // Reject a signer manager outside the configured adapter allowlist BEFORE the
+      // irrevocable BTC re-lock (same gate as createBond/createSbtcBond).
+      const smAllowError = this.signerManagerAllowedError(signerManager);
+      if (smAllowError) return { success: false, error: smAllowError };
+
       // 1. Resolve prior lock
       const prior = await this.deriveLock();
       if (!prior) return { success: false, error: 'No current L1 bond to renew' };
@@ -4465,14 +4548,17 @@ export class StacksSDK {
         vout: lockupProof.outputIndex,
       });
 
-      // Re-run eligibility with the SPV proof before spending the L2 signature.
+      // Re-run eligibility with the SPV proof before spending the L2 signature — with a
+      // FRESH poxInfo: the pre-broadcast snapshot is stale by at least the three-
+      // confirmation Bitcoin wait, so reusing it would miss a window/phase crossing.
+      const proofPox = await fetchPox5Info({ network: this.pox5Network });
       const proofPreflight = await fetchEligibleRegisterForBond({
         bondIndex: nextBondIndex,
         staker: this.address,
         amountUstx,
         satsTotal: outputAmount,
         signerManager,
-        poxInfo: pox,
+        poxInfo: proofPox,
         outputs: [lockupProof],
         network: this.pox5Network,
       });
@@ -4484,6 +4570,10 @@ export class StacksSDK {
       // Register on L2. Only the nonce→sign→broadcast is serialized; the Bitcoin
       // confirmation waits above ran outside the lock.
       const result = await this.runNonceExclusive(async () => {
+        // A native re-lock custodies no sBTC, so any custodied sBTC (e.g. an sBTC bond
+        // registered since the prior native bond) is refunded from pox-5 here — cover it
+        // or Deny mode aborts AFTER the BTC is already re-locked.
+        const custodyRefund = await this.custodyRefundPostConditions();
         const resolvedNonce = await this.resolveNonce(opts?.nonce);
         const stacksTx = await this.buildRegisterForBondTx({
           bondIndex: nextBondIndex,
@@ -4494,9 +4584,19 @@ export class StacksSDK {
           nonce: resolvedNonce,
           // Bound the paired STX lock to exactly the required amount.
           postConditionMode: PostConditionMode.Deny,
-          postConditions: [Pc.origin().willSendEq(amountUstx).ustxToLock()],
+          postConditions: [Pc.origin().willSendEq(amountUstx).ustxToLock(), ...custodyRefund.conditions],
         });
-        return this.pox5SignAndBroadcast(stacksTx, opts?.note ?? `renew-bond-${nextBondIndex}`, opts?.externalId);
+        return this.pox5SignAndBroadcast(
+          stacksTx,
+          opts?.note ?? `renew-bond-${nextBondIndex}`,
+          opts?.externalId,
+          // The BTC is already re-locked; a window/phase crossing or custody change
+          // during Fireblocks approval must discard the tx, not broadcast a doomed one.
+          () => this.revalidateRegisterForBond({
+            bondIndex: nextBondIndex, amountUstx, satsTotal: outputAmount, signerManager,
+            outputs: [lockupProof], expectedCustodySats: custodyRefund.custodiedSats,
+          }),
+        );
       });
       if (!result?.txid || result.error || result.reason) {
         return { success: false, error: result?.error ?? result?.reason ?? 'broadcast failed', btcTxid, vout: lockupProof.outputIndex };
