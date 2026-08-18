@@ -3430,8 +3430,10 @@ export class StacksSDK {
       let locking_address: string | null = null;
       let still_locked: boolean | null = null;
       let blocks_until_unlock: number | null = null;
+      let record: BondLockRecord | null = null;
 
       if (membership.isL1Lock) {
+        record = await this.lockRecordStore.loadRecord(this.address, membership.bondIndex).catch(() => null);
         const bond = await fetchBond({ bondIndex: membership.bondIndex, network: this.pox5Network });
         if (bond) {
           const meta = buildRegisterMetadata({
@@ -3453,7 +3455,6 @@ export class StacksSDK {
             const res = await fetch(`${this.esploraBase()}/address/${meta.lockAddress}/utxo`);
             if (!res.ok) throw new Error(`Esplora HTTP ${res.status}`);
             const utxos: Array<{ txid: string; vout: number; value: number }> = await res.json();
-            const record = await this.lockRecordStore.loadRecord(this.address, membership.bondIndex);
             still_locked =
               record?.btcTxid !== undefined && record.vout !== undefined
                 ? utxos.some((u) => u.txid === record.btcTxid && u.vout === record.vout)
@@ -3464,7 +3465,14 @@ export class StacksSDK {
         }
       }
 
-      const amountSatsBn = membership.amountSats;
+      // announce-l1-early-exit permanently zeroes the membership amount while the BTC
+      // stays locked in a live UTXO. Consumers bound the recovery-spend fee on this
+      // value, so a zeroed L1 amount falls back to the durable record's immutable
+      // funded amount rather than reporting a 0-sat bond.
+      const amountSatsBn =
+        membership.isL1Lock && membership.amountSats <= BigInt(0) && record?.amountSats
+          ? record.amountSats
+          : membership.amountSats;
       const amountBtc = (Number(amountSatsBn) / 1e8).toFixed(8);
       const earnedBtc = (Number(earnedSats) / 1e8).toFixed(8);
 
