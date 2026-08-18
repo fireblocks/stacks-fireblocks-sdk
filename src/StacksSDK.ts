@@ -2777,6 +2777,12 @@ export class StacksSDK {
       // Persist the immutable lock record BEFORE funding, so a crash after the BTC send
       // still leaves enough to recover the outpoint by lock address. The funding
       // outpoint (btcTxid/vout) is filled in once known below.
+      //
+      // On a RESUME, merge the prior attempt's funding facts (btcTxid/vout, the amount
+      // actually funded, and the reached stage) instead of downgrading the record: two
+      // failed confirmation waits in a row would otherwise erase the only pointer to
+      // Bitcoin that is already committed, making a later retry report "no BTC
+      // committed" and fall through to a fresh funding call.
       const lockRecord: BondLockRecord = {
         bondIndex,
         unlockBytes: metadata.unlockBytes,
@@ -2788,6 +2794,14 @@ export class StacksSDK {
         firstRewardCycle: bondPeriodToRewardCycle({ bondIndex, poxInfo: pox }),
         fundingExternalId,
         stage: "lock-fixed",
+        ...(canResumeFunding
+          ? {
+              btcTxid: priorRecord!.btcTxid,
+              vout: priorRecord!.vout,
+              amountSats: priorRecord!.amountSats,
+              stage: priorRecord!.stage ?? "btc-broadcast",
+            }
+          : {}),
       };
       // Persist the fixed lock parameters (address/script/amount/external id) BEFORE
       // any funding attempt, so a crash before funding still leaves recoverable state.
@@ -4515,7 +4529,13 @@ export class StacksSDK {
       this.setP2wshWitness(btcTx, 0, [stakerSig, new Uint8Array([1]), prior.lockScript]);
 
       // Persist the next bond's immutable lock record before spending, so a crash
-      // after the re-lock broadcast leaves a recoverable outpoint reference.
+      // after the re-lock broadcast leaves a recoverable outpoint reference. Merge a
+      // prior attempt's funding outpoint for the SAME lock address rather than
+      // downgrading it — an earlier re-lock broadcast may already have committed the
+      // BTC, and this save must never erase the only pointer to it.
+      const priorNextRecord = await this.lockRecordStore.loadRecord(this.address, nextBondIndex).catch(() => null);
+      const keepPriorOutpoint =
+        priorNextRecord?.btcTxid !== undefined && priorNextRecord.lockAddress === nextMeta.lockAddress;
       await this.lockRecordStore.saveRecord(this.address, nextBondIndex, {
         bondIndex: nextBondIndex,
         unlockBytes: nextMeta.unlockBytes,
@@ -4525,6 +4545,9 @@ export class StacksSDK {
         isL1Lock: true,
         signerManager,
         firstRewardCycle: bondPeriodToRewardCycle({ bondIndex: nextBondIndex, poxInfo: pox }),
+        ...(keepPriorOutpoint
+          ? { btcTxid: priorNextRecord!.btcTxid, vout: priorNextRecord!.vout, amountSats: priorNextRecord!.amountSats }
+          : {}),
       });
 
       const btcTxid = await this.broadcastBtc(bytesToHex(btcTx.extract()));
