@@ -143,6 +143,8 @@ import {
   firstPox5RewardCycle,
   bondPeriodToRewardCycle,
   burnHeightToRewardCycle,
+  currentDistributionCycle,
+  distributionCycleToBurnHeight,
   BOND_END_OFFSET_PERIODS,
   buildUnlockScript,
   buildLockScript,
@@ -4678,21 +4680,19 @@ export class StacksSDK {
   /**
    * Distribution "calculation height" — the burn height at which the reward waterfall
    * snapshots the active-bond set. calculate-rewards must submit exactly the bonds
-   * active at THIS height, not at the drifting live burn height; near a reward-cycle
-   * boundary the two can fall in different cycles, which is the defect FBS-41 fixes.
+   * active at THIS height, not at the drifting live burn height; near a boundary the
+   * two can fall in different cycles, which is the defect FBS-41 fixes.
    *
-   * EDUCATED GUESS (verify on a live node, then replace with the real accessor): the
-   * protocol answers do not cover this and the dependency exposes no
-   * `distribution-cycle-to-burn-height` / `current-distribution-cycle` read-only
-   * function, so we anchor to the START of the current reward cycle — a stable,
-   * deterministic snapshot within the current cycle rather than the drifting live
-   * height. We deliberately do NOT subtract a block (that would fall into the
-   * previous cycle and derive the active set one cycle off). Fail-safe: a wrong
-   * height only makes the node REJECT calculate-rewards (no misdistribution), and
-   * fetchEligibleCalculateRewards gates the submission before any signature is spent.
+   * The contract evaluates `(- (distribution-cycle-to-burn-height
+   * (current-distribution-cycle)) u1)` — one block BEFORE the current distribution-
+   * cycle boundary (pox-5 calculate-rewards). This mirrors that exactly via the same
+   * dependency helpers the authoritative fetchEligibleCalculateRewards preflight uses,
+   * replacing the earlier reward-cycle-start guess that missed every other
+   * distribution half-cycle. Fail-safe either way: a wrong height only makes the node
+   * REJECT calculate-rewards (no misdistribution).
    */
   private calculationHeight = (pox: Pox5PoxInfo): number =>
-    pox.firstBurnchainBlockHeight + pox.rewardCycleId * pox.rewardCycleLength;
+    distributionCycleToBurnHeight({ distributionCycle: currentDistributionCycle(pox), poxInfo: pox }) - 1;
 
   private activeBondWindow = (pox: Pox5PoxInfo, burnHeight: number): number[] => {
     const currentCycle = burnHeightToRewardCycle({ burnHeight, poxInfo: pox });
@@ -4702,8 +4702,11 @@ export class StacksSDK {
       ? 0
       : Math.floor((currentCycle - firstBondCycle) / gap);
     const windowStart = Math.max(0, latest - (BOND_END_OFFSET_PERIODS - 1));
+    // The contract's window is [latest-(N-1), latest] — no lookahead. A not-yet-started
+    // bond is not in the active set at the calculation height, and including it would
+    // only add an extra read (isBondActiveAtHeight filters it), so match exactly.
     const candidates: number[] = [];
-    for (let i = windowStart; i <= latest + 1; i++) candidates.push(i); // +1 lookahead
+    for (let i = windowStart; i <= latest; i++) candidates.push(i);
     return candidates;
   };
 

@@ -152,3 +152,39 @@ describe("revalidateRegisterForBond (post-signing discard paths)", () => {
     expect(mockEligible).toHaveBeenCalledWith(expect.objectContaining({ outputs }));
   });
 });
+
+describe("calculationHeight (FBS-41 distribution snapshot)", () => {
+  // private-1-like parameters: F=0, L=20 → distribution half-cycle H=10.
+  const F = 0;
+  const L = 20;
+  const H = Math.floor(L / 2);
+  const makePox = (currentBurnchainBlockHeight: number): any => ({
+    firstBurnchainBlockHeight: F,
+    rewardCycleLength: L,
+    currentBurnchainBlockHeight,
+    rewardCycleId: Math.floor((currentBurnchainBlockHeight - F) / L),
+  });
+
+  it("lands one block before the current distribution boundary, in BOTH cycle halves", () => {
+    const sdk = makeSdk();
+    // First half (h=203, dist cycle 20 starts at 200) and second half (h=215, dist
+    // cycle 21 starts at 210) of reward cycle 10 — the earlier reward-cycle-start
+    // formula could only ever express the even (first-half) boundary.
+    for (const h of [203, 215, 229, 200, 210]) {
+      const calc = sdk.calculationHeight(makePox(h));
+      // Exactly one block before a distribution boundary…
+      expect((calc + 1 - F) % H).toBe(0);
+      // …the CURRENT one (the boundary at or below h).
+      expect(calc).toBe(F + Math.floor((h - F) / H) * H - 1);
+    }
+  });
+
+  it("never emits the old reward-cycle-start value (which matched no valid height)", () => {
+    const sdk = makeSdk();
+    for (const h of [203, 215]) {
+      const pox = makePox(h);
+      const old = F + pox.rewardCycleId * L;
+      expect(sdk.calculationHeight(pox)).not.toBe(old);
+    }
+  });
+});
