@@ -4440,6 +4440,10 @@ export class StacksSDK {
     signerManager: string,
     opts?: { feeSats?: bigint; note?: string; nonce?: bigint; externalId?: string; confirmations?: number },
   ): Promise<RenewBondResult> => {
+    // Tracks the re-lock outpoint once BTC is committed, so even the catch-all error
+    // return carries the pointer to the re-locked Bitcoin (a throw after the broadcast
+    // — e.g. from the custody read inside the L2 build — must not hide it).
+    const committedBtc: { btcTxid?: string; vout?: number } = {};
     try {
       if (!this.address || !this.publicKey || !this.vaultAccountId) {
         throw new Error('Address, Public Key or Vault ID are not set');
@@ -4552,7 +4556,7 @@ export class StacksSDK {
       const priorNextRecord = await this.lockRecordStore.loadRecord(this.address, nextBondIndex).catch(() => null);
       const keepPriorOutpoint =
         priorNextRecord?.btcTxid !== undefined && priorNextRecord.lockAddress === nextMeta.lockAddress;
-      await this.lockRecordStore.saveRecord(this.address, nextBondIndex, {
+      const nextRecordBase: BondLockRecord = {
         bondIndex: nextBondIndex,
         unlockBytes: nextMeta.unlockBytes,
         lockAddress: nextMeta.lockAddress,
@@ -4561,29 +4565,32 @@ export class StacksSDK {
         isL1Lock: true,
         signerManager,
         firstRewardCycle: bondPeriodToRewardCycle({ bondIndex: nextBondIndex, poxInfo: pox }),
+      };
+      await this.lockRecordStore.saveRecord(this.address, nextBondIndex, {
+        ...nextRecordBase,
         ...(keepPriorOutpoint
           ? { btcTxid: priorNextRecord!.btcTxid, vout: priorNextRecord!.vout, amountSats: priorNextRecord!.amountSats }
           : {}),
       });
 
       const btcTxid = await this.broadcastBtc(bytesToHex(btcTx.extract()));
+      committedBtc.btcTxid = btcTxid;
+      // Persist the re-lock txid IMMEDIATELY after broadcast (matching createBond's
+      // btc-broadcast stage save) — a crash or a failed read during the multi-
+      // confirmation wait below must not lose the only pointer to the re-locked BTC,
+      // or the prior-outpoint merge above has nothing to preserve on retry.
+      await this.lockRecordStore.saveRecord(this.address, nextBondIndex, { ...nextRecordBase, btcTxid });
 
       // 4. Wait for confirmations on the new lock output
       const { blockHash } = await this.waitForBtcConfirmations(btcTxid, opts?.confirmations ?? 3);
 
       // 5. Assemble SPV proof for the new lock output
       const lockupProof = await this.assembleLockupProof(btcTxid, blockHash, nextMeta.outputScript, nextMeta.unlockHeight);
+      committedBtc.vout = lockupProof.outputIndex;
 
       // Record the resolved funding outpoint now that it is known.
       await this.lockRecordStore.saveRecord(this.address, nextBondIndex, {
-        bondIndex: nextBondIndex,
-        unlockBytes: nextMeta.unlockBytes,
-        lockAddress: nextMeta.lockAddress,
-        unlockHeight: nextMeta.unlockHeight,
-        amountSats: outputAmount,
-        isL1Lock: true,
-        signerManager,
-        firstRewardCycle: bondPeriodToRewardCycle({ bondIndex: nextBondIndex, poxInfo: pox }),
+        ...nextRecordBase,
         btcTxid,
         vout: lockupProof.outputIndex,
       });
@@ -4658,7 +4665,7 @@ export class StacksSDK {
         amountUstx: amountUstx.toString(),
       };
     } catch (error) {
-      return { success: false, error: `Failed to renew bond: ${formatErrorMessage(error)}` };
+      return { success: false, error: `Failed to renew bond: ${formatErrorMessage(error)}`, ...committedBtc };
     }
   };
 
