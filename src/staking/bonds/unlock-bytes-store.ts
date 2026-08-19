@@ -28,6 +28,27 @@ export type EnrollmentStage =
   | "registration-submitted" // register-for-bond broadcast
   | "registration-confirmed"; // register-for-bond settled successfully
 
+const ENROLLMENT_STAGE_ORDER: EnrollmentStage[] = [
+  "lock-fixed",
+  "funding-requested",
+  "btc-broadcast",
+  "btc-confirmed",
+  "proof-built",
+  "registration-submitted",
+  "registration-confirmed",
+];
+
+/**
+ * Returns the LATER of two enrollment stages. Saves along the enrollment flow must
+ * never regress a resumed record's stage (e.g. a retry re-confirming Bitcoin must not
+ * overwrite "registration-submitted" with "btc-confirmed" — recovery tooling honoring
+ * the resume-at-last-stage contract would then re-submit a settled registration).
+ */
+export function laterStage(a: EnrollmentStage | undefined, b: EnrollmentStage): EnrollmentStage {
+  if (a === undefined) return b;
+  return ENROLLMENT_STAGE_ORDER.indexOf(a) >= ENROLLMENT_STAGE_ORDER.indexOf(b) ? a : b;
+}
+
 export interface BondLockRecord {
   bondIndex: number;
   /** Witness `staker-unlock-bytes` committed to the on-chain lock script. */

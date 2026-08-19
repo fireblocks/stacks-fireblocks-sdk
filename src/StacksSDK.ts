@@ -65,7 +65,7 @@ import {
   stacksNetworkFromProfile,
   validateNetworkProfile,
 } from "./utils/network";
-import { BondLockRecord, InMemoryLockRecordStore, LockRecordStore } from "./staking/bonds/unlock-bytes-store";
+import { BondLockRecord, InMemoryLockRecordStore, LockRecordStore, laterStage } from "./staking/bonds/unlock-bytes-store";
 import { SignerManagerRegistry } from "./staking/signer-manager-adapter";
 import { createHash } from "crypto";
 import { parseOptionalFee, ValidationError } from "./utils/validation";
@@ -1577,6 +1577,12 @@ export class StacksSDK {
         throw new Error("Address, Public Key or Vault ID are not set");
       }
 
+      // This raw-signs a grant of the vault's signer key INTO the given manager
+      // contract — the most trust-sensitive manager-selecting call there is — so the
+      // adapter allowlist must gate it like every other manager-selecting entrypoint.
+      const smAllowError = this.signerManagerAllowedError(signerManager);
+      if (smAllowError) return { success: false, error: smAllowError };
+
       const [smAddress, smName] = signerManager.split(".");
       if (!smAddress || !smName) {
         throw new Error(`Invalid signer-manager principal: ${signerManager}. Expected ST….contract-name`);
@@ -2234,6 +2240,38 @@ export class StacksSDK {
   }
 
   /**
+   * Effective sats amount for a bond position: announce-l1-early-exit permanently
+   * zeroes the mutable membership amount while the BTC stays locked in a live UTXO, so
+   * a zeroed L1 amount falls back to the durable record's immutable funded amount.
+   * Single source of truth for every position-reporting surface (getBondPosition,
+   * checkStatus) so views cannot disagree about the same bond.
+   */
+  private effectiveL1AmountSats = (
+    membership: { isL1Lock: boolean; amountSats: bigint },
+    record: BondLockRecord | null | undefined,
+  ): bigint =>
+    membership.isL1Lock && membership.amountSats <= BigInt(0) && record?.amountSats
+      ? record.amountSats
+      : membership.amountSats;
+
+  /**
+   * Reads the Bitcoin tip height from Esplora, failing CLOSED: a non-2xx response or a
+   * non-numeric body (e.g. an HTML error page, where `Number(text)` is NaN and any
+   * `NaN < x` guard silently passes) returns null — UNKNOWN — so maturity gates refuse
+   * rather than sign a premature CLTV spend on garbage data.
+   */
+  private readBtcTipHeight = async (): Promise<number | null> => {
+    try {
+      const res = await fetch(`${this.esploraBase()}/blocks/tip/height`);
+      if (!res.ok) return null;
+      const tip = Number(await res.text());
+      return Number.isFinite(tip) ? tip : null;
+    } catch {
+      return null;
+    }
+  };
+
+  /**
    * Estimates a Bitcoin fee (sats) for a spend of ~`vbytes` from Esplora's
    * `/fee-estimates`, so recovery/rollover spends are broadcast with an adequate fee
    * rather than a fixed guess that can strand a transaction unconfirmed. Falls back to
@@ -2778,9 +2816,26 @@ export class StacksSDK {
       // NOT send a second Bitcoin transaction — resume from the recorded txid instead.
       const fundingExternalId = this.deriveFundingExternalId(bondIndex, metadata.lockAddress);
       const priorRecord = await this.lockRecordStore.loadRecord(this.address, bondIndex).catch(() => null);
+      // A caller-supplied btcTxid names the funding explicitly — a prior record for a
+      // DIFFERENT txid must not leak its outpoint/amount into the new record (that
+      // would fabricate an outpoint the new txid may not have).
+      const priorMatchesCaller = opts?.btcTxid === undefined || opts.btcTxid === priorRecord?.btcTxid;
       const canResumeFunding =
+        priorMatchesCaller &&
         priorRecord?.btcTxid !== undefined &&
         priorRecord.lockAddress === metadata.lockAddress;
+      // The lock address is amount-independent, so a resume at a DIFFERENT amount would
+      // silently reuse the old funding txid while the allowance check, SPV preflight and
+      // register-for-bond all run with the new amount against the old UTXO — every retry
+      // would then fail after the fact. Refuse up front with the funded amount.
+      if (canResumeFunding && priorRecord!.amountSats !== BigInt(btcAmountSats)) {
+        return {
+          success: false,
+          error: `A prior funding attempt for bond ${bondIndex} committed ${priorRecord!.amountSats} sats (txid ${priorRecord!.btcTxid}); this retry requests ${btcAmountSats} sats. Retry with the funded amount, or recover the locked BTC first.`,
+          btcTxid: priorRecord!.btcTxid,
+          vout: priorRecord!.vout,
+        };
+      }
 
       // Persist the immutable lock record BEFORE funding, so a crash after the BTC send
       // still leaves enough to recover the outpoint by lock address. The funding
@@ -2821,7 +2876,7 @@ export class StacksSDK {
       if (opts?.btcTxid) {
         // Caller-supplied funding (e.g. faucet on regtest) takes precedence.
         btcTxid = opts.btcTxid;
-        await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, btcTxid, stage: "btc-broadcast" });
+        await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, btcTxid, stage: laterStage(lockRecord.stage, "btc-broadcast") });
       } else if (canResumeFunding) {
         // Resume: this exact lock was already funded — never send BTC twice.
         btcTxid = priorRecord!.btcTxid!;
@@ -2829,7 +2884,7 @@ export class StacksSDK {
         // Record intent (with the deterministic external id) before calling Fireblocks,
         // so a crash mid-send is recoverable and a retry reuses the same id — which
         // Fireblocks de-duplicates, preventing a double funding transfer.
-        await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, stage: "funding-requested" });
+        await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, stage: laterStage(lockRecord.stage, "funding-requested") });
         const result = await this.fireblocksService.createBitcoinTransaction(
           metadata.lockAddress,
           btcAmountSats,
@@ -2838,14 +2893,14 @@ export class StacksSDK {
           fundingExternalId,
         );
         btcTxid = result.btcTxid;
-        await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, btcTxid, stage: "btc-broadcast" });
+        await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, btcTxid, stage: laterStage(lockRecord.stage, "btc-broadcast") });
       }
 
       committedBtc.btcTxid = btcTxid;
 
       // Step 8 — wait for Bitcoin confirmations
       const { blockHash } = await this.waitForBtcConfirmations(btcTxid, opts?.confirmations ?? 3);
-      await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, btcTxid, stage: "btc-confirmed" });
+      await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, btcTxid, stage: laterStage(lockRecord.stage, "btc-confirmed") });
 
       // Step 9 — assemble SPV proof
       const lockupProof = await this.assembleLockupProof(btcTxid, blockHash, metadata.outputScript, metadata.unlockHeight);
@@ -2856,7 +2911,7 @@ export class StacksSDK {
         ...lockRecord,
         btcTxid,
         vout: lockupProof.outputIndex,
-        stage: "proof-built",
+        stage: laterStage(lockRecord.stage, "proof-built"),
       });
 
       // Re-run eligibility with the SPV proof attached to cover the block-header
@@ -3441,7 +3496,15 @@ export class StacksSDK {
       let record: BondLockRecord | null = null;
 
       if (membership.isL1Lock) {
-        record = await this.lockRecordStore.loadRecord(this.address, membership.bondIndex).catch(() => null);
+        // Fail CLOSED on a store read failure: both still_locked and the zeroed-amount
+        // fallback below depend on the record, so swallowing the error here would report
+        // still_locked=false / a 0-sat bond for committed BTC with no failure signal.
+        // A genuinely missing record (null) is fine — a throwing store is not.
+        try {
+          record = await this.lockRecordStore.loadRecord(this.address, membership.bondIndex);
+        } catch (e) {
+          return { success: false, error: `Lock-record store unreadable for bond ${membership.bondIndex} (UNKNOWN, not "no record") — refusing to report position state: ${formatErrorMessage(e)}` };
+        }
         const bond = await fetchBond({ bondIndex: membership.bondIndex, network: this.pox5Network });
         if (bond) {
           const meta = buildRegisterMetadata({
@@ -3477,10 +3540,7 @@ export class StacksSDK {
       // stays locked in a live UTXO. Consumers bound the recovery-spend fee on this
       // value, so a zeroed L1 amount falls back to the durable record's immutable
       // funded amount rather than reporting a 0-sat bond.
-      const amountSatsBn =
-        membership.isL1Lock && membership.amountSats <= BigInt(0) && record?.amountSats
-          ? record.amountSats
-          : membership.amountSats;
+      const amountSatsBn = this.effectiveL1AmountSats(membership, record);
       const amountBtc = (Number(amountSatsBn) / 1e8).toFixed(8);
       const earnedBtc = (Number(earnedSats) / 1e8).toFixed(8);
 
@@ -4152,8 +4212,10 @@ export class StacksSDK {
       const lock = await this.deriveLock(undefined, opts?.bondIndex);
       if (!lock) return { success: false, error: 'No L1-locked bond membership found' };
 
-      const tipHeight = await fetch(`${this.esploraBase()}/blocks/tip/height`)
-        .then(r => r.text()).then(Number);
+      const tipHeight = await this.readBtcTipHeight();
+      if (tipHeight === null) {
+        return { success: false, error: 'Could not read the BTC tip height (UNKNOWN) — refusing to sign a possibly premature CLTV spend.' };
+      }
       if (tipHeight < lock.unlockHeight) {
         return { success: false, error: `Bond not matured: BTC tip ${tipHeight} < unlock height ${lock.unlockHeight}` };
       }
@@ -4365,8 +4427,8 @@ export class StacksSDK {
       //    bond into the early-exit path and fail with a misleading announce error).
       let branch = opts?.kind;
       if (!branch) {
-        const tipHeight = await fetch(`${this.esploraBase()}/blocks/tip/height`).then(r => r.text()).then(Number);
-        if (!Number.isFinite(tipHeight)) {
+        const tipHeight = await this.readBtcTipHeight();
+        if (tipHeight === null) {
           return { success: false, error: 'Could not read the BTC tip height to determine the spend branch; pass opts.kind (matured | early-exit) explicitly.' };
         }
         branch = tipHeight >= lock.unlockHeight ? 'matured' : 'early-exit';
@@ -4456,19 +4518,8 @@ export class StacksSDK {
       const smAllowError = this.signerManagerAllowedError(signerManager);
       if (smAllowError) return { success: false, error: smAllowError };
 
-      // 1. Resolve prior lock
-      const prior = await this.deriveLock();
-      if (!prior) return { success: false, error: 'No current L1 bond to renew' };
-
-      const tipHeight = await fetch(`${this.esploraBase()}/blocks/tip/height`)
-        .then(r => r.text()).then(Number);
-      if (tipHeight < prior.unlockHeight) {
-        return { success: false, error: `Prior bond not matured: BTC tip ${tipHeight} < unlock height ${prior.unlockHeight}` };
-      }
-
-      const utxo = await this.findLockUtxo(prior.lockingAddress, { txid: prior.btcTxid, vout: prior.vout });
-
-      // 2. Compute next lock parameters
+      // 1. Compute next lock parameters FIRST — resume detection needs the next lock
+      //    address before touching the prior UTXO (which a prior attempt may have spent).
       const [pox, nextBond] = await Promise.all([
         fetchPox5Info({ network: this.pox5Network }),
         fetchBond({ bondIndex: nextBondIndex, network: this.pox5Network }),
@@ -4496,17 +4547,110 @@ export class StacksSDK {
         return { success: false, error: 'Next bond lockup script mismatch — NOT proceeding' };
       }
 
-      // Persist unlockBytes for the new bond period before spending
-      // 3. Build the atomic BTC spend: prior P2WSH → next locking address.
-      // Spend against the actual on-chain output value, not the mutable membership
-      // amount (which early exit zeroes and maturity drops).
-      const feeSats = opts?.feeSats ?? await this.estimateBtcFeeSats(this.RECOVERY_SPEND_VBYTES);
-      const actualUtxoSats = BigInt(utxo.value);
-      const outputAmount = actualUtxoSats - feeSats;
-      // Never create a dust output. BIP-125 replacement is done by re-invoking with a
-      // higher opts.feeSats — the spend signals RBF and rebuilds from the still-unspent
-      // lock outpoint, so a confirmed original is rejected by the UTXO lookup above.
-      if (outputAmount < this.BTC_DUST_LIMIT_SATS) return { success: false, error: `Fee ${feeSats} sats leaves ${outputAmount} sats, below the dust limit ${this.BTC_DUST_LIMIT_SATS} — lower the fee (locked ${actualUtxoSats} sats).` };
+      const nextRecordFor = (amountSats: bigint, extra: Partial<BondLockRecord> = {}): BondLockRecord => ({
+        bondIndex: nextBondIndex,
+        unlockBytes: nextMeta.unlockBytes,
+        lockAddress: nextMeta.lockAddress,
+        unlockHeight: nextMeta.unlockHeight,
+        amountSats,
+        isL1Lock: true,
+        signerManager,
+        firstRewardCycle: bondPeriodToRewardCycle({ bondIndex: nextBondIndex, poxInfo: pox }),
+        ...extra,
+      });
+
+      // 2. RESUME: a prior renewBond attempt may already have broadcast the re-lock and
+      //    then crashed (or timed out) during the confirmation wait. The durable record
+      //    — persisted at broadcast time — is the pointer. Without this branch a retry
+      //    would re-sign and re-broadcast a CONFLICTING spend of the prior outpoint, and
+      //    once the first broadcast confirms, findLockUtxo would throw "already spent"
+      //    on every retry, permanently wedging the renewal.
+      const priorNextRecord = await this.lockRecordStore.loadRecord(this.address, nextBondIndex).catch(() => null);
+      const resumeRelock =
+        priorNextRecord?.btcTxid !== undefined && priorNextRecord.lockAddress === nextMeta.lockAddress;
+
+      let btcTxid: string;
+      let outputAmount: bigint;
+      if (resumeRelock) {
+        // BTC already re-locked by the recorded transaction — never spend twice. The
+        // pre-lock eligibility preflight is skipped (its purpose was to avoid re-locking
+        // into an ineligible bond); the SPV-proof preflight below still gates the L2 leg.
+        btcTxid = priorNextRecord!.btcTxid!;
+        outputAmount = priorNextRecord!.amountSats;
+        committedBtc.btcTxid = btcTxid;
+      } else {
+        // 3. Fresh path: resolve and spend the prior lock into the next lock address.
+        const prior = await this.deriveLock();
+        if (!prior) return { success: false, error: 'No current L1 bond to renew' };
+
+        const tipHeight = await this.readBtcTipHeight();
+        if (tipHeight === null) {
+          return { success: false, error: 'Could not read the BTC tip height (UNKNOWN) — refusing to sign a possibly premature CLTV re-lock.' };
+        }
+        if (tipHeight < prior.unlockHeight) {
+          return { success: false, error: `Prior bond not matured: BTC tip ${tipHeight} < unlock height ${prior.unlockHeight}` };
+        }
+
+        const utxo = await this.findLockUtxo(prior.lockingAddress, { txid: prior.btcTxid, vout: prior.vout });
+
+        // Spend against the actual on-chain output value, not the mutable membership
+        // amount (which early exit zeroes and maturity drops).
+        const feeSats = opts?.feeSats ?? await this.estimateBtcFeeSats(this.RECOVERY_SPEND_VBYTES);
+        const actualUtxoSats = BigInt(utxo.value);
+        outputAmount = actualUtxoSats - feeSats;
+        // Never create a dust output.
+        if (outputAmount < this.BTC_DUST_LIMIT_SATS) return { success: false, error: `Fee ${feeSats} sats leaves ${outputAmount} sats, below the dust limit ${this.BTC_DUST_LIMIT_SATS} — lower the fee (locked ${actualUtxoSats} sats).` };
+
+        // Evaluate the next bond's deterministic gates BEFORE re-locking the Bitcoin.
+        // Otherwise a predictable rejection would leave the funds committed to a
+        // script whose bond the staker never joined.
+        const preflight = await fetchEligibleRegisterForBond({
+          bondIndex: nextBondIndex,
+          staker: this.address,
+          amountUstx: minUstxForSatsAmount({
+            sats: outputAmount,
+            stxValueRatio: nextBond.stxValueRatio,
+            minUstxRatioBps: nextBond.minUstxRatioBps,
+          }),
+          satsTotal: outputAmount,
+          signerManager,
+          poxInfo: pox,
+          network: this.pox5Network,
+        });
+        if (!preflight.ok) {
+          const reasons = (preflight as { reasons?: number[] }).reasons ?? [];
+          return { success: false, error: `Next bond ${nextBondIndex} not eligible (no BTC re-locked): ${this.describeBondReasons(reasons)}` };
+        }
+
+        const priorP2wshScript = this.p2wshOutputScript(prior.lockScript);
+
+        const btcTx = new btc.Transaction({ lockTime: prior.unlockHeight });
+        btcTx.addInput({
+          txid: utxo.txid,
+          index: utxo.vout,
+          sequence: 0xfffffffd, // BIP-125 replaceable (still < 0xffffffff, so CLTV holds)
+          witnessUtxo: { script: priorP2wshScript, amount: actualUtxoSats },
+          witnessScript: prior.lockScript,
+        });
+        btcTx.addOutputAddress(nextMeta.lockAddress, outputAmount, this.btcNetwork);
+
+        const sighash = this.btcSegwitSighash(btcTx, 0, prior.lockScript, actualUtxoSats);
+        const stakerSig = await this.signBtcSighash(sighash);
+        this.setP2wshWitness(btcTx, 0, [stakerSig, new Uint8Array([1]), prior.lockScript]);
+
+        // Persist the next bond's immutable lock record before spending, so a crash
+        // after the re-lock broadcast leaves a recoverable outpoint reference. (The
+        // resume branch above handles a prior record with a txid, so reaching here
+        // means there is no committed-BTC pointer to preserve.)
+        await this.lockRecordStore.saveRecord(this.address, nextBondIndex, nextRecordFor(outputAmount));
+
+        btcTxid = await this.broadcastBtc(bytesToHex(btcTx.extract()));
+        committedBtc.btcTxid = btcTxid;
+        // Persist the re-lock txid IMMEDIATELY after broadcast (matching createBond's
+        // btc-broadcast stage save) — a crash or a failed read during the multi-
+        // confirmation wait below must not lose the only pointer to the re-locked BTC.
+        await this.lockRecordStore.saveRecord(this.address, nextBondIndex, nextRecordFor(outputAmount, { btcTxid }));
+      }
 
       // Required paired STX for the next bond, derived from the re-locked amount.
       const amountUstx = minUstxForSatsAmount({
@@ -4514,72 +4658,6 @@ export class StacksSDK {
         stxValueRatio: nextBond.stxValueRatio,
         minUstxRatioBps: nextBond.minUstxRatioBps,
       });
-
-      // Evaluate the next bond's deterministic gates BEFORE re-locking the Bitcoin.
-      // Otherwise a predictable rejection would leave the funds committed to a
-      // script whose bond the staker never joined.
-      const preflight = await fetchEligibleRegisterForBond({
-        bondIndex: nextBondIndex,
-        staker: this.address,
-        amountUstx,
-        satsTotal: outputAmount,
-        signerManager,
-        poxInfo: pox,
-        network: this.pox5Network,
-      });
-      if (!preflight.ok) {
-        const reasons = (preflight as { reasons?: number[] }).reasons ?? [];
-        return { success: false, error: `Next bond ${nextBondIndex} not eligible (no BTC re-locked): ${this.describeBondReasons(reasons)}` };
-      }
-
-      const priorP2wshScript = this.p2wshOutputScript(prior.lockScript);
-
-      const btcTx = new btc.Transaction({ lockTime: prior.unlockHeight });
-      btcTx.addInput({
-        txid: utxo.txid,
-        index: utxo.vout,
-        sequence: 0xfffffffd, // BIP-125 replaceable (still < 0xffffffff, so CLTV holds)
-        witnessUtxo: { script: priorP2wshScript, amount: actualUtxoSats },
-        witnessScript: prior.lockScript,
-      });
-      btcTx.addOutputAddress(nextMeta.lockAddress, outputAmount, this.btcNetwork);
-
-      const sighash = this.btcSegwitSighash(btcTx, 0, prior.lockScript, actualUtxoSats);
-      const stakerSig = await this.signBtcSighash(sighash);
-      this.setP2wshWitness(btcTx, 0, [stakerSig, new Uint8Array([1]), prior.lockScript]);
-
-      // Persist the next bond's immutable lock record before spending, so a crash
-      // after the re-lock broadcast leaves a recoverable outpoint reference. Merge a
-      // prior attempt's funding outpoint for the SAME lock address rather than
-      // downgrading it — an earlier re-lock broadcast may already have committed the
-      // BTC, and this save must never erase the only pointer to it.
-      const priorNextRecord = await this.lockRecordStore.loadRecord(this.address, nextBondIndex).catch(() => null);
-      const keepPriorOutpoint =
-        priorNextRecord?.btcTxid !== undefined && priorNextRecord.lockAddress === nextMeta.lockAddress;
-      const nextRecordBase: BondLockRecord = {
-        bondIndex: nextBondIndex,
-        unlockBytes: nextMeta.unlockBytes,
-        lockAddress: nextMeta.lockAddress,
-        unlockHeight: nextMeta.unlockHeight,
-        amountSats: outputAmount,
-        isL1Lock: true,
-        signerManager,
-        firstRewardCycle: bondPeriodToRewardCycle({ bondIndex: nextBondIndex, poxInfo: pox }),
-      };
-      await this.lockRecordStore.saveRecord(this.address, nextBondIndex, {
-        ...nextRecordBase,
-        ...(keepPriorOutpoint
-          ? { btcTxid: priorNextRecord!.btcTxid, vout: priorNextRecord!.vout, amountSats: priorNextRecord!.amountSats }
-          : {}),
-      });
-
-      const btcTxid = await this.broadcastBtc(bytesToHex(btcTx.extract()));
-      committedBtc.btcTxid = btcTxid;
-      // Persist the re-lock txid IMMEDIATELY after broadcast (matching createBond's
-      // btc-broadcast stage save) — a crash or a failed read during the multi-
-      // confirmation wait below must not lose the only pointer to the re-locked BTC,
-      // or the prior-outpoint merge above has nothing to preserve on retry.
-      await this.lockRecordStore.saveRecord(this.address, nextBondIndex, { ...nextRecordBase, btcTxid });
 
       // 4. Wait for confirmations on the new lock output
       const { blockHash } = await this.waitForBtcConfirmations(btcTxid, opts?.confirmations ?? 3);
@@ -4589,11 +4667,10 @@ export class StacksSDK {
       committedBtc.vout = lockupProof.outputIndex;
 
       // Record the resolved funding outpoint now that it is known.
-      await this.lockRecordStore.saveRecord(this.address, nextBondIndex, {
-        ...nextRecordBase,
+      await this.lockRecordStore.saveRecord(this.address, nextBondIndex, nextRecordFor(outputAmount, {
         btcTxid,
         vout: lockupProof.outputIndex,
-      });
+      }));
 
       // Re-run eligibility with the SPV proof before spending the L2 signature — with a
       // FRESH poxInfo: the pre-broadcast snapshot is stale by at least the three-
@@ -5471,7 +5548,16 @@ export class StacksSDK {
         bond: bondMembership ? {
           bond_index: bondMembership.bondIndex,
           amount_stx: microToStx(bondMembership.amountUstx),
-          amount_sats: bondMembership.amountSats.toString(),
+          // Same zeroed-amount fallback as getBondPosition (single helper): early exit
+          // zeroes the membership amount while the BTC stays locked. Best-effort record
+          // read here — checkStatus is an aggregate status view, and a store failure
+          // leaves the membership value rather than failing the whole status call.
+          amount_sats: this.effectiveL1AmountSats(
+            bondMembership,
+            bondMembership.isL1Lock
+              ? await this.lockRecordStore.loadRecord(this.address, bondMembership.bondIndex).catch(() => null)
+              : null,
+          ).toString(),
           signer_manager: bondMembership.signer,
           is_l1_lock: bondMembership.isL1Lock,
         } : null,
