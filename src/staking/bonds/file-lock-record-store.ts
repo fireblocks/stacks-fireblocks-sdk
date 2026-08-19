@@ -228,11 +228,12 @@ export class FileLockRecordStore implements LockRecordStore {
       const currentPrimary = await this.readFile(this.filePath); // throws if corrupt
       if (currentPrimary) {
         await fs.copyFile(this.filePath, this.bakPath);
-        // Best-effort fsync of the backup before the primary rename proceeds — without
-        // it a crash shortly after writeAll could leave .bak truncated/stale even though
-        // the new primary was durably renamed. Best-effort like fsyncDir: on filesystems
-        // where fsync is unsupported (some FUSE/network mounts) this must not turn every
-        // saveRecord into a hard failure over a durability enhancement.
+        // fsync the backup before the primary rename proceeds — without it a crash
+        // shortly after writeAll could leave .bak truncated/stale even though the new
+        // primary was durably renamed. Tolerate ONLY fsync-unsupported filesystems
+        // (some FUSE/network mounts) like fsyncDir does; a genuine I/O failure (EIO,
+        // EACCES, EMFILE) must stay loud — silently proceeding would void the
+        // one-verified-backup guarantee exactly when a failing disk makes it matter.
         try {
           const bh = await fs.open(this.bakPath, "r+");
           try {
@@ -240,7 +241,9 @@ export class FileLockRecordStore implements LockRecordStore {
           } finally {
             await bh.close();
           }
-        } catch {
+        } catch (e) {
+          const code = (e as NodeJS.ErrnoException).code;
+          if (code !== "ENOTSUP" && code !== "EINVAL" && code !== "ENOSYS") throw e;
           /* fsync unsupported on this platform — backup still written, just not flushed */
         }
       }
