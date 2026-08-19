@@ -153,6 +153,95 @@ describe("revalidateRegisterForBond (post-signing discard paths)", () => {
   });
 });
 
+describe("nativeRecordOverwriteGuard (record-slot protection)", () => {
+  const { InMemoryLockRecordStore } = jest.requireActual("../staking/bonds/unlock-bytes-store");
+  const LOCK_ADDR = "tb1qlockaddr";
+  const TXID = "cc".repeat(32);
+
+  const baseRecord = (extra: Record<string, unknown> = {}) => ({
+    bondIndex: 7,
+    unlockBytes: new Uint8Array([1]),
+    lockAddress: LOCK_ADDR,
+    unlockHeight: 1000,
+    amountSats: BigInt(100_000),
+    isL1Lock: true,
+    ...extra,
+  });
+
+  const withStore = async (record: Record<string, unknown> | null) => {
+    const sdk = makeSdk();
+    const store = new InMemoryLockRecordStore();
+    if (record) await store.saveRecord(sdk.address, 7, record);
+    sdk.setLockRecordStore(store);
+    return sdk;
+  };
+
+  const mockUtxos = (utxos: Array<{ txid: string; vout: number }> | "http-fail") => {
+    (global as any).fetch = jest.fn(async (url: string) => {
+      if (String(url).includes("/utxo")) {
+        if (utxos === "http-fail") return { ok: false, status: 502 } as any;
+        return { ok: true, json: async () => utxos } as any;
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+  };
+
+  it("passes with no record and with a non-L1 (sBTC) record", async () => {
+    expect(await (await withStore(null)).nativeRecordOverwriteGuard(7)).toBeUndefined();
+    expect(
+      await (await withStore(baseRecord({ isL1Lock: false, btcTxid: TXID }))).nativeRecordOverwriteGuard(7),
+    ).toBeUndefined();
+  });
+
+  it("refuses a funding-in-flight record (no txid yet, dedup key at risk)", async () => {
+    const sdk = await withStore(baseRecord({ stage: "funding-requested", fundingExternalId: "ext-1" }));
+    expect(await sdk.nativeRecordOverwriteGuard(7)).toMatch(/funding request in flight/);
+  });
+
+  it("passes a txid-less record at a pre-funding stage", async () => {
+    const sdk = await withStore(baseRecord({ stage: "lock-fixed" }));
+    expect(await sdk.nativeRecordOverwriteGuard(7)).toBeUndefined();
+  });
+
+  it("exempts the SAME lock address (those flows own their resume logic)", async () => {
+    const sdk = await withStore(baseRecord({ btcTxid: TXID, vout: 0 }));
+    expect(await sdk.nativeRecordOverwriteGuard(7, LOCK_ADDR)).toBeUndefined();
+  });
+
+  it("refuses while the recorded outpoint is unspent", async () => {
+    const sdk = await withStore(baseRecord({ btcTxid: TXID, vout: 0 }));
+    mockUtxos([{ txid: TXID, vout: 0 }]);
+    expect(await sdk.nativeRecordOverwriteGuard(7)).toMatch(/STILL-LOCKED/);
+  });
+
+  it("refuses when a stale txid hides real BTC at the address (any-UTXO fallback)", async () => {
+    const sdk = await withStore(baseRecord({ btcTxid: TXID, vout: 0 }));
+    mockUtxos([{ txid: "dd".repeat(32), vout: 1 }]);
+    expect(await sdk.nativeRecordOverwriteGuard(7)).toMatch(/STILL-LOCKED/);
+  });
+
+  it("passes once the lock address is fully spent (recovered)", async () => {
+    const sdk = await withStore(baseRecord({ btcTxid: TXID, vout: 0 }));
+    mockUtxos([]);
+    expect(await sdk.nativeRecordOverwriteGuard(7)).toBeUndefined();
+  });
+
+  it("refuses on an unreadable Bitcoin state (UNKNOWN, never safe)", async () => {
+    const sdk = await withStore(baseRecord({ btcTxid: TXID, vout: 0 }));
+    mockUtxos("http-fail");
+    expect(await sdk.nativeRecordOverwriteGuard(7)).toMatch(/UNKNOWN/);
+  });
+
+  it("refuses on an unreadable store (fail closed)", async () => {
+    const sdk = makeSdk();
+    sdk.setLockRecordStore({
+      saveRecord: async () => {},
+      loadRecord: async () => { throw new Error("EIO"); },
+    });
+    expect(await sdk.nativeRecordOverwriteGuard(7)).toMatch(/store unreadable/);
+  });
+});
+
 describe("calculationHeight (FBS-41 distribution snapshot)", () => {
   // private-1-like parameters: F=0, L=20 → distribution half-cycle H=10.
   const F = 0;
