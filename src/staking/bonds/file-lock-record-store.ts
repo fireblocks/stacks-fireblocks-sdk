@@ -230,21 +230,31 @@ export class FileLockRecordStore implements LockRecordStore {
         await fs.copyFile(this.filePath, this.bakPath);
         // fsync the backup before the primary rename proceeds — without it a crash
         // shortly after writeAll could leave .bak truncated/stale even though the new
-        // primary was durably renamed. Tolerate ONLY fsync-unsupported filesystems
-        // (some FUSE/network mounts) like fsyncDir does; a genuine I/O failure (EIO,
-        // EACCES, EMFILE) must stay loud — silently proceeding would void the
-        // one-verified-backup guarantee exactly when a failing disk makes it matter.
+        // primary was durably renamed. Error handling is split by what the failure
+        // means:
+        //  - open('r+') failure (EACCES on a mode-0444 backup inherited via copyFile,
+        //    EPERM on some CIFS/FUSE mounts) says nothing about the copied DATA — the
+        //    copy already succeeded — so it must not hard-fail every saveRecord,
+        //    including the money-path saves that run after Bitcoin has moved;
+        //  - sync() environment quirks (ENOTSUP/EINVAL/ENOSYS/EPERM) are tolerated
+        //    best-effort, but a genuine I/O failure (EIO) stays loud — a failing disk
+        //    voiding the backup guarantee must not be silent.
+        let bh: Awaited<ReturnType<typeof fs.open>> | null = null;
         try {
-          const bh = await fs.open(this.bakPath, "r+");
+          bh = await fs.open(this.bakPath, "r+");
+        } catch {
+          /* cannot open for flush — backup data already copied; skip the fsync */
+        }
+        if (bh) {
           try {
             await bh.sync();
+          } catch (e) {
+            const code = (e as NodeJS.ErrnoException).code;
+            if (code !== "ENOTSUP" && code !== "EINVAL" && code !== "ENOSYS" && code !== "EPERM") throw e;
+            /* fsync unsupported on this platform — backup still written, just not flushed */
           } finally {
             await bh.close();
           }
-        } catch (e) {
-          const code = (e as NodeJS.ErrnoException).code;
-          if (code !== "ENOTSUP" && code !== "EINVAL" && code !== "ENOSYS") throw e;
-          /* fsync unsupported on this platform — backup still written, just not flushed */
         }
       }
       // null → primary missing (new store): nothing to back up.
