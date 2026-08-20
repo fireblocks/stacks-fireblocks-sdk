@@ -4847,9 +4847,19 @@ export class StacksSDK {
         if (broadcastTxid !== btcTxid) {
           // Defensive only — the node's txid must equal the locally computed one. The
           // node-acknowledged txid is persisted so the durable record cannot diverge
-          // from what the chain actually accepted.
-          await this.lockRecordStore.saveRecord(this.address, nextBondIndex, nextRecordFor(outputAmount, { btcTxid: broadcastTxid })).catch(() => {});
-          return { success: false, error: `Broadcast txid ${broadcastTxid} does not match the locally computed txid ${btcTxid}; refusing to continue with an inconsistent pointer.`, btcTxid: broadcastTxid };
+          // from what the chain actually accepted — but ONLY when the response is
+          // actually a txid: a 200 with a junk body must not poison the record, whose
+          // locally computed txid remains the cryptographically correct pointer for
+          // the transaction the node just accepted.
+          const bodyIsTxid = /^[0-9a-fA-F]{64}$/.test(broadcastTxid);
+          if (bodyIsTxid) {
+            await this.lockRecordStore.saveRecord(this.address, nextBondIndex, nextRecordFor(outputAmount, { btcTxid: broadcastTxid })).catch(() => {});
+          }
+          return {
+            success: false,
+            error: `Broadcast response ${JSON.stringify(broadcastTxid)} does not match the locally computed txid ${btcTxid}; refusing to continue with an inconsistent pointer.`,
+            btcTxid: bodyIsTxid ? broadcastTxid : btcTxid,
+          };
         }
       }
 
