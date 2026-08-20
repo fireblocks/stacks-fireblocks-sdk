@@ -274,7 +274,7 @@ export const PUBLIC_TESTNET_POX5_API = 'https://api.testnet-pox5.hiro.so';
 // not provisioned yet; resolveCosignerUrl throws unless EARLY_EXIT_SIGNER_URL is set.
 export const EARLY_EXIT_SIGNER = {
   mainnet: '',
-  testnet: 'https://r25rniyw12.execute-api.eu-west-1.amazonaws.com/v1/v1',
+  testnet: 'https://r25rniyw12.execute-api.eu-west-1.amazonaws.com/api/v1',
   public_testnet: '',
 };
 
