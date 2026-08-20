@@ -137,13 +137,13 @@ function asafenumber(value, title = "") {
   }
 }
 function numberToHexUnpadded(num2) {
-  const hex3 = abignumber(num2).toString(16);
-  return hex3.length & 1 ? "0" + hex3 : hex3;
+  const hex4 = abignumber(num2).toString(16);
+  return hex4.length & 1 ? "0" + hex4 : hex4;
 }
-function hexToNumber(hex3) {
-  if (typeof hex3 !== "string")
-    throw new TypeError("hex string expected, got " + typeof hex3);
-  return hex3 === "" ? _0n : BigInt("0x" + hex3);
+function hexToNumber(hex4) {
+  if (typeof hex4 !== "string")
+    throw new TypeError("hex string expected, got " + typeof hex4);
+  return hex4 === "" ? _0n : BigInt("0x" + hex4);
 }
 function bytesToNumberBE(bytes2) {
   return hexToNumber((0, import_utils.bytesToHex)(bytes2));
@@ -156,10 +156,10 @@ function numberToBytesBE(n, len) {
   if (len === 0)
     throw new RangeError("zero length");
   n = abignumber(n);
-  const hex3 = n.toString(16);
-  if (hex3.length > len * 2)
+  const hex4 = n.toString(16);
+  if (hex4.length > len * 2)
     throw new RangeError("number too large");
-  return (0, import_utils.hexToBytes)(hex3.padStart(len * 2, "0"));
+  return (0, import_utils.hexToBytes)(hex4.padStart(len * 2, "0"));
 }
 function numberToBytesLE(n, len) {
   return numberToBytesBE(n, len).reverse();
@@ -269,7 +269,7 @@ var init_utils = __esm({
     anumber = import_utils.anumber;
     bytesToHex3 = import_utils.bytesToHex;
     concatBytes = (...arrays) => (0, import_utils.concatBytes)(...arrays);
-    hexToBytes2 = (hex3) => (0, import_utils.hexToBytes)(hex3);
+    hexToBytes2 = (hex4) => (0, import_utils.hexToBytes)(hex4);
     isBytes = import_utils.isBytes;
     randomBytes = (bytesLength) => (0, import_utils.randomBytes)(bytesLength);
     _0n = /* @__PURE__ */ BigInt(0);
@@ -311,8 +311,8 @@ function invert(number, modulo) {
     const n = y - v * q;
     b = a, a = r, x = u, y = v, u = m, v = n;
   }
-  const gcd3 = b;
-  if (gcd3 !== _1n2)
+  const gcd4 = b;
+  if (gcd4 !== _1n2)
     throw new Error("invert: does not exist");
   return mod(x, modulo);
 }
@@ -1130,8 +1130,8 @@ function weierstrass(params, extraOpts = {}) {
       P.assertValidity();
       return P;
     }
-    static fromHex(hex3) {
-      return Point2.fromBytes(hexToBytes2(hex3));
+    static fromHex(hex4) {
+      return Point2.fromBytes(hexToBytes2(hex4));
     }
     get x() {
       return this.toAffine().x;
@@ -1563,8 +1563,8 @@ function ecdsa(Point2, hash, ecdsaOpts = {}) {
       const s = bytes2.subarray(L, L * 2);
       return new Signature(Fn2.fromBytes(r), Fn2.fromBytes(s), recid);
     }
-    static fromHex(hex3, format) {
-      return this.fromBytes(hexToBytes2(hex3), format);
+    static fromHex(hex4, format) {
+      return this.fromBytes(hexToBytes2(hex4), format);
     }
     assertRecovery() {
       const { recovery } = this;
@@ -1809,12 +1809,12 @@ var init_weierstrass = __esm({
           abignumber(num2);
           if (num2 < _0n4)
             throw new E("integer: negative integers are not allowed");
-          let hex3 = numberToHexUnpadded(num2);
-          if (Number.parseInt(hex3[0], 16) & 8)
-            hex3 = "00" + hex3;
-          if (hex3.length & 1)
+          let hex4 = numberToHexUnpadded(num2);
+          if (Number.parseInt(hex4[0], 16) & 8)
+            hex4 = "00" + hex4;
+          if (hex4.length & 1)
             throw new E("unexpected DER parsing assertion: unpadded hex");
-          return hex3;
+          return hex4;
         },
         decode(data) {
           const { Err: E } = DER;
@@ -2028,7 +2028,7 @@ var init_secp256k1 = __esm({
   }
 });
 
-// node_modules/@scure/base/index.js
+// node_modules/micro-packed/node_modules/@scure/base/index.js
 function isBytes2(a) {
   return a instanceof Uint8Array || ArrayBuffer.isView(a) && a.constructor.name === "Uint8Array" && "BYTES_PER_ELEMENT" in a && a.BYTES_PER_ELEMENT === 1;
 }
@@ -2129,54 +2129,6 @@ function normalize(fn) {
   afn(fn);
   return { encode: (from) => from, decode: (to) => fn(to) };
 }
-function convertRadix(data, from, to) {
-  if (from < 2)
-    throw new RangeError(`convertRadix: invalid from=${from}, base cannot be less than 2`);
-  if (to < 2)
-    throw new RangeError(`convertRadix: invalid to=${to}, base cannot be less than 2`);
-  aArr(data);
-  if (!data.length)
-    return [];
-  let pos = 0;
-  const res = [];
-  const digits = Array.from(data, (d) => {
-    anumber2(d);
-    if (d < 0 || d >= from)
-      throw new Error(`invalid integer: ${d}`);
-    return d;
-  });
-  const dlen = digits.length;
-  while (true) {
-    let carry = 0;
-    let done = true;
-    for (let i = pos; i < dlen; i++) {
-      const digit = digits[i];
-      const fromCarry = from * carry;
-      const digitBase = fromCarry + digit;
-      if (!Number.isSafeInteger(digitBase) || fromCarry / from !== carry || digitBase - digit !== fromCarry) {
-        throw new Error("convertRadix: carry overflow");
-      }
-      const div = digitBase / to;
-      carry = digitBase % to;
-      const rounded = Math.floor(div);
-      digits[i] = rounded;
-      if (!Number.isSafeInteger(rounded) || rounded * to + carry !== digitBase)
-        throw new Error("convertRadix: carry overflow");
-      if (!done)
-        continue;
-      else if (!rounded)
-        pos = i;
-      else
-        done = false;
-    }
-    res.push(carry);
-    if (done)
-      break;
-  }
-  for (let i = 0; i < data.length - 1 && data[i] === 0; i++)
-    res.push(0);
-  return res.reverse();
-}
 function convertRadix2(data, from, to, padding2) {
   aArr(data);
   if (from <= 0 || from > 32)
@@ -2216,22 +2168,6 @@ function convertRadix2(data, from, to, padding2) {
   return res;
 }
 // @__NO_SIDE_EFFECTS__
-function radix(num2) {
-  anumber2(num2);
-  const _256 = 2 ** 8;
-  return {
-    encode: (bytes2) => {
-      if (!isBytes2(bytes2))
-        throw new TypeError("radix.encode input should be Uint8Array");
-      return convertRadix(Array.from(bytes2), _256, num2);
-    },
-    decode: (digits) => {
-      anumArr("radix.decode", digits);
-      return Uint8Array.from(convertRadix(digits, num2, _256));
-    }
-  };
-}
-// @__NO_SIDE_EFFECTS__
 function radix2(bits, revPadding = false) {
   anumber2(bits);
   if (bits <= 0 || bits > 32)
@@ -2250,141 +2186,9 @@ function radix2(bits, revPadding = false) {
     }
   };
 }
-function unsafeWrapper(fn) {
-  afn(fn);
-  return function(...args) {
-    try {
-      return fn.apply(null, args);
-    } catch (e) {
-    }
-  };
-}
-function checksum(len, fn) {
-  anumber2(len);
-  if (len <= 0)
-    throw new RangeError(`checksum length must be positive: ${len}`);
-  afn(fn);
-  const _fn = fn;
-  return {
-    encode(data) {
-      if (!isBytes2(data))
-        throw new TypeError("checksum.encode: input should be Uint8Array");
-      const sum = _fn(data).slice(0, len);
-      const res = new Uint8Array(data.length + len);
-      res.set(data);
-      res.set(sum, data.length);
-      return res;
-    },
-    decode(data) {
-      if (!isBytes2(data))
-        throw new TypeError("checksum.decode: input should be Uint8Array");
-      const payload = data.slice(0, -len);
-      const oldChecksum = data.slice(-len);
-      const newChecksum = _fn(payload).slice(0, len);
-      for (let i = 0; i < len; i++)
-        if (newChecksum[i] !== oldChecksum[i])
-          throw new Error("Invalid checksum");
-      return payload;
-    }
-  };
-}
-function bech32Polymod(pre) {
-  const b = pre >> 25;
-  let chk = (pre & 33554431) << 5;
-  for (let i = 0; i < POLYMOD_GENERATORS.length; i++) {
-    if ((b >> i & 1) === 1)
-      chk ^= POLYMOD_GENERATORS[i];
-  }
-  return chk;
-}
-function bechChecksum(prefix2, words, encodingConst = 1) {
-  const len = prefix2.length;
-  let chk = 1;
-  for (let i = 0; i < len; i++) {
-    const c = prefix2.charCodeAt(i);
-    if (c < 33 || c > 126)
-      throw new Error(`Invalid prefix (${prefix2})`);
-    chk = bech32Polymod(chk) ^ c >> 5;
-  }
-  chk = bech32Polymod(chk);
-  for (let i = 0; i < len; i++)
-    chk = bech32Polymod(chk) ^ prefix2.charCodeAt(i) & 31;
-  for (let v of words)
-    chk = bech32Polymod(chk) ^ v;
-  for (let i = 0; i < 6; i++)
-    chk = bech32Polymod(chk);
-  chk ^= encodingConst;
-  return BECH_ALPHABET.encode(convertRadix2([chk % powers[30]], 30, 5, false));
-}
-// @__NO_SIDE_EFFECTS__
-function genBech32(encoding) {
-  const ENCODING_CONST = encoding === "bech32" ? 1 : 734539939;
-  const _words = /* @__PURE__ */ radix2(5);
-  const fromWords = _words.decode;
-  const toWords = _words.encode;
-  const fromWordsUnsafe = unsafeWrapper(fromWords);
-  function encode(prefix2, words, limit = 90) {
-    astr("bech32.encode prefix", prefix2);
-    if (isBytes2(words))
-      words = Array.from(words);
-    anumArr("bech32.encode", words);
-    const plen = prefix2.length;
-    if (plen === 0)
-      throw new TypeError(`Invalid prefix length ${plen}`);
-    const actualLength = plen + 7 + words.length;
-    if (limit !== false && actualLength > limit)
-      throw new TypeError(`Length ${actualLength} exceeds limit ${limit}`);
-    const lowered = prefix2.toLowerCase();
-    const sum = bechChecksum(lowered, words, ENCODING_CONST);
-    return `${lowered}1${BECH_ALPHABET.encode(words)}${sum}`;
-  }
-  function decode(str2, limit = 90) {
-    astr("bech32.decode input", str2);
-    const slen = str2.length;
-    if (slen < 8 || limit !== false && slen > limit)
-      throw new TypeError(`invalid string length: ${slen} (${str2}). Expected (8..${limit})`);
-    const lowered = str2.toLowerCase();
-    if (str2 !== lowered && str2 !== str2.toUpperCase())
-      throw new Error(`String must be lowercase or uppercase`);
-    const sepIndex = lowered.lastIndexOf("1");
-    if (sepIndex === 0 || sepIndex === -1)
-      throw new Error(`Letter "1" must be present between prefix and data only`);
-    const prefix2 = lowered.slice(0, sepIndex);
-    const data = lowered.slice(sepIndex + 1);
-    if (data.length < 6)
-      throw new Error("Data must be at least 6 characters long");
-    const words = BECH_ALPHABET.decode(data).slice(0, -6);
-    const sum = bechChecksum(prefix2, words, ENCODING_CONST);
-    if (!data.endsWith(sum))
-      throw new Error(`Invalid checksum in ${str2}: expected "${sum}"`);
-    return { prefix: prefix2, words };
-  }
-  const decodeUnsafe = unsafeWrapper(decode);
-  function decodeToBytes(str2) {
-    const { prefix: prefix2, words } = decode(str2, false);
-    return {
-      prefix: prefix2,
-      words,
-      bytes: fromWords(words)
-    };
-  }
-  function encodeFromBytes(prefix2, bytes2) {
-    return encode(prefix2, toWords(bytes2));
-  }
-  return {
-    encode,
-    decode,
-    encodeFromBytes,
-    decodeToBytes,
-    decodeUnsafe,
-    fromWords,
-    fromWordsUnsafe,
-    toWords
-  };
-}
-var gcd, radix2carry, powers, genBase58, base58, createBase58check, BECH_ALPHABET, POLYMOD_GENERATORS, bech32, bech32m, _isWellFormedShim, _isWellFormed, utf8Fallback, utf8, hasHexBuiltin, hexBuiltin, hex;
+var gcd, radix2carry, powers, _isWellFormedShim, _isWellFormed, utf8Fallback, utf8, hasHexBuiltin, hexBuiltin, hex;
 var init_base = __esm({
-  "node_modules/@scure/base/index.js"() {
+  "node_modules/micro-packed/node_modules/@scure/base/index.js"() {
     gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
     radix2carry = /* @__NO_SIDE_EFFECTS__ */ (from, to) => from + (to - gcd(from, to));
     powers = /* @__PURE__ */ (() => {
@@ -2393,17 +2197,6 @@ var init_base = __esm({
         res.push(2 ** i);
       return res;
     })();
-    genBase58 = /* @__NO_SIDE_EFFECTS__ */ (abc) => /* @__PURE__ */ chain(/* @__PURE__ */ radix(58), /* @__PURE__ */ alphabet(abc), /* @__PURE__ */ join(""));
-    base58 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ genBase58("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"));
-    createBase58check = (sha2565) => {
-      afn(sha2565);
-      const _sha256 = sha2565;
-      return /* @__PURE__ */ chain(checksum(4, (data) => _sha256(_sha256(data))), base58);
-    };
-    BECH_ALPHABET = /* @__PURE__ */ chain(/* @__PURE__ */ alphabet("qpzry9x8gf2tvdw0s3jn54khce6mua7l"), /* @__PURE__ */ join(""));
-    POLYMOD_GENERATORS = [996825010, 642813549, 513874426, 1027748829, 705979059];
-    bech32 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ genBech32("bech32"));
-    bech32m = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ genBech32("bech32m"));
     _isWellFormedShim = (str2) => {
       try {
         return encodeURI(str2) !== null;
@@ -2836,22 +2629,22 @@ function apply(inner, base) {
     }
   });
 }
-function flagged(path, inner, def2) {
-  if (typeof path !== "string" && !isCoder(path))
-    throw new TypeError(`flagged: wrong path=${path}`);
+function flagged(path2, inner, def2) {
+  if (typeof path2 !== "string" && !isCoder(path2))
+    throw new TypeError(`flagged: wrong path=${path2}`);
   if (!isCoder(inner))
     throw new TypeError(`flagged: invalid inner value ${inner}`);
   const hasDef = def2 !== void 0;
   return wrap({
     encodeStream: (w, value) => {
-      if (typeof path === "string") {
-        if (Path.resolve(w.stack, path))
+      if (typeof path2 === "string") {
+        if (Path.resolve(w.stack, path2))
           inner.encodeStream(w, value);
         else if (hasDef)
           inner.encodeStream(w, def2);
       } else {
         const present = value !== void 0;
-        path.encodeStream(w, present);
+        path2.encodeStream(w, present);
         if (present)
           inner.encodeStream(w, value);
         else if (hasDef)
@@ -2860,10 +2653,10 @@ function flagged(path, inner, def2) {
     },
     decodeStream: (r) => {
       let hasFlag = false;
-      if (typeof path === "string")
-        hasFlag = !!Path.resolve(r.stack, path);
+      if (typeof path2 === "string")
+        hasFlag = !!Path.resolve(r.stack, path2);
       else
-        hasFlag = path.decodeStream(r);
+        hasFlag = path2.decodeStream(r);
       if (hasFlag)
         return inner.decodeStream(r);
       else if (hasDef)
@@ -3281,8 +3074,8 @@ var init_micro_packed = __esm({
         }
         return err;
       },
-      resolve: (stack, path) => {
-        const parts = path.split("/");
+      resolve: (stack, path2) => {
+        const parts = path2.split("/");
         const objPath = stack.map((i2) => i2.obj);
         let i = 0;
         for (; i < parts.length; i++) {
@@ -3970,6 +3763,407 @@ var init_utils2 = __esm({
   }
 });
 
+// node_modules/@scure/btc-signer/node_modules/@scure/base/index.js
+function isBytes5(a) {
+  return a instanceof Uint8Array || ArrayBuffer.isView(a) && a.constructor.name === "Uint8Array" && "BYTES_PER_ELEMENT" in a && a.BYTES_PER_ELEMENT === 1;
+}
+function abytes3(b) {
+  if (!isBytes5(b))
+    throw new TypeError("Uint8Array expected");
+}
+function isArrayOf2(isString, arr) {
+  if (!Array.isArray(arr))
+    return false;
+  if (arr.length === 0)
+    return true;
+  if (isString) {
+    return arr.every((item) => typeof item === "string");
+  } else {
+    return arr.every((item) => Number.isSafeInteger(item));
+  }
+}
+function afn2(input) {
+  if (typeof input !== "function")
+    throw new TypeError("function expected");
+  return true;
+}
+function astr2(label, input) {
+  if (typeof input !== "string")
+    throw new TypeError(`${label}: string expected`);
+  return true;
+}
+function anumber3(n) {
+  if (typeof n !== "number")
+    throw new TypeError(`number expected, got ${typeof n}`);
+  if (!Number.isSafeInteger(n))
+    throw new RangeError(`invalid integer: ${n}`);
+}
+function aArr2(input) {
+  if (!Array.isArray(input))
+    throw new TypeError("array expected");
+}
+function astrArr2(label, input) {
+  if (!isArrayOf2(true, input))
+    throw new TypeError(`${label}: array of strings expected`);
+}
+function anumArr2(label, input) {
+  if (!isArrayOf2(false, input))
+    throw new TypeError(`${label}: array of numbers expected`);
+}
+// @__NO_SIDE_EFFECTS__
+function chain2(...args) {
+  const id = (a) => a;
+  const wrap2 = (a, b) => (c) => a(b(c));
+  const encode = args.map((x) => x.encode).reduceRight(wrap2, id);
+  const decode = args.map((x) => x.decode).reduce(wrap2, id);
+  return { encode, decode };
+}
+// @__NO_SIDE_EFFECTS__
+function alphabet2(letters) {
+  const lettersA = typeof letters === "string" ? letters.split("") : letters;
+  const len = lettersA.length;
+  astrArr2("alphabet", lettersA);
+  const indexes = new Map(lettersA.map((l, i) => [l, i]));
+  return {
+    encode: (digits) => {
+      aArr2(digits);
+      return digits.map((i) => {
+        if (!Number.isSafeInteger(i) || i < 0 || i >= len)
+          throw new Error(`alphabet.encode: digit index outside alphabet "${i}". Allowed: ${letters}`);
+        return lettersA[i];
+      });
+    },
+    decode: (input) => {
+      aArr2(input);
+      return input.map((letter) => {
+        astr2("alphabet.decode", letter);
+        const i = indexes.get(letter);
+        if (i === void 0)
+          throw new Error(`Unknown letter: "${letter}". Allowed: ${letters}`);
+        return i;
+      });
+    }
+  };
+}
+// @__NO_SIDE_EFFECTS__
+function join2(separator = "") {
+  astr2("join", separator);
+  return {
+    encode: (from) => {
+      astrArr2("join.decode", from);
+      return from.join(separator);
+    },
+    decode: (to) => {
+      astr2("join.decode", to);
+      return to.split(separator);
+    }
+  };
+}
+// @__NO_SIDE_EFFECTS__
+function normalize2(fn) {
+  afn2(fn);
+  return { encode: (from) => from, decode: (to) => fn(to) };
+}
+function convertRadix(data, from, to) {
+  if (from < 2)
+    throw new RangeError(`convertRadix: invalid from=${from}, base cannot be less than 2`);
+  if (to < 2)
+    throw new RangeError(`convertRadix: invalid to=${to}, base cannot be less than 2`);
+  aArr2(data);
+  if (!data.length)
+    return [];
+  let pos = 0;
+  const res = [];
+  const digits = Array.from(data, (d) => {
+    anumber3(d);
+    if (d < 0 || d >= from)
+      throw new Error(`invalid integer: ${d}`);
+    return d;
+  });
+  const dlen = digits.length;
+  while (true) {
+    let carry = 0;
+    let done = true;
+    for (let i = pos; i < dlen; i++) {
+      const digit = digits[i];
+      const fromCarry = from * carry;
+      const digitBase = fromCarry + digit;
+      if (!Number.isSafeInteger(digitBase) || fromCarry / from !== carry || digitBase - digit !== fromCarry) {
+        throw new Error("convertRadix: carry overflow");
+      }
+      const div = digitBase / to;
+      carry = digitBase % to;
+      const rounded = Math.floor(div);
+      digits[i] = rounded;
+      if (!Number.isSafeInteger(rounded) || rounded * to + carry !== digitBase)
+        throw new Error("convertRadix: carry overflow");
+      if (!done)
+        continue;
+      else if (!rounded)
+        pos = i;
+      else
+        done = false;
+    }
+    res.push(carry);
+    if (done)
+      break;
+  }
+  for (let i = 0; i < data.length - 1 && data[i] === 0; i++)
+    res.push(0);
+  return res.reverse();
+}
+function convertRadix22(data, from, to, padding2) {
+  aArr2(data);
+  if (from <= 0 || from > 32)
+    throw new RangeError(`convertRadix2: wrong from=${from}`);
+  if (to <= 0 || to > 32)
+    throw new RangeError(`convertRadix2: wrong to=${to}`);
+  if (/* @__PURE__ */ radix2carry2(from, to) > 32) {
+    throw new Error(`convertRadix2: carry overflow from=${from} to=${to} carryBits=${/* @__PURE__ */ radix2carry2(from, to)}`);
+  }
+  let carry = 0;
+  let pos = 0;
+  const max = powers2[from];
+  const mask = powers2[to] - 1;
+  const res = [];
+  for (const n of data) {
+    anumber3(n);
+    if (n >= max)
+      throw new Error(`convertRadix2: invalid data word=${n} from=${from}`);
+    carry = carry << from | n;
+    if (pos + from > 32)
+      throw new Error(`convertRadix2: carry overflow pos=${pos} from=${from}`);
+    pos += from;
+    for (; pos >= to; pos -= to)
+      res.push((carry >> pos - to & mask) >>> 0);
+    const pow = powers2[pos];
+    if (pow === void 0)
+      throw new Error("invalid carry");
+    carry &= pow - 1;
+  }
+  carry = carry << to - pos & mask;
+  if (!padding2 && pos >= from)
+    throw new Error("Excess padding");
+  if (!padding2 && carry > 0)
+    throw new Error(`Non-zero padding: ${carry}`);
+  if (padding2 && pos > 0)
+    res.push(carry >>> 0);
+  return res;
+}
+// @__NO_SIDE_EFFECTS__
+function radix(num2) {
+  anumber3(num2);
+  const _256 = 2 ** 8;
+  return {
+    encode: (bytes2) => {
+      if (!isBytes5(bytes2))
+        throw new TypeError("radix.encode input should be Uint8Array");
+      return convertRadix(Array.from(bytes2), _256, num2);
+    },
+    decode: (digits) => {
+      anumArr2("radix.decode", digits);
+      return Uint8Array.from(convertRadix(digits, num2, _256));
+    }
+  };
+}
+// @__NO_SIDE_EFFECTS__
+function radix22(bits, revPadding = false) {
+  anumber3(bits);
+  if (bits <= 0 || bits > 32)
+    throw new RangeError("radix2: bits should be in (0..32]");
+  if (/* @__PURE__ */ radix2carry2(8, bits) > 32 || /* @__PURE__ */ radix2carry2(bits, 8) > 32)
+    throw new RangeError("radix2: carry overflow");
+  return {
+    encode: (bytes2) => {
+      if (!isBytes5(bytes2))
+        throw new TypeError("radix2.encode input should be Uint8Array");
+      return convertRadix22(Array.from(bytes2), 8, bits, !revPadding);
+    },
+    decode: (digits) => {
+      anumArr2("radix2.decode", digits);
+      return Uint8Array.from(convertRadix22(digits, bits, 8, revPadding));
+    }
+  };
+}
+function unsafeWrapper(fn) {
+  afn2(fn);
+  return function(...args) {
+    try {
+      return fn.apply(null, args);
+    } catch (e) {
+    }
+  };
+}
+function checksum(len, fn) {
+  anumber3(len);
+  if (len <= 0)
+    throw new RangeError(`checksum length must be positive: ${len}`);
+  afn2(fn);
+  const _fn = fn;
+  return {
+    encode(data) {
+      if (!isBytes5(data))
+        throw new TypeError("checksum.encode: input should be Uint8Array");
+      const sum = _fn(data).slice(0, len);
+      const res = new Uint8Array(data.length + len);
+      res.set(data);
+      res.set(sum, data.length);
+      return res;
+    },
+    decode(data) {
+      if (!isBytes5(data))
+        throw new TypeError("checksum.decode: input should be Uint8Array");
+      const payload = data.slice(0, -len);
+      const oldChecksum = data.slice(-len);
+      const newChecksum = _fn(payload).slice(0, len);
+      for (let i = 0; i < len; i++)
+        if (newChecksum[i] !== oldChecksum[i])
+          throw new Error("Invalid checksum");
+      return payload;
+    }
+  };
+}
+function bech32Polymod(pre) {
+  const b = pre >> 25;
+  let chk = (pre & 33554431) << 5;
+  for (let i = 0; i < POLYMOD_GENERATORS.length; i++) {
+    if ((b >> i & 1) === 1)
+      chk ^= POLYMOD_GENERATORS[i];
+  }
+  return chk;
+}
+function bechChecksum(prefix2, words, encodingConst = 1) {
+  const len = prefix2.length;
+  let chk = 1;
+  for (let i = 0; i < len; i++) {
+    const c = prefix2.charCodeAt(i);
+    if (c < 33 || c > 126)
+      throw new Error(`Invalid prefix (${prefix2})`);
+    chk = bech32Polymod(chk) ^ c >> 5;
+  }
+  chk = bech32Polymod(chk);
+  for (let i = 0; i < len; i++)
+    chk = bech32Polymod(chk) ^ prefix2.charCodeAt(i) & 31;
+  for (let v of words)
+    chk = bech32Polymod(chk) ^ v;
+  for (let i = 0; i < 6; i++)
+    chk = bech32Polymod(chk);
+  chk ^= encodingConst;
+  return BECH_ALPHABET.encode(convertRadix22([chk % powers2[30]], 30, 5, false));
+}
+// @__NO_SIDE_EFFECTS__
+function genBech32(encoding) {
+  const ENCODING_CONST = encoding === "bech32" ? 1 : 734539939;
+  const _words = /* @__PURE__ */ radix22(5);
+  const fromWords = _words.decode;
+  const toWords = _words.encode;
+  const fromWordsUnsafe = unsafeWrapper(fromWords);
+  function encode(prefix2, words, limit = 90) {
+    astr2("bech32.encode prefix", prefix2);
+    if (isBytes5(words))
+      words = Array.from(words);
+    anumArr2("bech32.encode", words);
+    const plen = prefix2.length;
+    if (plen === 0)
+      throw new TypeError(`Invalid prefix length ${plen}`);
+    const actualLength = plen + 7 + words.length;
+    if (limit !== false && actualLength > limit)
+      throw new TypeError(`Length ${actualLength} exceeds limit ${limit}`);
+    const lowered = prefix2.toLowerCase();
+    const sum = bechChecksum(lowered, words, ENCODING_CONST);
+    return `${lowered}1${BECH_ALPHABET.encode(words)}${sum}`;
+  }
+  function decode(str2, limit = 90) {
+    astr2("bech32.decode input", str2);
+    const slen = str2.length;
+    if (slen < 8 || limit !== false && slen > limit)
+      throw new TypeError(`invalid string length: ${slen} (${str2}). Expected (8..${limit})`);
+    const lowered = str2.toLowerCase();
+    if (str2 !== lowered && str2 !== str2.toUpperCase())
+      throw new Error(`String must be lowercase or uppercase`);
+    const sepIndex = lowered.lastIndexOf("1");
+    if (sepIndex === 0 || sepIndex === -1)
+      throw new Error(`Letter "1" must be present between prefix and data only`);
+    const prefix2 = lowered.slice(0, sepIndex);
+    const data = lowered.slice(sepIndex + 1);
+    if (data.length < 6)
+      throw new Error("Data must be at least 6 characters long");
+    const words = BECH_ALPHABET.decode(data).slice(0, -6);
+    const sum = bechChecksum(prefix2, words, ENCODING_CONST);
+    if (!data.endsWith(sum))
+      throw new Error(`Invalid checksum in ${str2}: expected "${sum}"`);
+    return { prefix: prefix2, words };
+  }
+  const decodeUnsafe = unsafeWrapper(decode);
+  function decodeToBytes(str2) {
+    const { prefix: prefix2, words } = decode(str2, false);
+    return {
+      prefix: prefix2,
+      words,
+      bytes: fromWords(words)
+    };
+  }
+  function encodeFromBytes(prefix2, bytes2) {
+    return encode(prefix2, toWords(bytes2));
+  }
+  return {
+    encode,
+    decode,
+    encodeFromBytes,
+    decodeToBytes,
+    decodeUnsafe,
+    fromWords,
+    fromWordsUnsafe,
+    toWords
+  };
+}
+var gcd2, radix2carry2, powers2, genBase58, base58, createBase58check, BECH_ALPHABET, POLYMOD_GENERATORS, bech32, bech32m, hasHexBuiltin2, hexBuiltin2, hex2;
+var init_base2 = __esm({
+  "node_modules/@scure/btc-signer/node_modules/@scure/base/index.js"() {
+    gcd2 = (a, b) => b === 0 ? a : gcd2(b, a % b);
+    radix2carry2 = /* @__NO_SIDE_EFFECTS__ */ (from, to) => from + (to - gcd2(from, to));
+    powers2 = /* @__PURE__ */ (() => {
+      let res = [];
+      for (let i = 0; i < 40; i++)
+        res.push(2 ** i);
+      return res;
+    })();
+    genBase58 = /* @__NO_SIDE_EFFECTS__ */ (abc) => /* @__PURE__ */ chain2(/* @__PURE__ */ radix(58), /* @__PURE__ */ alphabet2(abc), /* @__PURE__ */ join2(""));
+    base58 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ genBase58("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"));
+    createBase58check = (sha2565) => {
+      afn2(sha2565);
+      const _sha256 = sha2565;
+      return /* @__PURE__ */ chain2(checksum(4, (data) => _sha256(_sha256(data))), base58);
+    };
+    BECH_ALPHABET = /* @__PURE__ */ chain2(/* @__PURE__ */ alphabet2("qpzry9x8gf2tvdw0s3jn54khce6mua7l"), /* @__PURE__ */ join2(""));
+    POLYMOD_GENERATORS = [996825010, 642813549, 513874426, 1027748829, 705979059];
+    bech32 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ genBech32("bech32"));
+    bech32m = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ genBech32("bech32m"));
+    hasHexBuiltin2 = /* @__PURE__ */ (() => (
+      // Require both directions before enabling the native hex path so encode/decode stay symmetric.
+      typeof Uint8Array.from([]).toHex === "function" && typeof Uint8Array.fromHex === "function"
+    ))();
+    hexBuiltin2 = {
+      // Keep local type guards so the native path preserves library-level input errors.
+      // Native toHex emits lowercase hex, matching the fallback alphabet and Node's hex strings.
+      encode(data) {
+        abytes3(data);
+        return data.toHex();
+      },
+      // Native fromHex accepts either hex case and rejects odd-length / non-hex syntax.
+      decode(s) {
+        astr2("hex", s);
+        return Uint8Array.fromHex(s);
+      }
+    };
+    hex2 = /* @__PURE__ */ Object.freeze(hasHexBuiltin2 ? hexBuiltin2 : /* @__PURE__ */ chain2(/* @__PURE__ */ radix22(4), /* @__PURE__ */ alphabet2("0123456789abcdef"), /* @__PURE__ */ join2(""), /* @__PURE__ */ normalize2((s) => {
+      if (typeof s !== "string" || s.length % 2 !== 0)
+        throw new TypeError(`hex.decode: expected string, got ${typeof s} with length ${s.length}`);
+      return s.toLowerCase();
+    })));
+  }
+});
+
 // node_modules/@scure/btc-signer/script.js
 function ScriptNum(bytesLimit = 6, forceMinimal = false) {
   return wrap({
@@ -4337,7 +4531,7 @@ function PSBTKeyMap(psbtEnum) {
       const seen = {};
       const add = (key, value2) => {
         const _value2 = value2;
-        const kStr = hex.encode(PSBTUnknownKey.encode(key));
+        const kStr = hex2.encode(PSBTUnknownKey.encode(key));
         if (seen[kStr])
           throw new Error(`PSBT: duplicate key=${kStr}`);
         seen[kStr] = true;
@@ -4373,7 +4567,7 @@ function PSBTKeyMap(psbtEnum) {
       const noKey = {};
       const seen = {};
       for (const elm of raw) {
-        const kStr = hex.encode(PSBTUnknownKey.encode(elm.key));
+        const kStr = hex2.encode(PSBTUnknownKey.encode(elm.key));
         if (seen[kStr])
           throw new Error(`PSBT: duplicate key=${kStr}`);
         seen[kStr] = true;
@@ -4384,7 +4578,7 @@ function PSBTKeyMap(psbtEnum) {
           const [_name, kc, vc] = byType[elm.key.type];
           name = _name;
           if (!kc && key.length) {
-            throw new Error(`PSBT: Non-empty key for ${name} (key=${hex.encode(key)} value=${hex.encode(value)}`);
+            throw new Error(`PSBT: Non-empty key for ${name} (key=${hex2.encode(key)} value=${hex2.encode(value)}`);
           }
           key = kc ? kc.decode(key) : void 0;
           value = vc.decode(value);
@@ -4488,8 +4682,8 @@ function mergeKeyMap(psbtEnum, val, cur, allowedFields, allowUnknown) {
           if (val2.length !== 2)
             throw new Error(`keyMap(${k}): KV pairs should be [k, v][]`);
           return [
-            typeof val2[0] === "string" ? kC.decode(hex.decode(val2[0])) : val2[0],
-            typeof val2[1] === "string" ? vC.decode(hex.decode(val2[1])) : val2[1]
+            typeof val2[0] === "string" ? kC.decode(hex2.decode(val2[0])) : val2[0],
+            typeof val2[1] === "string" ? vC.decode(hex2.decode(val2[1])) : val2[1]
           ];
         });
         const map = {};
@@ -4498,17 +4692,17 @@ function mergeKeyMap(psbtEnum, val, cur, allowedFields, allowUnknown) {
             map[kStr] = [k2, v];
             return;
           }
-          const oldVal = hex.encode(vC.encode(map[kStr][1]));
-          const newVal = hex.encode(vC.encode(v));
+          const oldVal = hex2.encode(vC.encode(map[kStr][1]));
+          const newVal = hex2.encode(vC.encode(v));
           if (oldVal !== newVal)
             throw new Error(`keyMap(${key}): same key=${kStr} oldVal=${oldVal} newVal=${newVal}`);
         };
         for (const [k2, v] of oldKV) {
-          const kStr = hex.encode(kC.encode(k2));
+          const kStr = hex2.encode(kC.encode(k2));
           add(kStr, k2, v);
         }
         for (const [k2, v] of newKV) {
-          const kStr = hex.encode(kC.encode(k2));
+          const kStr = hex2.encode(kC.encode(k2));
           if (v === void 0) {
             if (cannotChange)
               throw new Error(`Cannot remove signed field=${key}/${k2}`);
@@ -4519,7 +4713,7 @@ function mergeKeyMap(psbtEnum, val, cur, allowedFields, allowUnknown) {
         res[key] = Object.values(map);
       }
     } else if (typeof res[k] === "string") {
-      res[k] = vC.decode(hex.decode(res[k]));
+      res[k] = vC.decode(hex2.decode(res[k]));
     } else if (cannotChange && k in _val && _cur && _cur[k] !== void 0) {
       if (!equalBytes2(vC.encode(_val[k]), vC.encode(_cur[k])))
         throw new Error(`Cannot change signed field=${k}`);
@@ -4528,15 +4722,15 @@ function mergeKeyMap(psbtEnum, val, cur, allowedFields, allowUnknown) {
   if (allowUnknown && _val.unknown) {
     const map = {};
     for (const [k, v] of _cur?.unknown || [])
-      map[hex.encode(PSBTUnknownKey.encode(k))] = [k, v];
+      map[hex2.encode(PSBTUnknownKey.encode(k))] = [k, v];
     for (const [k, v] of _val.unknown) {
-      const kStr = hex.encode(PSBTUnknownKey.encode(k));
+      const kStr = hex2.encode(PSBTUnknownKey.encode(k));
       if (map[kStr] === void 0) {
         map[kStr] = [k, v];
         continue;
       }
-      const oldVal = hex.encode(BytesInf.encode(map[kStr][1]));
-      const newVal = hex.encode(BytesInf.encode(v));
+      const oldVal = hex2.encode(BytesInf.encode(map[kStr][1]));
+      const newVal = hex2.encode(BytesInf.encode(v));
       if (oldVal !== newVal)
         throw new Error(`keyMap(unknown): same key=${kStr} oldVal=${oldVal} newVal=${newVal}`);
     }
@@ -4554,7 +4748,7 @@ function mergeKeyMap(psbtEnum, val, cur, allowedFields, allowUnknown) {
 var PubKeyECDSA, PubKeyECDSACompressed, PubKeySchnorr, SignatureSchnorr, RawWitnessWire, BIP32Der, TaprootBIP32Der, GlobalXPUB, tapScriptSigKey, _TaprootControlBlock, TaprootControlBlock, tapTree, BytesInf, Bytes20, Bytes32, PSBTInfo, PSBTGlobal, PSBTInput, PSBTInputFinalKeys, PSBTInputUnsignedKeys, PSBTOutput, PSBTOutputUnsignedKeys, PSBTKeyPair, PSBTUnknownKey, PSBTInputCoder, PSBTOutputCoder, PSBTGlobalCoder, _RawPSBTV0, _RawPSBTV2, _DebugPSBT, RawPSBTV0, RawPSBTV2;
 var init_psbt = __esm({
   "node_modules/@scure/btc-signer/psbt.js"() {
-    init_base();
+    init_base2();
     init_micro_packed();
     init_script();
     init_utils2();
@@ -4610,24 +4804,24 @@ var init_psbt = __esm({
     })), (tree) => {
       if (tree.length < 1)
         throw new Error("tapTree: expected at least one tuple");
-      let path = Array(tree[0].depth).fill(0);
+      let path2 = Array(tree[0].depth).fill(0);
       let maxDepth = tree[0].depth;
       for (let i = 1; i < tree.length; i++) {
         const { depth } = tree[i];
         if (depth > maxDepth)
           maxDepth = depth;
-        let j = path.length - 1;
-        while (j >= 0 && path[j] === 1)
+        let j = path2.length - 1;
+        while (j >= 0 && path2[j] === 1)
           j--;
         if (j < 0)
           throw new Error("tapTree: tuples must be in DFS order");
-        const next = path.slice(0, j);
+        const next = path2.slice(0, j);
         next.push(1);
         if (depth < next.length)
           throw new Error("tapTree: tuples must be in DFS order");
         while (next.length < depth)
           next.push(0);
-        path = next;
+        path2 = next;
       }
       let leaves = 0n;
       for (let i = 0; i < tree.length; i++)
@@ -4876,9 +5070,9 @@ function checkScript(script, redeemScript, witnessScript) {
 function uniqPubkey(pubkeys) {
   const map = {};
   for (const pub of pubkeys) {
-    const key = hex.encode(pub);
+    const key = hex2.encode(pub);
     if (map[key])
-      throw new Error(`Multisig: non-uniq pubkey: ${pubkeys.map(hex.encode)}`);
+      throw new Error(`Multisig: non-uniq pubkey: ${pubkeys.map(hex2.encode)}`);
     map[key] = true;
   }
 }
@@ -4929,20 +5123,20 @@ function taprootListToTree(taprootList) {
   const last = lst[0];
   return last?.childs || last;
 }
-function taprootAddPath(tree, path = []) {
+function taprootAddPath(tree, path2 = []) {
   if (!tree)
     throw new Error(`taprootAddPath: empty tree`);
   if (tree.type === "leaf")
-    return { ...tree, path };
+    return { ...tree, path: path2 };
   if (tree.type !== "branch")
     throw new Error(`taprootAddPath: wrong type=${tree}`);
   return {
     ...tree,
-    path,
+    path: path2,
     // BIP 341 control blocks serialize sibling hashes from leaf to root, so prepend the
     // current sibling before descending into the child subtree.
-    left: taprootAddPath(tree.left, [tree.right.hash, ...path]),
-    right: taprootAddPath(tree.right, [tree.left.hash, ...path])
+    left: taprootAddPath(tree.left, [tree.right.hash, ...path2]),
+    right: taprootAddPath(tree.right, [tree.left.hash, ...path2])
   };
 }
 function taprootWalkTree(tree) {
@@ -4964,7 +5158,7 @@ function taprootHashTree(tree, internalPubKey, allowUnknownOutputs = false, cust
     const { script: leafScript } = tree;
     if (tree.tapLeafScript || tree.tapMerkleRoot && !equalBytes2(tree.tapMerkleRoot, EMPTY))
       throw new Error("P2TR: tapRoot leafScript cannot have tree");
-    const script = typeof leafScript === "string" ? hex.decode(leafScript) : leafScript;
+    const script = typeof leafScript === "string" ? hex2.decode(leafScript) : leafScript;
     if (!isBytes4(script))
       throw new Error(`checkScript: wrong script type=${script}`);
     checkTaprootScript(script, internalPubKey, allowUnknownOutputs, customScripts);
@@ -4994,7 +5188,7 @@ function taprootHashTree(tree, internalPubKey, allowUnknownOutputs = false, cust
 function p2tr(internalPubKey, tree, network = NETWORK, allowUnknownOutputs = false, customScripts) {
   if (!internalPubKey && !tree)
     throw new Error("p2tr: should have pubKey or scriptTree (or both)");
-  const pubKey = typeof internalPubKey === "string" ? hex.decode(internalPubKey) : internalPubKey || TAPROOT_UNSPENDABLE_KEY;
+  const pubKey = typeof internalPubKey === "string" ? hex2.decode(internalPubKey) : internalPubKey || TAPROOT_UNSPENDABLE_KEY;
   if (!isValidPubkey(pubKey, PubT.schnorr))
     throw new Error("p2tr: non-schnorr pubkey");
   if (tree) {
@@ -5191,7 +5385,7 @@ function Address(network = NETWORK) {
 var import_utils13, OutP2A, OutPK, OutPKH, OutSH, OutWSH, OutWPKH, OutMS, OutTR, OutTRNS, OutTRMS, OutUnknown, OutScripts, _OutScript, OutScript, p2pk, p2pkh, p2sh, p2wsh, p2wpkh, p2ms, TAP_LEAF_VERSION, tapLeafVersion, tapLeafHash, p2tr_ns, p2tr_pk, _sortPubkeys, base58check;
 var init_payment = __esm({
   "node_modules/@scure/btc-signer/payment.js"() {
-    init_base();
+    init_base2();
     import_utils13 = require("@noble/hashes/utils.js");
     init_utils();
     init_micro_packed();
@@ -5201,14 +5395,14 @@ var init_payment = __esm({
     init_utils2();
     OutP2A = {
       encode(from) {
-        if (from.length !== 2 || from[0] !== 1 || !isBytes4(from[1]) || hex.encode(from[1]) !== "4e73")
+        if (from.length !== 2 || from[0] !== 1 || !isBytes4(from[1]) || hex2.encode(from[1]) !== "4e73")
           return;
         return { type: "p2a", script: Script.encode(from) };
       },
       decode: (to) => {
         if (to.type !== "p2a")
           return;
-        return [1, hex.decode("4e73")];
+        return [1, hex2.decode("4e73")];
       }
     };
     OutPK = {
@@ -5668,7 +5862,7 @@ function validateInput(i) {
         disableScriptCheck: true,
         allowUnknownInputs: true
       });
-      const txid = hex.encode(_i.txid);
+      const txid = hex2.encode(_i.txid);
       if (tx.id !== txid)
         throw new Error(`nonWitnessUtxo: wrong txid, exp=${txid} got=${tx.id}`);
     }
@@ -5694,13 +5888,13 @@ function normalizeInput(i, cur, allowedFields, disableScriptCheck = false, allow
   const _allowedFields = allowedFields;
   let { nonWitnessUtxo, txid } = _i;
   if (typeof nonWitnessUtxo === "string")
-    nonWitnessUtxo = hex.decode(nonWitnessUtxo);
+    nonWitnessUtxo = hex2.decode(nonWitnessUtxo);
   if (isBytes4(nonWitnessUtxo))
     nonWitnessUtxo = RawTx.decode(nonWitnessUtxo);
   if (!("nonWitnessUtxo" in _i) && nonWitnessUtxo === void 0)
     nonWitnessUtxo = _cur?.nonWitnessUtxo;
   if (typeof txid === "string")
-    txid = hex.decode(txid);
+    txid = hex2.decode(txid);
   if (txid === void 0)
     txid = _cur?.txid;
   let res = { ..._cur, ..._i, nonWitnessUtxo, txid };
@@ -5789,13 +5983,13 @@ function PSBTCombine(psbts) {
     tx.combine(Transaction2.fromPSBT(psbts[i]));
   return tx.toPSBT();
 }
-function bip32Path(path) {
+function bip32Path(path2) {
   const out = [];
-  if (!/^[mM]'?/.test(path))
+  if (!/^[mM]'?/.test(path2))
     throw new Error('Path must start with "m" or "M"');
-  if (/^[mM]'?$/.test(path))
+  if (/^[mM]'?$/.test(path2))
     return out;
-  const parts = path.replace(/^[mM]'?\//, "").split("/");
+  const parts = path2.replace(/^[mM]'?\//, "").split("/");
   if (parts.length > 255)
     throw new Error("Path depth exceeds 255");
   for (const c of parts) {
@@ -5814,7 +6008,7 @@ function bip32Path(path) {
 var EMPTY32, EMPTY_OUTPUT, toVsize, stripCodeSeparator, PRECISION, DEFAULT_VERSION, DEFAULT_LOCKTIME, DEFAULT_SEQUENCE, Decimal, def, SignatureHash, SigHash, SigHashNames, TxHashIdx, Transaction2, HARDENED_OFFSET;
 var init_transaction = __esm({
   "node_modules/@scure/btc-signer/transaction.js"() {
-    init_base();
+    init_base2();
     init_micro_packed();
     init_payment();
     init_psbt();
@@ -6131,13 +6325,13 @@ var init_transaction = __esm({
         return this.toBytes(false, false);
       }
       get hex() {
-        return hex.encode(this.toBytes(true, this.hasWitnesses));
+        return hex2.encode(this.toBytes(true, this.hasWitnesses));
       }
       get hash() {
-        return hex.encode(sha256x2(this.toBytes(true)));
+        return hex2.encode(sha256x2(this.toBytes(true)));
       }
       get id() {
-        return hex.encode(sha256x2(this.toBytes(true)).reverse());
+        return hex2.encode(sha256x2(this.toBytes(true)).reverse());
       }
       // Input stuff
       checkInputIdx(idx) {
@@ -6193,7 +6387,7 @@ var init_transaction = __esm({
         if (typeof amount !== "bigint")
           throw new Error(`Wrong amount type, should be of type bigint in sats, but got ${amount} of type ${typeof amount}`);
         if (typeof script === "string")
-          script = hex.decode(script);
+          script = hex2.decode(script);
         if (script === void 0)
           script = cur?.script;
         let res = { ...cur, ...o, amount, script };
@@ -6854,7 +7048,7 @@ function selectUTXO(inputs, outputs, strategy, opts) {
 var encodeTapBlock, _cmpBig, _Estimator;
 var init_utxo = __esm({
   "node_modules/@scure/btc-signer/utxo.js"() {
-    init_base();
+    init_base2();
     init_micro_packed();
     init_payment();
     init_psbt();
@@ -6930,7 +7124,7 @@ var init_utxo = __esm({
         this.normalizedInputs = allInputs.map((i) => {
           const normalized = normalizeInput(i, void 0, void 0, opts.disableScriptCheck, opts.allowUnknown);
           inputBeforeSign(normalized);
-          const key = `${hex.encode(normalized.txid)}:${normalized.index}`;
+          const key = `${hex2.encode(normalized.txid)}:${normalized.index}`;
           if (!opts.allowSameUtxo && inputKeys.has(key))
             throw new Error(`Estimator: same input passed multiple times: ${key}`);
           inputKeys.add(key);
@@ -7230,8 +7424,8 @@ var require_cycles = __commonJS({
     exports2.burnHeightToRewardCycle = burnHeightToRewardCycle2;
     exports2.rewardCycleToBurnHeight = rewardCycleToBurnHeight;
     exports2.burnHeightToDistributionIndex = burnHeightToDistributionIndex;
-    exports2.currentDistributionCycle = currentDistributionCycle;
-    exports2.distributionCycleToBurnHeight = distributionCycleToBurnHeight;
+    exports2.currentDistributionCycle = currentDistributionCycle2;
+    exports2.distributionCycleToBurnHeight = distributionCycleToBurnHeight2;
     exports2.isInPreparePhase = isInPreparePhase2;
     exports2.minUstxForSatsAmount = minUstxForSatsAmount2;
     exports2.isBondActiveAtHeight = isBondActiveAtHeight2;
@@ -7272,13 +7466,13 @@ var require_cycles = __commonJS({
       const distCycleLength = Math.floor(opts.poxInfo.rewardCycleLength / 2);
       return Math.floor((opts.burnHeight - opts.poxInfo.firstBurnchainBlockHeight) / distCycleLength);
     }
-    function currentDistributionCycle(poxInfo2) {
+    function currentDistributionCycle2(poxInfo2) {
       return burnHeightToDistributionIndex({
         burnHeight: poxInfo2.currentBurnchainBlockHeight,
         poxInfo: poxInfo2
       });
     }
-    function distributionCycleToBurnHeight(opts) {
+    function distributionCycleToBurnHeight2(opts) {
       const distCycleLength = Math.floor(opts.poxInfo.rewardCycleLength / 2);
       return opts.poxInfo.firstBurnchainBlockHeight + opts.distributionCycle * distCycleLength;
     }
@@ -7404,7 +7598,7 @@ var require_script = __commonJS({
     exports2.buildLockAddress = buildLockAddress2;
     exports2.lockScriptToAddress = lockScriptToAddress;
     exports2.computeUnlockHeight = computeUnlockHeight;
-    exports2.computeBondUnlockHeight = computeBondUnlockHeight2;
+    exports2.computeBondUnlockHeight = computeBondUnlockHeight3;
     exports2.buildRegisterMetadata = buildRegisterMetadata2;
     var btc = __importStar((init_btc_signer(), __toCommonJS(btc_signer_exports)));
     var sha2_js_1 = require("@noble/hashes/sha2.js");
@@ -7551,7 +7745,7 @@ var require_script = __commonJS({
         poxInfo: opts.poxInfo
       });
     }
-    function computeBondUnlockHeight2(opts) {
+    function computeBondUnlockHeight3(opts) {
       const endCycle = (0, cycles_1.bondPeriodToRewardCycle)({
         bondIndex: opts.bondIndex + cycles_1.BOND_END_OFFSET_PERIODS,
         poxInfo: opts.poxInfo
@@ -7563,7 +7757,7 @@ var require_script = __commonJS({
       return endBurnHeight - Math.floor(opts.poxInfo.rewardCycleLength / 2);
     }
     function buildRegisterMetadata2(opts) {
-      const unlockHeight = computeBondUnlockHeight2({
+      const unlockHeight = computeBondUnlockHeight3({
         bondIndex: opts.bondIndex,
         poxInfo: opts.poxInfo
       });
@@ -7835,8 +8029,7 @@ var require_build = __commonJS({
           "tx-index": transactions_1.Cl.uint(o.txIndex),
           amount: transactions_1.Cl.uint(o.amount)
         }))),
-        "staker-unlock-bytes": clBufferFrom(lockup.unlockBytes),
-        "unlock-burn-height": transactions_1.Cl.uint(lockup.unlockBurnHeight)
+        "staker-unlock-bytes": clBufferFrom(lockup.unlockBytes)
       }));
     }
     async function buildUpdateBondRegistration(args) {
@@ -7910,7 +8103,7 @@ var require_fetch = __commonJS({
     exports2.fetchAccountStatus = fetchAccountStatus2;
     exports2.fetchBondMembership = fetchBondMembership2;
     exports2.fetchProtocolBondMemberships = fetchProtocolBondMemberships;
-    exports2.fetchStakerSharesStakedForCycle = fetchStakerSharesStakedForCycle;
+    exports2.fetchStakerSharesStakedForCycle = fetchStakerSharesStakedForCycle2;
     exports2.fetchBond = fetchBond2;
     exports2.fetchProtocolBond = fetchProtocolBond;
     exports2.fetchBondAdmin = fetchBondAdmin;
@@ -7918,7 +8111,7 @@ var require_fetch = __commonJS({
     exports2.fetchTotalSbtcStakedForBond = fetchTotalSbtcStakedForBond;
     exports2.fetchTotalSharesStakedForCycle = fetchTotalSharesStakedForCycle;
     exports2.fetchTotalSbtcStaked = fetchTotalSbtcStaked;
-    exports2.fetchBondL1UnlockHeight = fetchBondL1UnlockHeight;
+    exports2.fetchBondL1UnlockHeight = fetchBondL1UnlockHeight2;
     exports2.fetchConstructLockupScript = fetchConstructLockupScript;
     exports2.fetchConstructLockupOutputScript = fetchConstructLockupOutputScript2;
     exports2.fetchPushScriptBytes = fetchPushScriptBytes;
@@ -7949,14 +8142,14 @@ var require_fetch = __commonJS({
     exports2.fetchSignerPendingStakedUstx = fetchSignerPendingStakedUstx;
     exports2.fetchAmountDelegatedForSigner = fetchAmountDelegatedForSigner;
     exports2.fetchUstxDelegatedForCycle = fetchUstxDelegatedForCycle;
-    exports2.fetchSignerCycleMembership = fetchSignerCycleMembership;
+    exports2.fetchSignerCycleMembership = fetchSignerCycleMembership2;
     exports2.fetchSignerSetContainsForCycle = fetchSignerSetContainsForCycle;
     exports2.fetchSignerSetFirstItem = fetchSignerSetFirstItem;
     exports2.fetchSignerSetLastItem = fetchSignerSetLastItem;
     exports2.fetchSignerSetNextItem = fetchSignerSetNextItem;
     exports2.fetchSignerSetPrevItem = fetchSignerSetPrevItem;
     exports2.fetchSignerSetItem = fetchSignerSetItem;
-    exports2.fetchStakerCustodiedSbtc = fetchStakerCustodiedSbtc;
+    exports2.fetchStakerCustodiedSbtc = fetchStakerCustodiedSbtc2;
     exports2.fetchBondOverlapsNewPosition = fetchBondOverlapsNewPosition;
     exports2.fetchHasAnnouncedL1EarlyExit = fetchHasAnnouncedL1EarlyExit2;
     exports2.fetchSignerInfo = fetchSignerInfo2;
@@ -8080,7 +8273,7 @@ var require_fetch = __commonJS({
         return void 0;
       return decodeBondMembership(optional.value);
     }
-    async function fetchStakerSharesStakedForCycle(opts) {
+    async function fetchStakerSharesStakedForCycle2(opts) {
       const network = (0, network_1.networkFrom)(opts.network ?? "mainnet");
       const result = await (0, transactions_1.fetchCallReadOnlyFunction)({
         contractAddress: network.bootAddress,
@@ -8200,7 +8393,7 @@ var require_fetch = __commonJS({
       });
       return BigInt(result.value);
     }
-    async function fetchBondL1UnlockHeight(opts) {
+    async function fetchBondL1UnlockHeight2(opts) {
       const network = (0, network_1.networkFrom)(opts.network ?? "mainnet");
       const result = await (0, transactions_1.fetchCallReadOnlyFunction)({
         contractAddress: network.bootAddress,
@@ -8612,7 +8805,7 @@ var require_fetch = __commonJS({
       });
       return BigInt(result.value);
     }
-    async function fetchSignerCycleMembership(opts) {
+    async function fetchSignerCycleMembership2(opts) {
       const network = (0, network_1.networkFrom)(opts.network ?? "mainnet");
       const result = await (0, transactions_1.fetchCallReadOnlyFunction)({
         contractAddress: network.bootAddress,
@@ -8692,7 +8885,7 @@ var require_fetch = __commonJS({
         next: unwrapPrincipal(optional.value.value.next)
       };
     }
-    async function fetchStakerCustodiedSbtc(opts) {
+    async function fetchStakerCustodiedSbtc2(opts) {
       const network = (0, network_1.networkFrom)(opts.network ?? "mainnet");
       const result = await (0, transactions_1.fetchCallReadOnlyFunction)({
         contractAddress: network.bootAddress,
@@ -8959,3820 +9152,6 @@ var require_errors = __commonJS({
   }
 });
 
-// node_modules/base64-js/index.js
-var require_base64_js = __commonJS({
-  "node_modules/base64-js/index.js"(exports2) {
-    "use strict";
-    exports2.byteLength = byteLength;
-    exports2.toByteArray = toByteArray;
-    exports2.fromByteArray = fromByteArray;
-    var lookup = [];
-    var revLookup = [];
-    var Arr = typeof Uint8Array !== "undefined" ? Uint8Array : Array;
-    var code = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    for (i = 0, len = code.length; i < len; ++i) {
-      lookup[i] = code[i];
-      revLookup[code.charCodeAt(i)] = i;
-    }
-    var i;
-    var len;
-    revLookup["-".charCodeAt(0)] = 62;
-    revLookup["_".charCodeAt(0)] = 63;
-    function getLens(b64) {
-      var len2 = b64.length;
-      if (len2 % 4 > 0) {
-        throw new Error("Invalid string. Length must be a multiple of 4");
-      }
-      var validLen = b64.indexOf("=");
-      if (validLen === -1) validLen = len2;
-      var placeHoldersLen = validLen === len2 ? 0 : 4 - validLen % 4;
-      return [validLen, placeHoldersLen];
-    }
-    function byteLength(b64) {
-      var lens = getLens(b64);
-      var validLen = lens[0];
-      var placeHoldersLen = lens[1];
-      return (validLen + placeHoldersLen) * 3 / 4 - placeHoldersLen;
-    }
-    function _byteLength(b64, validLen, placeHoldersLen) {
-      return (validLen + placeHoldersLen) * 3 / 4 - placeHoldersLen;
-    }
-    function toByteArray(b64) {
-      var tmp;
-      var lens = getLens(b64);
-      var validLen = lens[0];
-      var placeHoldersLen = lens[1];
-      var arr = new Arr(_byteLength(b64, validLen, placeHoldersLen));
-      var curByte = 0;
-      var len2 = placeHoldersLen > 0 ? validLen - 4 : validLen;
-      var i2;
-      for (i2 = 0; i2 < len2; i2 += 4) {
-        tmp = revLookup[b64.charCodeAt(i2)] << 18 | revLookup[b64.charCodeAt(i2 + 1)] << 12 | revLookup[b64.charCodeAt(i2 + 2)] << 6 | revLookup[b64.charCodeAt(i2 + 3)];
-        arr[curByte++] = tmp >> 16 & 255;
-        arr[curByte++] = tmp >> 8 & 255;
-        arr[curByte++] = tmp & 255;
-      }
-      if (placeHoldersLen === 2) {
-        tmp = revLookup[b64.charCodeAt(i2)] << 2 | revLookup[b64.charCodeAt(i2 + 1)] >> 4;
-        arr[curByte++] = tmp & 255;
-      }
-      if (placeHoldersLen === 1) {
-        tmp = revLookup[b64.charCodeAt(i2)] << 10 | revLookup[b64.charCodeAt(i2 + 1)] << 4 | revLookup[b64.charCodeAt(i2 + 2)] >> 2;
-        arr[curByte++] = tmp >> 8 & 255;
-        arr[curByte++] = tmp & 255;
-      }
-      return arr;
-    }
-    function tripletToBase64(num2) {
-      return lookup[num2 >> 18 & 63] + lookup[num2 >> 12 & 63] + lookup[num2 >> 6 & 63] + lookup[num2 & 63];
-    }
-    function encodeChunk(uint8, start, end) {
-      var tmp;
-      var output = [];
-      for (var i2 = start; i2 < end; i2 += 3) {
-        tmp = (uint8[i2] << 16 & 16711680) + (uint8[i2 + 1] << 8 & 65280) + (uint8[i2 + 2] & 255);
-        output.push(tripletToBase64(tmp));
-      }
-      return output.join("");
-    }
-    function fromByteArray(uint8) {
-      var tmp;
-      var len2 = uint8.length;
-      var extraBytes = len2 % 3;
-      var parts = [];
-      var maxChunkLength = 16383;
-      for (var i2 = 0, len22 = len2 - extraBytes; i2 < len22; i2 += maxChunkLength) {
-        parts.push(encodeChunk(uint8, i2, i2 + maxChunkLength > len22 ? len22 : i2 + maxChunkLength));
-      }
-      if (extraBytes === 1) {
-        tmp = uint8[len2 - 1];
-        parts.push(
-          lookup[tmp >> 2] + lookup[tmp << 4 & 63] + "=="
-        );
-      } else if (extraBytes === 2) {
-        tmp = (uint8[len2 - 2] << 8) + uint8[len2 - 1];
-        parts.push(
-          lookup[tmp >> 10] + lookup[tmp >> 4 & 63] + lookup[tmp << 2 & 63] + "="
-        );
-      }
-      return parts.join("");
-    }
-  }
-});
-
-// node_modules/@stacks/encryption/dist/cryptoUtils.js
-var require_cryptoUtils = __commonJS({
-  "node_modules/@stacks/encryption/dist/cryptoUtils.js"(exports2) {
-    "use strict";
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.NO_CRYPTO_LIB = void 0;
-    exports2.isSubtleCryptoAvailable = isSubtleCryptoAvailable;
-    exports2.isNodeCryptoAvailable = isNodeCryptoAvailable;
-    exports2.getCryptoLib = getCryptoLib;
-    function isSubtleCryptoAvailable() {
-      return typeof crypto !== "undefined" && typeof crypto.subtle !== "undefined";
-    }
-    function isNodeCryptoAvailable(withFeature) {
-      try {
-        const resolvedResult = require.resolve("crypto");
-        if (!resolvedResult) {
-          return false;
-        }
-        const cryptoModule = require("crypto");
-        if (!cryptoModule) {
-          return false;
-        }
-        if (withFeature) {
-          const features = withFeature(cryptoModule);
-          return features;
-        }
-        return true;
-      } catch (error) {
-        return false;
-      }
-    }
-    exports2.NO_CRYPTO_LIB = 'Crypto lib not found. Either the WebCrypto "crypto.subtle" or Node.js "crypto" module must be available.';
-    async function getCryptoLib() {
-      if (isSubtleCryptoAvailable()) {
-        return {
-          lib: crypto.subtle,
-          name: "subtleCrypto"
-        };
-      } else {
-        try {
-          const nodeCrypto = require("crypto");
-          return {
-            lib: nodeCrypto,
-            name: "nodeCrypto"
-          };
-        } catch (error) {
-          throw new Error(exports2.NO_CRYPTO_LIB);
-        }
-      }
-    }
-  }
-});
-
-// node_modules/@stacks/encryption/dist/aesCipher.js
-var require_aesCipher = __commonJS({
-  "node_modules/@stacks/encryption/dist/aesCipher.js"(exports2) {
-    "use strict";
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.WebCryptoAesCipher = exports2.NodeCryptoAesCipher = void 0;
-    exports2.createCipher = createCipher;
-    var common_1 = require("@stacks/common");
-    var cryptoUtils_1 = require_cryptoUtils();
-    var NodeCryptoAesCipher = class {
-      constructor(createCipher2, createDecipher) {
-        this.createCipher = createCipher2;
-        this.createDecipher = createDecipher;
-      }
-      async encrypt(algorithm, key, iv, data) {
-        if (algorithm !== "aes-128-cbc" && algorithm !== "aes-256-cbc") {
-          throw new Error(`Unsupported cipher algorithm "${algorithm}"`);
-        }
-        const cipher = this.createCipher(algorithm, key, iv);
-        const result = new Uint8Array((0, common_1.concatBytes)(cipher.update(data), cipher.final()));
-        return Promise.resolve(result);
-      }
-      async decrypt(algorithm, key, iv, data) {
-        if (algorithm !== "aes-128-cbc" && algorithm !== "aes-256-cbc") {
-          throw new Error(`Unsupported cipher algorithm "${algorithm}"`);
-        }
-        const cipher = this.createDecipher(algorithm, key, iv);
-        const result = new Uint8Array((0, common_1.concatBytes)(cipher.update(data), cipher.final()));
-        return Promise.resolve(result);
-      }
-    };
-    exports2.NodeCryptoAesCipher = NodeCryptoAesCipher;
-    var WebCryptoAesCipher = class {
-      constructor(subtleCrypto) {
-        this.subtleCrypto = subtleCrypto;
-      }
-      async encrypt(algorithm, key, iv, data) {
-        let algo;
-        let length;
-        if (algorithm === "aes-128-cbc") {
-          algo = "AES-CBC";
-          length = 128;
-        } else if (algorithm === "aes-256-cbc") {
-          algo = "AES-CBC";
-          length = 256;
-        } else {
-          throw new Error(`Unsupported cipher algorithm "${algorithm}"`);
-        }
-        const cryptoKey = await this.subtleCrypto.importKey("raw", key, { name: algo, length }, false, ["encrypt"]);
-        const result = await this.subtleCrypto.encrypt({ name: algo, iv }, cryptoKey, data);
-        return new Uint8Array(result);
-      }
-      async decrypt(algorithm, key, iv, data) {
-        let algo;
-        let length;
-        if (algorithm === "aes-128-cbc") {
-          algo = "AES-CBC";
-          length = 128;
-        } else if (algorithm === "aes-256-cbc") {
-          algo = "AES-CBC";
-          length = 256;
-        } else {
-          throw new Error(`Unsupported cipher algorithm "${algorithm}"`);
-        }
-        const cryptoKey = await this.subtleCrypto.importKey("raw", key, { name: algo, length }, false, ["decrypt"]);
-        const result = await this.subtleCrypto.decrypt({ name: algo, iv }, cryptoKey, data);
-        return new Uint8Array(result);
-      }
-    };
-    exports2.WebCryptoAesCipher = WebCryptoAesCipher;
-    async function createCipher() {
-      const cryptoLib = await (0, cryptoUtils_1.getCryptoLib)();
-      if (cryptoLib.name === "subtleCrypto") {
-        return new WebCryptoAesCipher(cryptoLib.lib);
-      }
-      return new NodeCryptoAesCipher(cryptoLib.lib.createCipheriv, cryptoLib.lib.createDecipheriv);
-    }
-  }
-});
-
-// node_modules/base-x/src/index.js
-var require_src = __commonJS({
-  "node_modules/base-x/src/index.js"(exports2, module2) {
-    "use strict";
-    function base(ALPHABET) {
-      if (ALPHABET.length >= 255) {
-        throw new TypeError("Alphabet too long");
-      }
-      var BASE_MAP = new Uint8Array(256);
-      for (var j = 0; j < BASE_MAP.length; j++) {
-        BASE_MAP[j] = 255;
-      }
-      for (var i = 0; i < ALPHABET.length; i++) {
-        var x = ALPHABET.charAt(i);
-        var xc = x.charCodeAt(0);
-        if (BASE_MAP[xc] !== 255) {
-          throw new TypeError(x + " is ambiguous");
-        }
-        BASE_MAP[xc] = i;
-      }
-      var BASE = ALPHABET.length;
-      var LEADER = ALPHABET.charAt(0);
-      var FACTOR = Math.log(BASE) / Math.log(256);
-      var iFACTOR = Math.log(256) / Math.log(BASE);
-      function encode(source) {
-        if (source instanceof Uint8Array) {
-        } else if (ArrayBuffer.isView(source)) {
-          source = new Uint8Array(source.buffer, source.byteOffset, source.byteLength);
-        } else if (Array.isArray(source)) {
-          source = Uint8Array.from(source);
-        }
-        if (!(source instanceof Uint8Array)) {
-          throw new TypeError("Expected Uint8Array");
-        }
-        if (source.length === 0) {
-          return "";
-        }
-        var zeroes = 0;
-        var length = 0;
-        var pbegin = 0;
-        var pend = source.length;
-        while (pbegin !== pend && source[pbegin] === 0) {
-          pbegin++;
-          zeroes++;
-        }
-        var size = (pend - pbegin) * iFACTOR + 1 >>> 0;
-        var b58 = new Uint8Array(size);
-        while (pbegin !== pend) {
-          var carry = source[pbegin];
-          var i2 = 0;
-          for (var it1 = size - 1; (carry !== 0 || i2 < length) && it1 !== -1; it1--, i2++) {
-            carry += 256 * b58[it1] >>> 0;
-            b58[it1] = carry % BASE >>> 0;
-            carry = carry / BASE >>> 0;
-          }
-          if (carry !== 0) {
-            throw new Error("Non-zero carry");
-          }
-          length = i2;
-          pbegin++;
-        }
-        var it2 = size - length;
-        while (it2 !== size && b58[it2] === 0) {
-          it2++;
-        }
-        var str2 = LEADER.repeat(zeroes);
-        for (; it2 < size; ++it2) {
-          str2 += ALPHABET.charAt(b58[it2]);
-        }
-        return str2;
-      }
-      function decodeUnsafe(source) {
-        if (typeof source !== "string") {
-          throw new TypeError("Expected String");
-        }
-        if (source.length === 0) {
-          return new Uint8Array();
-        }
-        var psz = 0;
-        var zeroes = 0;
-        var length = 0;
-        while (source[psz] === LEADER) {
-          zeroes++;
-          psz++;
-        }
-        var size = (source.length - psz) * FACTOR + 1 >>> 0;
-        var b256 = new Uint8Array(size);
-        while (source[psz]) {
-          var charCode = source.charCodeAt(psz);
-          if (charCode > 255) {
-            return;
-          }
-          var carry = BASE_MAP[charCode];
-          if (carry === 255) {
-            return;
-          }
-          var i2 = 0;
-          for (var it3 = size - 1; (carry !== 0 || i2 < length) && it3 !== -1; it3--, i2++) {
-            carry += BASE * b256[it3] >>> 0;
-            b256[it3] = carry % 256 >>> 0;
-            carry = carry / 256 >>> 0;
-          }
-          if (carry !== 0) {
-            throw new Error("Non-zero carry");
-          }
-          length = i2;
-          psz++;
-        }
-        var it4 = size - length;
-        while (it4 !== size && b256[it4] === 0) {
-          it4++;
-        }
-        var vch = new Uint8Array(zeroes + (size - it4));
-        var j2 = zeroes;
-        while (it4 !== size) {
-          vch[j2++] = b256[it4++];
-        }
-        return vch;
-      }
-      function decode(string2) {
-        var buffer = decodeUnsafe(string2);
-        if (buffer) {
-          return buffer;
-        }
-        throw new Error("Non-base" + BASE + " character");
-      }
-      return {
-        encode,
-        decodeUnsafe,
-        decode
-      };
-    }
-    module2.exports = base;
-  }
-});
-
-// node_modules/bs58/index.js
-var require_bs58 = __commonJS({
-  "node_modules/bs58/index.js"(exports2, module2) {
-    var basex = require_src();
-    var ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-    module2.exports = basex(ALPHABET);
-  }
-});
-
-// node_modules/@stacks/encryption/dist/hashRipemd160.js
-var require_hashRipemd160 = __commonJS({
-  "node_modules/@stacks/encryption/dist/hashRipemd160.js"(exports2) {
-    "use strict";
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.hashRipemd160 = hashRipemd160;
-    var ripemd160_1 = require("@noble/hashes/ripemd160");
-    function hashRipemd160(data) {
-      return (0, ripemd160_1.ripemd160)(data);
-    }
-  }
-});
-
-// node_modules/@stacks/encryption/dist/sha2Hash.js
-var require_sha2Hash = __commonJS({
-  "node_modules/@stacks/encryption/dist/sha2Hash.js"(exports2) {
-    "use strict";
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.WebCryptoSha2Hash = exports2.NodeCryptoSha2Hash = void 0;
-    exports2.createSha2Hash = createSha2Hash;
-    exports2.hashSha256Sync = hashSha256Sync;
-    exports2.hashSha512Sync = hashSha512Sync;
-    var sha256_1 = require("@noble/hashes/sha256");
-    var sha512_1 = require("@noble/hashes/sha512");
-    var cryptoUtils_1 = require_cryptoUtils();
-    var NodeCryptoSha2Hash = class {
-      constructor(createHash) {
-        this.createHash = createHash;
-      }
-      async digest(data, algorithm = "sha256") {
-        try {
-          const result = this.createHash(algorithm).update(data).digest();
-          return Promise.resolve(result);
-        } catch (error) {
-          console.log(error);
-          console.log(`Error performing ${algorithm} digest with Node.js 'crypto.createHash', falling back to JS implementation.`);
-          return Promise.resolve(algorithm === "sha256" ? hashSha256Sync(data) : hashSha512Sync(data));
-        }
-      }
-    };
-    exports2.NodeCryptoSha2Hash = NodeCryptoSha2Hash;
-    var WebCryptoSha2Hash = class {
-      constructor(subtleCrypto) {
-        this.subtleCrypto = subtleCrypto;
-      }
-      async digest(data, algorithm = "sha256") {
-        let algo;
-        if (algorithm === "sha256") {
-          algo = "SHA-256";
-        } else if (algorithm === "sha512") {
-          algo = "SHA-512";
-        } else {
-          throw new Error(`Unsupported hash algorithm ${algorithm}`);
-        }
-        try {
-          const hash = await this.subtleCrypto.digest(algo, data);
-          return new Uint8Array(hash);
-        } catch (error) {
-          console.log(error);
-          console.log(`Error performing ${algorithm} digest with WebCrypto, falling back to JS implementation.`);
-          return Promise.resolve(algorithm === "sha256" ? hashSha256Sync(data) : hashSha512Sync(data));
-        }
-      }
-    };
-    exports2.WebCryptoSha2Hash = WebCryptoSha2Hash;
-    async function createSha2Hash() {
-      const cryptoLib = await (0, cryptoUtils_1.getCryptoLib)();
-      if (cryptoLib.name === "subtleCrypto") {
-        return new WebCryptoSha2Hash(cryptoLib.lib);
-      } else {
-        return new NodeCryptoSha2Hash(cryptoLib.lib.createHash);
-      }
-    }
-    function hashSha256Sync(data) {
-      return (0, sha256_1.sha256)(data);
-    }
-    function hashSha512Sync(data) {
-      return (0, sha512_1.sha512)(data);
-    }
-  }
-});
-
-// node_modules/@stacks/encryption/dist/keys.js
-var require_keys = __commonJS({
-  "node_modules/@stacks/encryption/dist/keys.js"(exports2) {
-    "use strict";
-    var __importDefault = exports2 && exports2.__importDefault || function(mod2) {
-      return mod2 && mod2.__esModule ? mod2 : { "default": mod2 };
-    };
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.makeECPrivateKey = makeECPrivateKey;
-    exports2.base58CheckDecode = base58CheckDecode;
-    exports2.base58Encode = base58Encode;
-    exports2.base58CheckEncode = base58CheckEncode;
-    exports2.publicKeyToBtcAddress = publicKeyToBtcAddress;
-    exports2.getPublicKeyFromPrivate = getPublicKeyFromPrivate;
-    exports2.ecSign = ecSign;
-    var hmac_1 = require("@noble/hashes/hmac");
-    var sha256_1 = require("@noble/hashes/sha256");
-    var secp256k1_1 = require("@noble/secp256k1");
-    var common_1 = require("@stacks/common");
-    var bs58_1 = __importDefault(require_bs58());
-    var hashRipemd160_1 = require_hashRipemd160();
-    var sha2Hash_1 = require_sha2Hash();
-    var BITCOIN_PUBKEYHASH = 0;
-    secp256k1_1.utils.hmacSha256Sync = (key, ...msgs) => {
-      const h = hmac_1.hmac.create(sha256_1.sha256, key);
-      msgs.forEach((msg) => h.update(msg));
-      return h.digest();
-    };
-    function makeECPrivateKey() {
-      return (0, common_1.bytesToHex)(secp256k1_1.utils.randomPrivateKey());
-    }
-    function base58CheckDecode(btcAddress) {
-      const bytes2 = bs58_1.default.decode(btcAddress);
-      const payload = bytes2.slice(0, -4);
-      const checksum3 = bytes2.slice(-4);
-      const newChecksum = (0, sha256_1.sha256)((0, sha256_1.sha256)(payload));
-      if (checksum3[0] ^ newChecksum[0] | checksum3[1] ^ newChecksum[1] | checksum3[2] ^ newChecksum[2] | checksum3[3] ^ newChecksum[3]) {
-        throw new Error("Invalid checksum");
-      }
-      if (payload.length !== 21)
-        throw new TypeError("Invalid address length");
-      const version = (0, common_1.readUInt8)(payload, 0);
-      const hash = payload.slice(1);
-      return { version, hash };
-    }
-    function base58Encode(hash) {
-      const checksum3 = (0, sha256_1.sha256)((0, sha256_1.sha256)(hash));
-      return bs58_1.default.encode((0, common_1.concatBytes)(hash, checksum3).slice(0, hash.length + 4));
-    }
-    function base58CheckEncode(version, hash) {
-      return base58Encode((0, common_1.concatBytes)(new Uint8Array([version]), hash.slice(0, 20)));
-    }
-    function publicKeyToBtcAddress(publicKey, version = BITCOIN_PUBKEYHASH) {
-      const publicKeyBytes = typeof publicKey === "string" ? (0, common_1.hexToBytes)(publicKey) : publicKey;
-      const publicKeyHash160 = (0, hashRipemd160_1.hashRipemd160)((0, sha2Hash_1.hashSha256Sync)(publicKeyBytes));
-      return base58CheckEncode(version, publicKeyHash160);
-    }
-    function getPublicKeyFromPrivate(privateKey) {
-      const privateKeyBytes = (0, common_1.privateKeyToBytes)(privateKey);
-      return (0, common_1.bytesToHex)((0, secp256k1_1.getPublicKey)(privateKeyBytes.slice(0, 32), true));
-    }
-    function ecSign(messageHash, privateKey) {
-      return (0, secp256k1_1.signSync)(messageHash, (0, common_1.privateKeyToBytes)(privateKey).slice(0, 32), {
-        der: false
-      });
-    }
-  }
-});
-
-// node_modules/@stacks/encryption/dist/varuint.js
-var require_varuint = __commonJS({
-  "node_modules/@stacks/encryption/dist/varuint.js"(exports2) {
-    "use strict";
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.encode = encode;
-    exports2.decode = decode;
-    exports2.encodingLength = encodingLength;
-    var common_1 = require("@stacks/common");
-    var MAX_SAFE_INTEGER = 9007199254740991;
-    function ensureUInt53(n) {
-      if (n < 0 || n > MAX_SAFE_INTEGER || n % 1 !== 0)
-        throw new RangeError("value out of range");
-    }
-    function encode(number, bytes2, offset = 0) {
-      ensureUInt53(number);
-      if (!bytes2)
-        bytes2 = new Uint8Array(encodingLength(number));
-      if (number < 253) {
-        (0, common_1.writeUInt8)(bytes2, number, offset);
-      } else if (number <= 65535) {
-        (0, common_1.writeUInt8)(bytes2, 253, offset);
-        (0, common_1.writeUInt16LE)(bytes2, number, offset + 1);
-      } else if (number <= 4294967295) {
-        (0, common_1.writeUInt8)(bytes2, 254, offset);
-        (0, common_1.writeUInt32LE)(bytes2, number, offset + 1);
-      } else {
-        (0, common_1.writeUInt8)(bytes2, 255, offset);
-        (0, common_1.writeUInt32LE)(bytes2, number >>> 0, offset + 1);
-        (0, common_1.writeUInt32LE)(bytes2, number / 4294967296 | 0, offset + 5);
-      }
-      return bytes2;
-    }
-    function decode(bytes2, offset = 0) {
-      const first = (0, common_1.readUInt8)(bytes2, offset);
-      if (first < 253) {
-        return first;
-      } else if (first === 253) {
-        return (0, common_1.readUInt16LE)(bytes2, offset + 1);
-      } else if (first === 254) {
-        return (0, common_1.readUInt32LE)(bytes2, offset + 1);
-      } else {
-        const lo = (0, common_1.readUInt32LE)(bytes2, offset + 1);
-        const hi = (0, common_1.readUInt32LE)(bytes2, offset + 5);
-        const number = hi * 4294967296 + lo;
-        ensureUInt53(number);
-        return number;
-      }
-    }
-    function encodingLength(number) {
-      ensureUInt53(number);
-      return number < 253 ? 1 : number <= 65535 ? 3 : number <= 4294967295 ? 5 : 9;
-    }
-  }
-});
-
-// node_modules/@stacks/encryption/dist/messageSignature.js
-var require_messageSignature = __commonJS({
-  "node_modules/@stacks/encryption/dist/messageSignature.js"(exports2) {
-    "use strict";
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.hashMessage = hashMessage;
-    exports2.encodeMessage = encodeMessage;
-    exports2.decodeMessage = decodeMessage;
-    var sha256_1 = require("@noble/hashes/sha256");
-    var common_1 = require("@stacks/common");
-    var varuint_1 = require_varuint();
-    var chainPrefix = "Stacks Signed Message:\n";
-    function hashMessage(message, prefix2 = chainPrefix) {
-      return (0, sha256_1.sha256)(encodeMessage(message, prefix2));
-    }
-    function encodeMessage(message, prefix2 = chainPrefix) {
-      const messageBytes = typeof message == "string" ? (0, common_1.utf8ToBytes)(message) : message;
-      const encodedLength = (0, varuint_1.encode)(messageBytes.length);
-      return (0, common_1.concatBytes)((0, common_1.utf8ToBytes)(prefix2), encodedLength, messageBytes);
-    }
-    function decodeMessage(encodedMessage, prefix2 = chainPrefix) {
-      const prefixByteLength = (0, common_1.utf8ToBytes)(prefix2).byteLength;
-      const messageWithoutChainPrefix = encodedMessage.subarray(prefixByteLength);
-      const decoded = (0, varuint_1.decode)(messageWithoutChainPrefix);
-      const varIntLength = (0, varuint_1.encodingLength)(decoded);
-      return messageWithoutChainPrefix.slice(varIntLength);
-    }
-  }
-});
-
-// node_modules/@stacks/encryption/dist/utils.js
-var require_utils = __commonJS({
-  "node_modules/@stacks/encryption/dist/utils.js"(exports2) {
-    "use strict";
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.verifySignature = exports2.Signature = void 0;
-    exports2.getAesCbcOutputLength = getAesCbcOutputLength;
-    exports2.getBase64OutputLength = getBase64OutputLength;
-    exports2.hashCode = hashCode;
-    var secp256k1_1 = require("@noble/secp256k1");
-    Object.defineProperty(exports2, "Signature", { enumerable: true, get: function() {
-      return secp256k1_1.Signature;
-    } });
-    Object.defineProperty(exports2, "verifySignature", { enumerable: true, get: function() {
-      return secp256k1_1.verify;
-    } });
-    function getAesCbcOutputLength(inputByteLength) {
-      const cipherTextLength = (Math.floor(inputByteLength / 16) + 1) * 16;
-      return cipherTextLength;
-    }
-    function getBase64OutputLength(inputByteLength) {
-      const encodedLength = Math.ceil(inputByteLength / 3) * 4;
-      return encodedLength;
-    }
-    function hashCode(string2) {
-      let hash = 0;
-      if (string2.length === 0)
-        return hash;
-      for (let i = 0; i < string2.length; i++) {
-        const character = string2.charCodeAt(i);
-        hash = (hash << 5) - hash + character;
-        hash &= hash;
-      }
-      return hash & 2147483647;
-    }
-  }
-});
-
-// node_modules/@stacks/encryption/dist/ec.js
-var require_ec = __commonJS({
-  "node_modules/@stacks/encryption/dist/ec.js"(exports2) {
-    "use strict";
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.InvalidPublicKeyReason = void 0;
-    exports2.aes256CbcEncrypt = aes256CbcEncrypt;
-    exports2.hmacSha256 = hmacSha256;
-    exports2.getHexFromBN = getHexFromBN;
-    exports2.getBytesFromBN = getBytesFromBN;
-    exports2.getCipherObjectWrapper = getCipherObjectWrapper;
-    exports2.getSignedCipherObjectWrapper = getSignedCipherObjectWrapper;
-    exports2.eciesGetJsonStringLength = eciesGetJsonStringLength;
-    exports2.encryptECIES = encryptECIES;
-    exports2.decryptECIES = decryptECIES;
-    exports2.signECDSA = signECDSA2;
-    exports2.verifyECDSA = verifyECDSA;
-    exports2.verifyMessageSignature = verifyMessageSignature;
-    exports2.verifyMessageSignatureRsv = verifyMessageSignatureRsv;
-    var hmac_1 = require("@noble/hashes/hmac");
-    var sha256_1 = require("@noble/hashes/sha256");
-    var secp256k1_1 = require("@noble/secp256k1");
-    var common_1 = require("@stacks/common");
-    var base64_js_1 = require_base64_js();
-    var aesCipher_1 = require_aesCipher();
-    var keys_1 = require_keys();
-    var messageSignature_1 = require_messageSignature();
-    var sha2Hash_1 = require_sha2Hash();
-    var utils_1 = require_utils();
-    secp256k1_1.utils.hmacSha256Sync = (key, ...msgs) => {
-      const h = hmac_1.hmac.create(sha256_1.sha256, key);
-      msgs.forEach((msg) => h.update(msg));
-      return h.digest();
-    };
-    var InvalidPublicKeyReason;
-    (function(InvalidPublicKeyReason2) {
-      InvalidPublicKeyReason2["InvalidFormat"] = "InvalidFormat";
-      InvalidPublicKeyReason2["IsNotPoint"] = "IsNotPoint";
-    })(InvalidPublicKeyReason || (exports2.InvalidPublicKeyReason = InvalidPublicKeyReason = {}));
-    async function aes256CbcEncrypt(iv, key, plaintext) {
-      const cipher = await (0, aesCipher_1.createCipher)();
-      return await cipher.encrypt("aes-256-cbc", key, iv, plaintext);
-    }
-    async function aes256CbcDecrypt(iv, key, ciphertext) {
-      const cipher = await (0, aesCipher_1.createCipher)();
-      return await cipher.decrypt("aes-256-cbc", key, iv, ciphertext);
-    }
-    function hmacSha256(key, content) {
-      return (0, hmac_1.hmac)(sha256_1.sha256, key, content);
-    }
-    function equalsConstTime(a, b) {
-      if (a.length !== b.length) {
-        return false;
-      }
-      let res = 0;
-      for (let i = 0; i < a.length; i++) {
-        res |= a[i] ^ b[i];
-      }
-      return res === 0;
-    }
-    function sharedSecretToKeys(sharedSecret) {
-      const hashedSecret = (0, sha2Hash_1.hashSha512Sync)(sharedSecret);
-      return {
-        encryptionKey: hashedSecret.slice(0, 32),
-        hmacKey: hashedSecret.slice(32)
-      };
-    }
-    function allHexChars(maybe) {
-      return maybe.match(/^[0-9a-f]+$/i) !== null;
-    }
-    function isValidPublicKey(pub) {
-      const invalidFormat = {
-        result: false,
-        reason_data: "Invalid public key format",
-        reason: InvalidPublicKeyReason.InvalidFormat
-      };
-      const invalidPoint = {
-        result: false,
-        reason_data: "Public key is not a point",
-        reason: InvalidPublicKeyReason.IsNotPoint
-      };
-      if (pub.length !== 66 && pub.length !== 130)
-        return invalidFormat;
-      const firstByte = pub.slice(0, 2);
-      if (pub.length === 130 && firstByte !== "04")
-        return invalidFormat;
-      if (pub.length === 66 && firstByte !== "02" && firstByte !== "03")
-        return invalidFormat;
-      if (!allHexChars(pub))
-        return invalidFormat;
-      try {
-        const point = secp256k1_1.Point.fromHex(pub);
-        point.assertValidity();
-        return {
-          result: true,
-          reason_data: null,
-          reason: null
-        };
-      } catch (e) {
-        return invalidPoint;
-      }
-    }
-    function getHexFromBN(bnInput) {
-      const hexOut = bnInput.toString(16);
-      if (hexOut.length === 64) {
-        return hexOut;
-      } else if (hexOut.length < 64) {
-        const padding2 = "0".repeat(64 - hexOut.length);
-        return `${padding2}${hexOut}`;
-      } else {
-        throw new Error("Generated a > 32-byte bigint for encryption. Failing.");
-      }
-    }
-    function getBytesFromBN(bnInput) {
-      const result = (0, common_1.bigIntToBytes)(bnInput, 32);
-      if (result.byteLength !== 32) {
-        throw new Error("Failed to generate a 32-byte Uint8Array");
-      }
-      return result;
-    }
-    function getCipherObjectWrapper(opts) {
-      const shell = {
-        iv: "",
-        ephemeralPK: "",
-        mac: "",
-        cipherText: "",
-        wasString: !!opts.wasString
-      };
-      if (opts.cipherTextEncoding === "base64") {
-        shell.cipherTextEncoding = "base64";
-      }
-      const ivLength = 32;
-      const ephemeralPKLength = 66;
-      const macLength = 64;
-      return {
-        payloadValuesLength: ivLength + ephemeralPKLength + macLength,
-        payloadShell: JSON.stringify(shell)
-      };
-    }
-    function getSignedCipherObjectWrapper(payloadShell) {
-      const shell = {
-        signature: "",
-        publicKey: "",
-        cipherText: payloadShell
-      };
-      const signatureLength = 144;
-      const publicKeyLength = 66;
-      return {
-        signedPayloadValuesLength: signatureLength + publicKeyLength,
-        signedPayloadShell: JSON.stringify(shell)
-      };
-    }
-    function eciesGetJsonStringLength(opts) {
-      const { payloadShell, payloadValuesLength } = getCipherObjectWrapper(opts);
-      const cipherTextLength = (0, utils_1.getAesCbcOutputLength)(opts.contentLength);
-      let encodedCipherTextLength;
-      if (!opts.cipherTextEncoding || opts.cipherTextEncoding === "hex") {
-        encodedCipherTextLength = cipherTextLength * 2;
-      } else if (opts.cipherTextEncoding === "base64") {
-        encodedCipherTextLength = (0, utils_1.getBase64OutputLength)(cipherTextLength);
-      } else {
-        throw new Error(`Unexpected cipherTextEncoding "${opts.cipherTextEncoding}"`);
-      }
-      if (!opts.sign) {
-        return payloadShell.length + payloadValuesLength + encodedCipherTextLength;
-      } else {
-        const { signedPayloadShell, signedPayloadValuesLength } = getSignedCipherObjectWrapper(payloadShell);
-        return signedPayloadShell.length + signedPayloadValuesLength + payloadValuesLength + encodedCipherTextLength;
-      }
-    }
-    async function encryptECIES(publicKey, content, wasString, cipherTextEncoding) {
-      const validity = isValidPublicKey(publicKey);
-      if (!validity.result) {
-        throw validity;
-      }
-      const ephemeralPrivateKey = secp256k1_1.utils.randomPrivateKey();
-      const ephemeralPublicKey = (0, secp256k1_1.getPublicKey)(ephemeralPrivateKey, true);
-      let sharedSecret = (0, secp256k1_1.getSharedSecret)(ephemeralPrivateKey, publicKey, true);
-      sharedSecret = sharedSecret.slice(1);
-      const sharedKeys = sharedSecretToKeys(sharedSecret);
-      const initializationVector = secp256k1_1.utils.randomBytes(16);
-      const cipherText = await aes256CbcEncrypt(initializationVector, sharedKeys.encryptionKey, content);
-      const macData = (0, common_1.concatBytes)(initializationVector, ephemeralPublicKey, cipherText);
-      const mac = hmacSha256(sharedKeys.hmacKey, macData);
-      let cipherTextString;
-      if (!cipherTextEncoding || cipherTextEncoding === "hex") {
-        cipherTextString = (0, common_1.bytesToHex)(cipherText);
-      } else if (cipherTextEncoding === "base64") {
-        cipherTextString = (0, base64_js_1.fromByteArray)(cipherText);
-      } else {
-        throw new Error(`Unexpected cipherTextEncoding "${cipherTextEncoding}"`);
-      }
-      const result = {
-        iv: (0, common_1.bytesToHex)(initializationVector),
-        ephemeralPK: (0, common_1.bytesToHex)(ephemeralPublicKey),
-        cipherText: cipherTextString,
-        mac: (0, common_1.bytesToHex)(mac),
-        wasString
-      };
-      if (cipherTextEncoding && cipherTextEncoding !== "hex") {
-        result.cipherTextEncoding = cipherTextEncoding;
-      }
-      return result;
-    }
-    async function decryptECIES(privateKey, cipherObject) {
-      if (!cipherObject.ephemeralPK) {
-        throw new common_1.FailedDecryptionError("Unable to get public key from cipher object. You might be trying to decrypt an unencrypted object.");
-      }
-      const ephemeralPK = cipherObject.ephemeralPK;
-      let sharedSecret = (0, secp256k1_1.getSharedSecret)(privateKey, ephemeralPK, true);
-      sharedSecret = sharedSecret.slice(1);
-      const sharedKeys = sharedSecretToKeys(sharedSecret);
-      const ivBytes = (0, common_1.hexToBytes)(cipherObject.iv);
-      let cipherTextBytes;
-      if (!cipherObject.cipherTextEncoding || cipherObject.cipherTextEncoding === "hex") {
-        cipherTextBytes = (0, common_1.hexToBytes)(cipherObject.cipherText);
-      } else if (cipherObject.cipherTextEncoding === "base64") {
-        cipherTextBytes = (0, base64_js_1.toByteArray)(cipherObject.cipherText);
-      } else {
-        throw new Error(`Unexpected cipherTextEncoding "${cipherObject.cipherText}"`);
-      }
-      const macData = (0, common_1.concatBytes)(ivBytes, (0, common_1.hexToBytes)(ephemeralPK), cipherTextBytes);
-      const actualMac = hmacSha256(sharedKeys.hmacKey, macData);
-      const expectedMac = (0, common_1.hexToBytes)(cipherObject.mac);
-      if (!equalsConstTime(expectedMac, actualMac)) {
-        throw new common_1.FailedDecryptionError("Decryption failed: failure in MAC check");
-      }
-      const plainText = await aes256CbcDecrypt(ivBytes, sharedKeys.encryptionKey, cipherTextBytes);
-      if (cipherObject.wasString) {
-        return (0, common_1.bytesToUtf8)(plainText);
-      }
-      return plainText;
-    }
-    function signECDSA2(privateKey, content) {
-      const contentBytes = typeof content === "string" ? (0, common_1.utf8ToBytes)(content) : content;
-      const publicKey = (0, keys_1.getPublicKeyFromPrivate)(privateKey);
-      const contentHash = (0, sha2Hash_1.hashSha256Sync)(contentBytes);
-      const signature = (0, secp256k1_1.signSync)(contentHash, privateKey);
-      return {
-        signature: (0, common_1.bytesToHex)(signature),
-        publicKey
-      };
-    }
-    function verifyECDSA(content, publicKey, signature) {
-      const contentBytes = typeof content === "string" ? (0, common_1.utf8ToBytes)(content) : content;
-      const contentHash = (0, sha2Hash_1.hashSha256Sync)(contentBytes);
-      return (0, secp256k1_1.verify)(signature, contentHash, publicKey, { strict: false });
-    }
-    function verifyMessageSignature({ signature, message, publicKey }) {
-      const { r, s } = (0, common_1.parseRecoverableSignatureVrs)(signature);
-      const sig = new secp256k1_1.Signature((0, common_1.hexToBigInt)(r), (0, common_1.hexToBigInt)(s));
-      const hashedMsg = typeof message === "string" ? (0, messageSignature_1.hashMessage)(message) : message;
-      const verificationResult = (0, secp256k1_1.verify)(sig, hashedMsg, publicKey, { strict: false });
-      if (verificationResult || typeof message !== "string")
-        return verificationResult;
-      const LEGACY_PREFIX = "Stacks Message Signing:\n";
-      const legacyHash = (0, sha256_1.sha256)((0, messageSignature_1.encodeMessage)(message, LEGACY_PREFIX));
-      return (0, secp256k1_1.verify)(sig, legacyHash, publicKey, { strict: false });
-    }
-    function verifyMessageSignatureRsv({ signature, message, publicKey }) {
-      return verifyMessageSignature({
-        signature: (0, common_1.signatureRsvToVrs)(signature),
-        message,
-        publicKey
-      });
-    }
-  }
-});
-
-// node_modules/@stacks/encryption/dist/cryptoRandom.js
-var require_cryptoRandom = __commonJS({
-  "node_modules/@stacks/encryption/dist/cryptoRandom.js"(exports2) {
-    "use strict";
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.randomBytes = void 0;
-    var secp256k1_1 = require("@noble/secp256k1");
-    var randomBytes3 = (bytesLength = 32) => secp256k1_1.utils.randomBytes(bytesLength);
-    exports2.randomBytes = randomBytes3;
-  }
-});
-
-// node_modules/@stacks/encryption/dist/encryption.js
-var require_encryption = __commonJS({
-  "node_modules/@stacks/encryption/dist/encryption.js"(exports2) {
-    "use strict";
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.encryptContent = encryptContent;
-    exports2.decryptContent = decryptContent;
-    var common_1 = require("@stacks/common");
-    var ec_1 = require_ec();
-    var keys_1 = require_keys();
-    async function encryptContent(content, options) {
-      const opts = Object.assign({}, options);
-      let privateKey;
-      if (!opts.publicKey) {
-        if (!opts.privateKey) {
-          throw new Error("Either public key or private key must be supplied for encryption.");
-        }
-        opts.publicKey = (0, keys_1.getPublicKeyFromPrivate)(opts.privateKey);
-      }
-      const wasString = typeof opts.wasString === "boolean" ? opts.wasString : typeof content === "string";
-      const contentBytes = typeof content === "string" ? (0, common_1.utf8ToBytes)(content) : content;
-      const cipherObject = await (0, ec_1.encryptECIES)(opts.publicKey, contentBytes, wasString, opts.cipherTextEncoding);
-      let cipherPayload = JSON.stringify(cipherObject);
-      if (opts.sign) {
-        if (typeof opts.sign === "string") {
-          privateKey = opts.sign;
-        } else if (!privateKey) {
-          privateKey = opts.privateKey;
-        }
-        const signatureObject = (0, ec_1.signECDSA)(privateKey, cipherPayload);
-        const signedCipherObject = {
-          signature: signatureObject.signature,
-          publicKey: signatureObject.publicKey,
-          cipherText: cipherPayload
-        };
-        cipherPayload = JSON.stringify(signedCipherObject);
-      }
-      return cipherPayload;
-    }
-    function decryptContent(content, options) {
-      const opts = Object.assign({}, options);
-      if (!opts.privateKey) {
-        throw new Error("Private key is required for decryption.");
-      }
-      try {
-        const cipherObject = JSON.parse(content);
-        return (0, ec_1.decryptECIES)(opts.privateKey, cipherObject);
-      } catch (err) {
-        if (err instanceof SyntaxError) {
-          throw new Error("Failed to parse encrypted content JSON. The content may not be encrypted. If using getFile, try passing { decrypt: false }.");
-        } else {
-          throw err;
-        }
-      }
-    }
-  }
-});
-
-// node_modules/@scure/bip39/node_modules/@scure/base/lib/index.js
-var require_lib = __commonJS({
-  "node_modules/@scure/bip39/node_modules/@scure/base/lib/index.js"(exports2) {
-    "use strict";
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.bytes = exports2.stringToBytes = exports2.str = exports2.bytesToString = exports2.hex = exports2.utf8 = exports2.bech32m = exports2.bech32 = exports2.base58check = exports2.createBase58check = exports2.base58xmr = exports2.base58xrp = exports2.base58flickr = exports2.base58 = exports2.base64urlnopad = exports2.base64url = exports2.base64nopad = exports2.base64 = exports2.base32crockford = exports2.base32hexnopad = exports2.base32hex = exports2.base32nopad = exports2.base32 = exports2.base16 = exports2.utils = void 0;
-    exports2.assertNumber = assertNumber;
-    // @__NO_SIDE_EFFECTS__
-    function assertNumber(n) {
-      if (!Number.isSafeInteger(n))
-        throw new Error(`Wrong integer: ${n}`);
-    }
-    function isBytes6(a) {
-      return a instanceof Uint8Array || a != null && typeof a === "object" && a.constructor.name === "Uint8Array";
-    }
-    // @__NO_SIDE_EFFECTS__
-    function chain3(...args) {
-      const id = (a) => a;
-      const wrap2 = (a, b) => (c) => a(b(c));
-      const encode = args.map((x) => x.encode).reduceRight(wrap2, id);
-      const decode = args.map((x) => x.decode).reduce(wrap2, id);
-      return { encode, decode };
-    }
-    // @__NO_SIDE_EFFECTS__
-    function alphabet3(alphabet4) {
-      return {
-        encode: (digits) => {
-          if (!Array.isArray(digits) || digits.length && typeof digits[0] !== "number")
-            throw new Error("alphabet.encode input should be an array of numbers");
-          return digits.map((i) => {
-            /* @__PURE__ */ assertNumber(i);
-            if (i < 0 || i >= alphabet4.length)
-              throw new Error(`Digit index outside alphabet: ${i} (alphabet: ${alphabet4.length})`);
-            return alphabet4[i];
-          });
-        },
-        decode: (input) => {
-          if (!Array.isArray(input) || input.length && typeof input[0] !== "string")
-            throw new Error("alphabet.decode input should be array of strings");
-          return input.map((letter) => {
-            if (typeof letter !== "string")
-              throw new Error(`alphabet.decode: not string element=${letter}`);
-            const index = alphabet4.indexOf(letter);
-            if (index === -1)
-              throw new Error(`Unknown letter: "${letter}". Allowed: ${alphabet4}`);
-            return index;
-          });
-        }
-      };
-    }
-    // @__NO_SIDE_EFFECTS__
-    function join3(separator = "") {
-      if (typeof separator !== "string")
-        throw new Error("join separator should be string");
-      return {
-        encode: (from) => {
-          if (!Array.isArray(from) || from.length && typeof from[0] !== "string")
-            throw new Error("join.encode input should be array of strings");
-          for (let i of from)
-            if (typeof i !== "string")
-              throw new Error(`join.encode: non-string input=${i}`);
-          return from.join(separator);
-        },
-        decode: (to) => {
-          if (typeof to !== "string")
-            throw new Error("join.decode input should be string");
-          return to.split(separator);
-        }
-      };
-    }
-    // @__NO_SIDE_EFFECTS__
-    function padding2(bits, chr = "=") {
-      /* @__PURE__ */ assertNumber(bits);
-      if (typeof chr !== "string")
-        throw new Error("padding chr should be string");
-      return {
-        encode(data) {
-          if (!Array.isArray(data) || data.length && typeof data[0] !== "string")
-            throw new Error("padding.encode input should be array of strings");
-          for (let i of data)
-            if (typeof i !== "string")
-              throw new Error(`padding.encode: non-string input=${i}`);
-          while (data.length * bits % 8)
-            data.push(chr);
-          return data;
-        },
-        decode(input) {
-          if (!Array.isArray(input) || input.length && typeof input[0] !== "string")
-            throw new Error("padding.encode input should be array of strings");
-          for (let i of input)
-            if (typeof i !== "string")
-              throw new Error(`padding.decode: non-string input=${i}`);
-          let end = input.length;
-          if (end * bits % 8)
-            throw new Error("Invalid padding: string should have whole number of bytes");
-          for (; end > 0 && input[end - 1] === chr; end--) {
-            if (!((end - 1) * bits % 8))
-              throw new Error("Invalid padding: string has too much padding");
-          }
-          return input.slice(0, end);
-        }
-      };
-    }
-    // @__NO_SIDE_EFFECTS__
-    function normalize3(fn) {
-      if (typeof fn !== "function")
-        throw new Error("normalize fn should be function");
-      return { encode: (from) => from, decode: (to) => fn(to) };
-    }
-    // @__NO_SIDE_EFFECTS__
-    function convertRadix4(data, from, to) {
-      if (from < 2)
-        throw new Error(`convertRadix: wrong from=${from}, base cannot be less than 2`);
-      if (to < 2)
-        throw new Error(`convertRadix: wrong to=${to}, base cannot be less than 2`);
-      if (!Array.isArray(data))
-        throw new Error("convertRadix: data should be array");
-      if (!data.length)
-        return [];
-      let pos = 0;
-      const res = [];
-      const digits = Array.from(data);
-      digits.forEach((d) => {
-        /* @__PURE__ */ assertNumber(d);
-        if (d < 0 || d >= from)
-          throw new Error(`Wrong integer: ${d}`);
-      });
-      while (true) {
-        let carry = 0;
-        let done = true;
-        for (let i = pos; i < digits.length; i++) {
-          const digit = digits[i];
-          const digitBase = from * carry + digit;
-          if (!Number.isSafeInteger(digitBase) || from * carry / from !== carry || digitBase - digit !== from * carry) {
-            throw new Error("convertRadix: carry overflow");
-          }
-          carry = digitBase % to;
-          const rounded = Math.floor(digitBase / to);
-          digits[i] = rounded;
-          if (!Number.isSafeInteger(rounded) || rounded * to + carry !== digitBase)
-            throw new Error("convertRadix: carry overflow");
-          if (!done)
-            continue;
-          else if (!rounded)
-            pos = i;
-          else
-            done = false;
-        }
-        res.push(carry);
-        if (done)
-          break;
-      }
-      for (let i = 0; i < data.length - 1 && data[i] === 0; i++)
-        res.push(0);
-      return res.reverse();
-    }
-    var gcd3 = /* @__NO_SIDE_EFFECTS__ */ (a, b) => !b ? a : /* @__PURE__ */ gcd3(b, a % b);
-    var radix2carry3 = /* @__NO_SIDE_EFFECTS__ */ (from, to) => from + (to - /* @__PURE__ */ gcd3(from, to));
-    // @__NO_SIDE_EFFECTS__
-    function convertRadix23(data, from, to, padding3) {
-      if (!Array.isArray(data))
-        throw new Error("convertRadix2: data should be array");
-      if (from <= 0 || from > 32)
-        throw new Error(`convertRadix2: wrong from=${from}`);
-      if (to <= 0 || to > 32)
-        throw new Error(`convertRadix2: wrong to=${to}`);
-      if (/* @__PURE__ */ radix2carry3(from, to) > 32) {
-        throw new Error(`convertRadix2: carry overflow from=${from} to=${to} carryBits=${/* @__PURE__ */ radix2carry3(from, to)}`);
-      }
-      let carry = 0;
-      let pos = 0;
-      const mask = 2 ** to - 1;
-      const res = [];
-      for (const n of data) {
-        /* @__PURE__ */ assertNumber(n);
-        if (n >= 2 ** from)
-          throw new Error(`convertRadix2: invalid data word=${n} from=${from}`);
-        carry = carry << from | n;
-        if (pos + from > 32)
-          throw new Error(`convertRadix2: carry overflow pos=${pos} from=${from}`);
-        pos += from;
-        for (; pos >= to; pos -= to)
-          res.push((carry >> pos - to & mask) >>> 0);
-        carry &= 2 ** pos - 1;
-      }
-      carry = carry << to - pos & mask;
-      if (!padding3 && pos >= from)
-        throw new Error("Excess padding");
-      if (!padding3 && carry)
-        throw new Error(`Non-zero padding: ${carry}`);
-      if (padding3 && pos > 0)
-        res.push(carry >>> 0);
-      return res;
-    }
-    // @__NO_SIDE_EFFECTS__
-    function radix4(num2) {
-      /* @__PURE__ */ assertNumber(num2);
-      return {
-        encode: (bytes2) => {
-          if (!isBytes6(bytes2))
-            throw new Error("radix.encode input should be Uint8Array");
-          return /* @__PURE__ */ convertRadix4(Array.from(bytes2), 2 ** 8, num2);
-        },
-        decode: (digits) => {
-          if (!Array.isArray(digits) || digits.length && typeof digits[0] !== "number")
-            throw new Error("radix.decode input should be array of numbers");
-          return Uint8Array.from(/* @__PURE__ */ convertRadix4(digits, num2, 2 ** 8));
-        }
-      };
-    }
-    // @__NO_SIDE_EFFECTS__
-    function radix23(bits, revPadding = false) {
-      /* @__PURE__ */ assertNumber(bits);
-      if (bits <= 0 || bits > 32)
-        throw new Error("radix2: bits should be in (0..32]");
-      if (/* @__PURE__ */ radix2carry3(8, bits) > 32 || /* @__PURE__ */ radix2carry3(bits, 8) > 32)
-        throw new Error("radix2: carry overflow");
-      return {
-        encode: (bytes2) => {
-          if (!isBytes6(bytes2))
-            throw new Error("radix2.encode input should be Uint8Array");
-          return /* @__PURE__ */ convertRadix23(Array.from(bytes2), 8, bits, !revPadding);
-        },
-        decode: (digits) => {
-          if (!Array.isArray(digits) || digits.length && typeof digits[0] !== "number")
-            throw new Error("radix2.decode input should be array of numbers");
-          return Uint8Array.from(/* @__PURE__ */ convertRadix23(digits, bits, 8, revPadding));
-        }
-      };
-    }
-    // @__NO_SIDE_EFFECTS__
-    function unsafeWrapper3(fn) {
-      if (typeof fn !== "function")
-        throw new Error("unsafeWrapper fn should be function");
-      return function(...args) {
-        try {
-          return fn.apply(null, args);
-        } catch (e) {
-        }
-      };
-    }
-    // @__NO_SIDE_EFFECTS__
-    function checksum3(len, fn) {
-      /* @__PURE__ */ assertNumber(len);
-      if (typeof fn !== "function")
-        throw new Error("checksum fn should be function");
-      return {
-        encode(data) {
-          if (!isBytes6(data))
-            throw new Error("checksum.encode: input should be Uint8Array");
-          const checksum4 = fn(data).slice(0, len);
-          const res = new Uint8Array(data.length + len);
-          res.set(data);
-          res.set(checksum4, data.length);
-          return res;
-        },
-        decode(data) {
-          if (!isBytes6(data))
-            throw new Error("checksum.decode: input should be Uint8Array");
-          const payload = data.slice(0, -len);
-          const newChecksum = fn(payload).slice(0, len);
-          const oldChecksum = data.slice(-len);
-          for (let i = 0; i < len; i++)
-            if (newChecksum[i] !== oldChecksum[i])
-              throw new Error("Invalid checksum");
-          return payload;
-        }
-      };
-    }
-    exports2.utils = {
-      alphabet: alphabet3,
-      chain: chain3,
-      checksum: checksum3,
-      convertRadix: convertRadix4,
-      convertRadix2: convertRadix23,
-      radix: radix4,
-      radix2: radix23,
-      join: join3,
-      padding: padding2
-    };
-    exports2.base16 = /* @__PURE__ */ chain3(/* @__PURE__ */ radix23(4), /* @__PURE__ */ alphabet3("0123456789ABCDEF"), /* @__PURE__ */ join3(""));
-    exports2.base32 = /* @__PURE__ */ chain3(/* @__PURE__ */ radix23(5), /* @__PURE__ */ alphabet3("ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"), /* @__PURE__ */ padding2(5), /* @__PURE__ */ join3(""));
-    exports2.base32nopad = /* @__PURE__ */ chain3(/* @__PURE__ */ radix23(5), /* @__PURE__ */ alphabet3("ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"), /* @__PURE__ */ join3(""));
-    exports2.base32hex = /* @__PURE__ */ chain3(/* @__PURE__ */ radix23(5), /* @__PURE__ */ alphabet3("0123456789ABCDEFGHIJKLMNOPQRSTUV"), /* @__PURE__ */ padding2(5), /* @__PURE__ */ join3(""));
-    exports2.base32hexnopad = /* @__PURE__ */ chain3(/* @__PURE__ */ radix23(5), /* @__PURE__ */ alphabet3("0123456789ABCDEFGHIJKLMNOPQRSTUV"), /* @__PURE__ */ join3(""));
-    exports2.base32crockford = /* @__PURE__ */ chain3(/* @__PURE__ */ radix23(5), /* @__PURE__ */ alphabet3("0123456789ABCDEFGHJKMNPQRSTVWXYZ"), /* @__PURE__ */ join3(""), /* @__PURE__ */ normalize3((s) => s.toUpperCase().replace(/O/g, "0").replace(/[IL]/g, "1")));
-    exports2.base64 = /* @__PURE__ */ chain3(/* @__PURE__ */ radix23(6), /* @__PURE__ */ alphabet3("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"), /* @__PURE__ */ padding2(6), /* @__PURE__ */ join3(""));
-    exports2.base64nopad = /* @__PURE__ */ chain3(/* @__PURE__ */ radix23(6), /* @__PURE__ */ alphabet3("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"), /* @__PURE__ */ join3(""));
-    exports2.base64url = /* @__PURE__ */ chain3(/* @__PURE__ */ radix23(6), /* @__PURE__ */ alphabet3("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"), /* @__PURE__ */ padding2(6), /* @__PURE__ */ join3(""));
-    exports2.base64urlnopad = /* @__PURE__ */ chain3(/* @__PURE__ */ radix23(6), /* @__PURE__ */ alphabet3("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"), /* @__PURE__ */ join3(""));
-    var genBase583 = (abc) => /* @__PURE__ */ chain3(/* @__PURE__ */ radix4(58), /* @__PURE__ */ alphabet3(abc), /* @__PURE__ */ join3(""));
-    exports2.base58 = genBase583("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz");
-    exports2.base58flickr = genBase583("123456789abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ");
-    exports2.base58xrp = genBase583("rpshnaf39wBUDNEGHJKLM4PQRST7VWXYZ2bcdeCg65jkm8oFqi1tuvAxyz");
-    var XMR_BLOCK_LEN2 = [0, 2, 3, 5, 6, 7, 9, 10, 11];
-    exports2.base58xmr = {
-      encode(data) {
-        let res = "";
-        for (let i = 0; i < data.length; i += 8) {
-          const block = data.subarray(i, i + 8);
-          res += exports2.base58.encode(block).padStart(XMR_BLOCK_LEN2[block.length], "1");
-        }
-        return res;
-      },
-      decode(str2) {
-        let res = [];
-        for (let i = 0; i < str2.length; i += 11) {
-          const slice = str2.slice(i, i + 11);
-          const blockLen = XMR_BLOCK_LEN2.indexOf(slice.length);
-          const block = exports2.base58.decode(slice);
-          for (let j = 0; j < block.length - blockLen; j++) {
-            if (block[j] !== 0)
-              throw new Error("base58xmr: wrong padding");
-          }
-          res = res.concat(Array.from(block.slice(block.length - blockLen)));
-        }
-        return Uint8Array.from(res);
-      }
-    };
-    var createBase58check3 = (sha2565) => /* @__PURE__ */ chain3(/* @__PURE__ */ checksum3(4, (data) => sha2565(sha2565(data))), exports2.base58);
-    exports2.createBase58check = createBase58check3;
-    exports2.base58check = exports2.createBase58check;
-    var BECH_ALPHABET3 = /* @__PURE__ */ chain3(/* @__PURE__ */ alphabet3("qpzry9x8gf2tvdw0s3jn54khce6mua7l"), /* @__PURE__ */ join3(""));
-    var POLYMOD_GENERATORS3 = [996825010, 642813549, 513874426, 1027748829, 705979059];
-    // @__NO_SIDE_EFFECTS__
-    function bech32Polymod3(pre) {
-      const b = pre >> 25;
-      let chk = (pre & 33554431) << 5;
-      for (let i = 0; i < POLYMOD_GENERATORS3.length; i++) {
-        if ((b >> i & 1) === 1)
-          chk ^= POLYMOD_GENERATORS3[i];
-      }
-      return chk;
-    }
-    // @__NO_SIDE_EFFECTS__
-    function bechChecksum3(prefix2, words, encodingConst = 1) {
-      const len = prefix2.length;
-      let chk = 1;
-      for (let i = 0; i < len; i++) {
-        const c = prefix2.charCodeAt(i);
-        if (c < 33 || c > 126)
-          throw new Error(`Invalid prefix (${prefix2})`);
-        chk = /* @__PURE__ */ bech32Polymod3(chk) ^ c >> 5;
-      }
-      chk = /* @__PURE__ */ bech32Polymod3(chk);
-      for (let i = 0; i < len; i++)
-        chk = /* @__PURE__ */ bech32Polymod3(chk) ^ prefix2.charCodeAt(i) & 31;
-      for (let v of words)
-        chk = /* @__PURE__ */ bech32Polymod3(chk) ^ v;
-      for (let i = 0; i < 6; i++)
-        chk = /* @__PURE__ */ bech32Polymod3(chk);
-      chk ^= encodingConst;
-      return BECH_ALPHABET3.encode(/* @__PURE__ */ convertRadix23([chk % 2 ** 30], 30, 5, false));
-    }
-    // @__NO_SIDE_EFFECTS__
-    function genBech323(encoding) {
-      const ENCODING_CONST = encoding === "bech32" ? 1 : 734539939;
-      const _words = /* @__PURE__ */ radix23(5);
-      const fromWords = _words.decode;
-      const toWords = _words.encode;
-      const fromWordsUnsafe = /* @__PURE__ */ unsafeWrapper3(fromWords);
-      function encode(prefix2, words, limit = 90) {
-        if (typeof prefix2 !== "string")
-          throw new Error(`bech32.encode prefix should be string, not ${typeof prefix2}`);
-        if (words instanceof Uint8Array)
-          words = Array.from(words);
-        if (!Array.isArray(words) || words.length && typeof words[0] !== "number")
-          throw new Error(`bech32.encode words should be array of numbers, not ${typeof words}`);
-        if (prefix2.length === 0)
-          throw new TypeError(`Invalid prefix length ${prefix2.length}`);
-        const actualLength = prefix2.length + 7 + words.length;
-        if (limit !== false && actualLength > limit)
-          throw new TypeError(`Length ${actualLength} exceeds limit ${limit}`);
-        const lowered = prefix2.toLowerCase();
-        const sum = /* @__PURE__ */ bechChecksum3(lowered, words, ENCODING_CONST);
-        return `${lowered}1${BECH_ALPHABET3.encode(words)}${sum}`;
-      }
-      function decode(str2, limit = 90) {
-        if (typeof str2 !== "string")
-          throw new Error(`bech32.decode input should be string, not ${typeof str2}`);
-        if (str2.length < 8 || limit !== false && str2.length > limit)
-          throw new TypeError(`Wrong string length: ${str2.length} (${str2}). Expected (8..${limit})`);
-        const lowered = str2.toLowerCase();
-        if (str2 !== lowered && str2 !== str2.toUpperCase())
-          throw new Error(`String must be lowercase or uppercase`);
-        const sepIndex = lowered.lastIndexOf("1");
-        if (sepIndex === 0 || sepIndex === -1)
-          throw new Error(`Letter "1" must be present between prefix and data only`);
-        const prefix2 = lowered.slice(0, sepIndex);
-        const data = lowered.slice(sepIndex + 1);
-        if (data.length < 6)
-          throw new Error("Data must be at least 6 characters long");
-        const words = BECH_ALPHABET3.decode(data).slice(0, -6);
-        const sum = /* @__PURE__ */ bechChecksum3(prefix2, words, ENCODING_CONST);
-        if (!data.endsWith(sum))
-          throw new Error(`Invalid checksum in ${str2}: expected "${sum}"`);
-        return { prefix: prefix2, words };
-      }
-      const decodeUnsafe = /* @__PURE__ */ unsafeWrapper3(decode);
-      function decodeToBytes(str2) {
-        const { prefix: prefix2, words } = decode(str2, false);
-        return { prefix: prefix2, words, bytes: fromWords(words) };
-      }
-      function encodeFromBytes(prefix2, bytes2) {
-        return encode(prefix2, toWords(bytes2));
-      }
-      return {
-        encode,
-        decode,
-        encodeFromBytes,
-        decodeToBytes,
-        decodeUnsafe,
-        fromWords,
-        fromWordsUnsafe,
-        toWords
-      };
-    }
-    exports2.bech32 = /* @__PURE__ */ genBech323("bech32");
-    exports2.bech32m = /* @__PURE__ */ genBech323("bech32m");
-    exports2.utf8 = {
-      encode: (data) => new TextDecoder().decode(data),
-      decode: (str2) => new TextEncoder().encode(str2)
-    };
-    exports2.hex = /* @__PURE__ */ chain3(/* @__PURE__ */ radix23(4), /* @__PURE__ */ alphabet3("0123456789abcdef"), /* @__PURE__ */ join3(""), /* @__PURE__ */ normalize3((s) => {
-      if (typeof s !== "string" || s.length % 2)
-        throw new TypeError(`hex.decode: expected string, got ${typeof s} with length ${s.length}`);
-      return s.toLowerCase();
-    }));
-    var CODERS2 = {
-      utf8: exports2.utf8,
-      hex: exports2.hex,
-      base16: exports2.base16,
-      base32: exports2.base32,
-      base64: exports2.base64,
-      base64url: exports2.base64url,
-      base58: exports2.base58,
-      base58xmr: exports2.base58xmr
-    };
-    var coderTypeError2 = "Invalid encoding type. Available types: utf8, hex, base16, base32, base64, base64url, base58, base58xmr";
-    var bytesToString2 = (type, bytes2) => {
-      if (typeof type !== "string" || !CODERS2.hasOwnProperty(type))
-        throw new TypeError(coderTypeError2);
-      if (!isBytes6(bytes2))
-        throw new TypeError("bytesToString() expects Uint8Array");
-      return CODERS2[type].encode(bytes2);
-    };
-    exports2.bytesToString = bytesToString2;
-    exports2.str = exports2.bytesToString;
-    var stringToBytes2 = (type, str2) => {
-      if (!CODERS2.hasOwnProperty(type))
-        throw new TypeError(coderTypeError2);
-      if (typeof str2 !== "string")
-        throw new TypeError("stringToBytes() expects string");
-      return CODERS2[type].decode(str2);
-    };
-    exports2.stringToBytes = stringToBytes2;
-    exports2.bytes = exports2.stringToBytes;
-  }
-});
-
-// node_modules/@scure/bip39/index.js
-var require_bip39 = __commonJS({
-  "node_modules/@scure/bip39/index.js"(exports2) {
-    "use strict";
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.mnemonicToSeedSync = exports2.mnemonicToSeed = exports2.validateMnemonic = exports2.entropyToMnemonic = exports2.mnemonicToEntropy = exports2.generateMnemonic = void 0;
-    var _assert_1 = require("@noble/hashes/_assert");
-    var pbkdf2_1 = require("@noble/hashes/pbkdf2");
-    var sha256_1 = require("@noble/hashes/sha256");
-    var sha512_1 = require("@noble/hashes/sha512");
-    var utils_1 = require("@noble/hashes/utils");
-    var base_1 = require_lib();
-    var isJapanese = (wordlist) => wordlist[0] === "\u3042\u3044\u3053\u304F\u3057\u3093";
-    function nfkd(str2) {
-      if (typeof str2 !== "string")
-        throw new TypeError(`Invalid mnemonic type: ${typeof str2}`);
-      return str2.normalize("NFKD");
-    }
-    function normalize3(str2) {
-      const norm = nfkd(str2);
-      const words = norm.split(" ");
-      if (![12, 15, 18, 21, 24].includes(words.length))
-        throw new Error("Invalid mnemonic");
-      return { nfkd: norm, words };
-    }
-    function assertEntropy(entropy) {
-      _assert_1.default.bytes(entropy, 16, 20, 24, 28, 32);
-    }
-    function generateMnemonic(wordlist, strength = 128) {
-      _assert_1.default.number(strength);
-      if (strength % 32 !== 0 || strength > 256)
-        throw new TypeError("Invalid entropy");
-      return entropyToMnemonic((0, utils_1.randomBytes)(strength / 8), wordlist);
-    }
-    exports2.generateMnemonic = generateMnemonic;
-    var calcChecksum = (entropy) => {
-      const bitsLeft = 8 - entropy.length / 4;
-      return new Uint8Array([(0, sha256_1.sha256)(entropy)[0] >> bitsLeft << bitsLeft]);
-    };
-    function getCoder(wordlist) {
-      if (!Array.isArray(wordlist) || wordlist.length !== 2 ** 11 || typeof wordlist[0] !== "string")
-        throw new Error("Worlist: expected array of 2048 strings");
-      wordlist.forEach((i) => {
-        if (typeof i !== "string")
-          throw new Error(`Wordlist: non-string element: ${i}`);
-      });
-      return base_1.utils.chain(base_1.utils.checksum(1, calcChecksum), base_1.utils.radix2(11, true), base_1.utils.alphabet(wordlist));
-    }
-    function mnemonicToEntropy(mnemonic, wordlist) {
-      const { words } = normalize3(mnemonic);
-      const entropy = getCoder(wordlist).decode(words);
-      assertEntropy(entropy);
-      return entropy;
-    }
-    exports2.mnemonicToEntropy = mnemonicToEntropy;
-    function entropyToMnemonic(entropy, wordlist) {
-      assertEntropy(entropy);
-      const words = getCoder(wordlist).encode(entropy);
-      return words.join(isJapanese(wordlist) ? "\u3000" : " ");
-    }
-    exports2.entropyToMnemonic = entropyToMnemonic;
-    function validateMnemonic(mnemonic, wordlist) {
-      try {
-        mnemonicToEntropy(mnemonic, wordlist);
-      } catch (e) {
-        return false;
-      }
-      return true;
-    }
-    exports2.validateMnemonic = validateMnemonic;
-    var salt = (passphrase) => nfkd(`mnemonic${passphrase}`);
-    function mnemonicToSeed(mnemonic, passphrase = "") {
-      return (0, pbkdf2_1.pbkdf2Async)(sha512_1.sha512, normalize3(mnemonic).nfkd, salt(passphrase), { c: 2048, dkLen: 64 });
-    }
-    exports2.mnemonicToSeed = mnemonicToSeed;
-    function mnemonicToSeedSync(mnemonic, passphrase = "") {
-      return (0, pbkdf2_1.pbkdf2)(sha512_1.sha512, normalize3(mnemonic).nfkd, salt(passphrase), { c: 2048, dkLen: 64 });
-    }
-    exports2.mnemonicToSeedSync = mnemonicToSeedSync;
-  }
-});
-
-// node_modules/@scure/bip39/wordlists/english.js
-var require_english = __commonJS({
-  "node_modules/@scure/bip39/wordlists/english.js"(exports2) {
-    "use strict";
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.wordlist = void 0;
-    exports2.wordlist = `abandon
-ability
-able
-about
-above
-absent
-absorb
-abstract
-absurd
-abuse
-access
-accident
-account
-accuse
-achieve
-acid
-acoustic
-acquire
-across
-act
-action
-actor
-actress
-actual
-adapt
-add
-addict
-address
-adjust
-admit
-adult
-advance
-advice
-aerobic
-affair
-afford
-afraid
-again
-age
-agent
-agree
-ahead
-aim
-air
-airport
-aisle
-alarm
-album
-alcohol
-alert
-alien
-all
-alley
-allow
-almost
-alone
-alpha
-already
-also
-alter
-always
-amateur
-amazing
-among
-amount
-amused
-analyst
-anchor
-ancient
-anger
-angle
-angry
-animal
-ankle
-announce
-annual
-another
-answer
-antenna
-antique
-anxiety
-any
-apart
-apology
-appear
-apple
-approve
-april
-arch
-arctic
-area
-arena
-argue
-arm
-armed
-armor
-army
-around
-arrange
-arrest
-arrive
-arrow
-art
-artefact
-artist
-artwork
-ask
-aspect
-assault
-asset
-assist
-assume
-asthma
-athlete
-atom
-attack
-attend
-attitude
-attract
-auction
-audit
-august
-aunt
-author
-auto
-autumn
-average
-avocado
-avoid
-awake
-aware
-away
-awesome
-awful
-awkward
-axis
-baby
-bachelor
-bacon
-badge
-bag
-balance
-balcony
-ball
-bamboo
-banana
-banner
-bar
-barely
-bargain
-barrel
-base
-basic
-basket
-battle
-beach
-bean
-beauty
-because
-become
-beef
-before
-begin
-behave
-behind
-believe
-below
-belt
-bench
-benefit
-best
-betray
-better
-between
-beyond
-bicycle
-bid
-bike
-bind
-biology
-bird
-birth
-bitter
-black
-blade
-blame
-blanket
-blast
-bleak
-bless
-blind
-blood
-blossom
-blouse
-blue
-blur
-blush
-board
-boat
-body
-boil
-bomb
-bone
-bonus
-book
-boost
-border
-boring
-borrow
-boss
-bottom
-bounce
-box
-boy
-bracket
-brain
-brand
-brass
-brave
-bread
-breeze
-brick
-bridge
-brief
-bright
-bring
-brisk
-broccoli
-broken
-bronze
-broom
-brother
-brown
-brush
-bubble
-buddy
-budget
-buffalo
-build
-bulb
-bulk
-bullet
-bundle
-bunker
-burden
-burger
-burst
-bus
-business
-busy
-butter
-buyer
-buzz
-cabbage
-cabin
-cable
-cactus
-cage
-cake
-call
-calm
-camera
-camp
-can
-canal
-cancel
-candy
-cannon
-canoe
-canvas
-canyon
-capable
-capital
-captain
-car
-carbon
-card
-cargo
-carpet
-carry
-cart
-case
-cash
-casino
-castle
-casual
-cat
-catalog
-catch
-category
-cattle
-caught
-cause
-caution
-cave
-ceiling
-celery
-cement
-census
-century
-cereal
-certain
-chair
-chalk
-champion
-change
-chaos
-chapter
-charge
-chase
-chat
-cheap
-check
-cheese
-chef
-cherry
-chest
-chicken
-chief
-child
-chimney
-choice
-choose
-chronic
-chuckle
-chunk
-churn
-cigar
-cinnamon
-circle
-citizen
-city
-civil
-claim
-clap
-clarify
-claw
-clay
-clean
-clerk
-clever
-click
-client
-cliff
-climb
-clinic
-clip
-clock
-clog
-close
-cloth
-cloud
-clown
-club
-clump
-cluster
-clutch
-coach
-coast
-coconut
-code
-coffee
-coil
-coin
-collect
-color
-column
-combine
-come
-comfort
-comic
-common
-company
-concert
-conduct
-confirm
-congress
-connect
-consider
-control
-convince
-cook
-cool
-copper
-copy
-coral
-core
-corn
-correct
-cost
-cotton
-couch
-country
-couple
-course
-cousin
-cover
-coyote
-crack
-cradle
-craft
-cram
-crane
-crash
-crater
-crawl
-crazy
-cream
-credit
-creek
-crew
-cricket
-crime
-crisp
-critic
-crop
-cross
-crouch
-crowd
-crucial
-cruel
-cruise
-crumble
-crunch
-crush
-cry
-crystal
-cube
-culture
-cup
-cupboard
-curious
-current
-curtain
-curve
-cushion
-custom
-cute
-cycle
-dad
-damage
-damp
-dance
-danger
-daring
-dash
-daughter
-dawn
-day
-deal
-debate
-debris
-decade
-december
-decide
-decline
-decorate
-decrease
-deer
-defense
-define
-defy
-degree
-delay
-deliver
-demand
-demise
-denial
-dentist
-deny
-depart
-depend
-deposit
-depth
-deputy
-derive
-describe
-desert
-design
-desk
-despair
-destroy
-detail
-detect
-develop
-device
-devote
-diagram
-dial
-diamond
-diary
-dice
-diesel
-diet
-differ
-digital
-dignity
-dilemma
-dinner
-dinosaur
-direct
-dirt
-disagree
-discover
-disease
-dish
-dismiss
-disorder
-display
-distance
-divert
-divide
-divorce
-dizzy
-doctor
-document
-dog
-doll
-dolphin
-domain
-donate
-donkey
-donor
-door
-dose
-double
-dove
-draft
-dragon
-drama
-drastic
-draw
-dream
-dress
-drift
-drill
-drink
-drip
-drive
-drop
-drum
-dry
-duck
-dumb
-dune
-during
-dust
-dutch
-duty
-dwarf
-dynamic
-eager
-eagle
-early
-earn
-earth
-easily
-east
-easy
-echo
-ecology
-economy
-edge
-edit
-educate
-effort
-egg
-eight
-either
-elbow
-elder
-electric
-elegant
-element
-elephant
-elevator
-elite
-else
-embark
-embody
-embrace
-emerge
-emotion
-employ
-empower
-empty
-enable
-enact
-end
-endless
-endorse
-enemy
-energy
-enforce
-engage
-engine
-enhance
-enjoy
-enlist
-enough
-enrich
-enroll
-ensure
-enter
-entire
-entry
-envelope
-episode
-equal
-equip
-era
-erase
-erode
-erosion
-error
-erupt
-escape
-essay
-essence
-estate
-eternal
-ethics
-evidence
-evil
-evoke
-evolve
-exact
-example
-excess
-exchange
-excite
-exclude
-excuse
-execute
-exercise
-exhaust
-exhibit
-exile
-exist
-exit
-exotic
-expand
-expect
-expire
-explain
-expose
-express
-extend
-extra
-eye
-eyebrow
-fabric
-face
-faculty
-fade
-faint
-faith
-fall
-false
-fame
-family
-famous
-fan
-fancy
-fantasy
-farm
-fashion
-fat
-fatal
-father
-fatigue
-fault
-favorite
-feature
-february
-federal
-fee
-feed
-feel
-female
-fence
-festival
-fetch
-fever
-few
-fiber
-fiction
-field
-figure
-file
-film
-filter
-final
-find
-fine
-finger
-finish
-fire
-firm
-first
-fiscal
-fish
-fit
-fitness
-fix
-flag
-flame
-flash
-flat
-flavor
-flee
-flight
-flip
-float
-flock
-floor
-flower
-fluid
-flush
-fly
-foam
-focus
-fog
-foil
-fold
-follow
-food
-foot
-force
-forest
-forget
-fork
-fortune
-forum
-forward
-fossil
-foster
-found
-fox
-fragile
-frame
-frequent
-fresh
-friend
-fringe
-frog
-front
-frost
-frown
-frozen
-fruit
-fuel
-fun
-funny
-furnace
-fury
-future
-gadget
-gain
-galaxy
-gallery
-game
-gap
-garage
-garbage
-garden
-garlic
-garment
-gas
-gasp
-gate
-gather
-gauge
-gaze
-general
-genius
-genre
-gentle
-genuine
-gesture
-ghost
-giant
-gift
-giggle
-ginger
-giraffe
-girl
-give
-glad
-glance
-glare
-glass
-glide
-glimpse
-globe
-gloom
-glory
-glove
-glow
-glue
-goat
-goddess
-gold
-good
-goose
-gorilla
-gospel
-gossip
-govern
-gown
-grab
-grace
-grain
-grant
-grape
-grass
-gravity
-great
-green
-grid
-grief
-grit
-grocery
-group
-grow
-grunt
-guard
-guess
-guide
-guilt
-guitar
-gun
-gym
-habit
-hair
-half
-hammer
-hamster
-hand
-happy
-harbor
-hard
-harsh
-harvest
-hat
-have
-hawk
-hazard
-head
-health
-heart
-heavy
-hedgehog
-height
-hello
-helmet
-help
-hen
-hero
-hidden
-high
-hill
-hint
-hip
-hire
-history
-hobby
-hockey
-hold
-hole
-holiday
-hollow
-home
-honey
-hood
-hope
-horn
-horror
-horse
-hospital
-host
-hotel
-hour
-hover
-hub
-huge
-human
-humble
-humor
-hundred
-hungry
-hunt
-hurdle
-hurry
-hurt
-husband
-hybrid
-ice
-icon
-idea
-identify
-idle
-ignore
-ill
-illegal
-illness
-image
-imitate
-immense
-immune
-impact
-impose
-improve
-impulse
-inch
-include
-income
-increase
-index
-indicate
-indoor
-industry
-infant
-inflict
-inform
-inhale
-inherit
-initial
-inject
-injury
-inmate
-inner
-innocent
-input
-inquiry
-insane
-insect
-inside
-inspire
-install
-intact
-interest
-into
-invest
-invite
-involve
-iron
-island
-isolate
-issue
-item
-ivory
-jacket
-jaguar
-jar
-jazz
-jealous
-jeans
-jelly
-jewel
-job
-join
-joke
-journey
-joy
-judge
-juice
-jump
-jungle
-junior
-junk
-just
-kangaroo
-keen
-keep
-ketchup
-key
-kick
-kid
-kidney
-kind
-kingdom
-kiss
-kit
-kitchen
-kite
-kitten
-kiwi
-knee
-knife
-knock
-know
-lab
-label
-labor
-ladder
-lady
-lake
-lamp
-language
-laptop
-large
-later
-latin
-laugh
-laundry
-lava
-law
-lawn
-lawsuit
-layer
-lazy
-leader
-leaf
-learn
-leave
-lecture
-left
-leg
-legal
-legend
-leisure
-lemon
-lend
-length
-lens
-leopard
-lesson
-letter
-level
-liar
-liberty
-library
-license
-life
-lift
-light
-like
-limb
-limit
-link
-lion
-liquid
-list
-little
-live
-lizard
-load
-loan
-lobster
-local
-lock
-logic
-lonely
-long
-loop
-lottery
-loud
-lounge
-love
-loyal
-lucky
-luggage
-lumber
-lunar
-lunch
-luxury
-lyrics
-machine
-mad
-magic
-magnet
-maid
-mail
-main
-major
-make
-mammal
-man
-manage
-mandate
-mango
-mansion
-manual
-maple
-marble
-march
-margin
-marine
-market
-marriage
-mask
-mass
-master
-match
-material
-math
-matrix
-matter
-maximum
-maze
-meadow
-mean
-measure
-meat
-mechanic
-medal
-media
-melody
-melt
-member
-memory
-mention
-menu
-mercy
-merge
-merit
-merry
-mesh
-message
-metal
-method
-middle
-midnight
-milk
-million
-mimic
-mind
-minimum
-minor
-minute
-miracle
-mirror
-misery
-miss
-mistake
-mix
-mixed
-mixture
-mobile
-model
-modify
-mom
-moment
-monitor
-monkey
-monster
-month
-moon
-moral
-more
-morning
-mosquito
-mother
-motion
-motor
-mountain
-mouse
-move
-movie
-much
-muffin
-mule
-multiply
-muscle
-museum
-mushroom
-music
-must
-mutual
-myself
-mystery
-myth
-naive
-name
-napkin
-narrow
-nasty
-nation
-nature
-near
-neck
-need
-negative
-neglect
-neither
-nephew
-nerve
-nest
-net
-network
-neutral
-never
-news
-next
-nice
-night
-noble
-noise
-nominee
-noodle
-normal
-north
-nose
-notable
-note
-nothing
-notice
-novel
-now
-nuclear
-number
-nurse
-nut
-oak
-obey
-object
-oblige
-obscure
-observe
-obtain
-obvious
-occur
-ocean
-october
-odor
-off
-offer
-office
-often
-oil
-okay
-old
-olive
-olympic
-omit
-once
-one
-onion
-online
-only
-open
-opera
-opinion
-oppose
-option
-orange
-orbit
-orchard
-order
-ordinary
-organ
-orient
-original
-orphan
-ostrich
-other
-outdoor
-outer
-output
-outside
-oval
-oven
-over
-own
-owner
-oxygen
-oyster
-ozone
-pact
-paddle
-page
-pair
-palace
-palm
-panda
-panel
-panic
-panther
-paper
-parade
-parent
-park
-parrot
-party
-pass
-patch
-path
-patient
-patrol
-pattern
-pause
-pave
-payment
-peace
-peanut
-pear
-peasant
-pelican
-pen
-penalty
-pencil
-people
-pepper
-perfect
-permit
-person
-pet
-phone
-photo
-phrase
-physical
-piano
-picnic
-picture
-piece
-pig
-pigeon
-pill
-pilot
-pink
-pioneer
-pipe
-pistol
-pitch
-pizza
-place
-planet
-plastic
-plate
-play
-please
-pledge
-pluck
-plug
-plunge
-poem
-poet
-point
-polar
-pole
-police
-pond
-pony
-pool
-popular
-portion
-position
-possible
-post
-potato
-pottery
-poverty
-powder
-power
-practice
-praise
-predict
-prefer
-prepare
-present
-pretty
-prevent
-price
-pride
-primary
-print
-priority
-prison
-private
-prize
-problem
-process
-produce
-profit
-program
-project
-promote
-proof
-property
-prosper
-protect
-proud
-provide
-public
-pudding
-pull
-pulp
-pulse
-pumpkin
-punch
-pupil
-puppy
-purchase
-purity
-purpose
-purse
-push
-put
-puzzle
-pyramid
-quality
-quantum
-quarter
-question
-quick
-quit
-quiz
-quote
-rabbit
-raccoon
-race
-rack
-radar
-radio
-rail
-rain
-raise
-rally
-ramp
-ranch
-random
-range
-rapid
-rare
-rate
-rather
-raven
-raw
-razor
-ready
-real
-reason
-rebel
-rebuild
-recall
-receive
-recipe
-record
-recycle
-reduce
-reflect
-reform
-refuse
-region
-regret
-regular
-reject
-relax
-release
-relief
-rely
-remain
-remember
-remind
-remove
-render
-renew
-rent
-reopen
-repair
-repeat
-replace
-report
-require
-rescue
-resemble
-resist
-resource
-response
-result
-retire
-retreat
-return
-reunion
-reveal
-review
-reward
-rhythm
-rib
-ribbon
-rice
-rich
-ride
-ridge
-rifle
-right
-rigid
-ring
-riot
-ripple
-risk
-ritual
-rival
-river
-road
-roast
-robot
-robust
-rocket
-romance
-roof
-rookie
-room
-rose
-rotate
-rough
-round
-route
-royal
-rubber
-rude
-rug
-rule
-run
-runway
-rural
-sad
-saddle
-sadness
-safe
-sail
-salad
-salmon
-salon
-salt
-salute
-same
-sample
-sand
-satisfy
-satoshi
-sauce
-sausage
-save
-say
-scale
-scan
-scare
-scatter
-scene
-scheme
-school
-science
-scissors
-scorpion
-scout
-scrap
-screen
-script
-scrub
-sea
-search
-season
-seat
-second
-secret
-section
-security
-seed
-seek
-segment
-select
-sell
-seminar
-senior
-sense
-sentence
-series
-service
-session
-settle
-setup
-seven
-shadow
-shaft
-shallow
-share
-shed
-shell
-sheriff
-shield
-shift
-shine
-ship
-shiver
-shock
-shoe
-shoot
-shop
-short
-shoulder
-shove
-shrimp
-shrug
-shuffle
-shy
-sibling
-sick
-side
-siege
-sight
-sign
-silent
-silk
-silly
-silver
-similar
-simple
-since
-sing
-siren
-sister
-situate
-six
-size
-skate
-sketch
-ski
-skill
-skin
-skirt
-skull
-slab
-slam
-sleep
-slender
-slice
-slide
-slight
-slim
-slogan
-slot
-slow
-slush
-small
-smart
-smile
-smoke
-smooth
-snack
-snake
-snap
-sniff
-snow
-soap
-soccer
-social
-sock
-soda
-soft
-solar
-soldier
-solid
-solution
-solve
-someone
-song
-soon
-sorry
-sort
-soul
-sound
-soup
-source
-south
-space
-spare
-spatial
-spawn
-speak
-special
-speed
-spell
-spend
-sphere
-spice
-spider
-spike
-spin
-spirit
-split
-spoil
-sponsor
-spoon
-sport
-spot
-spray
-spread
-spring
-spy
-square
-squeeze
-squirrel
-stable
-stadium
-staff
-stage
-stairs
-stamp
-stand
-start
-state
-stay
-steak
-steel
-stem
-step
-stereo
-stick
-still
-sting
-stock
-stomach
-stone
-stool
-story
-stove
-strategy
-street
-strike
-strong
-struggle
-student
-stuff
-stumble
-style
-subject
-submit
-subway
-success
-such
-sudden
-suffer
-sugar
-suggest
-suit
-summer
-sun
-sunny
-sunset
-super
-supply
-supreme
-sure
-surface
-surge
-surprise
-surround
-survey
-suspect
-sustain
-swallow
-swamp
-swap
-swarm
-swear
-sweet
-swift
-swim
-swing
-switch
-sword
-symbol
-symptom
-syrup
-system
-table
-tackle
-tag
-tail
-talent
-talk
-tank
-tape
-target
-task
-taste
-tattoo
-taxi
-teach
-team
-tell
-ten
-tenant
-tennis
-tent
-term
-test
-text
-thank
-that
-theme
-then
-theory
-there
-they
-thing
-this
-thought
-three
-thrive
-throw
-thumb
-thunder
-ticket
-tide
-tiger
-tilt
-timber
-time
-tiny
-tip
-tired
-tissue
-title
-toast
-tobacco
-today
-toddler
-toe
-together
-toilet
-token
-tomato
-tomorrow
-tone
-tongue
-tonight
-tool
-tooth
-top
-topic
-topple
-torch
-tornado
-tortoise
-toss
-total
-tourist
-toward
-tower
-town
-toy
-track
-trade
-traffic
-tragic
-train
-transfer
-trap
-trash
-travel
-tray
-treat
-tree
-trend
-trial
-tribe
-trick
-trigger
-trim
-trip
-trophy
-trouble
-truck
-true
-truly
-trumpet
-trust
-truth
-try
-tube
-tuition
-tumble
-tuna
-tunnel
-turkey
-turn
-turtle
-twelve
-twenty
-twice
-twin
-twist
-two
-type
-typical
-ugly
-umbrella
-unable
-unaware
-uncle
-uncover
-under
-undo
-unfair
-unfold
-unhappy
-uniform
-unique
-unit
-universe
-unknown
-unlock
-until
-unusual
-unveil
-update
-upgrade
-uphold
-upon
-upper
-upset
-urban
-urge
-usage
-use
-used
-useful
-useless
-usual
-utility
-vacant
-vacuum
-vague
-valid
-valley
-valve
-van
-vanish
-vapor
-various
-vast
-vault
-vehicle
-velvet
-vendor
-venture
-venue
-verb
-verify
-version
-very
-vessel
-veteran
-viable
-vibrant
-vicious
-victory
-video
-view
-village
-vintage
-violin
-virtual
-virus
-visa
-visit
-visual
-vital
-vivid
-vocal
-voice
-void
-volcano
-volume
-vote
-voyage
-wage
-wagon
-wait
-walk
-wall
-walnut
-want
-warfare
-warm
-warrior
-wash
-wasp
-waste
-water
-wave
-way
-wealth
-weapon
-wear
-weasel
-weather
-web
-wedding
-weekend
-weird
-welcome
-west
-wet
-whale
-what
-wheat
-wheel
-when
-where
-whip
-whisper
-wide
-width
-wife
-wild
-will
-win
-window
-wine
-wing
-wink
-winner
-winter
-wire
-wisdom
-wise
-wish
-witness
-wolf
-woman
-wonder
-wood
-wool
-word
-work
-world
-worry
-worth
-wrap
-wreck
-wrestle
-wrist
-write
-wrong
-yard
-year
-yellow
-you
-young
-youth
-zebra
-zero
-zone
-zoo`.split("\n");
-  }
-});
-
-// node_modules/@stacks/encryption/dist/pbkdf2.js
-var require_pbkdf2 = __commonJS({
-  "node_modules/@stacks/encryption/dist/pbkdf2.js"(exports2) {
-    "use strict";
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.WebCryptoPartialPbkdf2 = exports2.WebCryptoPbkdf2 = exports2.NodeCryptoPbkdf2 = void 0;
-    exports2.createPbkdf2 = createPbkdf2;
-    var common_1 = require("@stacks/common");
-    var cryptoUtils_1 = require_cryptoUtils();
-    var NodeCryptoPbkdf2 = class {
-      constructor(nodePbkdf2) {
-        this.nodePbkdf2 = nodePbkdf2;
-      }
-      async derive(password, salt, iterations, keyLength, digest) {
-        if (digest !== "sha512" && digest !== "sha256") {
-          throw new Error(`Unsupported digest "${digest}" for Pbkdf2`);
-        }
-        return new Promise((resolve, reject) => {
-          this.nodePbkdf2(password, salt, iterations, keyLength, digest, (error, result) => {
-            if (error) {
-              reject(error);
-            }
-            resolve(result);
-          });
-        });
-      }
-    };
-    exports2.NodeCryptoPbkdf2 = NodeCryptoPbkdf2;
-    var WebCryptoPbkdf2 = class {
-      constructor(subtleCrypto) {
-        this.subtleCrypto = subtleCrypto;
-      }
-      async derive(password, salt, iterations, keyLength, digest) {
-        let algo;
-        if (digest === "sha256") {
-          algo = "SHA-256";
-        } else if (digest === "sha512") {
-          algo = "SHA-512";
-        } else {
-          throw new Error(`Unsupported Pbkdf2 digest algorithm "${digest}"`);
-        }
-        const passwordBytes = (0, common_1.utf8ToBytes)(password);
-        try {
-          const key = await this.subtleCrypto.importKey("raw", passwordBytes, "PBKDF2", false, ["deriveBits"]);
-          const result = await this.subtleCrypto.deriveBits({
-            name: "PBKDF2",
-            salt,
-            iterations,
-            hash: { name: algo }
-          }, key, keyLength * 8);
-          return new Uint8Array(result);
-        } catch (error) {
-          const partialWebCrypto = new WebCryptoPartialPbkdf2(this.subtleCrypto);
-          return partialWebCrypto.derive(password, salt, iterations, keyLength, digest);
-        }
-      }
-    };
-    exports2.WebCryptoPbkdf2 = WebCryptoPbkdf2;
-    var WebCryptoPartialPbkdf2 = class {
-      constructor(subtleCrypto) {
-        this.subtleCrypto = subtleCrypto;
-      }
-      async derive(password, salt, iterations, keyLength, digest) {
-        if (digest !== "sha512" && digest !== "sha256") {
-          throw new Error(`Unsupported digest "${digest}" for Pbkdf2`);
-        }
-        const passwordBytes = (0, common_1.utf8ToBytes)(password);
-        const algo = digest === "sha512" ? "SHA-512" : "SHA-256";
-        const algoOpts = { name: "HMAC", hash: algo };
-        const hmacDigest = (key, data) => this.subtleCrypto.importKey("raw", key, algoOpts, true, ["sign"]).then((cryptoKey) => this.subtleCrypto.sign(algoOpts, cryptoKey, data)).then((result) => new Uint8Array(result));
-        const DK = new Uint8Array(keyLength);
-        const saltLength = salt.length;
-        const block1 = new Uint8Array(saltLength + 4);
-        block1.set(salt);
-        let destPos = 0;
-        const hLen = digest === "sha512" ? 64 : 32;
-        const l = Math.ceil(keyLength / hLen);
-        for (let i = 1; i <= l; i++) {
-          (0, common_1.writeUInt32BE)(block1, i, saltLength);
-          const T = await hmacDigest(passwordBytes, block1);
-          let U = T;
-          for (let j = 1; j < iterations; j++) {
-            U = await hmacDigest(passwordBytes, U);
-            for (let k = 0; k < hLen; k++) {
-              T[k] ^= U[k];
-            }
-          }
-          DK.set(T.subarray(0, DK.byteLength - destPos), destPos);
-          destPos += hLen;
-        }
-        return DK;
-      }
-    };
-    exports2.WebCryptoPartialPbkdf2 = WebCryptoPartialPbkdf2;
-    async function createPbkdf2() {
-      const cryptoLib = await (0, cryptoUtils_1.getCryptoLib)();
-      if (cryptoLib.name === "subtleCrypto") {
-        return new WebCryptoPbkdf2(cryptoLib.lib);
-      }
-      return new NodeCryptoPbkdf2(cryptoLib.lib.pbkdf2);
-    }
-  }
-});
-
-// node_modules/@stacks/encryption/dist/wallet.js
-var require_wallet = __commonJS({
-  "node_modules/@stacks/encryption/dist/wallet.js"(exports2) {
-    "use strict";
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.encryptMnemonic = encryptMnemonic;
-    exports2.decryptMnemonic = decryptMnemonic;
-    var bip39_1 = require_bip39();
-    var english_1 = require_english();
-    var common_1 = require("@stacks/common");
-    var aesCipher_1 = require_aesCipher();
-    var cryptoRandom_1 = require_cryptoRandom();
-    var ec_1 = require_ec();
-    var pbkdf2_1 = require_pbkdf2();
-    var sha2Hash_1 = require_sha2Hash();
-    async function encryptMnemonic(phrase, password, opts) {
-      let mnemonicEntropy;
-      try {
-        const entropyBytes = (0, bip39_1.mnemonicToEntropy)(phrase, english_1.wordlist);
-        mnemonicEntropy = (0, common_1.bytesToHex)(entropyBytes);
-      } catch (error) {
-        console.error("Invalid mnemonic phrase provided");
-        console.error(error);
-        throw new Error("Not a valid bip39 mnemonic");
-      }
-      const plaintextNormalized = (0, common_1.hexToBytes)(mnemonicEntropy);
-      const pbkdf2 = await (0, pbkdf2_1.createPbkdf2)();
-      const salt = opts?.getRandomBytes ? opts.getRandomBytes(16) : (0, cryptoRandom_1.randomBytes)(16);
-      const keysAndIV = await pbkdf2.derive(password, salt, 1e5, 48, "sha512");
-      const encKey = keysAndIV.slice(0, 16);
-      const macKey = keysAndIV.slice(16, 32);
-      const iv = keysAndIV.slice(32, 48);
-      const cipher = await (0, aesCipher_1.createCipher)();
-      const cipherText = await cipher.encrypt("aes-128-cbc", encKey, iv, plaintextNormalized);
-      const hmacPayload = (0, common_1.concatBytes)(salt, cipherText);
-      const hmacDigest = (0, ec_1.hmacSha256)(macKey, hmacPayload);
-      return (0, common_1.concatBytes)(salt, hmacDigest, cipherText);
-    }
-    var PasswordError = class extends Error {
-    };
-    async function decryptMnemonicBytes(dataBytes, password) {
-      const salt = dataBytes.slice(0, 16);
-      const hmacSig = dataBytes.slice(16, 48);
-      const cipherText = dataBytes.slice(48);
-      const hmacPayload = (0, common_1.concatBytes)(salt, cipherText);
-      const pbkdf2 = await (0, pbkdf2_1.createPbkdf2)();
-      const keysAndIV = await pbkdf2.derive(password, salt, 1e5, 48, "sha512");
-      const encKey = keysAndIV.slice(0, 16);
-      const macKey = keysAndIV.slice(16, 32);
-      const iv = keysAndIV.slice(32, 48);
-      const decipher = await (0, aesCipher_1.createCipher)();
-      const decryptedResult = await decipher.decrypt("aes-128-cbc", encKey, iv, cipherText);
-      const hmacDigest = (0, ec_1.hmacSha256)(macKey, hmacPayload);
-      const sha2Hash = await (0, sha2Hash_1.createSha2Hash)();
-      const hmacSigHash = await sha2Hash.digest(hmacSig);
-      const hmacDigestHash = await sha2Hash.digest(hmacDigest);
-      if (!(0, common_1.equals)(hmacSigHash, hmacDigestHash)) {
-        throw new PasswordError("Wrong password (HMAC mismatch)");
-      }
-      let mnemonic;
-      try {
-        mnemonic = (0, bip39_1.entropyToMnemonic)(decryptedResult, english_1.wordlist);
-      } catch (error) {
-        console.error("Error thrown by `entropyToMnemonic`");
-        console.error(error);
-        throw new PasswordError("Wrong password (invalid plaintext)");
-      }
-      if (!(0, bip39_1.validateMnemonic)(mnemonic, english_1.wordlist)) {
-        throw new PasswordError("Wrong password (invalid plaintext)");
-      }
-      return mnemonic;
-    }
-    async function decryptMnemonic(data, password) {
-      const dataBytes = typeof data === "string" ? (0, common_1.hexToBytes)(data) : data;
-      return await decryptMnemonicBytes(dataBytes, password);
-    }
-  }
-});
-
-// node_modules/@stacks/encryption/dist/index.js
-var require_dist = __commonJS({
-  "node_modules/@stacks/encryption/dist/index.js"(exports2) {
-    "use strict";
-    var __createBinding = exports2 && exports2.__createBinding || (Object.create ? (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      var desc = Object.getOwnPropertyDescriptor(m, k);
-      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-        desc = { enumerable: true, get: function() {
-          return m[k];
-        } };
-      }
-      Object.defineProperty(o, k2, desc);
-    }) : (function(o, m, k, k2) {
-      if (k2 === void 0) k2 = k;
-      o[k2] = m[k];
-    }));
-    var __exportStar = exports2 && exports2.__exportStar || function(m, exports3) {
-      for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports3, p)) __createBinding(exports3, m, p);
-    };
-    Object.defineProperty(exports2, "__esModule", { value: true });
-    exports2.decryptMnemonic = exports2.encryptMnemonic = void 0;
-    __exportStar(require_ec(), exports2);
-    __exportStar(require_keys(), exports2);
-    __exportStar(require_cryptoRandom(), exports2);
-    __exportStar(require_sha2Hash(), exports2);
-    __exportStar(require_encryption(), exports2);
-    __exportStar(require_utils(), exports2);
-    __exportStar(require_messageSignature(), exports2);
-    var wallet_1 = require_wallet();
-    Object.defineProperty(exports2, "encryptMnemonic", { enumerable: true, get: function() {
-      return wallet_1.encryptMnemonic;
-    } });
-    Object.defineProperty(exports2, "decryptMnemonic", { enumerable: true, get: function() {
-      return wallet_1.decryptMnemonic;
-    } });
-  }
-});
-
 // node_modules/@stacks/bitcoin-staking/node_modules/@scure/base/index.js
 var base_exports = {};
 __export(base_exports, {
@@ -12796,20 +9175,20 @@ __export(base_exports, {
   bytes: () => bytes,
   bytesToString: () => bytesToString,
   createBase58check: () => createBase58check2,
-  hex: () => hex2,
+  hex: () => hex3,
   str: () => str,
   stringToBytes: () => stringToBytes,
   utf8: () => utf82,
   utils: () => utils3
 });
-function isBytes5(a) {
+function isBytes6(a) {
   return a instanceof Uint8Array || ArrayBuffer.isView(a) && a.constructor.name === "Uint8Array";
 }
-function abytes3(b) {
-  if (!isBytes5(b))
+function abytes4(b) {
+  if (!isBytes6(b))
     throw new Error("Uint8Array expected");
 }
-function isArrayOf2(isString, arr) {
+function isArrayOf3(isString, arr) {
   if (!Array.isArray(arr))
     return false;
   if (arr.length === 0)
@@ -12820,34 +9199,34 @@ function isArrayOf2(isString, arr) {
     return arr.every((item) => Number.isSafeInteger(item));
   }
 }
-function afn2(input) {
+function afn3(input) {
   if (typeof input !== "function")
     throw new Error("function expected");
   return true;
 }
-function astr2(label, input) {
+function astr3(label, input) {
   if (typeof input !== "string")
     throw new Error(`${label}: string expected`);
   return true;
 }
-function anumber4(n) {
+function anumber5(n) {
   if (!Number.isSafeInteger(n))
     throw new Error(`invalid integer: ${n}`);
 }
-function aArr2(input) {
+function aArr3(input) {
   if (!Array.isArray(input))
     throw new Error("array expected");
 }
-function astrArr2(label, input) {
-  if (!isArrayOf2(true, input))
+function astrArr3(label, input) {
+  if (!isArrayOf3(true, input))
     throw new Error(`${label}: array of strings expected`);
 }
-function anumArr2(label, input) {
-  if (!isArrayOf2(false, input))
+function anumArr3(label, input) {
+  if (!isArrayOf3(false, input))
     throw new Error(`${label}: array of numbers expected`);
 }
 // @__NO_SIDE_EFFECTS__
-function chain2(...args) {
+function chain3(...args) {
   const id = (a) => a;
   const wrap2 = (a, b) => (c) => a(b(c));
   const encode = args.map((x) => x.encode).reduceRight(wrap2, id);
@@ -12855,14 +9234,14 @@ function chain2(...args) {
   return { encode, decode };
 }
 // @__NO_SIDE_EFFECTS__
-function alphabet2(letters) {
+function alphabet3(letters) {
   const lettersA = typeof letters === "string" ? letters.split("") : letters;
   const len = lettersA.length;
-  astrArr2("alphabet", lettersA);
+  astrArr3("alphabet", lettersA);
   const indexes = new Map(lettersA.map((l, i) => [l, i]));
   return {
     encode: (digits) => {
-      aArr2(digits);
+      aArr3(digits);
       return digits.map((i) => {
         if (!Number.isSafeInteger(i) || i < 0 || i >= len)
           throw new Error(`alphabet.encode: digit index outside alphabet "${i}". Allowed: ${letters}`);
@@ -12870,9 +9249,9 @@ function alphabet2(letters) {
       });
     },
     decode: (input) => {
-      aArr2(input);
+      aArr3(input);
       return input.map((letter) => {
-        astr2("alphabet.decode", letter);
+        astr3("alphabet.decode", letter);
         const i = indexes.get(letter);
         if (i === void 0)
           throw new Error(`Unknown letter: "${letter}". Allowed: ${letters}`);
@@ -12882,32 +9261,32 @@ function alphabet2(letters) {
   };
 }
 // @__NO_SIDE_EFFECTS__
-function join2(separator = "") {
-  astr2("join", separator);
+function join3(separator = "") {
+  astr3("join", separator);
   return {
     encode: (from) => {
-      astrArr2("join.decode", from);
+      astrArr3("join.decode", from);
       return from.join(separator);
     },
     decode: (to) => {
-      astr2("join.decode", to);
+      astr3("join.decode", to);
       return to.split(separator);
     }
   };
 }
 // @__NO_SIDE_EFFECTS__
 function padding(bits, chr = "=") {
-  anumber4(bits);
-  astr2("padding", chr);
+  anumber5(bits);
+  astr3("padding", chr);
   return {
     encode(data) {
-      astrArr2("padding.encode", data);
+      astrArr3("padding.encode", data);
       while (data.length * bits % 8)
         data.push(chr);
       return data;
     },
     decode(input) {
-      astrArr2("padding.decode", input);
+      astrArr3("padding.decode", input);
       let end = input.length;
       if (end * bits % 8)
         throw new Error("padding: invalid, string should have whole number of bytes");
@@ -12922,8 +9301,8 @@ function padding(bits, chr = "=") {
   };
 }
 // @__NO_SIDE_EFFECTS__
-function normalize2(fn) {
-  afn2(fn);
+function normalize3(fn) {
+  afn3(fn);
   return { encode: (from) => from, decode: (to) => fn(to) };
 }
 function convertRadix3(data, from, to) {
@@ -12931,13 +9310,13 @@ function convertRadix3(data, from, to) {
     throw new Error(`convertRadix: invalid from=${from}, base cannot be less than 2`);
   if (to < 2)
     throw new Error(`convertRadix: invalid to=${to}, base cannot be less than 2`);
-  aArr2(data);
+  aArr3(data);
   if (!data.length)
     return [];
   let pos = 0;
   const res = [];
   const digits = Array.from(data, (d) => {
-    anumber4(d);
+    anumber5(d);
     if (d < 0 || d >= from)
       throw new Error(`invalid integer: ${d}`);
     return d;
@@ -12974,22 +9353,22 @@ function convertRadix3(data, from, to) {
     res.push(0);
   return res.reverse();
 }
-function convertRadix22(data, from, to, padding2) {
-  aArr2(data);
+function convertRadix23(data, from, to, padding2) {
+  aArr3(data);
   if (from <= 0 || from > 32)
     throw new Error(`convertRadix2: wrong from=${from}`);
   if (to <= 0 || to > 32)
     throw new Error(`convertRadix2: wrong to=${to}`);
-  if (/* @__PURE__ */ radix2carry2(from, to) > 32) {
-    throw new Error(`convertRadix2: carry overflow from=${from} to=${to} carryBits=${/* @__PURE__ */ radix2carry2(from, to)}`);
+  if (/* @__PURE__ */ radix2carry3(from, to) > 32) {
+    throw new Error(`convertRadix2: carry overflow from=${from} to=${to} carryBits=${/* @__PURE__ */ radix2carry3(from, to)}`);
   }
   let carry = 0;
   let pos = 0;
-  const max = powers2[from];
-  const mask = powers2[to] - 1;
+  const max = powers3[from];
+  const mask = powers3[to] - 1;
   const res = [];
   for (const n of data) {
-    anumber4(n);
+    anumber5(n);
     if (n >= max)
       throw new Error(`convertRadix2: invalid data word=${n} from=${from}`);
     carry = carry << from | n;
@@ -12998,7 +9377,7 @@ function convertRadix22(data, from, to, padding2) {
     pos += from;
     for (; pos >= to; pos -= to)
       res.push((carry >> pos - to & mask) >>> 0);
-    const pow = powers2[pos];
+    const pow = powers3[pos];
     if (pow === void 0)
       throw new Error("invalid carry");
     carry &= pow - 1;
@@ -13014,41 +9393,41 @@ function convertRadix22(data, from, to, padding2) {
 }
 // @__NO_SIDE_EFFECTS__
 function radix3(num2) {
-  anumber4(num2);
+  anumber5(num2);
   const _256 = 2 ** 8;
   return {
     encode: (bytes2) => {
-      if (!isBytes5(bytes2))
+      if (!isBytes6(bytes2))
         throw new Error("radix.encode input should be Uint8Array");
       return convertRadix3(Array.from(bytes2), _256, num2);
     },
     decode: (digits) => {
-      anumArr2("radix.decode", digits);
+      anumArr3("radix.decode", digits);
       return Uint8Array.from(convertRadix3(digits, num2, _256));
     }
   };
 }
 // @__NO_SIDE_EFFECTS__
-function radix22(bits, revPadding = false) {
-  anumber4(bits);
+function radix23(bits, revPadding = false) {
+  anumber5(bits);
   if (bits <= 0 || bits > 32)
     throw new Error("radix2: bits should be in (0..32]");
-  if (/* @__PURE__ */ radix2carry2(8, bits) > 32 || /* @__PURE__ */ radix2carry2(bits, 8) > 32)
+  if (/* @__PURE__ */ radix2carry3(8, bits) > 32 || /* @__PURE__ */ radix2carry3(bits, 8) > 32)
     throw new Error("radix2: carry overflow");
   return {
     encode: (bytes2) => {
-      if (!isBytes5(bytes2))
+      if (!isBytes6(bytes2))
         throw new Error("radix2.encode input should be Uint8Array");
-      return convertRadix22(Array.from(bytes2), 8, bits, !revPadding);
+      return convertRadix23(Array.from(bytes2), 8, bits, !revPadding);
     },
     decode: (digits) => {
-      anumArr2("radix2.decode", digits);
-      return Uint8Array.from(convertRadix22(digits, bits, 8, revPadding));
+      anumArr3("radix2.decode", digits);
+      return Uint8Array.from(convertRadix23(digits, bits, 8, revPadding));
     }
   };
 }
 function unsafeWrapper2(fn) {
-  afn2(fn);
+  afn3(fn);
   return function(...args) {
     try {
       return fn.apply(null, args);
@@ -13057,11 +9436,11 @@ function unsafeWrapper2(fn) {
   };
 }
 function checksum2(len, fn) {
-  anumber4(len);
-  afn2(fn);
+  anumber5(len);
+  afn3(fn);
   return {
     encode(data) {
-      if (!isBytes5(data))
+      if (!isBytes6(data))
         throw new Error("checksum.encode: input should be Uint8Array");
       const sum = fn(data).slice(0, len);
       const res = new Uint8Array(data.length + len);
@@ -13070,7 +9449,7 @@ function checksum2(len, fn) {
       return res;
     },
     decode(data) {
-      if (!isBytes5(data))
+      if (!isBytes6(data))
         throw new Error("checksum.decode: input should be Uint8Array");
       const payload = data.slice(0, -len);
       const oldChecksum = data.slice(-len);
@@ -13108,20 +9487,20 @@ function bechChecksum2(prefix2, words, encodingConst = 1) {
   for (let i = 0; i < 6; i++)
     chk = bech32Polymod2(chk);
   chk ^= encodingConst;
-  return BECH_ALPHABET2.encode(convertRadix22([chk % powers2[30]], 30, 5, false));
+  return BECH_ALPHABET2.encode(convertRadix23([chk % powers3[30]], 30, 5, false));
 }
 // @__NO_SIDE_EFFECTS__
 function genBech322(encoding) {
   const ENCODING_CONST = encoding === "bech32" ? 1 : 734539939;
-  const _words = /* @__PURE__ */ radix22(5);
+  const _words = /* @__PURE__ */ radix23(5);
   const fromWords = _words.decode;
   const toWords = _words.encode;
   const fromWordsUnsafe = unsafeWrapper2(fromWords);
   function encode(prefix2, words, limit = 90) {
-    astr2("bech32.encode prefix", prefix2);
-    if (isBytes5(words))
+    astr3("bech32.encode prefix", prefix2);
+    if (isBytes6(words))
       words = Array.from(words);
-    anumArr2("bech32.encode", words);
+    anumArr3("bech32.encode", words);
     const plen = prefix2.length;
     if (plen === 0)
       throw new TypeError(`Invalid prefix length ${plen}`);
@@ -13133,7 +9512,7 @@ function genBech322(encoding) {
     return `${lowered}1${BECH_ALPHABET2.encode(words)}${sum}`;
   }
   function decode(str2, limit = 90) {
-    astr2("bech32.decode input", str2);
+    astr3("bech32.decode input", str2);
     const slen = str2.length;
     if (slen < 8 || limit !== false && slen > limit)
       throw new TypeError(`invalid string length: ${slen} (${str2}). Expected (8..${limit})`);
@@ -13172,64 +9551,64 @@ function genBech322(encoding) {
     toWords
   };
 }
-var gcd2, radix2carry2, powers2, utils3, base16, base32, base32nopad, base32hex, base32hexnopad, base32crockford, hasBase64Builtin, decodeBase64Builtin, base64, base64nopad, base64url, base64urlnopad, genBase582, base582, base58flickr, base58xrp, XMR_BLOCK_LEN, base58xmr, createBase58check2, base58check2, BECH_ALPHABET2, POLYMOD_GENERATORS2, bech322, bech32m2, utf82, hasHexBuiltin2, hexBuiltin2, hex2, CODERS, coderTypeError, bytesToString, str, stringToBytes, bytes;
-var init_base2 = __esm({
+var gcd3, radix2carry3, powers3, utils3, base16, base32, base32nopad, base32hex, base32hexnopad, base32crockford, hasBase64Builtin, decodeBase64Builtin, base64, base64nopad, base64url, base64urlnopad, genBase582, base582, base58flickr, base58xrp, XMR_BLOCK_LEN, base58xmr, createBase58check2, base58check2, BECH_ALPHABET2, POLYMOD_GENERATORS2, bech322, bech32m2, utf82, hasHexBuiltin3, hexBuiltin3, hex3, CODERS, coderTypeError, bytesToString, str, stringToBytes, bytes;
+var init_base3 = __esm({
   "node_modules/@stacks/bitcoin-staking/node_modules/@scure/base/index.js"() {
-    gcd2 = (a, b) => b === 0 ? a : gcd2(b, a % b);
-    radix2carry2 = /* @__NO_SIDE_EFFECTS__ */ (from, to) => from + (to - gcd2(from, to));
-    powers2 = /* @__PURE__ */ (() => {
+    gcd3 = (a, b) => b === 0 ? a : gcd3(b, a % b);
+    radix2carry3 = /* @__NO_SIDE_EFFECTS__ */ (from, to) => from + (to - gcd3(from, to));
+    powers3 = /* @__PURE__ */ (() => {
       let res = [];
       for (let i = 0; i < 40; i++)
         res.push(2 ** i);
       return res;
     })();
     utils3 = {
-      alphabet: alphabet2,
-      chain: chain2,
+      alphabet: alphabet3,
+      chain: chain3,
       checksum: checksum2,
       convertRadix: convertRadix3,
-      convertRadix2: convertRadix22,
+      convertRadix2: convertRadix23,
       radix: radix3,
-      radix2: radix22,
-      join: join2,
+      radix2: radix23,
+      join: join3,
       padding
     };
-    base16 = /* @__PURE__ */ chain2(/* @__PURE__ */ radix22(4), /* @__PURE__ */ alphabet2("0123456789ABCDEF"), /* @__PURE__ */ join2(""));
-    base32 = /* @__PURE__ */ chain2(/* @__PURE__ */ radix22(5), /* @__PURE__ */ alphabet2("ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"), /* @__PURE__ */ padding(5), /* @__PURE__ */ join2(""));
-    base32nopad = /* @__PURE__ */ chain2(/* @__PURE__ */ radix22(5), /* @__PURE__ */ alphabet2("ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"), /* @__PURE__ */ join2(""));
-    base32hex = /* @__PURE__ */ chain2(/* @__PURE__ */ radix22(5), /* @__PURE__ */ alphabet2("0123456789ABCDEFGHIJKLMNOPQRSTUV"), /* @__PURE__ */ padding(5), /* @__PURE__ */ join2(""));
-    base32hexnopad = /* @__PURE__ */ chain2(/* @__PURE__ */ radix22(5), /* @__PURE__ */ alphabet2("0123456789ABCDEFGHIJKLMNOPQRSTUV"), /* @__PURE__ */ join2(""));
-    base32crockford = /* @__PURE__ */ chain2(/* @__PURE__ */ radix22(5), /* @__PURE__ */ alphabet2("0123456789ABCDEFGHJKMNPQRSTVWXYZ"), /* @__PURE__ */ join2(""), /* @__PURE__ */ normalize2((s) => s.toUpperCase().replace(/O/g, "0").replace(/[IL]/g, "1")));
+    base16 = /* @__PURE__ */ chain3(/* @__PURE__ */ radix23(4), /* @__PURE__ */ alphabet3("0123456789ABCDEF"), /* @__PURE__ */ join3(""));
+    base32 = /* @__PURE__ */ chain3(/* @__PURE__ */ radix23(5), /* @__PURE__ */ alphabet3("ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"), /* @__PURE__ */ padding(5), /* @__PURE__ */ join3(""));
+    base32nopad = /* @__PURE__ */ chain3(/* @__PURE__ */ radix23(5), /* @__PURE__ */ alphabet3("ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"), /* @__PURE__ */ join3(""));
+    base32hex = /* @__PURE__ */ chain3(/* @__PURE__ */ radix23(5), /* @__PURE__ */ alphabet3("0123456789ABCDEFGHIJKLMNOPQRSTUV"), /* @__PURE__ */ padding(5), /* @__PURE__ */ join3(""));
+    base32hexnopad = /* @__PURE__ */ chain3(/* @__PURE__ */ radix23(5), /* @__PURE__ */ alphabet3("0123456789ABCDEFGHIJKLMNOPQRSTUV"), /* @__PURE__ */ join3(""));
+    base32crockford = /* @__PURE__ */ chain3(/* @__PURE__ */ radix23(5), /* @__PURE__ */ alphabet3("0123456789ABCDEFGHJKMNPQRSTVWXYZ"), /* @__PURE__ */ join3(""), /* @__PURE__ */ normalize3((s) => s.toUpperCase().replace(/O/g, "0").replace(/[IL]/g, "1")));
     hasBase64Builtin = /* @__PURE__ */ (() => typeof Uint8Array.from([]).toBase64 === "function" && typeof Uint8Array.fromBase64 === "function")();
     decodeBase64Builtin = (s, isUrl) => {
-      astr2("base64", s);
+      astr3("base64", s);
       const re = isUrl ? /^[A-Za-z0-9=_-]+$/ : /^[A-Za-z0-9=+/]+$/;
-      const alphabet3 = isUrl ? "base64url" : "base64";
+      const alphabet4 = isUrl ? "base64url" : "base64";
       if (s.length > 0 && !re.test(s))
         throw new Error("invalid base64");
-      return Uint8Array.fromBase64(s, { alphabet: alphabet3, lastChunkHandling: "strict" });
+      return Uint8Array.fromBase64(s, { alphabet: alphabet4, lastChunkHandling: "strict" });
     };
     base64 = hasBase64Builtin ? {
       encode(b) {
-        abytes3(b);
+        abytes4(b);
         return b.toBase64();
       },
       decode(s) {
         return decodeBase64Builtin(s, false);
       }
-    } : /* @__PURE__ */ chain2(/* @__PURE__ */ radix22(6), /* @__PURE__ */ alphabet2("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"), /* @__PURE__ */ padding(6), /* @__PURE__ */ join2(""));
-    base64nopad = /* @__PURE__ */ chain2(/* @__PURE__ */ radix22(6), /* @__PURE__ */ alphabet2("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"), /* @__PURE__ */ join2(""));
+    } : /* @__PURE__ */ chain3(/* @__PURE__ */ radix23(6), /* @__PURE__ */ alphabet3("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"), /* @__PURE__ */ padding(6), /* @__PURE__ */ join3(""));
+    base64nopad = /* @__PURE__ */ chain3(/* @__PURE__ */ radix23(6), /* @__PURE__ */ alphabet3("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"), /* @__PURE__ */ join3(""));
     base64url = hasBase64Builtin ? {
       encode(b) {
-        abytes3(b);
+        abytes4(b);
         return b.toBase64({ alphabet: "base64url" });
       },
       decode(s) {
         return decodeBase64Builtin(s, true);
       }
-    } : /* @__PURE__ */ chain2(/* @__PURE__ */ radix22(6), /* @__PURE__ */ alphabet2("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"), /* @__PURE__ */ padding(6), /* @__PURE__ */ join2(""));
-    base64urlnopad = /* @__PURE__ */ chain2(/* @__PURE__ */ radix22(6), /* @__PURE__ */ alphabet2("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"), /* @__PURE__ */ join2(""));
-    genBase582 = /* @__NO_SIDE_EFFECTS__ */ (abc) => /* @__PURE__ */ chain2(/* @__PURE__ */ radix3(58), /* @__PURE__ */ alphabet2(abc), /* @__PURE__ */ join2(""));
+    } : /* @__PURE__ */ chain3(/* @__PURE__ */ radix23(6), /* @__PURE__ */ alphabet3("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"), /* @__PURE__ */ padding(6), /* @__PURE__ */ join3(""));
+    base64urlnopad = /* @__PURE__ */ chain3(/* @__PURE__ */ radix23(6), /* @__PURE__ */ alphabet3("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"), /* @__PURE__ */ join3(""));
+    genBase582 = /* @__NO_SIDE_EFFECTS__ */ (abc) => /* @__PURE__ */ chain3(/* @__PURE__ */ radix3(58), /* @__PURE__ */ alphabet3(abc), /* @__PURE__ */ join3(""));
     base582 = /* @__PURE__ */ genBase582("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz");
     base58flickr = /* @__PURE__ */ genBase582("123456789abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ");
     base58xrp = /* @__PURE__ */ genBase582("rpshnaf39wBUDNEGHJKLM4PQRST7VWXYZ2bcdeCg65jkm8oFqi1tuvAxyz");
@@ -13258,9 +9637,9 @@ var init_base2 = __esm({
         return Uint8Array.from(res);
       }
     };
-    createBase58check2 = (sha2565) => /* @__PURE__ */ chain2(checksum2(4, (data) => sha2565(sha2565(data))), base582);
+    createBase58check2 = (sha2565) => /* @__PURE__ */ chain3(checksum2(4, (data) => sha2565(sha2565(data))), base582);
     base58check2 = createBase58check2;
-    BECH_ALPHABET2 = /* @__PURE__ */ chain2(/* @__PURE__ */ alphabet2("qpzry9x8gf2tvdw0s3jn54khce6mua7l"), /* @__PURE__ */ join2(""));
+    BECH_ALPHABET2 = /* @__PURE__ */ chain3(/* @__PURE__ */ alphabet3("qpzry9x8gf2tvdw0s3jn54khce6mua7l"), /* @__PURE__ */ join3(""));
     POLYMOD_GENERATORS2 = [996825010, 642813549, 513874426, 1027748829, 705979059];
     bech322 = /* @__PURE__ */ genBech322("bech32");
     bech32m2 = /* @__PURE__ */ genBech322("bech32m");
@@ -13268,25 +9647,25 @@ var init_base2 = __esm({
       encode: (data) => new TextDecoder().decode(data),
       decode: (str2) => new TextEncoder().encode(str2)
     };
-    hasHexBuiltin2 = /* @__PURE__ */ (() => typeof Uint8Array.from([]).toHex === "function" && typeof Uint8Array.fromHex === "function")();
-    hexBuiltin2 = {
+    hasHexBuiltin3 = /* @__PURE__ */ (() => typeof Uint8Array.from([]).toHex === "function" && typeof Uint8Array.fromHex === "function")();
+    hexBuiltin3 = {
       encode(data) {
-        abytes3(data);
+        abytes4(data);
         return data.toHex();
       },
       decode(s) {
-        astr2("hex", s);
+        astr3("hex", s);
         return Uint8Array.fromHex(s);
       }
     };
-    hex2 = hasHexBuiltin2 ? hexBuiltin2 : /* @__PURE__ */ chain2(/* @__PURE__ */ radix22(4), /* @__PURE__ */ alphabet2("0123456789abcdef"), /* @__PURE__ */ join2(""), /* @__PURE__ */ normalize2((s) => {
+    hex3 = hasHexBuiltin3 ? hexBuiltin3 : /* @__PURE__ */ chain3(/* @__PURE__ */ radix23(4), /* @__PURE__ */ alphabet3("0123456789abcdef"), /* @__PURE__ */ join3(""), /* @__PURE__ */ normalize3((s) => {
       if (typeof s !== "string" || s.length % 2 !== 0)
         throw new TypeError(`hex.decode: expected string, got ${typeof s} with length ${s.length}`);
       return s.toLowerCase();
     }));
     CODERS = {
       utf8: utf82,
-      hex: hex2,
+      hex: hex3,
       base16,
       base32,
       base64,
@@ -13298,7 +9677,7 @@ var init_base2 = __esm({
     bytesToString = (type, bytes2) => {
       if (typeof type !== "string" || !CODERS.hasOwnProperty(type))
         throw new TypeError(coderTypeError);
-      if (!isBytes5(bytes2))
+      if (!isBytes6(bytes2))
         throw new TypeError("bytesToString() expects Uint8Array");
       return CODERS[type].encode(bytes2);
     };
@@ -13321,9 +9700,9 @@ var require_btc_address = __commonJS({
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.parse = parse;
     exports2.stringify = stringify;
-    var base_1 = (init_base2(), __toCommonJS(base_exports));
+    var base_1 = (init_base3(), __toCommonJS(base_exports));
     var common_1 = require("@stacks/common");
-    var encryption_1 = require_dist();
+    var encryption_1 = require("@stacks/encryption");
     var transactions_1 = require("@stacks/transactions");
     var constants_1 = require_constants();
     var network_1 = require_network();
@@ -13462,7 +9841,7 @@ var require_signer = __commonJS({
     exports2.decodeSignerCalldata = decodeSignerCalldata;
     var sha2_js_1 = require("@noble/hashes/sha2.js");
     var common_1 = require("@stacks/common");
-    var encryption_1 = require_dist();
+    var encryption_1 = require("@stacks/encryption");
     var transactions_1 = require("@stacks/transactions");
     var btc_address_1 = require_btc_address();
     function buildSignerGrantMessage(opts) {
@@ -13926,7 +10305,7 @@ var require_eligibility = __commonJS({
 });
 
 // node_modules/@stacks/bitcoin-staking/dist/index.js
-var require_dist2 = __commonJS({
+var require_dist = __commonJS({
   "node_modules/@stacks/bitcoin-staking/dist/index.js"(exports2) {
     "use strict";
     var __createBinding = exports2 && exports2.__createBinding || (Object.create ? (function(o, m, k, k2) {
@@ -13992,14 +10371,19 @@ __export(index_exports, {
   ActionType: () => ActionType,
   ApiService: () => ApiService,
   BTC_ESPLORA: () => BTC_ESPLORA,
+  CorruptLockStoreError: () => CorruptLockStoreError,
   DEFAULT_POX_FEE_USTX: () => DEFAULT_POX_FEE_USTX,
+  DEFAULT_SCHEDULE_BOND_INDICES: () => DEFAULT_SCHEDULE_BOND_INDICES,
   EARLY_EXIT_SIGNER: () => EARLY_EXIT_SIGNER,
+  FileLockRecordStore: () => FileLockRecordStore,
   InMemoryLockRecordStore: () => InMemoryLockRecordStore,
   MAX_FEE_STX: () => MAX_FEE_STX,
   POX4_ERRORS: () => POX4_ERRORS,
   POX5_BOND_ERRORS: () => POX5_BOND_ERRORS,
   PRIVATE1_HIRO_API_BASE: () => PRIVATE1_HIRO_API_BASE,
-  RBF_MIN_FEE_BUMP_USTX: () => RBF_MIN_FEE_BUMP_USTX,
+  PUBLIC_TESTNET_POX5_API: () => PUBLIC_TESTNET_POX5_API,
+  RBF_MIN_FEE_MULTIPLIER: () => RBF_MIN_FEE_MULTIPLIER,
+  SignerManagerRegistry: () => SignerManagerRegistry,
   StackingPools: () => StackingPools,
   StacksSDK: () => StacksSDK,
   TokenType: () => TokenType,
@@ -14008,16 +10392,21 @@ __export(index_exports, {
   api_constants: () => api_constants,
   config: () => config,
   derivationPath: () => derivationPath,
+  diffBondSchedule: () => diffBondSchedule,
   env: () => env,
+  formatBondScheduleError: () => formatBondScheduleError,
   ftInfo: () => ftInfo,
   helperConstants: () => helperConstants,
+  laterStage: () => laterStage,
   pagination_defaults: () => pagination_defaults,
   parseOptionalAmount: () => parseOptionalAmount,
   parseOptionalFee: () => parseOptionalFee,
   parseOptionalNonce: () => parseOptionalNonce,
+  planSbtcRollover: () => planSbtcRollover,
   poolInfo: () => poolInfo,
   poxInfo: () => poxInfo,
-  stacks_info: () => stacks_info
+  stacks_info: () => stacks_info,
+  validateBondScheduleAgainstChain: () => validateBondScheduleAgainstChain
 });
 module.exports = __toCommonJS(index_exports);
 
@@ -14047,7 +10436,6 @@ var import_network = require("@stacks/network");
 var import_transactions2 = require("@stacks/transactions");
 
 // src/utils/errorHandling.ts
-var REDACTED_KEYS = /* @__PURE__ */ new Set(["config", "headers", "auth", "authorization", "token", "apiKey", "secret"]);
 function formatErrorMessage(error) {
   if (error instanceof Error) {
     const nested = extractResponseDetail(error);
@@ -14065,10 +10453,10 @@ function formatErrorMessage(error) {
       }
     }
     try {
-      const serialized = JSON.stringify(error, (key, v) => {
-        if (REDACTED_KEYS.has(key)) return void 0;
-        return typeof v === "bigint" ? v.toString() : v;
-      });
+      const serialized = JSON.stringify(
+        error,
+        (_, v) => typeof v === "bigint" ? v.toString() : v
+      );
       if (serialized && serialized !== "{}") return serialized;
     } catch {
     }
@@ -14115,7 +10503,7 @@ var helperConstants = {
   stacks_api_max_limit: 200
   // Maximum limit accepted from callers; service paginates internally when limit > stacks_api_page_size
 };
-var RBF_MIN_FEE_BUMP_USTX = BigInt(1);
+var RBF_MIN_FEE_MULTIPLIER = 1.25;
 var MAX_FEE_STX = 10;
 var DEFAULT_POX_FEE_USTX = BigInt(1e4);
 var api_constants = {
@@ -14329,12 +10717,16 @@ var POX4_ERRORS = {
 };
 var BTC_ESPLORA = {
   mainnet: "https://mempool.space/api",
-  testnet: "https://mempool.bitcoin.private-1.hiro.so/api"
+  testnet: "https://mempool.bitcoin.private-1.hiro.so/api",
+  // Public Bitcoin testnet3 Esplora (used by the public-testnet profile).
+  public_testnet: "https://blockstream.info/testnet/api"
 };
 var PRIVATE1_HIRO_API_BASE = "https://api.private-1.hiro.so";
+var PUBLIC_TESTNET_POX5_API = "https://api.testnet-pox5.hiro.so";
 var EARLY_EXIT_SIGNER = {
   mainnet: "",
-  testnet: "https://r25rniyw12.execute-api.eu-west-1.amazonaws.com/v1/v1"
+  testnet: "https://r25rniyw12.execute-api.eu-west-1.amazonaws.com/v1/v1",
+  public_testnet: ""
 };
 var POX5_BOND_ERRORS = {
   7: { name: "ERR_BOND_NOT_FOUND", message: "Bond index not found \u2014 verify bondIndex." },
@@ -14398,8 +10790,8 @@ function validateAddress(addr, testnet) {
     return false;
   }
 }
-function isCompressedSecp256k1PubKeyHex(hex3) {
-  return /^(02|03)[0-9a-fA-F]{64}$/.test(hex3);
+function isCompressedSecp256k1PubKeyHex(hex4) {
+  return /^(02|03)[0-9a-fA-F]{64}$/.test(hex4);
 }
 function stxToMicro(amountStx) {
   if (!validateAmount(amountStx)) {
@@ -14490,7 +10882,7 @@ function untilBurnHeightForCycles(cycles, poxInput) {
   const Q = Number(pox.prepare_phase_block_length);
   const R = Number(pox.reward_phase_block_length);
   const cycleLen = Q + R;
-  return P + cycles * cycleLen;
+  return P + cycles * cycleLen - 1;
 }
 function assertResultSuccess(result) {
   if (!result || result.error || !result.txid || result.reason) {
@@ -14543,7 +10935,6 @@ var StacksService = class {
    *   chain id, and magic bytes come from the resolved profile so this service and
    *   the PoX-5 client always describe the same chain. When omitted, falls back to
    *   env/default resolution for standalone use.
-   * @param hiroApiKey - Optional Hiro API key, sent as `x-hiro-api-key` on every request.
    */
   constructor(testnet = false, profile, hiroApiKey) {
     /**
@@ -14594,19 +10985,32 @@ var StacksService = class {
      *
      * @param address - The Stacks address to query.
      */
+    /**
+     * Returns only the confirmed on-chain nonce, skipping the mempool scan.
+     * @param address - The Stacks address to query.
+     */
+    this.getConfirmedNonce = async (address) => {
+      try {
+        const response = await this.axiosClient.get(`${this.stackBaseUrl}/v2/accounts/${address}?proof=0`);
+        if (!response?.data || response.status !== 200) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        return BigInt(response.data.nonce);
+      } catch (error) {
+        console.error(`Error fetching confirmed nonce: ${formatErrorMessage(error)}`);
+        throw new Error(
+          `Failed to fetch confirmed nonce for address ${address}: ${formatErrorMessage(error)}`
+        );
+      }
+    };
     this.getAccountNonce = async (address) => {
       try {
         const pageSize = helperConstants.stacks_api_page_size;
-        let nonceError;
-        const nonceRequest = this.axiosClient.get(`${this.stackBaseUrl}/v2/accounts/${address}?proof=0`).catch((e) => {
-          nonceError = e;
-          return void 0;
-        });
+        const nonceRequest = this.axiosClient.get(`${this.stackBaseUrl}/v2/accounts/${address}?proof=0`);
         const pendingNonces = /* @__PURE__ */ new Set();
         let pendingTxCount = 0;
         let offset = 0;
-        const maxPages = 20;
-        for (let page = 0; page < maxPages; page++) {
+        while (true) {
           const mempoolResponse = await this.axiosClient.get(
             `${this.stackBaseUrl}/extended/v1/tx/mempool`,
             { params: { sender_address: address, limit: pageSize, offset } }
@@ -14621,9 +11025,8 @@ var StacksService = class {
           offset += pageSize;
         }
         const nonceResponse = await nonceRequest;
-        if (nonceError) throw nonceError;
         if (!nonceResponse?.data || nonceResponse.status !== 200) {
-          throw new Error(`HTTP ${nonceResponse?.status}`);
+          throw new Error(`HTTP ${nonceResponse.status}`);
         }
         const confirmedNonce = BigInt(nonceResponse.data.nonce);
         let nextAvailable = confirmedNonce;
@@ -14903,7 +11306,6 @@ var StacksService = class {
             network: this.network,
             ...nonce !== void 0 ? { nonce } : {},
             ...fee !== void 0 ? { fee } : {},
-            ...memo !== void 0 ? { memo } : {},
             ...memo !== void 0 ? { memo } : {}
           });
         }
@@ -14927,10 +11329,10 @@ var StacksService = class {
      * @param functionArgs - The arguments to pass to the function.
      * @returns - The unsigned Stacks contract call transaction.
      */
-    this.buildUnsignedContractCall = async (senderPublicKey, contractAddress, contractName, functionName, functionArgs, nonce, postConditions, postConditionMode) => {
+    this.buildUnsignedContractCall = async (senderPublicKey, contractAddress, contractName, functionName, functionArgs, nonce, postConditionMode, postConditions) => {
       try {
-        if (!validateAddress(contractAddress, this.network === import_network.STACKS_TESTNET)) {
-          throw new Error("Invalid contract address");
+        if (!validateAddress(contractAddress, this.testnet)) {
+          throw new Error("Invalid recipient address");
         }
         if (!isCompressedSecp256k1PubKeyHex(senderPublicKey)) {
           throw new Error("Invalid compressed secp256k1 public key hex format");
@@ -14945,9 +11347,9 @@ var StacksService = class {
           functionArgs,
           publicKey: senderPublicKey,
           network: this.network,
-          postConditions: postConditions ?? [],
           postConditionMode: postConditionMode ?? import_transactions2.PostConditionMode.Deny,
-          ...nonce !== void 0 ? { nonce } : {}
+          ...nonce !== void 0 ? { nonce } : {},
+          ...postConditions !== void 0 ? { postConditions } : {}
         });
         return unsignedContractCall;
       } catch (error) {
@@ -15034,8 +11436,8 @@ var StacksService = class {
           functionName,
           functionArgs,
           nonce,
-          postConditions,
-          postConditionMode
+          postConditionMode,
+          postConditions
         );
         if (fee !== void 0) {
           unsignedContractCall.auth.spendingCondition.fee = fee;
@@ -15268,7 +11670,6 @@ var StacksService = class {
           "delegate-stx",
           [
             (0, import_transactions2.uintCV)(amount),
-            poolContractName ? (0, import_transactions2.contractPrincipalCV)(delegateTo, poolContractName) : (0, import_transactions2.standardPrincipalCV)(delegateTo),
             poolContractName ? (0, import_transactions2.contractPrincipalCV)(delegateTo, poolContractName) : (0, import_transactions2.standardPrincipalCV)(delegateTo),
             (0, import_transactions2.someCV)((0, import_transactions2.uintCV)(until_burn_ht)),
             (0, import_transactions2.noneCV)()
@@ -15779,7 +12180,7 @@ var FireblocksSigner = class {
           );
         }
         console.log(`Transaction ${tx.id} is currently at status - ${tx.status}`);
-        await new Promise((resolve) => setTimeout(resolve, delay));
+        await new Promise((resolve2) => setTimeout(resolve2, delay));
         delay = Math.min(delay * 2, POLL_CEILING_MS);
         try {
           response = await this.fireblocks.transactions.getTransaction({ txId });
@@ -16006,6 +12407,7 @@ var FireblocksService = class {
 // src/services/cosigner.service.ts
 var import_common2 = require("@stacks/common");
 var import_secp256k12 = require("@noble/secp256k1");
+var import_bip32 = require("@scure/bip32");
 var DEFAULT_REQUEST_TIMEOUT_MS = 15e3;
 var COSIGNER_BIP32_DERIVATION = "m/48'/1'/0'/2'/0/0";
 var resolveCosignerUrl = (testnet) => {
@@ -16041,6 +12443,37 @@ var CosignerService = class {
         throw new Error(`Cosigner public-key request failed (${res.status})`);
       }
       return res.json();
+    };
+    /**
+     * Derives the leaf public key (0/0 below the service's advertised account xpub —
+     * the key committed into a bond's early-unlock-bytes) straight from `/public-key`.
+     * Reaching the service also proves it is online and pins its advertised identity.
+     */
+    this.getLeafPublicKey = async () => {
+      const info = await this.getPublicKey();
+      const account = import_bip32.HDKey.fromExtendedKey(info.xpub);
+      const leaf = account.deriveChild(0).deriveChild(0);
+      if (!leaf.publicKey) {
+        throw new Error("Cosigner xpub did not yield a leaf public key");
+      }
+      return leaf.publicKey;
+    };
+    /**
+     * Verifies BEFORE Bitcoin is funded that the cosigner service actually holds the
+     * key committed into the proposed lock script. The lock script's early-exit branch
+     * is `0x21 <P> 0xac` (buildUnlockScript(P)); if the service's derived leaf key does
+     * not reproduce the bond's early-unlock-bytes, early exit would be impossible, so
+     * funding must be refused. A 403 / unreachable service throws here as well, so the
+     * check fails closed and names the failing service.
+     */
+    this.verifyCommittedKey = async (expectedUnlockBytes) => {
+      const pubkey = await this.getLeafPublicKey();
+      const unlockScript = new Uint8Array([33, ...pubkey, 172]);
+      if ((0, import_common2.bytesToHex)(unlockScript) !== (0, import_common2.bytesToHex)(expectedUnlockBytes)) {
+        throw new Error(
+          `Early-exit cosigner key at ${this.baseUrl} does not match the bond's committed lock script \u2014 refusing to fund (early exit would be impossible for this bond).`
+        );
+      }
     };
     this.sign = async (req) => {
       const res = await this.fetchWithTimeout(`${this.baseUrl}/sign`, {
@@ -16131,28 +12564,44 @@ function accountBalanceNormalizingFetch(baseFetch = fetch) {
 }
 function resolveNetworkProfile(opts) {
   const envUrl = process.env.STACKS_API_URL || void 0;
-  if (opts.testnet) {
-    return {
-      name: "private-devnet",
-      stacksApiUrl: opts.stacksApiUrl || envUrl || PRIVATE1_HIRO_API_BASE,
-      chainId: 256,
-      magicBytes: "id",
-      esploraBaseUrl: BTC_ESPLORA.testnet,
-      bech32Prefix: "bcrt",
-      cosignerUrl: EARLY_EXIT_SIGNER.testnet,
-      expectedPoxContractName: "pox-5"
-    };
+  const name = opts.network ?? (opts.testnet ? "private-devnet" : "mainnet");
+  switch (name) {
+    case "private-devnet":
+      return {
+        name: "private-devnet",
+        stacksApiUrl: opts.stacksApiUrl || envUrl || PRIVATE1_HIRO_API_BASE,
+        chainId: 256,
+        magicBytes: "id",
+        esploraBaseUrl: BTC_ESPLORA.testnet,
+        bech32Prefix: "bcrt",
+        cosignerUrl: EARLY_EXIT_SIGNER.testnet,
+        expectedPoxContractName: "pox-5"
+      };
+    case "public-testnet":
+      return {
+        name: "public-testnet",
+        stacksApiUrl: opts.stacksApiUrl || envUrl || PUBLIC_TESTNET_POX5_API,
+        chainId: import_network2.STACKS_TESTNET.chainId,
+        magicBytes: import_network2.STACKS_TESTNET.magicBytes,
+        esploraBaseUrl: BTC_ESPLORA.public_testnet,
+        bech32Prefix: "tb",
+        cosignerUrl: EARLY_EXIT_SIGNER.public_testnet,
+        expectedPoxContractName: "pox-5",
+        requirePox5Active: true
+      };
+    case "mainnet":
+    default:
+      return {
+        name: "mainnet",
+        stacksApiUrl: opts.stacksApiUrl || envUrl || api_constants.stacks_mainnet_rpc,
+        chainId: import_network2.STACKS_MAINNET.chainId,
+        magicBytes: import_network2.STACKS_MAINNET.magicBytes,
+        esploraBaseUrl: BTC_ESPLORA.mainnet,
+        bech32Prefix: void 0,
+        cosignerUrl: EARLY_EXIT_SIGNER.mainnet,
+        expectedPoxContractName: "pox-5"
+      };
   }
-  return {
-    name: "mainnet",
-    stacksApiUrl: opts.stacksApiUrl || envUrl || api_constants.stacks_mainnet_rpc,
-    chainId: import_network2.STACKS_MAINNET.chainId,
-    magicBytes: import_network2.STACKS_MAINNET.magicBytes,
-    esploraBaseUrl: BTC_ESPLORA.mainnet,
-    bech32Prefix: void 0,
-    cosignerUrl: EARLY_EXIT_SIGNER.mainnet,
-    expectedPoxContractName: "pox-5"
-  };
 }
 function stacksNetworkFromProfile(profile) {
   const base = profile.name === "mainnet" ? import_network2.STACKS_MAINNET : import_network2.STACKS_TESTNET;
@@ -16188,18 +12637,42 @@ async function validateNetworkProfile(profile) {
     if (poxRes.ok) {
       const pox = await poxRes.json();
       const contractId = pox?.contract_id;
-      if (typeof contractId === "string" && !contractId.endsWith(`.${profile.expectedPoxContractName}`)) {
+      const pox5Active = typeof contractId === "string" && contractId.endsWith(`.${profile.expectedPoxContractName}`);
+      if (!pox5Active) {
+        if (profile.requirePox5Active) {
+          throw new Error(
+            `Network profile "${profile.name}" requires an active ${profile.expectedPoxContractName} contract, but ${profile.stacksApiUrl} reports "${contractId ?? "unknown"}". This network is not yet supported.`
+          );
+        }
         console.warn(
           `Active PoX contract "${contractId}" is not ".${profile.expectedPoxContractName}"; PoX-5 bond operations may be unavailable on this network.`
         );
       }
+    } else if (profile.requirePox5Active) {
+      throw new Error(
+        `Network profile "${profile.name}" could not confirm an active ${profile.expectedPoxContractName} contract (GET /v2/pox returned HTTP ${poxRes.status}). This network is not yet supported.`
+      );
     }
   } catch (error) {
+    if (profile.requirePox5Active) throw error;
     console.warn(`PoX contract check skipped: ${formatErrorMessage(error)}`);
   }
 }
 
 // src/staking/bonds/unlock-bytes-store.ts
+var ENROLLMENT_STAGE_ORDER = [
+  "lock-fixed",
+  "funding-requested",
+  "btc-broadcast",
+  "btc-confirmed",
+  "proof-built",
+  "registration-submitted",
+  "registration-confirmed"
+];
+function laterStage(a, b) {
+  if (a === void 0) return b;
+  return ENROLLMENT_STAGE_ORDER.indexOf(a) >= ENROLLMENT_STAGE_ORDER.indexOf(b) ? a : b;
+}
 var InMemoryLockRecordStore = class {
   constructor() {
     this.store = /* @__PURE__ */ new Map();
@@ -16215,6 +12688,26 @@ var InMemoryLockRecordStore = class {
   }
 };
 
+// src/staking/signer-manager-adapter.ts
+var SignerManagerRegistry = class {
+  constructor(adapters = []) {
+    this.byPrincipal = new Map(adapters.map((a) => [a.contractPrincipal, a]));
+  }
+  get(principal) {
+    return this.byPrincipal.get(principal);
+  }
+  has(principal) {
+    return this.byPrincipal.has(principal);
+  }
+  /** Number of registered adapters. 0 = no allowlist configured (all managers allowed). */
+  get size() {
+    return this.byPrincipal.size;
+  }
+};
+
+// src/StacksSDK.ts
+var import_crypto2 = require("crypto");
+
 // src/utils/validation.ts
 var ValidationError = class extends Error {
   constructor(message) {
@@ -16225,7 +12718,8 @@ var ValidationError = class extends Error {
 function parseOptionalNonce(value) {
   if (value === void 0 || value === "") return void 0;
   if (typeof value === "bigint") {
-    if (value < BigInt(0)) throw new ValidationError("nonce must be a non-negative integer");
+    if (value < BigInt(0))
+      throw new ValidationError("nonce must be a non-negative integer");
     return value;
   }
   if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) {
@@ -16257,15 +12751,131 @@ function parseOptionalFee(value) {
     throw new ValidationError("fee must be a positive number (STX)");
   }
   if (fee > MAX_FEE_STX) {
-    throw new ValidationError(`fee ${fee} STX exceeds the safety limit of ${MAX_FEE_STX} STX`);
+    throw new ValidationError(
+      `fee ${fee} STX exceeds the safety limit of ${MAX_FEE_STX} STX`
+    );
   }
   return fee;
 }
 
+// src/utils/rbf.ts
+function checkFeeReplacement(orig, newFeeSats, lockAddress, recordedOutpoint) {
+  if (orig.confirmed) {
+    return { ok: false, error: `Original tx is already confirmed (block ${orig.blockHeight}) \u2014 nothing to replace.` };
+  }
+  if (orig.outputCount !== 1) {
+    return { ok: false, error: `Original tx has ${orig.outputCount} outputs; only a single-output recovery spend can be fee-replaced by this method.` };
+  }
+  if (!orig.destination) {
+    return { ok: false, error: "Original tx destination address could not be decoded." };
+  }
+  if (!orig.lockOutpoint?.txid || orig.lockOutpoint.vout === void 0) {
+    return { ok: false, error: "Original tx lock input outpoint could not be decoded." };
+  }
+  if (orig.prevoutAddress && orig.prevoutAddress !== lockAddress) {
+    return { ok: false, error: `Original tx does not spend this bond's lock address (${lockAddress}); refusing to replace an unrelated transaction.` };
+  }
+  const outpointCheckable = recordedOutpoint?.txid !== void 0 && recordedOutpoint.vout !== void 0;
+  if (outpointCheckable && (orig.lockOutpoint.txid !== recordedOutpoint.txid || orig.lockOutpoint.vout !== recordedOutpoint.vout)) {
+    return { ok: false, error: `Original tx input ${orig.lockOutpoint.txid}:${orig.lockOutpoint.vout} does not match the recorded lock outpoint ${recordedOutpoint.txid}:${recordedOutpoint.vout}.` };
+  }
+  if (!orig.prevoutAddress && !outpointCheckable) {
+    return { ok: false, error: `Cannot verify the original transaction spends this bond's lock (no prevout address from Esplora and no recorded outpoint) \u2014 refusing to replace an unverified transaction.` };
+  }
+  const oldFeeSats = orig.feeSats;
+  if (newFeeSats <= oldFeeSats) {
+    return { ok: false, error: `New fee ${newFeeSats} sats must exceed the original ${oldFeeSats} sats (BIP-125 requires a higher absolute fee).` };
+  }
+  const vsize = orig.vsize > 0 ? orig.vsize : 1;
+  if (newFeeSats - oldFeeSats < BigInt(vsize)) {
+    return { ok: false, error: `Fee increase ${newFeeSats - oldFeeSats} sats is below the BIP-125 rule-4 minimum of ${vsize} sats (1 sat/vB over a ${vsize} vB tx); raise newFeeSats to at least ${oldFeeSats + BigInt(vsize)}.` };
+  }
+  const newDestinationSats = orig.destinationSats + oldFeeSats - newFeeSats;
+  const rate = (fee) => (Number(fee) / vsize).toFixed(2);
+  return {
+    ok: true,
+    oldFeeSats,
+    newFeeSats,
+    oldDestinationSats: orig.destinationSats,
+    newDestinationSats,
+    feeRateOldSatVb: rate(oldFeeSats),
+    feeRateNewSatVb: rate(newFeeSats),
+    destination: orig.destination,
+    lockOutpoint: orig.lockOutpoint
+  };
+}
+
+// src/utils/bondScheduleChain.ts
+var import_bitcoin_staking = __toESM(require_dist());
+var BitcoinStaking = __toESM(require_dist());
+
+// src/utils/bondSchedule.ts
+function diffBondSchedule(pairs) {
+  const checks = pairs.map((p) => ({
+    ...p,
+    match: p.localUnlockHeight === p.onchainUnlockHeight
+  }));
+  const mismatches = checks.filter((c) => !c.match);
+  return { ok: mismatches.length === 0, checks, mismatches };
+}
+function formatBondScheduleError(diff, schedule) {
+  const detail = diff.mismatches.map((m) => `bond ${m.bondIndex}: local ${m.localUnlockHeight} != chain ${m.onchainUnlockHeight}`).join("; ");
+  return `Bond schedule does not match the chain (local BOND_GAP_CYCLES=${schedule.gapCycles}, BOND_LENGTH_CYCLES=${schedule.lengthCycles}). Refusing to operate against a schedule the deployed PoX-5 contract does not enforce. Mismatches: ${detail}`;
+}
+
+// src/utils/bondScheduleChain.ts
+var BOND_GAP_CYCLES2 = BitcoinStaking.BOND_GAP_CYCLES ?? 2;
+var BOND_LENGTH_CYCLES2 = BitcoinStaking.BOND_LENGTH_CYCLES ?? 12;
+var DEFAULT_SCHEDULE_BOND_INDICES = [0, 1, 2, 3, 4, 5, 6];
+async function validateBondScheduleAgainstChain(opts) {
+  const network = stacksNetworkFromProfile(opts.profile);
+  const indices = opts.bondIndices ?? DEFAULT_SCHEDULE_BOND_INDICES;
+  try {
+    const poxInfo2 = await (0, import_bitcoin_staking.fetchPoxInfo)({ network });
+    const pairs = await Promise.all(
+      indices.map(async (bondIndex) => ({
+        bondIndex,
+        localUnlockHeight: Number((0, import_bitcoin_staking.computeBondUnlockHeight)({ bondIndex, poxInfo: poxInfo2 })),
+        onchainUnlockHeight: Number(await (0, import_bitcoin_staking.fetchBondL1UnlockHeight)({ bondIndex, network }))
+      }))
+    );
+    const diff = diffBondSchedule(pairs);
+    return {
+      ok: diff.ok,
+      diff,
+      gapCycles: BOND_GAP_CYCLES2,
+      lengthCycles: BOND_LENGTH_CYCLES2,
+      error: diff.ok ? void 0 : formatBondScheduleError(diff, { gapCycles: BOND_GAP_CYCLES2, lengthCycles: BOND_LENGTH_CYCLES2 })
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      gapCycles: BOND_GAP_CYCLES2,
+      lengthCycles: BOND_LENGTH_CYCLES2,
+      error: `Could not validate the bond schedule against chain (UNKNOWN, not "matches"): ${formatErrorMessage(error)}`
+    };
+  }
+}
+
+// src/staking/bonds/sbtc-rollover.ts
+function planSbtcRollover(oldCustodiedSats, newSats) {
+  if (oldCustodiedSats < BigInt(0) || newSats < BigInt(0)) {
+    throw new Error(`Invalid sBTC amounts for rollover: old=${oldCustodiedSats}, new=${newSats}`);
+  }
+  if (newSats > oldCustodiedSats) {
+    return { direction: "origin-sends", amountSats: newSats - oldCustodiedSats };
+  }
+  if (newSats < oldCustodiedSats) {
+    return { direction: "boot-sends", amountSats: oldCustodiedSats - newSats };
+  }
+  return { direction: "none", amountSats: BigInt(0) };
+}
+
 // src/StacksSDK.ts
 var import_transactions3 = require("@stacks/transactions");
-var import_bitcoin_staking = __toESM(require_dist2());
+var import_bitcoin_staking2 = __toESM(require_dist());
 init_btc_signer();
+var import_encryption = require("@stacks/encryption");
 var import_sha23 = require("@noble/hashes/sha2");
 var import_secp256k14 = require("@noble/secp256k1");
 var import_common3 = require("@stacks/common");
@@ -16302,6 +12912,14 @@ var StacksSDK = class _StacksSDK {
   constructor(vaultAccountId, fireblocksConfig, hiroApiKey) {
     this.cachedTransactions = [];
     this.testnet = false;
+    this.btcRecoveryAllowlist = [];
+    this.signerManagerRegistry = new SignerManagerRegistry();
+    this.verifyEarlyExitCosignerAtFunding = false;
+    // A recovery/rollover spend is ~1 P2WSH input + 1 output; conservative vsize used
+    // for Esplora fee estimation.
+    this.RECOVERY_SPEND_VBYTES = 150;
+    // Never create a Bitcoin output at or below this (P2WPKH dust threshold, sats).
+    this.BTC_DUST_LIMIT_SATS = BigInt(330);
     this.lockRecordStore = new InMemoryLockRecordStore();
     this.lockRecordStoreIsDurable = false;
     /**
@@ -16317,16 +12935,37 @@ var StacksSDK = class _StacksSDK {
       this.lockRecordStoreIsDurable = true;
     };
     /**
-     * Warns loudly before a native BTC bond is created against the non-durable
-     * in-memory lock-record store — a process restart or pool eviction between
-     * funding and recovery would lose the record and can strand BTC.
+     * Native-BTC funding is refused unless a durable, healthy lock-record store is
+     * configured. Losing a record for an unspent BTC lock can strand funds, so the
+     * default in-memory store (not durable across restarts / pool eviction) is not
+     * allowed to fund, and a configured durable store must pass its health check
+     * immediately before funding. Returns an error message when funding must be
+     * refused, or undefined when the store is safe to use.
      */
-    this.warnIfLockStoreNotDurable = () => {
+    this.assertDurableLockStore = async () => {
       if (!this.lockRecordStoreIsDurable) {
-        console.warn(
-          "[SECURITY] Creating a native BTC bond with the default IN-MEMORY lock-record store. This is NOT durable across restarts/pool eviction and can STRAND BTC on recovery. Wire a durable, shared store via setLockRecordStore()/pool lockRecordStore before production use."
-        );
+        return "Native-BTC funding requires a durable lock-record store (the default in-memory store is not durable across restarts/pool eviction and can STRAND BTC on recovery). Configure one via setLockRecordStore()/the pool lockRecordStore option before creating a bond.";
       }
+      if (this.lockRecordStore.checkHealth) {
+        try {
+          await this.lockRecordStore.checkHealth();
+        } catch (error) {
+          return `Lock-record store failed its health check \u2014 refusing to fund: ${formatErrorMessage(error)}`;
+        }
+      }
+      return void 0;
+    };
+    /**
+     * Deterministic Fireblocks external id for a bond's BTC funding transfer, derived
+     * from the vault, network, bond index, and lock address. Because it is stable for a
+     * given enrollment, a retry reuses the same id and Fireblocks de-duplicates the
+     * transfer — a second funding transaction is never created for the same lock, even
+     * across a process crash. A genuine replacement (e.g. fee bump) must use a new id.
+     */
+    this.deriveFundingExternalId = (bondIndex, lockAddress) => {
+      const material = `${this.vaultAccountId}:${this.networkProfile.name}:bond:${bondIndex}:${lockAddress}`;
+      const digest = (0, import_crypto2.createHash)("sha256").update(material).digest("hex").slice(0, 40);
+      return `bond-fund-${digest}`;
     };
     /**
      * Retrieves the Stacks account public key associated with the Fireblocks vault account.
@@ -16448,6 +13087,7 @@ var StacksSDK = class _StacksSDK {
         }
         return {
           success: true,
+          chain: "stacks",
           data: txDetails
         };
       } catch (error) {
@@ -16456,8 +13096,56 @@ var StacksSDK = class _StacksSDK {
         );
         return {
           success: false,
+          chain: "stacks",
           error: formatErrorMessage(error)
         };
+      }
+    };
+    /**
+     * Retrieves the status of a BITCOIN transaction from the selected Esplora API.
+     *
+     * A Bitcoin txid (returned as `btcTxid` by createBond, renewBond, unlockMaturedBond,
+     * spendEarlyExitUtxo, and replaceBtcRecoveryFee) MUST be polled here, never through
+     * getTxStatusById — that endpoint queries the Stacks API and a BTC txid would never be
+     * found there. The response is tagged `chain: 'bitcoin'`. A txid Esplora does not know
+     * yet returns `found: false` (not an error); a transport failure returns `success:false`
+     * (UNKNOWN, never silently "not confirmed").
+     */
+    this.getBtcTxStatus = async (btcTxid) => {
+      if (!/^[0-9a-fA-F]{64}$/.test(btcTxid)) {
+        return { success: false, chain: "bitcoin", error: `Invalid BTC txid: ${btcTxid}` };
+      }
+      try {
+        const res = await fetch(`${this.esploraBase()}/tx/${btcTxid}`);
+        if (res.status === 404) {
+          return { success: true, chain: "bitcoin", data: { txid: btcTxid, found: false, confirmed: false, confirmations: 0 } };
+        }
+        if (!res.ok) throw new Error(`Esplora HTTP ${res.status}`);
+        const tx = await res.json();
+        const confirmed = !!tx?.status?.confirmed;
+        const blockHeight = tx?.status?.block_height ?? null;
+        let confirmations = 0;
+        if (confirmed) {
+          confirmations = null;
+          if (typeof blockHeight === "number") {
+            const tip = await this.readBtcTipHeight();
+            if (tip !== null) confirmations = Math.max(0, tip - blockHeight + 1);
+          }
+        }
+        return {
+          success: true,
+          chain: "bitcoin",
+          data: {
+            txid: btcTxid,
+            found: true,
+            confirmed,
+            block_height: blockHeight,
+            block_hash: tx?.status?.block_hash ?? null,
+            confirmations
+          }
+        };
+      } catch (error) {
+        return { success: false, chain: "bitcoin", error: `Could not read BTC tx ${btcTxid} status (UNKNOWN, not "unconfirmed"): ${formatErrorMessage(error)}` };
       }
     };
     /**
@@ -16605,27 +13293,6 @@ var StacksSDK = class _StacksSDK {
      * @returns A promise that resolves to an object indicating if parameters are valid, the final amount, and reason if invalid.
      * @throws {Error} If parameter validation fails.
      */
-    this.estimateFee = async (recipientAddress, amount, type = "STX" /* STX */, token, customTokenContractAddress, customTokenContractName) => {
-      try {
-        if (!this.address || !this.publicKey || !this.vaultAccountId) {
-          throw new Error("Address, Public Key or Vault ID are not set");
-        }
-        const microAmount = type === "Fungible Token" /* FungibleToken */ ? stxToMicro(amount) : stxToMicro(amount);
-        let microfee = 0;
-        if (type === "STX" /* STX */) {
-          microfee = await this.chainService.estimateTxFee(recipientAddress, microAmount);
-        } else if (type === "Fungible Token" /* FungibleToken */) {
-          const tokenInfo = token !== "custom-token" /* CUSTOM */ ? getTokenInfo(token, this.testnet ? "testnet" : "mainnet") : void 0;
-          const ftContractAddress = tokenInfo?.contractAddress ?? customTokenContractAddress;
-          const ftContractName = tokenInfo?.contractName ?? customTokenContractName;
-          const functionArgs = [(0, import_transactions3.uintCV)(microAmount), (0, import_transactions3.principalCV)(this.address), (0, import_transactions3.principalCV)(recipientAddress), (0, import_transactions3.noneCV)()];
-          microfee = await this.chainService.estimateContractCallFee(ftContractAddress, ftContractName, "transfer", functionArgs);
-        }
-        return { success: true, fee: microToStx(microfee), microfee };
-      } catch (error) {
-        return { success: false, error: formatErrorMessage(error) };
-      }
-    };
     this.checkParamsAndAdjustAmount = async (recipientAddress, amount, grossTransaction = false, type = "STX" /* STX */, token, customTokenContractAddress, customTokenContractName) => {
       try {
         if (!validateAddress(recipientAddress, this.testnet)) {
@@ -16780,16 +13447,17 @@ var StacksSDK = class _StacksSDK {
       return run;
     };
     this.resolveNonce = async (nonce) => {
-      const nonceInfo = await this.chainService.getAccountNonce(this.address);
       if (nonce !== void 0) {
-        if (nonce < nonceInfo.confirmedNonce) {
+        const confirmedNonce = await this.chainService.getConfirmedNonce(this.address);
+        if (nonce < confirmedNonce) {
           throw new ValidationError(
-            `Nonce ${nonce} is below the confirmed nonce (${nonceInfo.confirmedNonce}). This transaction would be rejected.`
+            `Nonce ${nonce} is below the confirmed nonce (${confirmedNonce}). This transaction would be rejected.`
           );
         }
         return nonce;
       }
-      return nonceInfo.nextAvailable;
+      const { nextAvailable } = await this.chainService.getAccountNonce(this.address);
+      return nextAvailable;
     };
     /**
      *  Builds, signs, and sends an STX or fungible token transfer transaction.
@@ -16858,6 +13526,9 @@ var StacksSDK = class _StacksSDK {
         nonce,
         externalId
       } = options;
+      if (functionName === "generic-contract-call" && !contractCallParams) {
+        throw new Error("Contract call parameters must be provided for generic-contract-call");
+      }
       try {
         if (functionName === "allow-contract-caller" && (!poolContractName || !poolAddress)) {
           throw new Error("Pool contract name and address must be provided for allow-contract-caller");
@@ -16876,11 +13547,6 @@ var StacksSDK = class _StacksSDK {
         }
         return await this.runNonceExclusive(async () => {
           const resolvedNonce = await this.resolveNonce(nonce);
-          if (functionName === "generic-contract-call" && !contractCallParams) {
-            throw new Error(
-              "Contract call parameters must be provided for generic-contract-call"
-            );
-          }
           let transactionToSign;
           switch (functionName) {
             case "allow-contract-caller":
@@ -16967,11 +13633,7 @@ var StacksSDK = class _StacksSDK {
           );
           const signature = concatSignature(rawSignature.fullSig, rawSignature.v);
           transactionToSign.unsignedContractCall.auth.spendingCondition.signature = (0, import_transactions3.createMessageSignature)(signature);
-          const transaction = (0, import_transactions3.serializeTransaction)(transactionToSign.unsignedContractCall);
-          const result = await this.chainService.broadcastTransaction(
-            transactionToSign.unsignedContractCall
-          );
-          return { ...result, transaction };
+          return await this.chainService.broadcastTransaction(transactionToSign.unsignedContractCall);
         });
       } catch (error) {
         if (error instanceof ValidationError) return { success: false, error: error.message };
@@ -16980,7 +13642,7 @@ var StacksSDK = class _StacksSDK {
         );
       }
     };
-    this.pox5SignAndBroadcast = async (tx, note, externalId) => {
+    this.pox5SignAndBroadcast = async (tx, note, externalId, revalidate) => {
       const sigHash = tx.signBegin();
       const preSignSigHash = (0, import_transactions3.sigHashPreSign)(
         sigHash,
@@ -16996,8 +13658,20 @@ var StacksSDK = class _StacksSDK {
       );
       const signature = concatSignature(rawSignature.fullSig, rawSignature.v);
       tx.auth.spendingCondition.signature = (0, import_transactions3.createMessageSignature)(signature);
+      if (revalidate) {
+        const changed = await revalidate();
+        if (changed) {
+          return { error: `Transaction discarded after signing \u2014 ${changed}. No transaction was submitted; retry to sign against current state.` };
+        }
+      }
       return this.chainService.broadcastTransaction(tx, this.pox5Network);
     };
+    /**
+     * Encodes optional signer-manager calldata as a Clarity `(optional (buff))`. Some
+     * signer managers require calldata; when none is supplied this is `none`, preserving
+     * the prior hardcoded behavior.
+     */
+    this.encodeSignerCalldata = (calldata) => calldata === void 0 ? import_transactions3.Cl.none() : import_transactions3.Cl.some(typeof calldata === "string" ? import_transactions3.Cl.bufferFromHex(calldata) : import_transactions3.Cl.buffer(calldata));
     // ─── PoX-5 Solo STX ──────────────────────────────────────────────────────────
     /**
      * Stakes STX through a signer-manager (PoX-5). Replaces pox-4 stackSolo.
@@ -17008,18 +13682,20 @@ var StacksSDK = class _StacksSDK {
      * @param nonce - Optional nonce override.
      * @param externalId - Optional Fireblocks external ID for idempotency.
      */
-    this.stake = async (amountStx, numCycles, signerManager, note, nonce, externalId) => {
+    this.stake = async (amountStx, numCycles, signerManager, note, nonce, externalId, signerCalldata) => {
       try {
         if (!this.address || !this.publicKey || !this.vaultAccountId) {
           throw new Error("Address, Public Key or Vault ID are not set");
         }
-        const pox = await (0, import_bitcoin_staking.fetchPoxInfo)({ network: this.pox5Network });
+        const smAllowError = this.signerManagerAllowedError(signerManager);
+        if (smAllowError) return { success: false, error: smAllowError };
+        const pox = await (0, import_bitcoin_staking2.fetchPoxInfo)({ network: this.pox5Network });
         const eligibilityCheck = await this.checkEligibility(pox, amountStx);
         if (!eligibilityCheck.eligible) {
           return { success: false, error: `Account not eligible for staking: ${eligibilityCheck.reason}` };
         }
         const amountUstx = stxToMicro(amountStx);
-        const preflight = await (0, import_bitcoin_staking.fetchEligibleStake)({
+        const preflight = await (0, import_bitcoin_staking2.fetchEligibleStake)({
           staker: this.address,
           signerManager,
           amountUstx,
@@ -17033,6 +13709,7 @@ var StacksSDK = class _StacksSDK {
           return { success: false, error: `Account not eligible for staking: ${this.describeBondReasons(reasons)}` };
         }
         const result = await this.runNonceExclusive(async () => {
+          const custodyRefund = await this.custodyRefundPostConditions();
           const resolvedNonce = await this.resolveNonce(nonce);
           const tx = await this.buildPox5Call(
             "stake",
@@ -17041,25 +13718,53 @@ var StacksSDK = class _StacksSDK {
               import_transactions3.Cl.uint(amountUstx),
               import_transactions3.Cl.uint(numCycles),
               import_transactions3.Cl.uint(pox.currentBurnchainBlockHeight),
-              import_transactions3.Cl.none()
-              // signer-calldata
+              this.encodeSignerCalldata(signerCalldata)
             ],
             {
               nonce: resolvedNonce,
-              // Deny mode bounding the STX lock to exactly the staked amount.
               postConditionMode: import_transactions3.PostConditionMode.Deny,
-              postConditions: [import_transactions3.Pc.origin().willSendEq(amountUstx).ustxToLock()]
+              postConditions: [
+                // Deny mode bounding the STX lock to exactly the staked amount.
+                import_transactions3.Pc.origin().willSendEq(amountUstx).ustxToLock(),
+                // An sBTC-bond holder rolling into a solo STX stake is refunded their
+                // entire custodied sBTC from pox-5 during this call — cover it or abort.
+                ...custodyRefund.conditions
+              ]
             }
           );
-          return this.pox5SignAndBroadcast(tx, note || `stake ${amountStx} STX for ${numCycles} cycles`, externalId);
+          return this.pox5SignAndBroadcast(tx, note || `stake ${amountStx} STX for ${numCycles} cycles`, externalId, async () => {
+            const [recheck, nowCustodied] = await Promise.all([
+              (0, import_bitcoin_staking2.fetchEligibleStake)({
+                staker: this.address,
+                signerManager,
+                amountUstx,
+                numCycles,
+                startBurnHt: pox.currentBurnchainBlockHeight,
+                poxInfo: await (0, import_bitcoin_staking2.fetchPoxInfo)({ network: this.pox5Network }),
+                network: this.pox5Network
+              }),
+              (0, import_bitcoin_staking2.fetchStakerCustodiedSbtc)({ staker: this.address, network: this.pox5Network })
+            ]);
+            if (nowCustodied !== custodyRefund.custodiedSats) {
+              return `custodied sBTC changed during approval (${custodyRefund.custodiedSats} \u2192 ${nowCustodied} sats) \u2014 retry to rebuild against current custody`;
+            }
+            if (!recheck.ok) {
+              const reasons = recheck.reasons ?? [];
+              return `staking eligibility changed during approval: ${this.describeBondReasons(reasons)}`;
+            }
+            return void 0;
+          });
         });
         if (!result || result.error || !result.txid || result.reason) {
-          return { success: false, error: result?.error || result?.reason || "Failed to broadcast stake transaction" };
+          console.error("stake broadcast rejected:", JSON.stringify(result));
+          const parts = [result?.error, result?.reason, result?.reason_data ? JSON.stringify(result.reason_data) : void 0].filter(Boolean);
+          return { success: false, error: parts.join(" \u2014 ") || "Failed to broadcast stake transaction" };
         }
         const txStatus = await this.waitForTxSettlement(result.txid);
         if (!txStatus.success || txStatus.data?.tx_status !== "success") {
           return {
             success: false,
+            unsettled: !txStatus.success,
             error: txStatus.error || txStatus.data?.tx_error || "Stake transaction failed at the contract level.",
             txHash: result.txid
           };
@@ -17079,13 +13784,15 @@ var StacksSDK = class _StacksSDK {
      * @param nonce - Optional nonce override.
      * @param externalId - Optional Fireblocks external ID for idempotency.
      */
-    this.updateStake = async (signerManager, oldSignerManager, cyclesToExtend, increaseByStx, note, nonce, externalId) => {
+    this.updateStake = async (signerManager, oldSignerManager, cyclesToExtend, increaseByStx, note, nonce, externalId, signerCalldata) => {
       try {
         if (!this.address || !this.publicKey || !this.vaultAccountId) {
           throw new Error("Address, Public Key or Vault ID are not set");
         }
+        const smAllowError = this.signerManagerAllowedError(signerManager);
+        if (smAllowError) return { success: false, error: smAllowError };
         const amountIncrease = increaseByStx ? stxToMicro(increaseByStx) : BigInt(0);
-        const preflight = await (0, import_bitcoin_staking.fetchEligibleStakeUpdate)({
+        const preflight = await (0, import_bitcoin_staking2.fetchEligibleStakeUpdate)({
           staker: this.address,
           signerManager,
           oldSignerManager,
@@ -17098,14 +13805,12 @@ var StacksSDK = class _StacksSDK {
           return { success: false, error: `Cannot update stake: ${this.describeBondReasons(reasons)}` };
         }
         const result = await this.runNonceExclusive(async () => {
-          let postCondition;
-          if (amountIncrease > BigInt(0)) {
-            const current = await (0, import_bitcoin_staking.fetchStakerInfo)({ address: this.address, network: this.pox5Network });
-            const currentAmountUstx = current?.staked ? BigInt(current.details.amountUstx) : BigInt(0);
-            postCondition = import_transactions3.Pc.origin().willSendEq(currentAmountUstx + amountIncrease).ustxToLock();
-          } else {
-            postCondition = import_transactions3.Pc.origin().willPerformPox();
+          const current = await (0, import_bitcoin_staking2.fetchStakerInfo)({ address: this.address, network: this.pox5Network });
+          if (!current?.staked) {
+            return { error: "Cannot update stake: no active staking position found for this account." };
           }
+          const currentAmountUstx = BigInt(current.details.amountUstx);
+          const postCondition = import_transactions3.Pc.origin().willSendEq(currentAmountUstx + amountIncrease).ustxToLock();
           const resolvedNonce = await this.resolveNonce(nonce);
           const tx = await this.buildPox5Call(
             "stake-update",
@@ -17114,8 +13819,7 @@ var StacksSDK = class _StacksSDK {
               import_transactions3.Cl.address(oldSignerManager),
               import_transactions3.Cl.uint(cyclesToExtend ?? 0),
               import_transactions3.Cl.uint(amountIncrease),
-              import_transactions3.Cl.none()
-              // signer-calldata
+              this.encodeSignerCalldata(signerCalldata)
             ],
             {
               nonce: resolvedNonce,
@@ -17123,7 +13827,28 @@ var StacksSDK = class _StacksSDK {
               postConditions: [postCondition]
             }
           );
-          return this.pox5SignAndBroadcast(tx, note || "update stake position", externalId);
+          return this.pox5SignAndBroadcast(tx, note || "update stake position", externalId, async () => {
+            const [recheck, nowInfo] = await Promise.all([
+              (0, import_bitcoin_staking2.fetchEligibleStakeUpdate)({
+                staker: this.address,
+                signerManager,
+                oldSignerManager,
+                cyclesToExtend: cyclesToExtend ?? 0,
+                amountIncrease,
+                network: this.pox5Network
+              }),
+              (0, import_bitcoin_staking2.fetchStakerInfo)({ address: this.address, network: this.pox5Network })
+            ]);
+            const nowAmountUstx = nowInfo?.staked ? BigInt(nowInfo.details.amountUstx) : null;
+            if (nowAmountUstx !== currentAmountUstx) {
+              return `staked amount changed during approval (${currentAmountUstx} \u2192 ${nowAmountUstx ?? "not staked"} \xB5STX) \u2014 retry to rebuild against the current position`;
+            }
+            if (!recheck.ok) {
+              const reasons = recheck.reasons ?? [];
+              return `stake-update eligibility changed during approval: ${this.describeBondReasons(reasons)}`;
+            }
+            return void 0;
+          });
         });
         if (!result || result.error || !result.txid || result.reason) {
           return { success: false, error: result?.error || result?.reason || "Failed to broadcast update-stake transaction" };
@@ -17132,6 +13857,7 @@ var StacksSDK = class _StacksSDK {
         if (!txStatus.success || txStatus.data?.tx_status !== "success") {
           return {
             success: false,
+            unsettled: !txStatus.success,
             error: txStatus.error || txStatus.data?.tx_error || "Update-stake transaction failed at the contract level.",
             txHash: result.txid
           };
@@ -17153,11 +13879,11 @@ var StacksSDK = class _StacksSDK {
         if (!this.address || !this.publicKey || !this.vaultAccountId) {
           throw new Error("Address, Public Key or Vault ID are not set");
         }
-        const pox = await (0, import_bitcoin_staking.fetchPoxInfo)({ network: this.pox5Network });
-        if ((0, import_bitcoin_staking.isInPreparePhase)({ burnHeight: pox.currentBurnchainBlockHeight, poxInfo: pox })) {
+        const pox = await (0, import_bitcoin_staking2.fetchPoxInfo)({ network: this.pox5Network });
+        if ((0, import_bitcoin_staking2.isInPreparePhase)({ burnHeight: pox.currentBurnchainBlockHeight, poxInfo: pox })) {
           return { success: false, error: "Cannot unstake during the prepare phase \u2014 wait for the reward phase to begin." };
         }
-        const preflight = await (0, import_bitcoin_staking.fetchEligibleUnstake)({
+        const preflight = await (0, import_bitcoin_staking2.fetchEligibleUnstake)({
           staker: this.address,
           oldSignerManager,
           poxInfo: pox,
@@ -17179,7 +13905,10 @@ var StacksSDK = class _StacksSDK {
               postConditions: [import_transactions3.Pc.origin().willPerformPox()]
             }
           );
-          return this.pox5SignAndBroadcast(tx, note || "unstake STX", externalId);
+          return this.pox5SignAndBroadcast(tx, note || "unstake STX", externalId, async () => {
+            const nowPox = await (0, import_bitcoin_staking2.fetchPoxInfo)({ network: this.pox5Network });
+            return (0, import_bitcoin_staking2.isInPreparePhase)({ burnHeight: nowPox.currentBurnchainBlockHeight, poxInfo: nowPox }) ? "the chain entered the prepare phase during approval" : void 0;
+          });
         });
         if (!result || result.error || !result.txid || result.reason) {
           return { success: false, error: result?.error || result?.reason || "Failed to broadcast unstake transaction" };
@@ -17188,6 +13917,7 @@ var StacksSDK = class _StacksSDK {
         if (!txStatus.success || txStatus.data?.tx_status !== "success") {
           return {
             success: false,
+            unsettled: !txStatus.success,
             error: txStatus.error || txStatus.data?.tx_error || "Unstake transaction failed at the contract level.",
             txHash: result.txid
           };
@@ -17223,6 +13953,8 @@ var StacksSDK = class _StacksSDK {
         if (!this.address || !this.publicKey || !this.vaultAccountId) {
           throw new Error("Address, Public Key or Vault ID are not set");
         }
+        const smAllowError = this.signerManagerAllowedError(signerManager);
+        if (smAllowError) return { success: false, error: smAllowError };
         const [smAddress, smName] = signerManager.split(".");
         if (!smAddress || !smName) {
           throw new Error(`Invalid signer-manager principal: ${signerManager}. Expected ST\u2026.contract-name`);
@@ -17231,7 +13963,7 @@ var StacksSDK = class _StacksSDK {
         const registerExternalId = externalId ? `${externalId}-register` : void 0;
         const result = await this.runNonceExclusive(async () => {
           const resolvedNonce = await this.resolveNonce(nonce);
-          const grantMsgHash = await (0, import_bitcoin_staking.fetchSignerGrantMessageHash)({
+          const grantMsgHash = await (0, import_bitcoin_staking2.fetchSignerGrantMessageHash)({
             signerManager,
             authId,
             network: this.pox5Network
@@ -17273,6 +14005,7 @@ var StacksSDK = class _StacksSDK {
         if (!txStatus.success || txStatus.data?.tx_status !== "success") {
           return {
             success: false,
+            unsettled: !txStatus.success,
             error: txStatus.error || txStatus.data?.tx_error || "register-self transaction failed at the contract level.",
             txHash: result.txid
           };
@@ -17302,9 +14035,12 @@ var StacksSDK = class _StacksSDK {
             [import_transactions3.Cl.address(signerManager), import_transactions3.Cl.buffer((0, import_common3.hexToBytes)(signerKey))],
             {
               nonce: resolvedNonce,
-              // Deny mode; revoking a signer grant performs no asset transfer.
+              // Deny mode with no post-conditions: revoking a signer grant records no
+              // PoX/Stacking action and moves no assets, so there is nothing for the
+              // node's action gate to cover. A will-perform-PoX condition here would be
+              // uncovered and the node would reject the transaction after signing.
               postConditionMode: import_transactions3.PostConditionMode.Deny,
-              postConditions: [import_transactions3.Pc.origin().willPerformPox()]
+              postConditions: []
             }
           );
           return this.pox5SignAndBroadcast(tx, note || "revoke signer grant", externalId);
@@ -17316,6 +14052,7 @@ var StacksSDK = class _StacksSDK {
         if (!txStatus.success || txStatus.data?.tx_status !== "success") {
           return {
             success: false,
+            unsettled: !txStatus.success,
             error: txStatus.error || txStatus.data?.tx_error || "Revoke signer grant transaction failed at the contract level.",
             txHash: result.txid
           };
@@ -17333,7 +14070,7 @@ var StacksSDK = class _StacksSDK {
         if (!this.address) {
           throw new Error("Address is not set");
         }
-        const info = await (0, import_bitcoin_staking.fetchStakerInfo)({ address: this.address, network: this.pox5Network });
+        const info = await (0, import_bitcoin_staking2.fetchStakerInfo)({ address: this.address, network: this.pox5Network });
         if (!info.staked) {
           return { success: true, staked: false };
         }
@@ -17381,8 +14118,8 @@ var StacksSDK = class _StacksSDK {
         }
         const signerKey = this.publicKey;
         const [grantExists, signerInfo] = await Promise.all([
-          (0, import_bitcoin_staking.fetchVerifySignerKeyGrant)({ signerKey, signerManager, network: this.pox5Network }),
-          (0, import_bitcoin_staking.fetchSignerInfo)({ signerManager, network: this.pox5Network })
+          (0, import_bitcoin_staking2.fetchVerifySignerKeyGrant)({ signerKey, signerManager, network: this.pox5Network }),
+          (0, import_bitcoin_staking2.fetchSignerInfo)({ signerManager, network: this.pox5Network })
         ]);
         const signerRegistered = !!signerInfo?.signerKey;
         const registeredKey = signerInfo?.signerKey ?? null;
@@ -17411,12 +14148,23 @@ var StacksSDK = class _StacksSDK {
     };
     this.getPox5Info = async () => {
       try {
-        const info = await (0, import_bitcoin_staking.fetchPoxInfo)({ network: this.pox5Network });
+        const info = await (0, import_bitcoin_staking2.fetchPoxInfo)({ network: this.pox5Network });
         const data = JSON.parse(JSON.stringify(info, (_, v) => typeof v === "bigint" ? v.toString() : v));
         return { success: true, data };
       } catch (error) {
         return { success: false, error: `Failed to fetch PoX-5 info: ${formatErrorMessage(error)}` };
       }
+    };
+    /**
+     * Validates the SDK's local bond-schedule constants (BOND_GAP_CYCLES / BOND_LENGTH_CYCLES)
+     * against the deployed PoX-5 contract's get-bond-l1-unlock-height accessor. Returns the
+     * per-index comparison plus a mismatch list; `success:false` means either a definite
+     * schedule mismatch or an UNKNOWN chain read failure (see error). The REST server also
+     * runs this at boot and refuses to start on a definite mismatch.
+     */
+    this.validateBondSchedule = async (opts) => {
+      const result = await validateBondScheduleAgainstChain({ profile: this.networkProfile, bondIndices: opts?.bondIndices });
+      return result.ok ? { success: true, data: result } : { success: false, data: result, error: result.error };
     };
     /**
      * Creates a native coin transaction to transfer funds to a recipient address.
@@ -17733,13 +14481,67 @@ var StacksSDK = class _StacksSDK {
         };
       }
     };
+    /**
+     * Effective sats amount for a bond position: announce-l1-early-exit permanently
+     * zeroes the mutable membership amount while the BTC stays locked in a live UTXO, so
+     * a zeroed L1 amount falls back to the durable record's immutable funded amount.
+     * Single source of truth for every position-reporting surface (getBondPosition,
+     * checkStatus) so views cannot disagree about the same bond.
+     */
+    this.effectiveL1AmountSats = (membership, record) => membership.isL1Lock && membership.amountSats <= BigInt(0) && record?.amountSats ? record.amountSats : membership.amountSats;
+    /**
+     * Reads the Bitcoin tip height from Esplora, failing CLOSED: a non-2xx response or a
+     * non-numeric body (e.g. an HTML error page, where `Number(text)` is NaN and any
+     * `NaN < x` guard silently passes) returns null — UNKNOWN — so maturity gates refuse
+     * rather than sign a premature CLTV spend on garbage data.
+     */
+    this.readBtcTipHeight = async () => {
+      try {
+        const res = await fetch(`${this.esploraBase()}/blocks/tip/height`);
+        if (!res.ok) return null;
+        const body = (await res.text()).trim();
+        if (!/^\d+$/.test(body)) return null;
+        return Number(body);
+      } catch {
+        return null;
+      }
+    };
+    /**
+     * Estimates a Bitcoin fee (sats) for a spend of ~`vbytes` from Esplora's
+     * `/fee-estimates`, so recovery/rollover spends are broadcast with an adequate fee
+     * rather than a fixed guess that can strand a transaction unconfirmed. Falls back to
+     * a conservative floor if the estimate is unavailable, so recovery is never blocked.
+     */
+    this.estimateBtcFeeSats = async (vbytes, confTarget = 6) => {
+      try {
+        const res = await fetch(`${this.esploraBase()}/fee-estimates`);
+        if (!res.ok) throw new Error(`Esplora HTTP ${res.status}`);
+        const rates = await res.json();
+        const rate = rates[String(confTarget)] ?? rates["6"] ?? rates["1"];
+        if (typeof rate !== "number" || !(rate > 0)) throw new Error("no usable fee rate");
+        return BigInt(Math.ceil(rate * vbytes));
+      } catch {
+        return BigInt(Math.max(500, vbytes * 2));
+      }
+    };
     this.waitForBtcConfirmations = async (btcTxid, required = 3, pollMs = 3e4, timeoutMs = 90 * 6e4) => {
       const deadline = Date.now() + timeoutMs;
+      let unknownDepthPolls = 0;
       while (Date.now() < deadline) {
-        const tx = await fetch(`${this.esploraBase()}/tx/${btcTxid}`).then((r) => r.json());
-        if (tx?.status?.confirmed && tx.status.block_hash) {
-          const confirmations = tx.status.block_height ? await fetch(`${this.esploraBase()}/blocks/tip/height`).then((r) => r.json()) - tx.status.block_height + 1 : 0;
-          if (confirmations >= required) return { blockHash: tx.status.block_hash };
+        const status = await this.getBtcTxStatus(btcTxid);
+        if (status.success && status.data?.found && status.data.confirmed && status.data.block_hash) {
+          if (status.data.confirmations !== null && status.data.confirmations >= required) {
+            return { blockHash: status.data.block_hash };
+          }
+          if (status.data.confirmations === null) {
+            if (++unknownDepthPolls >= 10) {
+              throw new Error(
+                `BTC tx ${btcTxid} is confirmed (block ${status.data.block_height ?? "?"}) but the Esplora tip height has been unreadable for ${unknownDepthPolls} consecutive polls \u2014 cannot verify ${required} confirmations.`
+              );
+            }
+          } else {
+            unknownDepthPolls = 0;
+          }
         }
         await new Promise((r) => setTimeout(r, pollMs));
       }
@@ -17759,7 +14561,7 @@ var StacksSDK = class _StacksSDK {
         fetch(`${this.esploraBase()}/block/${blockHash}`).then((r) => r.json())
       ]);
       return {
-        ...(0, import_bitcoin_staking.buildLockProof)({
+        ...(0, import_bitcoin_staking2.buildLockProof)({
           txHex,
           header: headerHex,
           merkleProof,
@@ -17811,14 +14613,15 @@ var StacksSDK = class _StacksSDK {
           import_transactions3.Cl.address(args.signerManager),
           import_transactions3.Cl.uint(args.amountUstx),
           lockupCV,
-          import_transactions3.Cl.none()
-          // signer-calldata (optional buff) — not used on the native path
+          this.encodeSignerCalldata(args.signerCalldata)
         ],
         publicKey: this.publicKey,
         fee: DEFAULT_POX_FEE_USTX,
         nonce: args.nonce,
         network: this.pox5Network,
-        postConditionMode: args.postConditionMode ?? import_transactions3.PostConditionMode.Allow,
+        // Fail closed: fund-moving PoX-5 calls must opt IN to any asset movement, so
+        // the default is Deny with no conditions rather than permissive Allow.
+        postConditionMode: args.postConditionMode ?? import_transactions3.PostConditionMode.Deny,
         postConditions: args.postConditions ?? []
       });
     };
@@ -17840,23 +14643,91 @@ var StacksSDK = class _StacksSDK {
         fee: DEFAULT_POX_FEE_USTX,
         nonce: opts.nonce,
         network: this.pox5Network,
-        postConditionMode: opts.postConditionMode ?? import_transactions3.PostConditionMode.Allow,
+        // Fail closed: default to Deny with no conditions so a caller must explicitly
+        // authorize any asset movement rather than inheriting permissive Allow.
+        postConditionMode: opts.postConditionMode ?? import_transactions3.PostConditionMode.Deny,
         postConditions: opts.postConditions ?? []
       });
     };
     /**
-     * Resolves the sBTC token asset for post-conditions. Prefers an explicit override,
-     * otherwise falls back to the built-in sBTC contract for this network (constants
-     * `ftInfo[TokenType.sBTC]`). Returns undefined only if neither is available.
+     * Resolves the sBTC token asset for post-conditions from the SELECTED NETWORK's
+     * pox-5 configuration — the `pox_5_sbtc_contract` field of GET /v2/pox on the same
+     * node used to build and broadcast the transaction. A static mainnet asset id is
+     * meaningless on another network, so there is deliberately no table fallback. The
+     * asset identifier is `<pox_5_sbtc_contract>::sbtc-token`.
+     *
+     * Fails closed (returns undefined) when the field is absent, malformed, or its
+     * contract address does not belong to the network this SDK operates on. An explicit
+     * override is honored ONLY when it exactly matches the contract the node reports; it
+     * cannot bypass network validation or select a different token.
      */
-    this.resolveSbtcAsset = (override) => {
-      if (override) return override;
-      const info = getTokenInfo("sbtc-token" /* sBTC */, this.testnet ? "testnet" : "mainnet");
-      return info ? { contractAddress: info.contractAddress, contractName: info.contractName, assetName: info.assetName } : void 0;
+    this.resolveSbtcAsset = async (override) => {
+      let resolved = this.sbtcAssetCache;
+      if (!resolved) {
+        let sbtcContractId;
+        try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 15e3);
+          try {
+            const res = await fetch(`${this.networkProfile.stacksApiUrl}/v2/pox`, { signal: controller.signal });
+            if (!res.ok) return void 0;
+            const body = await res.json();
+            if (typeof body.pox_5_sbtc_contract === "string") {
+              sbtcContractId = body.pox_5_sbtc_contract;
+            }
+          } finally {
+            clearTimeout(timer);
+          }
+        } catch {
+          return void 0;
+        }
+        if (!sbtcContractId) return void 0;
+        const [contractAddress, contractName] = sbtcContractId.split(".");
+        if (!contractAddress || !contractName) return void 0;
+        if (!validateAddress(contractAddress, this.testnet)) return void 0;
+        resolved = { contractAddress, contractName, assetName: "sbtc-token" };
+        this.sbtcAssetCache = resolved;
+      }
+      if (override && (override.contractAddress !== resolved.contractAddress || override.contractName !== resolved.contractName || override.assetName !== resolved.assetName)) {
+        return void 0;
+      }
+      return resolved;
+    };
+    /**
+     * Resolves the paired-STX lock amount for a bond. The amount is normally derived
+     * from the bond's sats value (`contractMin`). An explicit override is an EXPERT
+     * path: it is only honored when a `maxBondStxUstx` policy is configured on the SDK,
+     * and only within `[contractMin, maxBondStxUstx]`. This prevents an erroneous or
+     * malicious override from locking an unbounded amount of STX for the full bond
+     * term. The override is intentionally NOT reachable through the REST server.
+     */
+    /**
+     * When a signer-manager adapter allowlist is configured (registry non-empty), refuse
+     * a manager that is not on it BEFORE any funds move — defense in depth over the
+     * contract's own signer-grant gate. An empty registry imposes no allowlist.
+     */
+    this.signerManagerAllowedError = (signerManager) => {
+      if (this.signerManagerRegistry.size > 0 && !this.signerManagerRegistry.has(signerManager)) {
+        return `Signer manager ${signerManager} is not in the configured signerManagerAdapters allowlist \u2014 refusing to proceed.`;
+      }
+      return void 0;
+    };
+    this.resolveBondStxAmount = (contractMin, override) => {
+      if (override === void 0) return { amountUstx: contractMin };
+      if (this.maxBondStxUstx === void 0) {
+        return { error: "A paired-STX amount override requires an explicit maxBondStxUstx policy on the SDK; none is configured." };
+      }
+      if (override < contractMin) {
+        return { error: `Paired-STX override ${microToStx(override)} STX is below the contract minimum ${microToStx(contractMin)} STX for this bond.` };
+      }
+      if (override > this.maxBondStxUstx) {
+        return { error: `Paired-STX override ${microToStx(override)} STX exceeds the configured maxBondStxUstx ceiling ${microToStx(this.maxBondStxUstx)} STX.` };
+      }
+      return { amountUstx: override };
     };
     /** Renders `fetchEligibleRegisterForBond` reason codes into a readable string. */
     this.describeBondReasons = (reasons) => reasons.map((r) => {
-      const d = (0, import_bitcoin_staking.describePox5Error)(r);
+      const d = (0, import_bitcoin_staking2.describePox5Error)(r);
       return d ? `${d.name} (${d.description})` : `code ${r}`;
     }).join("; ");
     /**
@@ -17864,12 +14735,18 @@ var StacksSDK = class _StacksSDK {
      * (canonical `update-bond-registration`). Runs the contract eligibility preflight
      * first, then records the new manager so reward discovery routes to it.
      */
-    this.updateBondRegistration = async (bondIndex, signerManager, oldSignerManager, opts) => {
+    this.updateBondRegistration = async (signerManager, oldSignerManager, opts) => {
       try {
         if (!this.address || !this.publicKey || !this.vaultAccountId) {
           throw new Error("Address, Public Key or Vault ID are not set");
         }
-        const eligible = await (0, import_bitcoin_staking.fetchEligibleUpdateBondRegistration)({
+        const smAllowError = this.signerManagerAllowedError(signerManager);
+        if (smAllowError) return { success: false, error: smAllowError };
+        const membershipBefore = await (0, import_bitcoin_staking2.fetchBondMembership)({ address: this.address, network: this.pox5Network });
+        if (!membershipBefore) {
+          return { success: false, error: "No active bond membership to rotate the signer for." };
+        }
+        const eligible = await (0, import_bitcoin_staking2.fetchEligibleUpdateBondRegistration)({
           staker: this.address,
           signerManager,
           oldSignerManager,
@@ -17886,24 +14763,49 @@ var StacksSDK = class _StacksSDK {
             [import_transactions3.Cl.address(signerManager), import_transactions3.Cl.address(oldSignerManager), import_transactions3.Cl.none()],
             {
               nonce: resolvedNonce,
-              // Deny mode with no conditions: a pre-start signer swap moves no assets.
+              // Deny mode; a pre-start signer swap moves no assets but the contract
+              // still records a PoX action, which the node's action gate requires be
+              // covered by a will-perform-PoX condition.
               postConditionMode: import_transactions3.PostConditionMode.Deny,
-              postConditions: []
+              postConditions: [import_transactions3.Pc.origin().willPerformPox()]
             }
           );
-          return this.pox5SignAndBroadcast(tx, opts?.note ?? `update-bond-registration-${bondIndex}`, opts?.externalId);
+          return this.pox5SignAndBroadcast(tx, opts?.note ?? `update-bond-registration-${membershipBefore.bondIndex}`, opts?.externalId);
         });
         if (!result?.txid || result.error || result.reason) {
           return { success: false, error: result?.error ?? result?.reason ?? "broadcast failed" };
         }
         const settled = await this.waitForTxSettlement(result.txid);
         if (!settled.success || settled.data?.tx_status !== "success") {
-          return { success: false, error: settled.data?.tx_error ?? "update-bond-registration failed on-chain", txHash: result.txid };
+          return { success: false, unsettled: !settled.success, error: settled.data?.tx_error ?? "update-bond-registration failed on-chain", txHash: result.txid };
         }
-        const existing = await this.lockRecordStore.loadRecord(this.address, bondIndex).catch(() => null);
-        if (existing) {
-          await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...existing, signerManager });
+        const membershipAfter = await (0, import_bitcoin_staking2.fetchBondMembership)({ address: this.address, network: this.pox5Network }).catch(() => null);
+        if (membershipAfter && membershipAfter.bondIndex !== membershipBefore.bondIndex) {
+          return {
+            success: true,
+            txHash: result.txid,
+            warning: `Signer rotation confirmed, but the active bond changed from ${membershipBefore.bondIndex} to ${membershipAfter.bondIndex} during the operation; local record not updated \u2014 re-run reward discovery to reconcile.`
+          };
         }
+        const derivedBondIndex = membershipBefore.bondIndex;
+        let existing;
+        try {
+          existing = await this.lockRecordStore.loadRecord(this.address, derivedBondIndex);
+        } catch (e) {
+          return {
+            success: true,
+            txHash: result.txid,
+            warning: `Signer rotation confirmed for bond ${derivedBondIndex}, but the lock-record store was UNREADABLE (${formatErrorMessage(e)}) \u2014 the rotated manager was NOT persisted; re-run reward discovery or retry the record update once the store recovers.`
+          };
+        }
+        if (!existing) {
+          return {
+            success: true,
+            txHash: result.txid,
+            warning: `Signer rotation confirmed for bond ${derivedBondIndex}, but no durable lock record exists to update \u2014 reward routing for this bond may be stale until a record is present.`
+          };
+        }
+        await this.lockRecordStore.saveRecord(this.address, derivedBondIndex, { ...existing, signerManager });
         return { success: true, txHash: result.txid };
       } catch (error) {
         return { success: false, error: `Failed to update bond registration: ${formatErrorMessage(error)}` };
@@ -17920,32 +14822,42 @@ var StacksSDK = class _StacksSDK {
      * NOTE: This call blocks until Bitcoin confirmations are received (~30 min typical).
      */
     this.createBond = async (bondIndex, btcAmountSats, signerManager, opts) => {
+      const committedBtc = {};
       try {
         if (!this.address || !this.publicKey || !this.vaultAccountId) {
           throw new Error("Address, Public Key or Vault ID are not set");
         }
-        this.warnIfLockStoreNotDurable();
-        const allowance = await (0, import_bitcoin_staking.fetchBondAllowance)({ bondIndex, address: this.address, network: this.pox5Network });
+        const storeError = await this.assertDurableLockStore();
+        if (storeError) return { success: false, error: storeError };
+        const smAllowError = this.signerManagerAllowedError(signerManager);
+        if (smAllowError) return { success: false, error: smAllowError };
+        const allowance = await (0, import_bitcoin_staking2.fetchBondAllowance)({ bondIndex, address: this.address, network: this.pox5Network });
         if (allowance < btcAmountSats) {
           return { success: false, error: `Not allowlisted for ${btcAmountSats} sats on bond ${bondIndex} (cap: ${allowance} sats)` };
         }
         const [pox, bond] = await Promise.all([
-          (0, import_bitcoin_staking.fetchPoxInfo)({ network: this.pox5Network }),
-          (0, import_bitcoin_staking.fetchBond)({ bondIndex, network: this.pox5Network })
+          (0, import_bitcoin_staking2.fetchPoxInfo)({ network: this.pox5Network }),
+          (0, import_bitcoin_staking2.fetchBond)({ bondIndex, network: this.pox5Network })
         ]);
         if (!bond) return { success: false, error: `Bond ${bondIndex} not found` };
-        const amountUstx = opts?.amountUstxOverride ?? (0, import_bitcoin_staking.minUstxForSatsAmount)({
+        const contractMinUstx = (0, import_bitcoin_staking2.minUstxForSatsAmount)({
           sats: btcAmountSats,
           stxValueRatio: bond.stxValueRatio,
           minUstxRatioBps: bond.minUstxRatioBps
         });
-        const accountStatus = await (0, import_bitcoin_staking.fetchAccountStatus)({ address: this.address, network: this.pox5Network });
-        const spendableStx = accountStatus.balance;
-        const requiredUstx = amountUstx + DEFAULT_POX_FEE_USTX;
-        if (requiredUstx > spendableStx) {
-          return { success: false, error: `Insufficient liquid STX: need ${microToStx(requiredUstx)} STX (${microToStx(amountUstx)} stake + ${microToStx(DEFAULT_POX_FEE_USTX)} fee) but only ${microToStx(spendableStx)} available` };
+        const amountResolution = this.resolveBondStxAmount(contractMinUstx, opts?.amountUstxOverride);
+        if ("error" in amountResolution) return { success: false, error: amountResolution.error };
+        const amountUstx = amountResolution.amountUstx;
+        const accountStatus = await (0, import_bitcoin_staking2.fetchAccountStatus)({ address: this.address, network: this.pox5Network });
+        const unlockedStx = accountStatus.balance;
+        const lockedStx = accountStatus.locked ?? BigInt(0);
+        if (unlockedStx < DEFAULT_POX_FEE_USTX) {
+          return { success: false, error: `Insufficient unlocked STX for the transaction fee: need ${microToStx(DEFAULT_POX_FEE_USTX)} STX unlocked but only ${microToStx(unlockedStx)} available` };
         }
-        const preflight = await (0, import_bitcoin_staking.fetchEligibleRegisterForBond)({
+        if (unlockedStx - DEFAULT_POX_FEE_USTX + lockedStx < amountUstx) {
+          return { success: false, error: `Insufficient STX to lock ${microToStx(amountUstx)} STX: unlocked-after-fee ${microToStx(unlockedStx - DEFAULT_POX_FEE_USTX)} + locked ${microToStx(lockedStx)} is short` };
+        }
+        const preflight = await (0, import_bitcoin_staking2.fetchEligibleRegisterForBond)({
           bondIndex,
           staker: this.address,
           amountUstx,
@@ -17958,9 +14870,9 @@ var StacksSDK = class _StacksSDK {
           const reasons = preflight.reasons ?? [];
           return { success: false, error: `Not eligible to register for bond ${bondIndex} (no BTC committed): ${this.describeBondReasons(reasons)}` };
         }
-        const firstBondCycle = (0, import_bitcoin_staking.firstPox5RewardCycle)(pox);
+        const firstBondCycle = (0, import_bitcoin_staking2.firstPox5RewardCycle)(pox);
         if (firstBondCycle === void 0) return { success: false, error: "pox-5 not yet configured on this network" };
-        const metadata = (0, import_bitcoin_staking.buildRegisterMetadata)({
+        const metadata = (0, import_bitcoin_staking2.buildRegisterMetadata)({
           bondIndex,
           poxInfo: pox,
           bitcoinPublicKey: this.publicKey,
@@ -17993,6 +14905,55 @@ var StacksSDK = class _StacksSDK {
             return { success: false, error: `Lockup script mismatch \u2014 SDK: ${(0, import_common3.bytesToHex)(metadata.outputScript)}, contract: ${onchainScriptHex}` };
           }
         }
+        if (this.verifyEarlyExitCosignerAtFunding) {
+          try {
+            const cosigner = new CosignerService(resolveCosignerUrl(this.testnet));
+            const earlyUnlockBytes = typeof bond.earlyUnlockBytes === "string" ? (0, import_common3.hexToBytes)(bond.earlyUnlockBytes) : bond.earlyUnlockBytes;
+            await cosigner.verifyCommittedKey(earlyUnlockBytes);
+          } catch (error) {
+            return { success: false, error: `Early-exit cosigner preflight failed (no BTC committed): ${formatErrorMessage(error)}` };
+          }
+        }
+        const fundingExternalId = this.deriveFundingExternalId(bondIndex, metadata.lockAddress);
+        let priorRecord;
+        try {
+          priorRecord = await this.lockRecordStore.loadRecord(this.address, bondIndex);
+        } catch (e) {
+          return { success: false, error: `Lock-record store unreadable for bond ${bondIndex} (UNKNOWN, not "no prior attempt") \u2014 refusing to fund: ${formatErrorMessage(e)}` };
+        }
+        if (opts?.btcTxid !== void 0 && priorRecord?.btcTxid !== void 0 && priorRecord.lockAddress === metadata.lockAddress && opts.btcTxid !== priorRecord.btcTxid) {
+          return {
+            success: false,
+            error: `Bond ${bondIndex} already has a recorded funding tx ${priorRecord.btcTxid} at this lock address; refusing to replace it with ${opts.btcTxid}. Omit btcTxid to resume the recorded funding, or recover it first.`,
+            btcTxid: priorRecord.btcTxid,
+            vout: priorRecord.vout
+          };
+        }
+        const canResumeFunding = priorRecord?.btcTxid !== void 0 && priorRecord.lockAddress === metadata.lockAddress;
+        const staleLockGuard = await this.nativeRecordOverwriteGuard(bondIndex, metadata.lockAddress);
+        if (staleLockGuard) return { success: false, error: staleLockGuard, btcTxid: priorRecord?.btcTxid, vout: priorRecord?.vout };
+        if (canResumeFunding) {
+          const recordedTx = await this.getBtcTxStatus(priorRecord.btcTxid);
+          if (!recordedTx.success) {
+            return { success: false, error: `Cannot verify the recorded funding tx ${priorRecord.btcTxid} (UNKNOWN) \u2014 refusing to proceed: ${recordedTx.error ?? ""}`, btcTxid: priorRecord.btcTxid, vout: priorRecord.vout };
+          }
+          if (!recordedTx.data.found) {
+            return {
+              success: false,
+              error: `Recorded funding tx ${priorRecord.btcTxid} for bond ${bondIndex} is not visible on the configured Esplora \u2014 it may have been RBF-bumped by Fireblocks (new txid) or evicted. Look up the transfer by external id ${fundingExternalId} in Fireblocks and retry with opts.btcTxid set to the actual funding txid.`,
+              btcTxid: priorRecord.btcTxid,
+              vout: priorRecord.vout
+            };
+          }
+        }
+        if (canResumeFunding && priorRecord.amountSats !== BigInt(btcAmountSats)) {
+          return {
+            success: false,
+            error: `A prior funding attempt for bond ${bondIndex} committed ${priorRecord.amountSats} sats (txid ${priorRecord.btcTxid}); this retry requests ${btcAmountSats} sats. Retry with the funded amount, or recover the locked BTC first.`,
+            btcTxid: priorRecord.btcTxid,
+            vout: priorRecord.vout
+          };
+        }
         const lockRecord = {
           bondIndex,
           unlockBytes: metadata.unlockBytes,
@@ -18001,30 +14962,47 @@ var StacksSDK = class _StacksSDK {
           amountSats: BigInt(btcAmountSats),
           isL1Lock: true,
           signerManager,
-          firstRewardCycle: (0, import_bitcoin_staking.bondPeriodToRewardCycle)({ bondIndex, poxInfo: pox })
+          firstRewardCycle: (0, import_bitcoin_staking2.bondPeriodToRewardCycle)({ bondIndex, poxInfo: pox }),
+          fundingExternalId,
+          stage: "lock-fixed",
+          ...canResumeFunding ? {
+            btcTxid: priorRecord.btcTxid,
+            vout: priorRecord.vout,
+            amountSats: priorRecord.amountSats,
+            stage: priorRecord.stage ?? "btc-broadcast"
+          } : {}
         };
         await this.lockRecordStore.saveRecord(this.address, bondIndex, lockRecord);
         let btcTxid;
         if (opts?.btcTxid) {
           btcTxid = opts.btcTxid;
+          await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, btcTxid, stage: laterStage(lockRecord.stage, "btc-broadcast") });
+        } else if (canResumeFunding) {
+          btcTxid = priorRecord.btcTxid;
         } else {
+          await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, stage: laterStage(lockRecord.stage, "funding-requested") });
           const result2 = await this.fireblocksService.createBitcoinTransaction(
             metadata.lockAddress,
             btcAmountSats,
             this.vaultAccountId.toString(),
             opts?.note || `BTC bond ${bondIndex} lock`,
-            opts?.externalId ? `${opts.externalId}-lock` : void 0
+            fundingExternalId
           );
           btcTxid = result2.btcTxid;
+          await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, btcTxid, stage: laterStage(lockRecord.stage, "btc-broadcast") });
         }
+        committedBtc.btcTxid = btcTxid;
         const { blockHash } = await this.waitForBtcConfirmations(btcTxid, opts?.confirmations ?? 3);
+        await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, btcTxid, stage: laterStage(lockRecord.stage, "btc-confirmed") });
         const lockupProof = await this.assembleLockupProof(btcTxid, blockHash, metadata.outputScript, metadata.unlockHeight);
+        committedBtc.vout = lockupProof.outputIndex;
         await this.lockRecordStore.saveRecord(this.address, bondIndex, {
           ...lockRecord,
           btcTxid,
-          vout: lockupProof.outputIndex
+          vout: lockupProof.outputIndex,
+          stage: laterStage(lockRecord.stage, "proof-built")
         });
-        const proofPreflight = await (0, import_bitcoin_staking.fetchEligibleRegisterForBond)({
+        const proofPreflight = await (0, import_bitcoin_staking2.fetchEligibleRegisterForBond)({
           bondIndex,
           staker: this.address,
           amountUstx,
@@ -18044,6 +15022,7 @@ var StacksSDK = class _StacksSDK {
           };
         }
         const result = await this.runNonceExclusive(async () => {
+          const custodyRefund = await this.custodyRefundPostConditions();
           const resolvedNonce = await this.resolveNonce(opts?.nonce);
           const tx = await this.buildRegisterForBondTx({
             bondIndex,
@@ -18052,11 +15031,28 @@ var StacksSDK = class _StacksSDK {
             outputs: [lockupProof],
             unlockBytes: metadata.unlockBytes,
             nonce: resolvedNonce,
+            signerCalldata: opts?.signerCalldata,
             // Bound the paired STX lock to exactly the required amount.
             postConditionMode: import_transactions3.PostConditionMode.Deny,
-            postConditions: [import_transactions3.Pc.origin().willSendEq(amountUstx).ustxToLock()]
+            postConditions: [import_transactions3.Pc.origin().willSendEq(amountUstx).ustxToLock(), ...custodyRefund.conditions]
           });
-          return this.pox5SignAndBroadcast(tx, opts?.note ?? "register-for-bond", opts?.externalId ? `${opts.externalId}-register` : void 0);
+          return this.pox5SignAndBroadcast(
+            tx,
+            opts?.note ?? "register-for-bond",
+            opts?.externalId ? `${opts.externalId}-register` : void 0,
+            // BTC is already locked at this point; the bond window / eligibility / custody
+            // can still change during L2 approval (e.g. ERR_BOND_ALREADY_STARTED). Re-check
+            // against the CURRENT height and discard rather than broadcast a doomed
+            // register — the BTC remains recoverable and the L2 tx can be retried.
+            () => this.revalidateRegisterForBond({
+              bondIndex,
+              amountUstx,
+              satsTotal: btcAmountSats,
+              signerManager,
+              outputs: [lockupProof],
+              expectedCustodySats: custodyRefund.custodiedSats
+            })
+          );
         });
         if (!result?.txid || result.error || result.reason) {
           console.error("register-for-bond broadcast failed:", JSON.stringify(result));
@@ -18064,12 +15060,24 @@ var StacksSDK = class _StacksSDK {
           const errMsg = parts.join(" \u2014 ") || "broadcast failed";
           return { success: false, error: errMsg, btcTxid, vout: lockupProof.outputIndex };
         }
+        await this.lockRecordStore.saveRecord(this.address, bondIndex, {
+          ...lockRecord,
+          btcTxid,
+          vout: lockupProof.outputIndex,
+          stage: "registration-submitted"
+        });
         const settled = await this.waitForTxSettlement(result.txid);
         console.log("register-for-bond settlement:", JSON.stringify({ tx_status: settled.data?.tx_status, tx_result: settled.data?.tx_result }));
         if (!settled.success || settled.data?.tx_status !== "success") {
           const txRepr = settled.data?.tx_result?.repr ?? settled.data?.tx_error ?? "";
-          return { success: false, error: `[${settled.data?.tx_status}] ${txRepr}`.trim(), stacksTxid: result.txid, btcTxid, vout: lockupProof.outputIndex };
+          return { success: false, unsettled: !settled.success, error: `[${settled.data?.tx_status}] ${txRepr}`.trim(), stacksTxid: result.txid, btcTxid, vout: lockupProof.outputIndex };
         }
+        await this.lockRecordStore.saveRecord(this.address, bondIndex, {
+          ...lockRecord,
+          btcTxid,
+          vout: lockupProof.outputIndex,
+          stage: "registration-confirmed"
+        });
         return {
           success: true,
           btcTxid,
@@ -18081,8 +15089,138 @@ var StacksSDK = class _StacksSDK {
         };
       } catch (error) {
         console.error("createBond error:", error);
-        return { success: false, error: `Failed to create bond: ${formatErrorMessage(error)}` };
+        return { success: false, error: `Failed to create bond: ${formatErrorMessage(error)}`, ...committedBtc };
       }
+    };
+    /**
+     * Post-signing re-check for a register-for-bond broadcast (createBond, createSbtcBond,
+     * rollSbtcBond, renewBond). Re-runs the eligibility gate at the CURRENT tip — with a
+     * freshly fetched poxInfo, never a pre-broadcast snapshot — so a signature that sat in
+     * Fireblocks approval is not broadcast into a now-certain contract rejection
+     * (prepare-phase entry, bond start, closed rollover window). Returns a reason string to
+     * discard the tx, or undefined to proceed.
+     *
+     * `requireZeroCustody` guards createSbtcBond specifically: its sBTC post-condition asserts
+     * the GROSS amount, which is only valid with no prior custody. If custody appeared during
+     * the approval window the call is now a rollover — register-for-bond would move only the
+     * net difference and the gross post-condition would abort — so discard and route to
+     * rollSbtcBond instead.
+     *
+     * `expectedCustodySats` guards every path whose post-conditions were BUILT from a custody
+     * read (the net-delta rollover, and the pox-5 custody-refund condition on native paths):
+     * if live custody differs from the baked value, the signed conditions no longer match
+     * what the contract will transfer, so discard rather than broadcast a doomed abort.
+     *
+     * `outputs` threads the SPV lockup proof through for the native-BTC paths, whose
+     * eligibility check covers the proof-dependent gates as well.
+     */
+    this.revalidateRegisterForBond = async (args) => {
+      const nowPox = await (0, import_bitcoin_staking2.fetchPoxInfo)({ network: this.pox5Network });
+      const needCustody = args.requireZeroCustody || args.expectedCustodySats !== void 0;
+      const [recheck, custodied] = await Promise.all([
+        (0, import_bitcoin_staking2.fetchEligibleRegisterForBond)({
+          bondIndex: args.bondIndex,
+          staker: this.address,
+          amountUstx: args.amountUstx,
+          satsTotal: args.satsTotal,
+          signerManager: args.signerManager,
+          poxInfo: nowPox,
+          ...args.outputs ? { outputs: args.outputs } : {},
+          network: this.pox5Network
+        }),
+        needCustody ? (0, import_bitcoin_staking2.fetchStakerCustodiedSbtc)({ staker: this.address, network: this.pox5Network }) : Promise.resolve(BigInt(0))
+      ]);
+      if (args.requireZeroCustody && custodied > BigInt(0)) {
+        return `staker gained ${custodied} sats of custodied sBTC during approval \u2014 this is now a rollover; use rollSbtcBond (net-delta) instead of createSbtcBond (gross).`;
+      }
+      if (args.expectedCustodySats !== void 0 && custodied !== args.expectedCustodySats) {
+        return `custodied sBTC changed during approval (${args.expectedCustodySats} \u2192 ${custodied} sats) \u2014 the signed post-conditions no longer match the transfer the contract will make; retry to rebuild against current custody.`;
+      }
+      if (!recheck.ok) {
+        const reasons = recheck.reasons ?? [];
+        return `bond eligibility changed during approval: ${this.describeBondReasons(reasons)}`;
+      }
+      return void 0;
+    };
+    /**
+     * Guards the durable record slot at (address, bondIndex) before a write would
+     * overwrite it with a record for a DIFFERENT lock. The store holds ONE record per
+     * slot, and a native-BTC record may be the only in-SDK pointer to committed Bitcoin
+     * (e.g. a renewal whose L2 leg failed) — clobbering it would strand the UTXO behind
+     * an out-of-band address scan, and a lost fundingExternalId would drop the
+     * idempotency key that prevents a second Fireblocks funding.
+     *
+     * Refuses when the existing native record either
+     *  - has a funding in flight (stage "funding-requested", txid not yet known), or
+     *  - has ANY unspent Bitcoin at its lock address — matched by the recorded outpoint
+     *    when present, but falling back to any-UTXO-at-address so a stale recorded txid
+     *    (e.g. an RBF replacement) with real BTC at the address still refuses.
+     * A fully spent lock (already recovered) allows the overwrite. An unreadable store
+     * or Bitcoin state refuses (UNKNOWN, never "safe").
+     *
+     * `newLockAddress` exempts a record for the SAME lock the caller is about to write —
+     * those flows own their resume/conflict logic; omit it for sBTC registrations, whose
+     * records never legitimately share a slot with a live native lock.
+     */
+    this.nativeRecordOverwriteGuard = async (bondIndex, newLockAddress) => {
+      let existing;
+      try {
+        existing = await this.lockRecordStore.loadRecord(this.address, bondIndex);
+      } catch (e) {
+        return `Lock-record store unreadable for bond ${bondIndex} (UNKNOWN) \u2014 refusing to overwrite a possible native-BTC pointer: ${formatErrorMessage(e)}`;
+      }
+      if (!existing || existing.isL1Lock === false) return void 0;
+      if (newLockAddress !== void 0 && existing.lockAddress === newLockAddress) return void 0;
+      if (existing.btcTxid === void 0) {
+        if (existing.stage === "funding-requested") {
+          return `Bond ${bondIndex} has a native funding request in flight (external id ${existing.fundingExternalId ?? "unknown"}, lock ${existing.lockAddress}) \u2014 resolve that attempt before overwriting its record.`;
+        }
+        return void 0;
+      }
+      try {
+        const res = await fetch(`${this.esploraBase()}/address/${existing.lockAddress}/utxo`);
+        if (!res.ok) throw new Error(`Esplora HTTP ${res.status}`);
+        const utxos = await res.json();
+        const stillLocked = utxos.some((u) => u.txid === existing.btcTxid && (existing.vout === void 0 || u.vout === existing.vout)) || utxos.length > 0;
+        if (stillLocked) {
+          return `Bond ${bondIndex}'s record points at STILL-LOCKED native BTC (${existing.btcTxid}:${existing.vout ?? "?"} at ${existing.lockAddress}); overwriting it would lose the only pointer \u2014 recover the Bitcoin first (unlockMaturedBond / spendEarlyExitUtxo).`;
+        }
+        return void 0;
+      } catch (e) {
+        return `Could not verify bond ${bondIndex}'s recorded native-BTC lock is spent (UNKNOWN, not recovered) \u2014 refusing to overwrite its pointer: ${formatErrorMessage(e)}`;
+      }
+    };
+    /**
+     * pox-5→staker sBTC custody-refund post-condition for calls that custody NO sBTC.
+     *
+     * `register-for-bond` (native lockup) and the STX-only `stake` path both run the
+     * contract's internal roll-sbtc with a new sBTC amount of 0, so when the staker
+     * currently custodies sBTC the contract refunds the ENTIRE custodied amount from
+     * pox-5 during the call. In Deny mode that transfer must be covered or the node
+     * aborts the transaction after the signature is spent — on the bond paths, after
+     * the Bitcoin is already committed.
+     *
+     * Returns the FT condition (empty when custody is 0) plus the custody amount so the
+     * caller can bake it into its post-signing re-check. Throws when custody is non-zero
+     * but the network sBTC asset cannot be resolved: an uncovered refund must refuse to
+     * build rather than sign permissively.
+     */
+    this.custodyRefundPostConditions = async () => {
+      const custodiedSats = await (0, import_bitcoin_staking2.fetchStakerCustodiedSbtc)({ staker: this.address, network: this.pox5Network });
+      if (custodiedSats <= BigInt(0)) return { conditions: [], custodiedSats: BigInt(0) };
+      const sbtcAsset = await this.resolveSbtcAsset();
+      if (!sbtcAsset) {
+        throw new Error(
+          `Staker custodies ${custodiedSats} sats of sBTC that this call would refund from pox-5, but the network sBTC asset could not be resolved (/v2/pox pox_5_sbtc_contract) \u2014 refusing to build without covering the refund.`
+        );
+      }
+      const bootAddr = this.pox5Network.bootAddress;
+      const pox5ContractId = `${bootAddr}.pox-5`;
+      const sbtcContractId = `${sbtcAsset.contractAddress}.${sbtcAsset.contractName}`;
+      return {
+        conditions: [import_transactions3.Pc.principal(pox5ContractId).willSendEq(custodiedSats).ft(sbtcContractId, sbtcAsset.assetName)],
+        custodiedSats
+      };
     };
     /**
      * Registers an sBTC-backed bond: locks the paired STX and transfers sBTC to the
@@ -18098,21 +15236,32 @@ var StacksSDK = class _StacksSDK {
         if (!this.address || !this.publicKey || !this.vaultAccountId) {
           throw new Error("Address, Public Key or Vault ID are not set");
         }
-        const sbtcAsset = this.resolveSbtcAsset(opts?.sbtcAsset);
+        const smAllowError = this.signerManagerAllowedError(signerManager);
+        if (smAllowError) return { success: false, error: smAllowError };
+        const overwriteError = await this.nativeRecordOverwriteGuard(bondIndex);
+        if (overwriteError) return { success: false, error: overwriteError };
+        const sbtcAsset = await this.resolveSbtcAsset(opts?.sbtcAsset);
         if (!sbtcAsset) {
-          return { success: false, error: "No sBTC asset configured for this network; pass sbtcAsset explicitly." };
+          return { success: false, error: "Could not resolve the network sBTC asset (/v2/pox pox_5_sbtc_contract); refusing to build. Any override must exactly match the contract the node reports." };
         }
-        const [pox, bond] = await Promise.all([
-          (0, import_bitcoin_staking.fetchPoxInfo)({ network: this.pox5Network }),
-          (0, import_bitcoin_staking.fetchBond)({ bondIndex, network: this.pox5Network })
+        const [pox, bond, custodiedSats] = await Promise.all([
+          (0, import_bitcoin_staking2.fetchPoxInfo)({ network: this.pox5Network }),
+          (0, import_bitcoin_staking2.fetchBond)({ bondIndex, network: this.pox5Network }),
+          (0, import_bitcoin_staking2.fetchStakerCustodiedSbtc)({ staker: this.address, network: this.pox5Network })
         ]);
         if (!bond) return { success: false, error: `Bond ${bondIndex} not found` };
-        const amountUstx = opts?.amountUstxOverride ?? (0, import_bitcoin_staking.minUstxForSatsAmount)({
+        if (custodiedSats > BigInt(0)) {
+          return { success: false, error: `Staker already has ${custodiedSats} sats of custodied sBTC \u2014 use rollSbtcBond for a rollover (which moves only the net difference), not createSbtcBond.` };
+        }
+        const contractMinUstx = (0, import_bitcoin_staking2.minUstxForSatsAmount)({
           sats: sbtcSats,
           stxValueRatio: bond.stxValueRatio,
           minUstxRatioBps: bond.minUstxRatioBps
         });
-        const preflight = await (0, import_bitcoin_staking.fetchEligibleRegisterForBond)({
+        const amountResolution = this.resolveBondStxAmount(contractMinUstx, opts?.amountUstxOverride);
+        if ("error" in amountResolution) return { success: false, error: amountResolution.error };
+        const amountUstx = amountResolution.amountUstx;
+        const preflight = await (0, import_bitcoin_staking2.fetchEligibleRegisterForBond)({
           bondIndex,
           staker: this.address,
           amountUstx,
@@ -18134,6 +15283,7 @@ var StacksSDK = class _StacksSDK {
             amountUstx,
             sbtcSats,
             nonce: resolvedNonce,
+            signerCalldata: opts?.signerCalldata,
             // Bound both legs: the paired STX lock and the exact sBTC transfer (the
             // staker is the tx origin, so origin sends both).
             postConditionMode: import_transactions3.PostConditionMode.Deny,
@@ -18142,15 +15292,15 @@ var StacksSDK = class _StacksSDK {
               import_transactions3.Pc.origin().willSendEq(sbtcSats).ft(sbtcContractId, sbtcAsset.assetName)
             ]
           });
-          return this.pox5SignAndBroadcast(tx, opts?.note ?? `register-sbtc-bond-${bondIndex}`, opts?.externalId);
+          return this.pox5SignAndBroadcast(
+            tx,
+            opts?.note ?? `register-sbtc-bond-${bondIndex}`,
+            opts?.externalId,
+            () => this.revalidateRegisterForBond({ bondIndex, amountUstx, satsTotal: sbtcSats, signerManager, requireZeroCustody: true })
+          );
         });
         if (!result?.txid || result.error || result.reason) {
           return { success: false, error: result?.error ?? result?.reason ?? "broadcast failed" };
-        }
-        const settled = await this.waitForTxSettlement(result.txid);
-        if (!settled.success || settled.data?.tx_status !== "success") {
-          const repr = settled.data?.tx_result?.repr ?? settled.data?.tx_error ?? "";
-          return { success: false, error: `[${settled.data?.tx_status}] ${repr}`.trim(), txHash: result.txid };
         }
         await this.lockRecordStore.saveRecord(this.address, bondIndex, {
           bondIndex,
@@ -18160,19 +15310,146 @@ var StacksSDK = class _StacksSDK {
           amountSats: sbtcSats,
           isL1Lock: false,
           signerManager,
-          firstRewardCycle: (0, import_bitcoin_staking.bondPeriodToRewardCycle)({ bondIndex, poxInfo: pox })
+          firstRewardCycle: (0, import_bitcoin_staking2.bondPeriodToRewardCycle)({ bondIndex, poxInfo: pox })
         });
+        const settled = await this.waitForTxSettlement(result.txid);
+        if (!settled.success || settled.data?.tx_status !== "success") {
+          const repr = settled.data?.tx_result?.repr ?? settled.data?.tx_error ?? "";
+          return { success: false, unsettled: !settled.success, error: `[${settled.data?.tx_status}] ${repr}`.trim(), txHash: result.txid };
+        }
         return { success: true, txHash: result.txid };
       } catch (error) {
         return { success: false, error: `Failed to create sBTC bond: ${formatErrorMessage(error)}` };
       }
     };
     /**
+     * Rolls an existing sBTC-backed position into the next bond period at a (possibly)
+     * different sBTC amount. Distinct from the native-BTC `renewBond` (which spends a
+     * Bitcoin L1 UTXO); an sBTC rollover is a pure L2 `register-for-bond` that moves only
+     * the NET sBTC difference (answers.md §3c):
+     *   - increase (new > custodied): the staker sends `new − custodied`;
+     *   - decrease (new < custodied): the PoX-5 boot contract sends `custodied − new` back;
+     *   - unchanged: no sBTC moves, so no sBTC post-condition is attached.
+     * The paired STX leg always asserts the FULL resulting STX lock (answers.md §2a/§2c/§4).
+     * The prior custody is read from the contract via `get-staker-custodied-sbtc` so the
+     * delta is bounded from chain state, never from a caller-supplied "old" amount.
+     *
+     * NOTE: sBTC paths are not yet exercised end-to-end on a live network (PoX-5 testnet is
+     * not active — answers.md §7); the deterministic post-condition logic is unit-tested,
+     * but validate the full flow against a live node before production use.
+     *
+     * @param nextBondIndex - The bond index to roll into.
+     * @param newSbtcSats - The target sBTC amount (sats) for the new position.
+     * @param signerManager - The signer-manager principal governing the new position.
+     */
+    this.rollSbtcBond = async (nextBondIndex, newSbtcSats, signerManager, opts) => {
+      try {
+        if (!this.address || !this.publicKey || !this.vaultAccountId) {
+          throw new Error("Address, Public Key or Vault ID are not set");
+        }
+        if (newSbtcSats < BigInt(0)) {
+          return { success: false, error: "newSbtcSats must be non-negative" };
+        }
+        const smAllowError = this.signerManagerAllowedError(signerManager);
+        if (smAllowError) return { success: false, error: smAllowError };
+        const overwriteError = await this.nativeRecordOverwriteGuard(nextBondIndex);
+        if (overwriteError) return { success: false, error: overwriteError };
+        const sbtcAsset = await this.resolveSbtcAsset(opts?.sbtcAsset);
+        if (!sbtcAsset) {
+          return { success: false, error: "Could not resolve the network sBTC asset (/v2/pox pox_5_sbtc_contract); refusing to build. Any override must exactly match the contract the node reports." };
+        }
+        const [pox, bond, custodiedSats] = await Promise.all([
+          (0, import_bitcoin_staking2.fetchPoxInfo)({ network: this.pox5Network }),
+          (0, import_bitcoin_staking2.fetchBond)({ bondIndex: nextBondIndex, network: this.pox5Network }),
+          (0, import_bitcoin_staking2.fetchStakerCustodiedSbtc)({ staker: this.address, network: this.pox5Network })
+        ]);
+        if (!bond) return { success: false, error: `Bond ${nextBondIndex} not found` };
+        const contractMinUstx = (0, import_bitcoin_staking2.minUstxForSatsAmount)({
+          sats: newSbtcSats,
+          stxValueRatio: bond.stxValueRatio,
+          minUstxRatioBps: bond.minUstxRatioBps
+        });
+        const amountResolution = this.resolveBondStxAmount(contractMinUstx, opts?.amountUstxOverride);
+        if ("error" in amountResolution) return { success: false, error: amountResolution.error };
+        const amountUstx = amountResolution.amountUstx;
+        const preflight = await (0, import_bitcoin_staking2.fetchEligibleRegisterForBond)({
+          bondIndex: nextBondIndex,
+          staker: this.address,
+          amountUstx,
+          satsTotal: newSbtcSats,
+          signerManager,
+          poxInfo: pox,
+          network: this.pox5Network
+        });
+        if (!preflight.ok) {
+          const reasons = preflight.reasons ?? [];
+          return { success: false, error: `Not eligible to roll sBTC bond into ${nextBondIndex}: ${this.describeBondReasons(reasons)}` };
+        }
+        const rollover = planSbtcRollover(custodiedSats, newSbtcSats);
+        const sbtcContractId = `${sbtcAsset.contractAddress}.${sbtcAsset.contractName}`;
+        const bootAddr = this.pox5Network.bootAddress;
+        const pox5ContractId = `${bootAddr}.pox-5`;
+        const postConditions = [
+          // Paired STX: assert the FULL resulting STX lock (register-for-bond records a
+          // Stacking action for the full resulting lock — answers.md §2a).
+          import_transactions3.Pc.origin().willSendEq(amountUstx).ustxToLock()
+        ];
+        if (rollover.direction === "origin-sends") {
+          postConditions.push(import_transactions3.Pc.origin().willSendEq(rollover.amountSats).ft(sbtcContractId, sbtcAsset.assetName));
+        } else if (rollover.direction === "boot-sends") {
+          postConditions.push(import_transactions3.Pc.principal(pox5ContractId).willSendEq(rollover.amountSats).ft(sbtcContractId, sbtcAsset.assetName));
+        }
+        const result = await this.runNonceExclusive(async () => {
+          const resolvedNonce = await this.resolveNonce(opts?.nonce);
+          const tx = await this.buildRegisterForBondTx({
+            bondIndex: nextBondIndex,
+            signerManager,
+            amountUstx,
+            sbtcSats: newSbtcSats,
+            nonce: resolvedNonce,
+            signerCalldata: opts?.signerCalldata,
+            postConditionMode: import_transactions3.PostConditionMode.Deny,
+            postConditions
+          });
+          return this.pox5SignAndBroadcast(
+            tx,
+            opts?.note ?? `roll-sbtc-bond-${nextBondIndex}`,
+            opts?.externalId,
+            // The net-delta post-conditions were baked from custodiedSats; a custody change
+            // during approval invalidates them, so the re-check compares against it.
+            () => this.revalidateRegisterForBond({ bondIndex: nextBondIndex, amountUstx, satsTotal: newSbtcSats, signerManager, expectedCustodySats: custodiedSats })
+          );
+        });
+        if (!result?.txid || result.error || result.reason) {
+          return { success: false, error: result?.error ?? result?.reason ?? "broadcast failed" };
+        }
+        await this.lockRecordStore.saveRecord(this.address, nextBondIndex, {
+          bondIndex: nextBondIndex,
+          unlockBytes: new Uint8Array(),
+          lockAddress: "",
+          unlockHeight: 0,
+          amountSats: newSbtcSats,
+          isL1Lock: false,
+          signerManager,
+          firstRewardCycle: (0, import_bitcoin_staking2.bondPeriodToRewardCycle)({ bondIndex: nextBondIndex, poxInfo: pox })
+        });
+        const settled = await this.waitForTxSettlement(result.txid);
+        if (!settled.success || settled.data?.tx_status !== "success") {
+          const repr = settled.data?.tx_result?.repr ?? settled.data?.tx_error ?? "";
+          return { success: false, unsettled: !settled.success, error: `[${settled.data?.tx_status}] ${repr}`.trim(), txHash: result.txid };
+        }
+        return { success: true, txHash: result.txid };
+      } catch (error) {
+        return { success: false, error: `Failed to roll sBTC bond: ${formatErrorMessage(error)}` };
+      }
+    };
+    /**
      * Withdraws sBTC from an sBTC-backed membership (`unstake-sbtc`). The pox-5
-     * contract transfers the requested sBTC back to the staker, so when the deployed
-     * sBTC asset is supplied we bound that transfer with a deny-mode post-condition
-     * asserting the contract sends at most `amountToWithdrawSats`. Without the asset
-     * the call falls back to permissive mode (with a warning).
+     * contract transfers the requested sBTC back to the staker, so the call runs in
+     * Deny mode with two post-conditions: a will-perform-PoX condition for the PoX
+     * action, and an exact FT condition asserting the contract sends exactly
+     * `amountToWithdrawSats`. If the sBTC asset cannot be resolved for this network
+     * the call refuses to build rather than signing an unbounded withdrawal.
      *
      * NOTE: sBTC paths are not yet exercised end-to-end on a live network.
      */
@@ -18181,7 +15458,7 @@ var StacksSDK = class _StacksSDK {
         if (!this.address || !this.publicKey || !this.vaultAccountId) {
           throw new Error("Address, Public Key or Vault ID are not set");
         }
-        const eligible = await (0, import_bitcoin_staking.fetchEligibleUnstakeSbtc)({
+        const eligible = await (0, import_bitcoin_staking2.fetchEligibleUnstakeSbtc)({
           staker: this.address,
           signerManager,
           amountToWithdrawSats,
@@ -18191,20 +15468,18 @@ var StacksSDK = class _StacksSDK {
           const reasons = eligible.reasons ?? [];
           return { success: false, error: `Cannot unstake sBTC: ${this.describeBondReasons(reasons)}` };
         }
-        const resolvedSbtc = this.resolveSbtcAsset(sbtcAsset);
-        let postConditionMode = import_transactions3.PostConditionMode.Allow;
-        let postConditions = [];
-        if (resolvedSbtc) {
-          const bootAddr = this.pox5Network.bootAddress;
-          const pox5ContractId = `${bootAddr}.pox-5`;
-          const sbtcContractId = `${resolvedSbtc.contractAddress}.${resolvedSbtc.contractName}`;
-          postConditionMode = import_transactions3.PostConditionMode.Deny;
-          postConditions = [
-            import_transactions3.Pc.principal(pox5ContractId).willSendLte(amountToWithdrawSats).ft(sbtcContractId, resolvedSbtc.assetName)
-          ];
-        } else {
-          console.warn("unstakeSbtc: no sBTC asset resolved \u2014 the returned sBTC is not bounded by a post-condition.");
+        const resolvedSbtc = await this.resolveSbtcAsset(sbtcAsset);
+        if (!resolvedSbtc) {
+          return { success: false, error: "Could not resolve the network sBTC asset (/v2/pox pox_5_sbtc_contract); refusing to build an unbounded sBTC withdrawal." };
         }
+        const bootAddr = this.pox5Network.bootAddress;
+        const pox5ContractId = `${bootAddr}.pox-5`;
+        const sbtcContractId = `${resolvedSbtc.contractAddress}.${resolvedSbtc.contractName}`;
+        const postConditionMode = import_transactions3.PostConditionMode.Deny;
+        const postConditions = [
+          import_transactions3.Pc.origin().willPerformPox(),
+          import_transactions3.Pc.principal(pox5ContractId).willSendEq(amountToWithdrawSats).ft(sbtcContractId, resolvedSbtc.assetName)
+        ];
         const result = await this.runNonceExclusive(async () => {
           const resolvedNonce = await this.resolveNonce(opts?.nonce);
           const tx = await this.buildPox5Call(
@@ -18219,7 +15494,7 @@ var StacksSDK = class _StacksSDK {
         }
         const settled = await this.waitForTxSettlement(result.txid);
         if (!settled.success || settled.data?.tx_status !== "success") {
-          return { success: false, error: settled.data?.tx_error ?? "unstake-sbtc failed on-chain", txHash: result.txid };
+          return { success: false, unsettled: !settled.success, error: settled.data?.tx_error ?? "unstake-sbtc failed on-chain", txHash: result.txid };
         }
         return { success: true, txHash: result.txid };
       } catch (error) {
@@ -18234,9 +15509,9 @@ var StacksSDK = class _StacksSDK {
       try {
         if (!this.address) throw new Error("Address is not set");
         const [pox, membership, stxOnly] = await Promise.all([
-          (0, import_bitcoin_staking.fetchPoxInfo)({ network: this.pox5Network }),
-          (0, import_bitcoin_staking.fetchBondMembership)({ address: this.address, network: this.pox5Network }),
-          (0, import_bitcoin_staking.fetchStakerInfo)({ address: this.address, network: this.pox5Network })
+          (0, import_bitcoin_staking2.fetchPoxInfo)({ network: this.pox5Network }),
+          (0, import_bitcoin_staking2.fetchBondMembership)({ address: this.address, network: this.pox5Network }),
+          (0, import_bitcoin_staking2.fetchStakerInfo)({ address: this.address, network: this.pox5Network })
         ]);
         const stxOnlyData = stxOnly?.staked ? {
           amount_stx: microToStx(stxOnly.details.amountUstx),
@@ -18247,10 +15522,10 @@ var StacksSDK = class _StacksSDK {
         if (!membership) {
           return { success: true, data: { bond: null, stx_only: stxOnlyData } };
         }
-        const firstEarningCycle = (0, import_bitcoin_staking.bondPeriodToRewardCycle)({ bondIndex: membership.bondIndex, poxInfo: pox });
+        const firstEarningCycle = (0, import_bitcoin_staking2.bondPeriodToRewardCycle)({ bondIndex: membership.bondIndex, poxInfo: pox });
         const earnedSats = await this.sumOverCycles(
           this.cycleRange(firstEarningCycle, pox.rewardCycleId),
-          (cycle) => (0, import_bitcoin_staking.fetchEarned)({
+          (cycle) => (0, import_bitcoin_staking2.fetchEarned)({
             signerManager: membership.signer,
             rewardCycle: cycle,
             bondIndex: membership.bondIndex,
@@ -18261,10 +15536,16 @@ var StacksSDK = class _StacksSDK {
         let locking_address = null;
         let still_locked = null;
         let blocks_until_unlock = null;
+        let record = null;
         if (membership.isL1Lock) {
-          const bond = await (0, import_bitcoin_staking.fetchBond)({ bondIndex: membership.bondIndex, network: this.pox5Network });
+          try {
+            record = await this.lockRecordStore.loadRecord(this.address, membership.bondIndex);
+          } catch (e) {
+            return { success: false, error: `Lock-record store unreadable for bond ${membership.bondIndex} (UNKNOWN, not "no record") \u2014 refusing to report position state: ${formatErrorMessage(e)}` };
+          }
+          const bond = await (0, import_bitcoin_staking2.fetchBond)({ bondIndex: membership.bondIndex, network: this.pox5Network });
           if (bond) {
-            const meta = (0, import_bitcoin_staking.buildRegisterMetadata)({
+            const meta = (0, import_bitcoin_staking2.buildRegisterMetadata)({
               bondIndex: membership.bondIndex,
               poxInfo: pox,
               bitcoinPublicKey: this.publicKey,
@@ -18279,17 +15560,16 @@ var StacksSDK = class _StacksSDK {
               const res = await fetch(`${this.esploraBase()}/address/${meta.lockAddress}/utxo`);
               if (!res.ok) throw new Error(`Esplora HTTP ${res.status}`);
               const utxos = await res.json();
-              const record = await this.lockRecordStore.loadRecord(this.address, membership.bondIndex);
               still_locked = record?.btcTxid !== void 0 && record.vout !== void 0 ? utxos.some((u) => u.txid === record.btcTxid && u.vout === record.vout) : utxos.length > 0;
             } catch {
               still_locked = null;
             }
           }
         }
-        const amountSatsBn = membership.amountSats;
+        const amountSatsBn = this.effectiveL1AmountSats(membership, record);
         const amountBtc = (Number(amountSatsBn) / 1e8).toFixed(8);
         const earnedBtc = (Number(earnedSats) / 1e8).toFixed(8);
-        const firstRewardCycle = (0, import_bitcoin_staking.bondPeriodToRewardCycle)({ bondIndex: membership.bondIndex, poxInfo: pox });
+        const firstRewardCycle = (0, import_bitcoin_staking2.bondPeriodToRewardCycle)({ bondIndex: membership.bondIndex, poxInfo: pox });
         const cyclesUntilRewards = Math.max(0, firstRewardCycle - pox.rewardCycleId);
         return {
           success: true,
@@ -18329,10 +15609,10 @@ var StacksSDK = class _StacksSDK {
         if (!this.address || !this.publicKey || !this.vaultAccountId) {
           throw new Error("Address, Public Key or Vault ID are not set");
         }
-        const membership = await (0, import_bitcoin_staking.fetchBondMembership)({ address: this.address, network: this.pox5Network });
+        const membership = await (0, import_bitcoin_staking2.fetchBondMembership)({ address: this.address, network: this.pox5Network });
         if (!membership) return { success: false, error: "No active bond membership found" };
         if (!membership.isL1Lock) return { success: false, error: "Early exit only applies to L1-locked (native BTC) bonds" };
-        const eligible = await (0, import_bitcoin_staking.fetchEligibleAnnounceL1EarlyExit)({
+        const eligible = await (0, import_bitcoin_staking2.fetchEligibleAnnounceL1EarlyExit)({
           staker: this.address,
           oldSignerManager: membership.signer,
           network: this.pox5Network
@@ -18353,14 +15633,25 @@ var StacksSDK = class _StacksSDK {
               postConditions: [import_transactions3.Pc.origin().willPerformPox()]
             }
           );
-          return this.pox5SignAndBroadcast(tx, opts?.note ?? "announce-l1-early-exit", opts?.externalId);
+          return this.pox5SignAndBroadcast(tx, opts?.note ?? "announce-l1-early-exit", opts?.externalId, async () => {
+            const recheck = await (0, import_bitcoin_staking2.fetchEligibleAnnounceL1EarlyExit)({
+              staker: this.address,
+              oldSignerManager: membership.signer,
+              network: this.pox5Network
+            });
+            if (!recheck.ok) {
+              const reasons = recheck.reasons ?? [];
+              return `eligibility changed during approval: ${this.describeBondReasons(reasons)}`;
+            }
+            return void 0;
+          });
         });
         if (!result?.txid || result.error || result.reason) {
           return { success: false, error: result?.error ?? result?.reason ?? "broadcast failed" };
         }
         const settled = await this.waitForTxSettlement(result.txid);
         if (!settled.success || settled.data?.tx_status !== "success") {
-          return { success: false, error: settled.data?.tx_error ?? "announce-l1-early-exit failed on-chain", txHash: result.txid };
+          return { success: false, unsettled: !settled.success, error: settled.data?.tx_error ?? "announce-l1-early-exit failed on-chain", txHash: result.txid };
         }
         return { success: true, txHash: result.txid };
       } catch (error) {
@@ -18375,11 +15666,11 @@ var StacksSDK = class _StacksSDK {
       try {
         if (!this.address || !this.publicKey) throw new Error("Address or Public Key not set");
         const [pox, bond] = await Promise.all([
-          (0, import_bitcoin_staking.fetchPoxInfo)({ network: this.pox5Network }),
-          (0, import_bitcoin_staking.fetchBond)({ bondIndex, network: this.pox5Network })
+          (0, import_bitcoin_staking2.fetchPoxInfo)({ network: this.pox5Network }),
+          (0, import_bitcoin_staking2.fetchBond)({ bondIndex, network: this.pox5Network })
         ]);
         if (!bond) return { success: false, error: `Bond ${bondIndex} not found` };
-        const metadata = (0, import_bitcoin_staking.buildRegisterMetadata)({
+        const metadata = (0, import_bitcoin_staking2.buildRegisterMetadata)({
           bondIndex,
           poxInfo: pox,
           bitcoinPublicKey: this.publicKey,
@@ -18432,9 +15723,9 @@ var StacksSDK = class _StacksSDK {
     };
     this.getRequirements = async (opts) => {
       try {
-        const pox = await (0, import_bitcoin_staking.fetchPoxInfo)({ network: this.pox5Network });
+        const pox = await (0, import_bitcoin_staking2.fetchPoxInfo)({ network: this.pox5Network });
         const safetyCheck = isSafeToSubmit(pox);
-        const isPreparePh = (0, import_bitcoin_staking.isInPreparePhase)({ burnHeight: pox.currentBurnchainBlockHeight, poxInfo: pox });
+        const isPreparePh = (0, import_bitcoin_staking2.isInPreparePhase)({ burnHeight: pox.currentBurnchainBlockHeight, poxInfo: pox });
         const cycle = {
           id: pox.rewardCycleId,
           current_burn_height: pox.currentBurnchainBlockHeight,
@@ -18445,12 +15736,12 @@ var StacksSDK = class _StacksSDK {
           blocks_until_deadline: Math.max(0, safetyCheck.blocksUntilBoundary - stacks_info.stacking.solo.safetyBlocks),
           blocks_until_safe: safetyCheck.safe ? null : pox.prepareCycleLength + safetyCheck.blocksUntilBoundary
         };
-        const firstBondCycle = (0, import_bitcoin_staking.bondPeriodToRewardCycle)({ bondIndex: 0, poxInfo: pox });
+        const firstBondCycle = (0, import_bitcoin_staking2.bondPeriodToRewardCycle)({ bondIndex: 0, poxInfo: pox });
         const boundary = Math.max(0, Math.ceil((pox.rewardCycleId - firstBondCycle) / this.bondGapCycles(pox)));
         const currentBondIndex = boundary > 0 ? boundary - 1 : null;
         let nextOpenBondIndex = null;
         for (const candidate of [boundary, boundary + 1]) {
-          const s = await (0, import_bitcoin_staking.fetchBondStatus)({ bondIndex: candidate, poxInfo: pox, network: this.pox5Network });
+          const s = await (0, import_bitcoin_staking2.fetchBondStatus)({ bondIndex: candidate, poxInfo: pox, network: this.pox5Network });
           if (s === "open" || s === "eligible") {
             nextOpenBondIndex = candidate;
             break;
@@ -18458,9 +15749,9 @@ var StacksSDK = class _StacksSDK {
         }
         const fetchBondDetails = async (idx) => {
           const [bond, status, allowance] = await Promise.all([
-            (0, import_bitcoin_staking.fetchBond)({ bondIndex: idx, network: this.pox5Network }),
-            (0, import_bitcoin_staking.fetchBondStatus)({ bondIndex: idx, poxInfo: pox, network: this.pox5Network }),
-            this.address ? (0, import_bitcoin_staking.fetchBondAllowance)({ bondIndex: idx, address: this.address, network: this.pox5Network }).catch(() => BigInt(0)) : Promise.resolve(BigInt(0))
+            (0, import_bitcoin_staking2.fetchBond)({ bondIndex: idx, network: this.pox5Network }),
+            (0, import_bitcoin_staking2.fetchBondStatus)({ bondIndex: idx, poxInfo: pox, network: this.pox5Network }),
+            this.address ? (0, import_bitcoin_staking2.fetchBondAllowance)({ bondIndex: idx, address: this.address, network: this.pox5Network }).catch(() => BigInt(0)) : Promise.resolve(BigInt(0))
           ]);
           if (!bond) return null;
           return {
@@ -18502,7 +15793,7 @@ var StacksSDK = class _StacksSDK {
           } : null
         };
         if (opts?.btcAmountSats !== void 0 && nextOpenDetails?._bond) {
-          const minUstx = (0, import_bitcoin_staking.minUstxForSatsAmount)({
+          const minUstx = (0, import_bitcoin_staking2.minUstxForSatsAmount)({
             sats: opts.btcAmountSats,
             stxValueRatio: nextOpenDetails._bond.stxValueRatio,
             minUstxRatioBps: nextOpenDetails._bond.minUstxRatioBps
@@ -18523,7 +15814,7 @@ var StacksSDK = class _StacksSDK {
               your_allowance_sats: reqDetails.your_allowance_sats
             };
             if (opts.btcAmountSats !== void 0) {
-              const minUstx = (0, import_bitcoin_staking.minUstxForSatsAmount)({
+              const minUstx = (0, import_bitcoin_staking2.minUstxForSatsAmount)({
                 sats: opts.btcAmountSats,
                 stxValueRatio: reqDetails._bond.stxValueRatio,
                 minUstxRatioBps: reqDetails._bond.minUstxRatioBps
@@ -18531,7 +15822,7 @@ var StacksSDK = class _StacksSDK {
               btc_bond.requested_bond.min_stx_for_sats = microToStx(minUstx);
               btc_bond.requested_bond.min_ustx_for_sats = minUstx.toString();
               if (opts.signerManager && this.address) {
-                const eligibility = await (0, import_bitcoin_staking.fetchEligibleRegisterForBond)({
+                const eligibility = await (0, import_bitcoin_staking2.fetchEligibleRegisterForBond)({
                   bondIndex: opts.bondIndex,
                   staker: this.address,
                   amountUstx: minUstx,
@@ -18542,7 +15833,7 @@ var StacksSDK = class _StacksSDK {
                 });
                 btc_bond.requested_bond.eligible = eligibility.ok;
                 btc_bond.requested_bond.eligibility_reasons = eligibility.ok ? [] : (eligibility.reasons ?? []).map((r) => {
-                  const d = (0, import_bitcoin_staking.describePox5Error)(r);
+                  const d = (0, import_bitcoin_staking2.describePox5Error)(r);
                   return d ? d.name : `code ${r}`;
                 });
               }
@@ -18573,7 +15864,7 @@ var StacksSDK = class _StacksSDK {
         const body = await res.text().catch(() => "");
         throw new Error(`BTC broadcast failed (${res.status}): ${body}`);
       }
-      return res.text();
+      return (await res.text()).trim();
     };
     this.btcDerSig = (fullSigHex) => {
       const parsed = import_secp256k14.Signature.fromCompact(fullSigHex);
@@ -18601,18 +15892,18 @@ var StacksSDK = class _StacksSDK {
     this.deriveLock = async (address, bondIndexOverride) => {
       const addr = address ?? this.address;
       const [pox, membership] = await Promise.all([
-        (0, import_bitcoin_staking.fetchPoxInfo)({ network: this.pox5Network }),
-        (0, import_bitcoin_staking.fetchBondMembership)({ address: addr, network: this.pox5Network }).catch(() => null)
+        (0, import_bitcoin_staking2.fetchPoxInfo)({ network: this.pox5Network }),
+        (0, import_bitcoin_staking2.fetchBondMembership)({ address: addr, network: this.pox5Network }).catch(() => null)
       ]);
       const bondIndex = bondIndexOverride ?? membership?.bondIndex;
       if (bondIndex === void 0) return null;
       if (membership && !membership.isL1Lock && bondIndexOverride === void 0) return null;
       const record = await this.lockRecordStore.loadRecord(addr, bondIndex);
       if (record && record.isL1Lock === false) return null;
-      const bond = await (0, import_bitcoin_staking.fetchBond)({ bondIndex, network: this.pox5Network });
+      const bond = await (0, import_bitcoin_staking2.fetchBond)({ bondIndex, network: this.pox5Network });
       if (!bond) throw new Error(`Bond ${bondIndex} not found`);
-      const unlockBytes = record?.unlockBytes ?? (0, import_bitcoin_staking.buildUnlockScript)((0, import_common3.hexToBytes)(this.publicKey));
-      const unlockHeight = record?.unlockHeight ?? (0, import_bitcoin_staking.computeBondUnlockHeight)({ bondIndex, poxInfo: pox });
+      const unlockBytes = record?.unlockBytes ?? (0, import_bitcoin_staking2.buildUnlockScript)((0, import_common3.hexToBytes)(this.publicKey));
+      const unlockHeight = record?.unlockHeight ?? (0, import_bitcoin_staking2.computeBondUnlockHeight)({ bondIndex, poxInfo: pox });
       const lockScriptOpts = {
         stxAddress: addr,
         unlockHeight,
@@ -18622,8 +15913,8 @@ var StacksSDK = class _StacksSDK {
       return {
         bondIndex,
         unlockHeight,
-        lockScript: (0, import_bitcoin_staking.buildLockScript)(lockScriptOpts),
-        lockingAddress: record?.lockAddress ?? (0, import_bitcoin_staking.buildLockAddress)({ ...lockScriptOpts, network: this.pox5Network }),
+        lockScript: (0, import_bitcoin_staking2.buildLockScript)(lockScriptOpts),
+        lockingAddress: record?.lockAddress ?? (0, import_bitcoin_staking2.buildLockAddress)({ ...lockScriptOpts, network: this.pox5Network }),
         earlyUnlockBytes: typeof bond.earlyUnlockBytes === "string" ? (0, import_common3.hexToBytes)(bond.earlyUnlockBytes) : bond.earlyUnlockBytes,
         unlockBytes,
         // Use the immutable recorded amount; membership.amountSats is zeroed by
@@ -18646,7 +15937,7 @@ var StacksSDK = class _StacksSDK {
      * amount-equality match returned an empty list on both a zeroed amount and a
      * failed read, making a still-locked output look spent.
      */
-    this.findLockUtxo = async (lockingAddress, outpoint) => {
+    this.findLockUtxo = async (lockingAddress, outpoint, opts) => {
       let utxos;
       try {
         const res = await fetch(`${this.esploraBase()}/address/${lockingAddress}/utxo`);
@@ -18661,7 +15952,12 @@ var StacksSDK = class _StacksSDK {
         const match2 = utxos.find((u) => u.txid === outpoint.txid && u.vout === outpoint.vout);
         if (!match2) {
           throw new Error(
-            `Recorded lock outpoint ${outpoint.txid}:${outpoint.vout} not found at ${lockingAddress} \u2014 it may already be spent.`
+            `Lock outpoint ${outpoint.txid}:${outpoint.vout} not found at ${lockingAddress} \u2014 it may already be spent, or the override is wrong.`
+          );
+        }
+        if (opts?.isOperatorOverride && opts.expectedAmountSats !== void 0 && opts.expectedAmountSats > BigInt(0) && BigInt(match2.value) !== opts.expectedAmountSats) {
+          throw new Error(
+            `Override outpoint ${outpoint.txid}:${outpoint.vout} has value ${match2.value} sats but the expected lock amount is ${opts.expectedAmountSats} sats \u2014 rejecting.`
           );
         }
         return match2;
@@ -18671,8 +15967,109 @@ var StacksSDK = class _StacksSDK {
         throw new Error(`No unspent lock output found at ${lockingAddress}.`);
       }
       throw new Error(
-        `Ambiguous lock UTXO: ${utxos.length} unspent outputs at ${lockingAddress}; a durable lock record is required to select the correct outpoint.`
+        `Ambiguous lock UTXO: ${utxos.length} unspent outputs at ${lockingAddress}; a durable lock record or an explicit outpoint override is required to select the correct one.`
       );
+    };
+    /**
+     * Resolves the exact lock UTXO to spend for a recovery. Prefers the immutable
+     * recorded funding outpoint; when no record exists, an operator may supply an
+     * explicit outpoint, which is validated (unspent, correct P2WSH address/script,
+     * and exact expected value) before it is returned. Only when neither is present
+     * does it fall back to a single unambiguous output at the lock address.
+     */
+    /** True if `addr` is a well-formed BTC address for the active Bitcoin network. */
+    this.isValidBtcAddressForNetwork = (addr) => {
+      try {
+        Address(this.btcNetwork).decode(addr);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    /**
+     * Resolves the destination for a native-BTC recovery spend. Under RAW signing the
+     * destination is invisible to Fireblocks, so recovery DEFAULTS to the vault's own
+     * derived BTC address; any other (external) destination must be explicitly approved
+     * via `btcRecoveryAllowlist`. Wrong-network / malformed addresses are rejected
+     * before signing.
+     */
+    this.resolveRecoveryDestination = (requested) => {
+      const vaultAddress = this.getBtcVaultAddress();
+      if (!vaultAddress) {
+        return { error: "Cannot resolve the vault BTC address (public key not set)." };
+      }
+      if (!requested) return { address: vaultAddress };
+      if (!this.isValidBtcAddressForNetwork(requested)) {
+        return { error: `Destination ${requested} is not a valid BTC address for this network.` };
+      }
+      if (requested !== vaultAddress && !this.btcRecoveryAllowlist.includes(requested)) {
+        return {
+          error: `External BTC destination ${requested} is not approved. Recovery defaults to the vault's own address; add the destination to btcRecoveryAllowlist to permit it.`
+        };
+      }
+      return { address: requested };
+    };
+    this.resolveRecoveryUtxo = async (lock, override) => {
+      if (lock.btcTxid !== void 0 && lock.vout !== void 0) {
+        return this.findLockUtxo(lock.lockingAddress, { txid: lock.btcTxid, vout: lock.vout });
+      }
+      if (override) {
+        return this.findLockUtxo(lock.lockingAddress, override, {
+          expectedAmountSats: lock.amountSats,
+          isOperatorOverride: true
+        });
+      }
+      return this.findLockUtxo(lock.lockingAddress);
+    };
+    /**
+     * Reports a native-BTC bond position by index from the immutable durable lock
+     * record plus live Bitcoin UTXO state — independent of Stacks membership, which
+     * `announce-l1-early-exit` zeroes and maturity drops. This keeps a mature or
+     * exited bond visible and recoverable after its on-chain membership disappears.
+     * A Bitcoin lookup failure is reported as UNKNOWN (null), never silently as spent.
+     */
+    this.getHistoricalBondPosition = async (bondIndex) => {
+      try {
+        if (!this.address || !this.publicKey) throw new Error("Address or Public Key not set");
+        const lock = await this.deriveLock(void 0, bondIndex);
+        if (!lock) return { success: false, error: `No native-BTC lock found for bond ${bondIndex}` };
+        let still_locked = null;
+        let recovered = null;
+        let matured = null;
+        try {
+          const [utxosRes, tipHeight] = await Promise.all([
+            fetch(`${this.esploraBase()}/address/${lock.lockingAddress}/utxo`),
+            this.readBtcTipHeight()
+          ]);
+          if (!utxosRes.ok) throw new Error(`Esplora HTTP ${utxosRes.status}`);
+          const utxos = await utxosRes.json();
+          const isUnspent = lock.btcTxid !== void 0 && lock.vout !== void 0 ? utxos.some((u) => u.txid === lock.btcTxid && u.vout === lock.vout) : utxos.length > 0;
+          still_locked = isUnspent;
+          recovered = !isUnspent;
+          matured = tipHeight !== null ? tipHeight >= lock.unlockHeight : null;
+        } catch {
+          still_locked = null;
+          recovered = null;
+          matured = null;
+        }
+        return {
+          success: true,
+          data: {
+            bond_index: lock.bondIndex,
+            amount_sats: lock.amountSats.toString(),
+            amount_btc: (Number(lock.amountSats) / 1e8).toFixed(8),
+            lock_address: lock.lockingAddress,
+            unlock_height: lock.unlockHeight,
+            btc_txid: lock.btcTxid ?? null,
+            vout: lock.vout ?? null,
+            still_locked,
+            recovered,
+            matured
+          }
+        };
+      } catch (error) {
+        return { success: false, error: `Failed to get historical bond position: ${formatErrorMessage(error)}` };
+      }
     };
     // ─── §6: unlockMaturedBond ────────────────────────────────────────────────
     /**
@@ -18682,17 +16079,23 @@ var StacksSDK = class _StacksSDK {
      */
     this.unlockMaturedBond = async (destinationBtcAddress, opts) => {
       try {
+        const dest = this.resolveRecoveryDestination(destinationBtcAddress);
+        if ("error" in dest) return { success: false, error: dest.error };
+        const destination = dest.address;
         const lock = await this.deriveLock(void 0, opts?.bondIndex);
         if (!lock) return { success: false, error: "No L1-locked bond membership found" };
-        const tipHeight = await fetch(`${this.esploraBase()}/blocks/tip/height`).then((r) => r.text()).then(Number);
+        const tipHeight = await this.readBtcTipHeight();
+        if (tipHeight === null) {
+          return { success: false, error: "Could not read the BTC tip height (UNKNOWN) \u2014 refusing to sign a possibly premature CLTV spend." };
+        }
         if (tipHeight < lock.unlockHeight) {
           return { success: false, error: `Bond not matured: BTC tip ${tipHeight} < unlock height ${lock.unlockHeight}` };
         }
-        const utxo = await this.findLockUtxo(lock.lockingAddress, { txid: lock.btcTxid, vout: lock.vout });
-        const feeSats = opts?.feeSats ?? BigInt(500);
+        const utxo = opts?.knownUtxo ?? await this.resolveRecoveryUtxo(lock, opts?.outpointOverride);
+        const feeSats = opts?.feeSats ?? await this.estimateBtcFeeSats(this.RECOVERY_SPEND_VBYTES);
         const actualUtxoSats = BigInt(utxo.value);
         const outputAmount = actualUtxoSats - feeSats;
-        if (outputAmount <= BigInt(0)) return { success: false, error: "Fee exceeds locked amount" };
+        if (outputAmount < this.BTC_DUST_LIMIT_SATS) return { success: false, error: `Fee ${feeSats} sats leaves ${outputAmount} sats, below the dust limit ${this.BTC_DUST_LIMIT_SATS} \u2014 lower the fee (locked ${actualUtxoSats} sats).` };
         const p2wshScript = this.p2wshOutputScript(lock.lockScript);
         const tx = new Transaction2({ lockTime: lock.unlockHeight });
         tx.addInput({
@@ -18703,7 +16106,7 @@ var StacksSDK = class _StacksSDK {
           witnessUtxo: { script: p2wshScript, amount: actualUtxoSats },
           witnessScript: lock.lockScript
         });
-        tx.addOutputAddress(destinationBtcAddress, outputAmount, this.btcNetwork);
+        tx.addOutputAddress(destination, outputAmount, this.btcNetwork);
         const sighash = this.btcSegwitSighash(tx, 0, lock.lockScript, actualUtxoSats);
         const stakerSig = await this.signBtcSighash(sighash);
         this.setP2wshWitness(tx, 0, [stakerSig, new Uint8Array([1]), lock.lockScript]);
@@ -18723,9 +16126,12 @@ var StacksSDK = class _StacksSDK {
      */
     this.spendEarlyExitUtxo = async (destinationBtcAddress, opts) => {
       try {
+        const dest = this.resolveRecoveryDestination(destinationBtcAddress);
+        if ("error" in dest) return { success: false, error: dest.error };
+        const destination = dest.address;
         const lock = await this.deriveLock(void 0, opts?.bondIndex);
         if (!lock) return { success: false, error: "No L1-locked bond membership found" };
-        const announced = await (0, import_bitcoin_staking.fetchHasAnnouncedL1EarlyExit)({
+        const announced = await (0, import_bitcoin_staking2.fetchHasAnnouncedL1EarlyExit)({
           bondIndex: lock.bondIndex,
           staker: this.address,
           network: this.pox5Network
@@ -18733,11 +16139,11 @@ var StacksSDK = class _StacksSDK {
         if (!announced) {
           return { success: false, error: "announce-l1-early-exit not settled \u2014 call announceEarlyExit first and wait for it to confirm" };
         }
-        const utxo = await this.findLockUtxo(lock.lockingAddress, { txid: lock.btcTxid, vout: lock.vout });
-        const feeSats = opts?.feeSats ?? BigInt(500);
+        const utxo = opts?.knownUtxo ?? await this.resolveRecoveryUtxo(lock, opts?.outpointOverride);
+        const feeSats = opts?.feeSats ?? await this.estimateBtcFeeSats(this.RECOVERY_SPEND_VBYTES);
         const actualUtxoSats = BigInt(utxo.value);
         const outputAmount = actualUtxoSats - feeSats;
-        if (outputAmount <= BigInt(0)) return { success: false, error: "Fee exceeds locked amount" };
+        if (outputAmount < this.BTC_DUST_LIMIT_SATS) return { success: false, error: `Fee ${feeSats} sats leaves ${outputAmount} sats, below the dust limit ${this.BTC_DUST_LIMIT_SATS} \u2014 lower the fee (locked ${actualUtxoSats} sats).` };
         const p2wshScript = this.p2wshOutputScript(lock.lockScript);
         const tx = new Transaction2();
         tx.addInput({
@@ -18748,7 +16154,7 @@ var StacksSDK = class _StacksSDK {
           witnessUtxo: { script: p2wshScript, amount: actualUtxoSats },
           witnessScript: lock.lockScript
         });
-        tx.addOutputAddress(destinationBtcAddress, outputAmount, this.btcNetwork);
+        tx.addOutputAddress(destination, outputAmount, this.btcNetwork);
         const sighash = this.btcSegwitSighash(tx, 0, lock.lockScript, actualUtxoSats);
         const unsignedTxHex = (0, import_common3.bytesToHex)(tx.toBytes(false, false));
         const cosigner = new CosignerService(resolveCosignerUrl(this.testnet));
@@ -18763,12 +16169,118 @@ var StacksSDK = class _StacksSDK {
             expectedUnlockBytes: lock.earlyUnlockBytes
           })
         ]);
-        const preimage = (0, import_bitcoin_staking.computeRegisterPreimage)(this.address);
+        const preimage = (0, import_bitcoin_staking2.computeRegisterPreimage)(this.address);
         this.setP2wshWitness(tx, 0, [stakerSig, earlyExitSig, preimage, new Uint8Array([]), lock.lockScript]);
         const btcTxid = await this.broadcastBtc((0, import_common3.bytesToHex)(tx.extract()));
         return { success: true, btcTxid };
       } catch (error) {
         return { success: false, error: `Failed to spend early exit UTXO: ${formatErrorMessage(error)}` };
+      }
+    };
+    /**
+     * Replaces a still-unconfirmed recovery spend (from unlockMaturedBond or
+     * spendEarlyExitUtxo) with a higher-fee transaction (BIP-125 RBF).
+     *
+     * A recovery spend is one input (the lock UTXO) and one output (the destination), so
+     * the fee can only be raised by REDUCING the destination amount — this method never
+     * claims to preserve the received amount. It:
+     *   - preserves the original lock input and destination address;
+     *   - requires the new absolute fee to exceed the original AND to clear the BIP-125
+     *     rule-4 increment (≥ 1 sat/vB over the original, so the replacement pays for its
+     *     own relay bandwidth) — since the size is fixed, a higher absolute fee is also a
+     *     higher fee rate;
+     *   - refuses to create a dust output;
+     *   - rebuilds, re-authorizes, and re-signs through Fireblocks (fresh signatures);
+     *   - rejects if the original is already confirmed or can no longer be found
+     *     (dropped/replaced), and if the still-unspent lock UTXO has been spent by a
+     *     confirmed transaction the rebuild's UTXO lookup rejects it.
+     * The response carries old/new fee and old/new destination amount for display.
+     *
+     * @param originalTxid - The txid of the recovery spend being replaced.
+     * @param newFeeSats - The new absolute fee in sats (must exceed the original fee).
+     * @param opts.kind - Force the spend branch; defaults to inferring from bond maturity.
+     */
+    this.replaceBtcRecoveryFee = async (originalTxid, newFeeSats, opts) => {
+      try {
+        if (!/^[0-9a-fA-F]{64}$/.test(originalTxid)) {
+          return { success: false, error: `Invalid original txid: ${originalTxid}` };
+        }
+        if (newFeeSats <= BigInt(0)) {
+          return { success: false, error: "newFeeSats must be positive" };
+        }
+        let orig;
+        try {
+          const res = await fetch(`${this.esploraBase()}/tx/${originalTxid}`);
+          if (res.status === 404) {
+            return { success: false, error: `Original tx ${originalTxid} not found \u2014 it may already be confirmed and pruned, or replaced/dropped from the mempool. Read its current state before replacing.` };
+          }
+          if (!res.ok) throw new Error(`Esplora HTTP ${res.status}`);
+          orig = await res.json();
+        } catch (error) {
+          return { success: false, error: `Could not read original tx ${originalTxid} (treat as UNKNOWN, not replaceable): ${formatErrorMessage(error)}` };
+        }
+        if (orig?.status?.confirmed) {
+          return { success: false, error: `Original tx ${originalTxid} is already confirmed (block ${orig.status.block_height}) \u2014 nothing to replace.` };
+        }
+        const lock = await this.deriveLock(void 0, opts?.bondIndex);
+        if (!lock) return { success: false, error: "No L1-locked bond found to replace a recovery spend for." };
+        const vin0 = Array.isArray(orig.vin) ? orig.vin[0] : void 0;
+        const parsed = {
+          confirmed: !!orig?.status?.confirmed,
+          blockHeight: orig?.status?.block_height,
+          feeSats: BigInt(orig.fee ?? 0),
+          // vsize from weight (ceil(weight/4)); Esplora reports weight, not vsize directly.
+          vsize: orig.weight ? Math.ceil(Number(orig.weight) / 4) : this.RECOVERY_SPEND_VBYTES,
+          destination: Array.isArray(orig.vout) ? orig.vout[0]?.scriptpubkey_address : void 0,
+          destinationSats: BigInt((Array.isArray(orig.vout) ? orig.vout[0]?.value : 0) ?? 0),
+          outputCount: Array.isArray(orig.vout) ? orig.vout.length : 0,
+          lockOutpoint: vin0 ? { txid: vin0.txid, vout: vin0.vout } : void 0,
+          prevoutAddress: vin0?.prevout?.scriptpubkey_address
+        };
+        const check = checkFeeReplacement(
+          parsed,
+          newFeeSats,
+          lock.lockingAddress,
+          lock.btcTxid !== void 0 && lock.vout !== void 0 ? { txid: lock.btcTxid, vout: lock.vout } : void 0
+        );
+        if (!check.ok) return { success: false, error: check.error };
+        let branch = opts?.kind;
+        if (!branch) {
+          const tipHeight = await this.readBtcTipHeight();
+          if (tipHeight === null) {
+            return { success: false, error: "Could not read the BTC tip height to determine the spend branch; pass opts.kind (matured | early-exit) explicitly." };
+          }
+          branch = tipHeight >= lock.unlockHeight ? "matured" : "early-exit";
+        }
+        const lockValueSats = Number(vin0?.prevout?.value ?? lock.amountSats ?? 0);
+        if (!Number.isFinite(lockValueSats) || lockValueSats <= 0) {
+          return { success: false, error: "Could not determine the lock UTXO value for the replacement (missing prevout value and no recorded lock amount)." };
+        }
+        const spendOpts = {
+          feeSats: newFeeSats,
+          bondIndex: opts?.bondIndex,
+          knownUtxo: { txid: check.lockOutpoint.txid, vout: check.lockOutpoint.vout, value: lockValueSats }
+        };
+        const spend = branch === "matured" ? await this.unlockMaturedBond(check.destination, spendOpts) : await this.spendEarlyExitUtxo(check.destination, spendOpts);
+        if (!spend.success || !spend.btcTxid) {
+          return { success: false, error: spend.error ?? "Replacement spend failed." };
+        }
+        return {
+          success: true,
+          btcTxid: spend.btcTxid,
+          replacement: {
+            oldFeeSats: check.oldFeeSats.toString(),
+            newFeeSats: check.newFeeSats.toString(),
+            oldDestinationSats: check.oldDestinationSats.toString(),
+            newDestinationSats: check.newDestinationSats.toString(),
+            feeRateOldSatVb: check.feeRateOldSatVb,
+            feeRateNewSatVb: check.feeRateNewSatVb,
+            destination: check.destination,
+            branch
+          }
+        };
+      } catch (error) {
+        return { success: false, error: `Failed to replace recovery fee: ${formatErrorMessage(error)}` };
       }
     };
     /**
@@ -18790,24 +16302,21 @@ var StacksSDK = class _StacksSDK {
      * Must be called inside the re-lock window (after prior unlockHeight, before next bond starts).
      */
     this.renewBond = async (nextBondIndex, signerManager, opts) => {
+      const committedBtc = {};
       try {
         if (!this.address || !this.publicKey || !this.vaultAccountId) {
           throw new Error("Address, Public Key or Vault ID are not set");
         }
-        this.warnIfLockStoreNotDurable();
-        const prior = await this.deriveLock();
-        if (!prior) return { success: false, error: "No current L1 bond to renew" };
-        const tipHeight = await fetch(`${this.esploraBase()}/blocks/tip/height`).then((r) => r.text()).then(Number);
-        if (tipHeight < prior.unlockHeight) {
-          return { success: false, error: `Prior bond not matured: BTC tip ${tipHeight} < unlock height ${prior.unlockHeight}` };
-        }
-        const utxo = await this.findLockUtxo(prior.lockingAddress, { txid: prior.btcTxid, vout: prior.vout });
+        const storeError = await this.assertDurableLockStore();
+        if (storeError) return { success: false, error: storeError };
+        const smAllowError = this.signerManagerAllowedError(signerManager);
+        if (smAllowError) return { success: false, error: smAllowError };
         const [pox, nextBond] = await Promise.all([
-          (0, import_bitcoin_staking.fetchPoxInfo)({ network: this.pox5Network }),
-          (0, import_bitcoin_staking.fetchBond)({ bondIndex: nextBondIndex, network: this.pox5Network })
+          (0, import_bitcoin_staking2.fetchPoxInfo)({ network: this.pox5Network }),
+          (0, import_bitcoin_staking2.fetchBond)({ bondIndex: nextBondIndex, network: this.pox5Network })
         ]);
         if (!nextBond) return { success: false, error: `Next bond ${nextBondIndex} not found` };
-        const nextMeta = (0, import_bitcoin_staking.buildRegisterMetadata)({
+        const nextMeta = (0, import_bitcoin_staking2.buildRegisterMetadata)({
           bondIndex: nextBondIndex,
           poxInfo: pox,
           bitcoinPublicKey: this.publicKey,
@@ -18815,7 +16324,7 @@ var StacksSDK = class _StacksSDK {
           earlyUnlockBytes: nextBond.earlyUnlockBytes,
           network: this.pox5Network
         });
-        const onchainNext = await (0, import_bitcoin_staking.fetchConstructLockupOutputScript)({
+        const onchainNext = await (0, import_bitcoin_staking2.fetchConstructLockupOutputScript)({
           stxAddress: this.address,
           unlockHeight: nextMeta.unlockHeight,
           unlockBytes: nextMeta.unlockBytes,
@@ -18825,74 +16334,134 @@ var StacksSDK = class _StacksSDK {
         if ((0, import_common3.bytesToHex)(nextMeta.outputScript) !== (0, import_common3.bytesToHex)(onchainNext)) {
           return { success: false, error: "Next bond lockup script mismatch \u2014 NOT proceeding" };
         }
-        const feeSats = opts?.feeSats ?? BigInt(500);
-        const actualUtxoSats = BigInt(utxo.value);
-        const outputAmount = actualUtxoSats - feeSats;
-        if (outputAmount <= BigInt(0)) return { success: false, error: "Fee exceeds locked amount" };
-        const amountUstx = (0, import_bitcoin_staking.minUstxForSatsAmount)({
-          sats: outputAmount,
+        const nextRecordFor = (amountSats, extra = {}) => ({
+          bondIndex: nextBondIndex,
+          unlockBytes: nextMeta.unlockBytes,
+          lockAddress: nextMeta.lockAddress,
+          unlockHeight: nextMeta.unlockHeight,
+          amountSats,
+          isL1Lock: true,
+          signerManager,
+          firstRewardCycle: (0, import_bitcoin_staking2.bondPeriodToRewardCycle)({ bondIndex: nextBondIndex, poxInfo: pox }),
+          ...extra
+        });
+        const requiredUstx = (sats) => (0, import_bitcoin_staking2.minUstxForSatsAmount)({
+          sats,
           stxValueRatio: nextBond.stxValueRatio,
           minUstxRatioBps: nextBond.minUstxRatioBps
         });
-        const preflight = await (0, import_bitcoin_staking.fetchEligibleRegisterForBond)({
-          bondIndex: nextBondIndex,
-          staker: this.address,
-          amountUstx,
-          satsTotal: outputAmount,
-          signerManager,
-          poxInfo: pox,
-          network: this.pox5Network
-        });
-        if (!preflight.ok) {
-          const reasons = preflight.reasons ?? [];
-          return { success: false, error: `Next bond ${nextBondIndex} not eligible (no BTC re-locked): ${this.describeBondReasons(reasons)}` };
+        const staleLockGuard = await this.nativeRecordOverwriteGuard(nextBondIndex, nextMeta.lockAddress);
+        if (staleLockGuard) return { success: false, error: staleLockGuard };
+        let priorNextRecord;
+        try {
+          priorNextRecord = await this.lockRecordStore.loadRecord(this.address, nextBondIndex);
+        } catch (e) {
+          return { success: false, error: `Lock-record store unreadable for bond ${nextBondIndex} (UNKNOWN, not "no prior attempt") \u2014 refusing to re-lock: ${formatErrorMessage(e)}` };
         }
-        const priorP2wshScript = this.p2wshOutputScript(prior.lockScript);
-        const btcTx = new Transaction2({ lockTime: prior.unlockHeight });
-        btcTx.addInput({
-          txid: utxo.txid,
-          index: utxo.vout,
-          sequence: 4294967293,
-          // BIP-125 replaceable (still < 0xffffffff, so CLTV holds)
-          witnessUtxo: { script: priorP2wshScript, amount: actualUtxoSats },
-          witnessScript: prior.lockScript
-        });
-        btcTx.addOutputAddress(nextMeta.lockAddress, outputAmount, this.btcNetwork);
-        const sighash = this.btcSegwitSighash(btcTx, 0, prior.lockScript, actualUtxoSats);
-        const stakerSig = await this.signBtcSighash(sighash);
-        this.setP2wshWitness(btcTx, 0, [stakerSig, new Uint8Array([1]), prior.lockScript]);
-        await this.lockRecordStore.saveRecord(this.address, nextBondIndex, {
-          bondIndex: nextBondIndex,
-          unlockBytes: nextMeta.unlockBytes,
-          lockAddress: nextMeta.lockAddress,
-          unlockHeight: nextMeta.unlockHeight,
-          amountSats: outputAmount,
-          isL1Lock: true,
-          signerManager,
-          firstRewardCycle: (0, import_bitcoin_staking.bondPeriodToRewardCycle)({ bondIndex: nextBondIndex, poxInfo: pox })
-        });
-        const btcTxid = await this.broadcastBtc((0, import_common3.bytesToHex)(btcTx.extract()));
+        let resumeRelock = priorNextRecord?.btcTxid !== void 0 && priorNextRecord.lockAddress === nextMeta.lockAddress;
+        let rebuildingOverDeadTxid = false;
+        if (resumeRelock) {
+          const recordedTx = await this.getBtcTxStatus(priorNextRecord.btcTxid);
+          if (!recordedTx.success) {
+            return { success: false, error: `Cannot verify the recorded re-lock tx ${priorNextRecord.btcTxid} (UNKNOWN) \u2014 refusing to proceed: ${recordedTx.error ?? ""}` };
+          }
+          if (!recordedTx.data.found) {
+            resumeRelock = false;
+            rebuildingOverDeadTxid = true;
+          }
+        }
+        let btcTxid;
+        let outputAmount;
+        if (resumeRelock) {
+          btcTxid = priorNextRecord.btcTxid;
+          outputAmount = priorNextRecord.amountSats;
+          committedBtc.btcTxid = btcTxid;
+        } else {
+          const prior = await this.deriveLock();
+          if (!prior) return { success: false, error: "No current L1 bond to renew" };
+          const tipHeight = await this.readBtcTipHeight();
+          if (tipHeight === null) {
+            return { success: false, error: "Could not read the BTC tip height (UNKNOWN) \u2014 refusing to sign a possibly premature CLTV re-lock." };
+          }
+          if (tipHeight < prior.unlockHeight) {
+            return { success: false, error: `Prior bond not matured: BTC tip ${tipHeight} < unlock height ${prior.unlockHeight}` };
+          }
+          const utxo = await this.findLockUtxo(prior.lockingAddress, { txid: prior.btcTxid, vout: prior.vout });
+          const feeSats = opts?.feeSats ?? await this.estimateBtcFeeSats(this.RECOVERY_SPEND_VBYTES);
+          const actualUtxoSats = BigInt(utxo.value);
+          outputAmount = actualUtxoSats - feeSats;
+          if (outputAmount < this.BTC_DUST_LIMIT_SATS) return { success: false, error: `Fee ${feeSats} sats leaves ${outputAmount} sats, below the dust limit ${this.BTC_DUST_LIMIT_SATS} \u2014 lower the fee (locked ${actualUtxoSats} sats).` };
+          const preflight = await (0, import_bitcoin_staking2.fetchEligibleRegisterForBond)({
+            bondIndex: nextBondIndex,
+            staker: this.address,
+            amountUstx: requiredUstx(outputAmount),
+            satsTotal: outputAmount,
+            signerManager,
+            poxInfo: pox,
+            network: this.pox5Network
+          });
+          if (!preflight.ok) {
+            const reasons = preflight.reasons ?? [];
+            return { success: false, error: `Next bond ${nextBondIndex} not eligible (no BTC re-locked): ${this.describeBondReasons(reasons)}` };
+          }
+          const priorP2wshScript = this.p2wshOutputScript(prior.lockScript);
+          const btcTx = new Transaction2({ lockTime: prior.unlockHeight });
+          btcTx.addInput({
+            txid: utxo.txid,
+            index: utxo.vout,
+            sequence: 4294967293,
+            // BIP-125 replaceable (still < 0xffffffff, so CLTV holds)
+            witnessUtxo: { script: priorP2wshScript, amount: actualUtxoSats },
+            witnessScript: prior.lockScript
+          });
+          btcTx.addOutputAddress(nextMeta.lockAddress, outputAmount, this.btcNetwork);
+          const sighash = this.btcSegwitSighash(btcTx, 0, prior.lockScript, actualUtxoSats);
+          const stakerSig = await this.signBtcSighash(sighash);
+          this.setP2wshWitness(btcTx, 0, [stakerSig, new Uint8Array([1]), prior.lockScript]);
+          btcTxid = btcTx.id;
+          committedBtc.btcTxid = btcTxid;
+          await this.lockRecordStore.saveRecord(this.address, nextBondIndex, nextRecordFor(outputAmount, { btcTxid }));
+          let broadcastTxid;
+          try {
+            broadcastTxid = await this.broadcastBtc((0, import_common3.bytesToHex)(btcTx.extract()));
+          } catch (e) {
+            if (rebuildingOverDeadTxid && priorNextRecord) {
+              await this.lockRecordStore.saveRecord(this.address, nextBondIndex, priorNextRecord).catch(() => {
+              });
+              committedBtc.btcTxid = priorNextRecord.btcTxid;
+            }
+            throw e;
+          }
+          if (broadcastTxid !== btcTxid) {
+            const bodyIsTxid = /^[0-9a-fA-F]{64}$/.test(broadcastTxid);
+            if (bodyIsTxid) {
+              await this.lockRecordStore.saveRecord(this.address, nextBondIndex, nextRecordFor(outputAmount, { btcTxid: broadcastTxid })).catch(() => {
+              });
+            }
+            return {
+              success: false,
+              error: `Broadcast response ${JSON.stringify(broadcastTxid)} does not match the locally computed txid ${btcTxid}; refusing to continue with an inconsistent pointer.`,
+              btcTxid: bodyIsTxid ? broadcastTxid : btcTxid
+            };
+          }
+        }
+        const amountUstx = requiredUstx(outputAmount);
         const { blockHash } = await this.waitForBtcConfirmations(btcTxid, opts?.confirmations ?? 3);
         const lockupProof = await this.assembleLockupProof(btcTxid, blockHash, nextMeta.outputScript, nextMeta.unlockHeight);
-        await this.lockRecordStore.saveRecord(this.address, nextBondIndex, {
-          bondIndex: nextBondIndex,
-          unlockBytes: nextMeta.unlockBytes,
-          lockAddress: nextMeta.lockAddress,
-          unlockHeight: nextMeta.unlockHeight,
-          amountSats: outputAmount,
-          isL1Lock: true,
-          signerManager,
-          firstRewardCycle: (0, import_bitcoin_staking.bondPeriodToRewardCycle)({ bondIndex: nextBondIndex, poxInfo: pox }),
+        committedBtc.vout = lockupProof.outputIndex;
+        await this.lockRecordStore.saveRecord(this.address, nextBondIndex, nextRecordFor(outputAmount, {
           btcTxid,
-          vout: lockupProof.outputIndex
-        });
-        const proofPreflight = await (0, import_bitcoin_staking.fetchEligibleRegisterForBond)({
+          vout: lockupProof.outputIndex,
+          ...resumeRelock && priorNextRecord ? { stage: priorNextRecord.stage, fundingExternalId: priorNextRecord.fundingExternalId } : {}
+        }));
+        const proofPox = await (0, import_bitcoin_staking2.fetchPoxInfo)({ network: this.pox5Network });
+        const proofPreflight = await (0, import_bitcoin_staking2.fetchEligibleRegisterForBond)({
           bondIndex: nextBondIndex,
           staker: this.address,
           amountUstx,
           satsTotal: outputAmount,
           signerManager,
-          poxInfo: pox,
+          poxInfo: proofPox,
           outputs: [lockupProof],
           network: this.pox5Network
         });
@@ -18901,6 +16470,7 @@ var StacksSDK = class _StacksSDK {
           return { success: false, error: `SPV proof preflight failed for bond ${nextBondIndex} (BTC re-locked; recover via unlockMaturedBond/spendEarlyExitUtxo): ${this.describeBondReasons(reasons)}`, btcTxid, vout: lockupProof.outputIndex };
         }
         const result = await this.runNonceExclusive(async () => {
+          const custodyRefund = await this.custodyRefundPostConditions();
           const resolvedNonce = await this.resolveNonce(opts?.nonce);
           const stacksTx = await this.buildRegisterForBondTx({
             bondIndex: nextBondIndex,
@@ -18911,9 +16481,23 @@ var StacksSDK = class _StacksSDK {
             nonce: resolvedNonce,
             // Bound the paired STX lock to exactly the required amount.
             postConditionMode: import_transactions3.PostConditionMode.Deny,
-            postConditions: [import_transactions3.Pc.origin().willSendEq(amountUstx).ustxToLock()]
+            postConditions: [import_transactions3.Pc.origin().willSendEq(amountUstx).ustxToLock(), ...custodyRefund.conditions]
           });
-          return this.pox5SignAndBroadcast(stacksTx, opts?.note ?? `renew-bond-${nextBondIndex}`, opts?.externalId);
+          return this.pox5SignAndBroadcast(
+            stacksTx,
+            opts?.note ?? `renew-bond-${nextBondIndex}`,
+            opts?.externalId,
+            // The BTC is already re-locked; a window/phase crossing or custody change
+            // during Fireblocks approval must discard the tx, not broadcast a doomed one.
+            () => this.revalidateRegisterForBond({
+              bondIndex: nextBondIndex,
+              amountUstx,
+              satsTotal: outputAmount,
+              signerManager,
+              outputs: [lockupProof],
+              expectedCustodySats: custodyRefund.custodiedSats
+            })
+          );
         });
         if (!result?.txid || result.error || result.reason) {
           return { success: false, error: result?.error ?? result?.reason ?? "broadcast failed", btcTxid, vout: lockupProof.outputIndex };
@@ -18921,7 +16505,7 @@ var StacksSDK = class _StacksSDK {
         const settled = await this.waitForTxSettlement(result.txid);
         if (!settled.success || settled.data?.tx_status !== "success") {
           const txRepr = settled.data?.tx_result?.repr ?? settled.data?.tx_error ?? "";
-          return { success: false, error: `[${settled.data?.tx_status}] ${txRepr}`.trim(), stacksTxid: result.txid, btcTxid, vout: lockupProof.outputIndex };
+          return { success: false, unsettled: !settled.success, error: `[${settled.data?.tx_status}] ${txRepr}`.trim(), stacksTxid: result.txid, btcTxid, vout: lockupProof.outputIndex };
         }
         return {
           success: true,
@@ -18933,7 +16517,7 @@ var StacksSDK = class _StacksSDK {
           amountUstx: amountUstx.toString()
         };
       } catch (error) {
-        return { success: false, error: `Failed to renew bond: ${formatErrorMessage(error)}` };
+        return { success: false, error: `Failed to renew bond: ${formatErrorMessage(error)}`, ...committedBtc };
       }
     };
     // ─── §9: Rewards ─────────────────────────────────────────────────────────
@@ -18946,25 +16530,41 @@ var StacksSDK = class _StacksSDK {
      */
     // Cycles between consecutive bond periods (derived rather than importing the
     // constant, which the dependency does not export at the type level).
-    this.bondGapCycles = (pox) => (0, import_bitcoin_staking.bondPeriodToRewardCycle)({ bondIndex: 1, poxInfo: pox }) - (0, import_bitcoin_staking.bondPeriodToRewardCycle)({ bondIndex: 0, poxInfo: pox });
-    this.activeBondWindow = (pox) => {
-      const currentCycle = (0, import_bitcoin_staking.burnHeightToRewardCycle)({ burnHeight: pox.currentBurnchainBlockHeight, poxInfo: pox });
-      const firstBondCycle = (0, import_bitcoin_staking.bondPeriodToRewardCycle)({ bondIndex: 0, poxInfo: pox });
+    this.bondGapCycles = (pox) => (0, import_bitcoin_staking2.bondPeriodToRewardCycle)({ bondIndex: 1, poxInfo: pox }) - (0, import_bitcoin_staking2.bondPeriodToRewardCycle)({ bondIndex: 0, poxInfo: pox });
+    /**
+     * Distribution "calculation height" — the burn height at which the reward waterfall
+     * snapshots the active-bond set. calculate-rewards must submit exactly the bonds
+     * active at THIS height, not at the drifting live burn height; near a boundary the
+     * two can fall in different cycles, which is the defect FBS-41 fixes.
+     *
+     * The contract evaluates `(- (distribution-cycle-to-burn-height
+     * (current-distribution-cycle)) u1)` — one block BEFORE the current distribution-
+     * cycle boundary (pox-5 calculate-rewards). This mirrors that exactly via the same
+     * dependency helpers the authoritative fetchEligibleCalculateRewards preflight uses,
+     * replacing the earlier reward-cycle-start guess that missed every other
+     * distribution half-cycle. Fail-safe either way: a wrong height only makes the node
+     * REJECT calculate-rewards (no misdistribution).
+     */
+    this.calculationHeight = (pox) => (0, import_bitcoin_staking2.distributionCycleToBurnHeight)({ distributionCycle: (0, import_bitcoin_staking2.currentDistributionCycle)(pox), poxInfo: pox }) - 1;
+    this.activeBondWindow = (pox, burnHeight) => {
+      const currentCycle = (0, import_bitcoin_staking2.burnHeightToRewardCycle)({ burnHeight, poxInfo: pox });
+      const firstBondCycle = (0, import_bitcoin_staking2.bondPeriodToRewardCycle)({ bondIndex: 0, poxInfo: pox });
       const gap = this.bondGapCycles(pox);
       const latest = currentCycle <= firstBondCycle ? 0 : Math.floor((currentCycle - firstBondCycle) / gap);
-      const windowStart = Math.max(0, latest - (import_bitcoin_staking.BOND_END_OFFSET_PERIODS - 1));
+      const windowStart = Math.max(0, latest - (import_bitcoin_staking2.BOND_END_OFFSET_PERIODS - 1));
       const candidates = [];
-      for (let i = windowStart; i <= latest + 1; i++) candidates.push(i);
+      for (let i = windowStart; i <= latest; i++) candidates.push(i);
       return candidates;
     };
     this.getActiveBondsSorted = async () => {
-      const pox = await (0, import_bitcoin_staking.fetchPoxInfo)({ network: this.pox5Network });
-      const candidates = this.activeBondWindow(pox);
+      const pox = await (0, import_bitcoin_staking2.fetchPoxInfo)({ network: this.pox5Network });
+      const calcHeight = this.calculationHeight(pox);
+      const candidates = this.activeBondWindow(pox, calcHeight);
       const results = await Promise.all(
         candidates.map(async (i) => {
-          const bond = await (0, import_bitcoin_staking.fetchBond)({ bondIndex: i, network: this.pox5Network }).catch(() => null);
+          const bond = await (0, import_bitcoin_staking2.fetchBond)({ bondIndex: i, network: this.pox5Network }).catch(() => null);
           if (!bond) return null;
-          const active = (0, import_bitcoin_staking.isBondActiveAtHeight)({ bondIndex: i, burnHeight: pox.currentBurnchainBlockHeight, poxInfo: pox });
+          const active = (0, import_bitcoin_staking2.isBondActiveAtHeight)({ bondIndex: i, burnHeight: calcHeight, poxInfo: pox });
           if (!active) return null;
           return { i, stxValueRatio: bond.stxValueRatio };
         })
@@ -18984,14 +16584,14 @@ var StacksSDK = class _StacksSDK {
       try {
         if (!this.publicKey || !this.vaultAccountId) throw new Error("SDK not initialized");
         const bondIndices = await this.getActiveBondsSorted();
-        const preflight = await (0, import_bitcoin_staking.fetchEligibleCalculateRewards)({ bondIndices, network: this.pox5Network });
+        const preflight = await (0, import_bitcoin_staking2.fetchEligibleCalculateRewards)({ bondIndices, network: this.pox5Network });
         if (!preflight.ok) {
           const reasons = preflight.reasons ?? [];
           return { success: false, error: `Cannot calculate rewards: ${this.describeBondReasons(reasons)}` };
         }
         const result = await this.runNonceExclusive(async () => {
           const resolvedNonce = await this.resolveNonce(opts?.nonce);
-          const tx = await (0, import_bitcoin_staking.buildCalculateRewards)({
+          const tx = await (0, import_bitcoin_staking2.buildCalculateRewards)({
             bondIndices,
             publicKey: this.publicKey,
             fee: DEFAULT_POX_FEE_USTX,
@@ -19005,7 +16605,7 @@ var StacksSDK = class _StacksSDK {
         }
         const settled = await this.waitForTxSettlement(result.txid);
         if (!settled.success || settled.data?.tx_status !== "success") {
-          return { success: false, error: settled.data?.tx_error ?? "calculate-rewards failed on-chain", txHash: result.txid };
+          return { success: false, unsettled: !settled.success, error: settled.data?.tx_error ?? "calculate-rewards failed on-chain", txHash: result.txid };
         }
         return { success: true, txHash: result.txid };
       } catch (error) {
@@ -19028,15 +16628,9 @@ var StacksSDK = class _StacksSDK {
       }
       return values;
     };
-    /** Fetches a bigint value per cycle in batches and sums the results. */
     this.sumOverCycles = async (cycles, fetcher) => {
       const values = await this.mapCyclesLimited(cycles, fetcher);
       return values.reduce((sum, v) => sum + v, BigInt(0));
-    };
-    /** Fetches a bigint value per cycle in batches and returns the cycles with a positive result. */
-    this.filterCyclesWithPositiveValue = async (cycles, fetcher) => {
-      const values = await this.mapCyclesLimited(cycles, fetcher);
-      return cycles.filter((_, i) => values[i] > BigInt(0));
     };
     /**
      * Executes the two-step signer-manager reward claim for a single reward cycle.
@@ -19045,238 +16639,347 @@ var StacksSDK = class _StacksSDK {
      * STX-only share via none() instead of some(bondIndex).
      * @returns The advanced nonce, and an error message if any step failed.
      */
-    this.executeClaimCycle = async (signerContractAddress, signerContractName, cycle, claimBondIndices, stakerBondIndices, nonce, note, txHashes) => {
-      const smClaimTx = await (0, import_transactions3.makeUnsignedContractCall)({
-        contractAddress: signerContractAddress,
-        contractName: signerContractName,
-        functionName: "claim-rewards",
-        functionArgs: [import_transactions3.Cl.list(claimBondIndices.map((i) => import_transactions3.Cl.uint(i))), import_transactions3.Cl.uint(cycle)],
-        publicKey: this.publicKey,
-        fee: DEFAULT_POX_FEE_USTX,
-        nonce,
-        network: this.pox5Network,
-        // Permissive by design: this calls the CALLER-SELECTED signer-manager
-        // contract, which is where sBTC reward custody and payout live — PoX-5 has no
-        // pool/pro-rata mechanism of its own, so the sBTC movement here is defined by
-        // the specific signer-manager, not by pox-5. A correct deny-mode FT
-        // post-condition therefore depends on that contract's implementation and must
-        // be supplied per-integration (it cannot be written generically here).
-        postConditionMode: "allow",
-        postConditions: []
-      });
-      const smClaimResult = await this.pox5SignAndBroadcast(smClaimTx, `sm-claim-rewards-cycle-${cycle}`);
-      if (smClaimResult?.txid && !smClaimResult.error && !smClaimResult.reason) {
-        nonce = nonce + BigInt(1);
-        const smClaimSettled = await this.waitForTxSettlement(smClaimResult.txid);
-        const smClaimRepr = smClaimSettled.data?.tx_result?.repr ?? smClaimSettled.data?.tx_error ?? "";
-        if (smClaimSettled.data?.tx_status !== "success" && !smClaimRepr.includes("u30") && !smClaimRepr.includes("u32")) {
-          return { nonce, error: `signer-manager.claim-rewards failed at cycle ${cycle}: ${smClaimRepr}` };
+    this.executeClaimCycle = async (signerContractAddress, signerContractName, cycle, claimBondIndices, stakerBondIndices, nonceHolder, note, txHashes, results) => {
+      const signerManager = `${signerContractAddress}.${signerContractName}`;
+      const uniqueBondIndices = [...new Set(claimBondIndices)].sort((a, b) => a - b);
+      const sbtcAsset = await this.resolveSbtcAsset();
+      if (!sbtcAsset) {
+        return { error: `Cannot resolve the network sBTC asset to bound claim-rewards at cycle ${cycle}; refusing to broadcast an unbounded reward claim.` };
+      }
+      const bootAddr = this.pox5Network.bootAddress;
+      const pox5ContractId = `${bootAddr}.pox-5`;
+      const sbtcContractId = `${sbtcAsset.contractAddress}.${sbtcAsset.contractName}`;
+      let totalRewards;
+      const accruedByBond = /* @__PURE__ */ new Map();
+      let noneAccrued = BigInt(0);
+      try {
+        const earned = await Promise.all([
+          (0, import_bitcoin_staking2.fetchEarned)({ signerManager, rewardCycle: cycle, network: this.pox5Network }),
+          ...uniqueBondIndices.map(
+            (idx) => (0, import_bitcoin_staking2.fetchEarned)({ signerManager, rewardCycle: cycle, bondIndex: idx, network: this.pox5Network })
+          )
+        ]);
+        totalRewards = earned.reduce((sum, e) => sum + e, BigInt(0));
+        noneAccrued = earned[0] ?? BigInt(0);
+        uniqueBondIndices.forEach((idx, i) => accruedByBond.set(idx, earned[i + 1] ?? BigInt(0)));
+      } catch (error) {
+        return { error: `Could not read earned rewards to bound claim-rewards at cycle ${cycle}: ${formatErrorMessage(error)}` };
+      }
+      const broadcastLeg = async (buildTx, legNote) => {
+        const result = await this.runNonceExclusive(async () => {
+          const explicit = nonceHolder.value;
+          nonceHolder.value = void 0;
+          const n = await this.resolveNonce(explicit);
+          const tx = await buildTx(n);
+          return this.pox5SignAndBroadcast(tx, legNote);
+        });
+        if (!result?.txid || result.error || result.reason) {
+          return { broadcastError: [result?.error, result?.reason].filter(Boolean).join(" \u2014 ") || "broadcast failed" };
         }
-      } else if (smClaimResult?.error || smClaimResult?.reason) {
-        const errMsg = [smClaimResult?.error, smClaimResult?.reason].filter(Boolean).join(" \u2014 ");
-        return { nonce, error: `signer-manager.claim-rewards broadcast failed at cycle ${cycle}: ${errMsg}` };
+        const settled = await this.waitForTxSettlement(result.txid);
+        return { txid: result.txid, settled };
+      };
+      const recordCycleFailure = (error, signerClaimTxid2) => {
+        for (const b of stakerBondIndices) {
+          results.push({
+            bondIndex: b ?? null,
+            rewardCycle: cycle,
+            signerManager,
+            signerAccruedSats: (b !== void 0 ? accruedByBond.get(b) ?? BigInt(0) : noneAccrued).toString(),
+            stakerPaidSats: null,
+            signerClaimTxid: signerClaimTxid2,
+            stakerClaimTxid: null,
+            status: "failed",
+            error
+          });
+        }
+      };
+      const stakerPayoutPolicy = this.signerManagerRegistry.get(signerManager)?.payoutPolicy;
+      if (stakerBondIndices.length > 0 && !stakerPayoutPolicy) {
+        return {
+          error: `No registered payout policy for signer manager ${signerManager} \u2014 refusing the reward claim at cycle ${cycle} before any leg broadcasts. Register a signerManagerAdapters entry with a payout policy for this manager.`
+        };
+      }
+      const stakerPayoutAssetId = stakerPayoutPolicy ? `${stakerPayoutPolicy.asset.contractAddress}.${stakerPayoutPolicy.asset.contractName}` : void 0;
+      let signerClaimTxid = null;
+      if (totalRewards > BigInt(0)) {
+        const smClaim = await broadcastLeg(
+          (n) => (0, import_transactions3.makeUnsignedContractCall)({
+            contractAddress: signerContractAddress,
+            contractName: signerContractName,
+            functionName: "claim-rewards",
+            functionArgs: [import_transactions3.Cl.list(uniqueBondIndices.map((i) => import_transactions3.Cl.uint(i))), import_transactions3.Cl.uint(cycle)],
+            publicKey: this.publicKey,
+            fee: DEFAULT_POX_FEE_USTX,
+            nonce: n,
+            network: this.pox5Network,
+            // Deny mode: PoX-5 sends exactly total-rewards sBTC to the signer manager for
+            // this cycle. Computed from the same chain state read just above.
+            postConditionMode: "deny",
+            postConditions: [
+              import_transactions3.Pc.principal(pox5ContractId).willSendEq(totalRewards).ft(sbtcContractId, sbtcAsset.assetName)
+            ]
+          }),
+          `sm-claim-rewards-cycle-${cycle}`
+        );
+        if ("broadcastError" in smClaim) {
+          const msg = `signer-manager.claim-rewards broadcast failed at cycle ${cycle}: ${smClaim.broadcastError}`;
+          recordCycleFailure(msg, null);
+          return { error: msg };
+        }
+        const smClaimRepr = smClaim.settled.data?.tx_result?.repr ?? smClaim.settled.data?.tx_error ?? "";
+        if (smClaim.settled.data?.tx_status !== "success" && !smClaimRepr.includes("u30") && !smClaimRepr.includes("u32")) {
+          const msg = `signer-manager.claim-rewards failed at cycle ${cycle}: ${smClaimRepr}`;
+          recordCycleFailure(msg, smClaim.txid);
+          return { unsettled: !smClaim.settled.success, error: msg };
+        }
+        signerClaimTxid = smClaim.txid;
+        txHashes.push(smClaim.txid);
       }
       for (const bondIndex of stakerBondIndices) {
-        const smStakerTx = await (0, import_transactions3.makeUnsignedContractCall)({
-          contractAddress: signerContractAddress,
-          contractName: signerContractName,
-          functionName: "claim-staker-rewards",
-          functionArgs: [
-            import_transactions3.Cl.address(this.address),
-            import_transactions3.Cl.uint(cycle),
-            bondIndex !== void 0 ? import_transactions3.Cl.some(import_transactions3.Cl.uint(bondIndex)) : import_transactions3.Cl.none()
-          ],
-          publicKey: this.publicKey,
-          fee: DEFAULT_POX_FEE_USTX,
-          nonce,
-          network: this.pox5Network,
-          // Permissive by design: the staker payout is performed by the caller-selected
-          // signer-manager's own logic (see the claim-rewards note above), so it cannot
-          // be bounded generically here.
-          postConditionMode: "allow",
-          postConditions: []
+        const signerAccruedSats = bondIndex !== void 0 ? accruedByBond.get(bondIndex) ?? BigInt(0) : noneAccrued;
+        const stakerPaidSats = await (0, import_bitcoin_staking2.fetchEarnedStakerRewards)({
+          signerManager,
+          rewardCycle: cycle,
+          bondIndex,
+          staker: this.address,
+          network: this.pox5Network
+        }).catch(() => null);
+        const recordResult = (status, stakerClaimTxid, error) => results.push({
+          bondIndex: bondIndex ?? null,
+          rewardCycle: cycle,
+          signerManager,
+          signerAccruedSats: signerAccruedSats.toString(),
+          // Only report a paid amount when the payout actually settled; a failed leg
+          // paid nothing, so it must not carry the pre-claim entitlement.
+          stakerPaidSats: status === "claimed" && stakerPaidSats !== null ? stakerPaidSats.toString() : null,
+          signerClaimTxid,
+          stakerClaimTxid,
+          status,
+          ...error ? { error } : {}
         });
         const defaultNote = bondIndex !== void 0 ? `sm-claim-staker-rewards-cycle-${cycle}-bond-${bondIndex}` : `sm-claim-staker-stx-rewards-cycle-${cycle}`;
         const bondSuffix = bondIndex !== void 0 ? ` bond ${bondIndex}` : "";
-        const smStakerResult = await this.pox5SignAndBroadcast(smStakerTx, note ?? defaultNote);
-        if (!smStakerResult?.txid || smStakerResult.error || smStakerResult.reason) {
-          const errMsg = [smStakerResult?.error, smStakerResult?.reason].filter(Boolean).join(" \u2014 ") || "broadcast failed";
-          return { nonce, error: `Failed at cycle ${cycle}${bondSuffix}: ${errMsg}` };
+        const smStaker = await broadcastLeg(
+          (n) => (0, import_transactions3.makeUnsignedContractCall)({
+            contractAddress: signerContractAddress,
+            contractName: signerContractName,
+            functionName: "claim-staker-rewards",
+            functionArgs: [
+              import_transactions3.Cl.address(this.address),
+              import_transactions3.Cl.uint(cycle),
+              bondIndex !== void 0 ? import_transactions3.Cl.some(import_transactions3.Cl.uint(bondIndex)) : import_transactions3.Cl.none()
+            ],
+            publicKey: this.publicKey,
+            fee: DEFAULT_POX_FEE_USTX,
+            nonce: n,
+            network: this.pox5Network,
+            // Deny mode: the manager sends the staker at most maxPayoutSats of the
+            // policy asset (a deliberate upper bound, per answers §3a).
+            postConditionMode: "deny",
+            postConditions: [
+              import_transactions3.Pc.principal(signerManager).willSendLte(stakerPayoutPolicy.maxPayoutSats).ft(stakerPayoutAssetId, stakerPayoutPolicy.asset.assetName)
+            ]
+          }),
+          note ?? defaultNote
+        );
+        if ("broadcastError" in smStaker) {
+          recordResult("failed", null, smStaker.broadcastError);
+          return { error: `Failed at cycle ${cycle}${bondSuffix}: ${smStaker.broadcastError}` };
         }
-        const settled = await this.waitForTxSettlement(smStakerResult.txid);
-        if (!settled.success || settled.data?.tx_status !== "success") {
-          const stakerRepr = settled.data?.tx_result?.repr ?? settled.data?.tx_error ?? "";
-          return { nonce, error: `Claim failed on-chain at cycle ${cycle}${bondSuffix}: ${stakerRepr}` };
+        if (!smStaker.settled.success || smStaker.settled.data?.tx_status !== "success") {
+          const stakerRepr = smStaker.settled.data?.tx_result?.repr ?? smStaker.settled.data?.tx_error ?? "";
+          recordResult("failed", smStaker.txid, stakerRepr);
+          return { unsettled: !smStaker.settled.success, error: `Claim failed on-chain at cycle ${cycle}${bondSuffix}: ${stakerRepr}` };
         }
-        txHashes.push(smStakerResult.txid);
-        nonce = nonce + BigInt(1);
+        recordResult("claimed", smStaker.txid);
+        txHashes.push(smStaker.txid);
       }
-      return { nonce };
-    };
-    /**
-     * Resolves the signer manager and first earning cycle for a bond independently
-     * of current membership. Prefers the live membership when it still refers to the
-     * bond, else falls back to the durable record saved at registration — so rewards
-     * stay discoverable after the bond period ends or the membership is overwritten.
-     */
-    this.resolveBondSignerContext = async (bondIndex, pox, currentMembership) => {
-      if (currentMembership && currentMembership.bondIndex === bondIndex) {
-        return {
-          signerManager: currentMembership.signer,
-          firstEarningCycle: (0, import_bitcoin_staking.bondPeriodToRewardCycle)({ bondIndex, poxInfo: pox })
-        };
-      }
-      const record = await this.lockRecordStore.loadRecord(this.address, bondIndex);
-      if (record?.signerManager) {
-        return {
-          signerManager: record.signerManager,
-          firstEarningCycle: record.firstRewardCycle ?? (0, import_bitcoin_staking.bondPeriodToRewardCycle)({ bondIndex, poxInfo: pox })
-        };
-      }
-      return null;
+      return {};
     };
     /**
      * Claims ALL accumulated sBTC rewards for the given bond indices.
      * Handles the full flow internally: calculate → distribute → claim staker share.
      *
-     * Reward context is resolved per bond from membership OR the durable record, so
-     * historical/expired bonds remain claimable, and claims are grouped by signer
-     * manager so bonds under different managers route to the correct contract. Each
-     * requested bond is probed per cycle (not just the lowest index).
+     * The signer manager that governs each reward cycle is resolved from chain
+     * (get-signer-cycle-membership) rather than the local record, so signer rotation
+     * between cycles routes each cycle's claim to the correct manager and historical
+     * cycles remain claimable after a restart with an empty cache. A chain read failure
+     * refuses the claim (unknown, never silently "no rewards").
+     *
+     * Resumable by design: the per-cycle plan is rebuilt from chain on every call and
+     * includes only cycles/bonds with a still-positive signer accrual or staker
+     * entitlement, so a re-invocation after a partial failure resumes at the first
+     * unclaimed leg without repeating confirmed work — the chain is the progress record,
+     * not a local file. Both claim legs are contract-idempotent, so re-running a leg that
+     * already settled is benign. On failure the response carries the partial `results`
+     * and `txHashes` plus the error; call again to resume.
      */
     this.claimRewards = async (bondIndices, opts) => {
       try {
         if (!this.publicKey || !this.vaultAccountId) throw new Error("SDK not initialized");
         if (!this.address) throw new Error("Address not set");
         if (bondIndices.length === 0) return { success: false, error: "No bond indices provided" };
-        const pox = await (0, import_bitcoin_staking.fetchPoxInfo)({ network: this.pox5Network });
-        const membership = await (0, import_bitcoin_staking.fetchBondMembership)({ address: this.address, network: this.pox5Network }).catch(() => null);
-        const groups = /* @__PURE__ */ new Map();
-        const unresolved = [];
-        for (const bondIndex of bondIndices) {
-          const ctx = await this.resolveBondSignerContext(bondIndex, pox, membership);
-          if (!ctx) {
-            unresolved.push(bondIndex);
-            continue;
-          }
-          const group = groups.get(ctx.signerManager) ?? { firstCycle: ctx.firstEarningCycle, bonds: [] };
-          group.firstCycle = Math.min(group.firstCycle, ctx.firstEarningCycle);
-          group.bonds.push(bondIndex);
-          groups.set(ctx.signerManager, group);
+        const staker = this.address;
+        const uniqueBonds = [...new Set(bondIndices)].sort((a, b) => a - b);
+        const pox = await (0, import_bitcoin_staking2.fetchPoxInfo)({ network: this.pox5Network });
+        const firstCycleByBond = new Map(
+          uniqueBonds.map((b) => [b, (0, import_bitcoin_staking2.bondPeriodToRewardCycle)({ bondIndex: b, poxInfo: pox })])
+        );
+        const minFirstCycle = Math.min(...firstCycleByBond.values());
+        let lastComputeHeight;
+        try {
+          lastComputeHeight = await (0, import_bitcoin_staking2.fetchLastRewardComputeHeight)({ network: this.pox5Network });
+        } catch (e) {
+          return { success: false, error: `Could not read the last reward compute height (unknown, not zero) \u2014 refusing to claim: ${formatErrorMessage(e)}` };
         }
-        if (unresolved.length > 0) {
-          return { success: false, error: `No signer-manager history for bond(s) ${unresolved.join(", ")}; this vault has no record of registering them (supply recovery data or the originating vault).` };
-        }
-        const lastComputeHeight = await (0, import_bitcoin_staking.fetchLastRewardComputeHeight)({ network: this.pox5Network }).catch(() => 0);
         const lastComputedCycle = lastComputeHeight > 0 ? Math.floor((lastComputeHeight - pox.firstBurnchainBlockHeight) / pox.rewardCycleLength) : pox.rewardCycleId - 1;
-        return await this.runNonceExclusive(async () => {
-          let nonce = await this.resolveNonce(opts?.nonce);
-          const txHashes = [];
-          let anyClaimable = false;
-          for (const [signerManager, group] of groups) {
-            const signerDotIdx = signerManager.lastIndexOf(".");
-            const signerContractAddress = signerManager.slice(0, signerDotIdx);
-            const signerContractName = signerManager.slice(signerDotIdx + 1);
-            const claimableCycles = await this.filterCyclesWithPositiveValue(
-              this.cycleRange(group.firstCycle, lastComputedCycle + 1),
-              async (cycle) => {
-                const perBond = await Promise.all(
-                  group.bonds.map(
-                    (bondIndex) => (0, import_bitcoin_staking.fetchEarned)({ signerManager, rewardCycle: cycle, bondIndex, network: this.pox5Network }).catch(() => BigInt(0))
-                  )
-                );
-                return perBond.reduce((sum, v) => sum + v, BigInt(0));
-              }
+        const plan = [];
+        for (let cycle = minFirstCycle; cycle <= lastComputedCycle; cycle++) {
+          let cycleMembership;
+          try {
+            cycleMembership = await (0, import_bitcoin_staking2.fetchSignerCycleMembership)({ staker, cycle, network: this.pox5Network });
+          } catch (e) {
+            return { success: false, error: `Could not resolve signer-cycle membership for cycle ${cycle} (unknown, not zero) \u2014 refusing to claim: ${formatErrorMessage(e)}` };
+          }
+          if (!cycleMembership) continue;
+          const signerManager = cycleMembership.signer;
+          const candidateBonds = uniqueBonds.filter((b) => (firstCycleByBond.get(b) ?? 0) <= cycle);
+          const earned = await Promise.all(
+            candidateBonds.map(async (b) => {
+              const [signerSats, stakerSats] = await Promise.all([
+                (0, import_bitcoin_staking2.fetchEarned)({ signerManager, rewardCycle: cycle, bondIndex: b, network: this.pox5Network }).catch(() => BigInt(-1)),
+                (0, import_bitcoin_staking2.fetchEarnedStakerRewards)({ signerManager, rewardCycle: cycle, bondIndex: b, staker, network: this.pox5Network }).catch(() => BigInt(-1))
+              ]);
+              return { bond: b, signerSats, stakerSats };
+            })
+          );
+          const failedRead = earned.find((e) => e.signerSats < BigInt(0) || e.stakerSats < BigInt(0));
+          if (failedRead) {
+            return { success: false, error: `Could not read earned rewards for bond ${failedRead.bond} at cycle ${cycle} (unknown, not zero) \u2014 refusing to claim` };
+          }
+          const claimBonds = earned.filter((e) => e.signerSats > BigInt(0) || e.stakerSats > BigInt(0)).map((e) => e.bond);
+          if (claimBonds.length === 0) continue;
+          const dot = signerManager.lastIndexOf(".");
+          plan.push({ cycle, signerAddr: signerManager.slice(0, dot), signerName: signerManager.slice(dot + 1), bonds: claimBonds });
+        }
+        if (plan.length === 0) {
+          return {
+            success: false,
+            error: `No rewards available yet for bond(s) ${uniqueBonds.join(", ")} (last_computed_cycle: ${lastComputedCycle}, current_cycle: ${pox.rewardCycleId})`
+          };
+        }
+        const txHashes = [];
+        const results = [];
+        const nonceHolder = { value: opts?.nonce };
+        for (const item of plan) {
+          for (let i = 0; i < item.bonds.length; i += 6) {
+            const chunk = item.bonds.slice(i, i + 6);
+            const result = await this.executeClaimCycle(
+              item.signerAddr,
+              item.signerName,
+              item.cycle,
+              chunk,
+              chunk,
+              nonceHolder,
+              opts?.note,
+              txHashes,
+              results
             );
-            if (claimableCycles.length === 0) continue;
-            anyClaimable = true;
-            const CLAIM_LIST_CAP = 6;
-            const bondChunks = [];
-            for (let i = 0; i < group.bonds.length; i += CLAIM_LIST_CAP) {
-              bondChunks.push(group.bonds.slice(i, i + CLAIM_LIST_CAP));
-            }
-            for (const cycle of claimableCycles) {
-              for (const chunk of bondChunks) {
-                const result = await this.executeClaimCycle(
-                  signerContractAddress,
-                  signerContractName,
-                  cycle,
-                  chunk,
-                  chunk,
-                  nonce,
-                  opts?.note,
-                  txHashes
-                );
-                nonce = result.nonce;
-                if (result.error) return { success: false, error: result.error, txHashes };
-              }
-            }
+            if (result.error) return { success: false, unsettled: result.unsettled, error: result.error, txHashes, results };
           }
-          if (!anyClaimable) {
-            return {
-              success: false,
-              error: `No rewards available yet for bond(s) ${bondIndices.join(", ")} (last_computed_cycle: ${lastComputedCycle}, current_cycle: ${pox.rewardCycleId})`
-            };
-          }
-          return { success: true, txHashes };
-        });
+        }
+        return { success: true, txHashes, results };
       } catch (error) {
         return { success: false, error: `Failed to claim rewards: ${formatErrorMessage(error)}` };
       }
     };
     /**
      * Claims accumulated sBTC rewards for an STX-only staker (no BTC bonds).
-     * Same two-step flow as claimRewards but uses none() for bond index and derives
-     * the signer-manager from the vault's active STX stake rather than bond membership.
+     *
+     * The signer manager is resolved PER CYCLE from get-signer-cycle-membership (not the
+     * current stake), so historical cycles route correctly across signer rotation and
+     * stay claimable after the stake expires when an explicit cycle range is supplied.
+     * Claimability per cycle is the complementary pair: the staker entitlement
+     * (get-earned-staker-rewards, positive only AFTER someone runs claim-rewards) OR the
+     * signer-level accrual (get-earned, positive only BEFORE) — the latter additionally
+     * requiring this staker to hold shares for the cycle. Gating on the staker read alone
+     * would deadlock a self-managed signer, whose first claim-rewards is reachable only
+     * through this method. A read failure refuses rather than reading as "no rewards".
      */
     this.claimStxOnlyRewards = async (opts) => {
       try {
         if (!this.publicKey || !this.vaultAccountId) throw new Error("SDK not initialized");
         if (!this.address) throw new Error("Address not set");
-        const stakerInfo = await (0, import_bitcoin_staking.fetchStakerInfo)({ address: this.address, network: this.pox5Network }).catch(() => null);
-        if (!stakerInfo?.staked) return { success: false, error: "No active STX-only stake found for this vault" };
-        const signerPrincipal = stakerInfo.details.signer;
-        const firstEarningCycle = stakerInfo.details.firstRewardCycle;
-        const signerDotIdx = signerPrincipal.lastIndexOf(".");
-        const signerContractAddress = signerPrincipal.slice(0, signerDotIdx);
-        const signerContractName = signerPrincipal.slice(signerDotIdx + 1);
-        const pox = await (0, import_bitcoin_staking.fetchPoxInfo)({ network: this.pox5Network });
-        const lastComputeHeight = await (0, import_bitcoin_staking.fetchLastRewardComputeHeight)({ network: this.pox5Network }).catch(() => 0);
-        const lastComputedCycle = lastComputeHeight > 0 ? Math.floor((lastComputeHeight - pox.firstBurnchainBlockHeight) / pox.rewardCycleLength) : pox.rewardCycleId - 1;
-        const claimableCycles = await this.filterCyclesWithPositiveValue(
-          this.cycleRange(firstEarningCycle, lastComputedCycle + 1),
-          (cycle) => (0, import_bitcoin_staking.fetchEarned)({
-            signerManager: signerPrincipal,
-            rewardCycle: cycle,
-            bondIndex: void 0,
-            network: this.pox5Network
-          }).catch(() => BigInt(0))
-        );
-        if (claimableCycles.length === 0) {
-          return {
-            success: false,
-            error: `No rewards available yet for STX-only stake (first_reward_cycle: ${firstEarningCycle}, last_computed_cycle: ${lastComputedCycle}, current_cycle: ${pox.rewardCycleId})`
-          };
+        const staker = this.address;
+        if (opts?.fromCycle !== void 0 && opts?.toCycle !== void 0 && opts.fromCycle > opts.toCycle) {
+          return { success: false, error: `Invalid cycle range: fromCycle ${opts.fromCycle} > toCycle ${opts.toCycle}` };
         }
-        return await this.runNonceExclusive(async () => {
-          let nonce = await this.resolveNonce(opts?.nonce);
-          const txHashes = [];
-          for (const cycle of claimableCycles) {
-            const result = await this.executeClaimCycle(
-              signerContractAddress,
-              signerContractName,
-              cycle,
-              [],
-              [void 0],
-              nonce,
-              opts?.note,
-              txHashes
-            );
-            nonce = result.nonce;
-            if (result.error) return { success: false, error: result.error, txHashes };
+        const pox = await (0, import_bitcoin_staking2.fetchPoxInfo)({ network: this.pox5Network });
+        let lastComputeHeight;
+        try {
+          lastComputeHeight = await (0, import_bitcoin_staking2.fetchLastRewardComputeHeight)({ network: this.pox5Network });
+        } catch (e) {
+          return { success: false, error: `Could not read the last reward compute height (unknown, not zero) \u2014 refusing to claim: ${formatErrorMessage(e)}` };
+        }
+        const lastComputedCycle = lastComputeHeight > 0 ? Math.floor((lastComputeHeight - pox.firstBurnchainBlockHeight) / pox.rewardCycleLength) : pox.rewardCycleId - 1;
+        let startCycle = opts?.fromCycle;
+        if (startCycle === void 0) {
+          const stakerInfo = await (0, import_bitcoin_staking2.fetchStakerInfo)({ address: staker, network: this.pox5Network }).catch(() => null);
+          if (!stakerInfo?.staked) {
+            return { success: false, error: "No active STX-only stake found; supply fromCycle (and optionally toCycle) to claim historical cycles after expiry." };
           }
-          return { success: true, txHashes };
-        });
+          startCycle = stakerInfo.details.firstRewardCycle;
+        }
+        const endCycle = Math.min(opts?.toCycle ?? lastComputedCycle, lastComputedCycle);
+        const plan = [];
+        for (let cycle = startCycle; cycle <= endCycle; cycle++) {
+          let cycleMembership;
+          try {
+            cycleMembership = await (0, import_bitcoin_staking2.fetchSignerCycleMembership)({ staker, cycle, network: this.pox5Network });
+          } catch (e) {
+            return { success: false, error: `Could not resolve signer-cycle membership for cycle ${cycle} (unknown, not zero) \u2014 refusing to claim: ${formatErrorMessage(e)}` };
+          }
+          if (!cycleMembership) continue;
+          const signerManager = cycleMembership.signer;
+          let signerEarned;
+          let stakerEarned;
+          let stakerShares;
+          try {
+            [signerEarned, stakerEarned, stakerShares] = await Promise.all([
+              (0, import_bitcoin_staking2.fetchEarned)({ signerManager, rewardCycle: cycle, network: this.pox5Network }),
+              (0, import_bitcoin_staking2.fetchEarnedStakerRewards)({ signerManager, rewardCycle: cycle, staker, network: this.pox5Network }),
+              (0, import_bitcoin_staking2.fetchStakerSharesStakedForCycle)({ staker, signer: signerManager, rewardCycle: cycle, network: this.pox5Network })
+            ]);
+          } catch (e) {
+            return { success: false, error: `Could not read earned rewards at cycle ${cycle} (unknown, not zero) \u2014 refusing to claim: ${formatErrorMessage(e)}` };
+          }
+          const claimable = stakerEarned > BigInt(0) || signerEarned > BigInt(0) && stakerShares > BigInt(0);
+          if (!claimable) continue;
+          const dot = signerManager.lastIndexOf(".");
+          plan.push({ cycle, signerAddr: signerManager.slice(0, dot), signerName: signerManager.slice(dot + 1) });
+        }
+        if (plan.length === 0) {
+          return { success: false, error: `No STX-only rewards for this staker in cycles ${startCycle}-${endCycle} (last_computed_cycle: ${lastComputedCycle}, current_cycle: ${pox.rewardCycleId})` };
+        }
+        const txHashes = [];
+        const results = [];
+        const nonceHolder = { value: opts?.nonce };
+        for (const item of plan) {
+          const result = await this.executeClaimCycle(
+            item.signerAddr,
+            item.signerName,
+            item.cycle,
+            [],
+            [void 0],
+            nonceHolder,
+            opts?.note,
+            txHashes,
+            results
+          );
+          if (result.error) return { success: false, unsettled: result.unsettled, error: result.error, txHashes, results };
+        }
+        return { success: true, txHashes, results };
       } catch (error) {
         return { success: false, error: `Failed to claim STX-only rewards: ${formatErrorMessage(error)}` };
       }
@@ -19287,23 +16990,23 @@ var StacksSDK = class _StacksSDK {
      */
     this.getEarnedRewards = async (signerManager, bondIndex) => {
       try {
-        const pox = await (0, import_bitcoin_staking.fetchPoxInfo)({ network: this.pox5Network });
-        const bondFirstRewardCycle = bondIndex !== void 0 ? (0, import_bitcoin_staking.bondPeriodToRewardCycle)({ bondIndex, poxInfo: pox }) : void 0;
+        const pox = await (0, import_bitcoin_staking2.fetchPoxInfo)({ network: this.pox5Network });
+        const bondFirstRewardCycle = bondIndex !== void 0 ? (0, import_bitcoin_staking2.bondPeriodToRewardCycle)({ bondIndex, poxInfo: pox }) : void 0;
         let startCycle = bondFirstRewardCycle;
         if (startCycle === void 0) {
-          const stakerInfo = this.address ? await (0, import_bitcoin_staking.fetchStakerInfo)({ address: this.address, network: this.pox5Network }).catch(() => null) : null;
+          const stakerInfo = this.address ? await (0, import_bitcoin_staking2.fetchStakerInfo)({ address: this.address, network: this.pox5Network }).catch(() => null) : null;
           startCycle = stakerInfo?.staked ? stakerInfo.details.firstRewardCycle : pox.rewardCycleId;
         }
         const pastCycles = this.cycleRange(startCycle, pox.rewardCycleId);
         const stakerAddress = this.address;
         const [earned, stakerEarned] = await Promise.all([
-          this.sumOverCycles(pastCycles, (cycle) => (0, import_bitcoin_staking.fetchEarned)({
+          this.sumOverCycles(pastCycles, (cycle) => (0, import_bitcoin_staking2.fetchEarned)({
             signerManager,
             rewardCycle: cycle,
             bondIndex,
             network: this.pox5Network
           }).catch(() => BigInt(0))),
-          stakerAddress ? this.sumOverCycles(pastCycles, (cycle) => (0, import_bitcoin_staking.fetchEarnedStakerRewards)({
+          stakerAddress ? this.sumOverCycles(pastCycles, (cycle) => (0, import_bitcoin_staking2.fetchEarnedStakerRewards)({
             signerManager,
             rewardCycle: cycle,
             bondIndex,
@@ -19336,15 +17039,14 @@ var StacksSDK = class _StacksSDK {
       }
       console.log(`Checking account status for address: ${this.address}`);
       try {
-        const pox5Info = await (0, import_bitcoin_staking.fetchPoxInfo)({ network: this.pox5Network }).catch(() => null);
+        const pox5Info = await (0, import_bitcoin_staking2.fetchPoxInfo)({ network: this.pox5Network }).catch(() => null);
         const delegationApplicable = pox5Info?.contractId?.includes("pox-4") ?? false;
         const [delegationResult, balanceResponse, stakerInfo, bondMembership] = await Promise.all([
           delegationApplicable ? this.chainService.checkDelegationStatus(this.address).then((value) => ({ value, failed: false })).catch(() => ({ value: null, failed: true })) : Promise.resolve({ value: null, failed: false }),
           this.chainService.makeBalanceCalls(this.address),
-          (0, import_bitcoin_staking.fetchStakerInfo)({ address: this.address, network: this.pox5Network }).catch(() => null),
-          (0, import_bitcoin_staking.fetchBondMembership)({ address: this.address, network: this.pox5Network }).catch(() => null)
+          (0, import_bitcoin_staking2.fetchStakerInfo)({ address: this.address, network: this.pox5Network }).catch(() => null),
+          (0, import_bitcoin_staking2.fetchBondMembership)({ address: this.address, network: this.pox5Network }).catch(() => null)
         ]);
-        const delegationData = delegationResult.value;
         if (!balanceResponse) {
           throw new Error("Failed to fetch balance data");
         }
@@ -19354,6 +17056,7 @@ var StacksSDK = class _StacksSDK {
         const totalMinerRewardsRecievedMicro = BigInt(
           balanceData.total_miner_rewards_received ?? "0"
         );
+        const delegationData = delegationResult.value;
         const isDelegated = !!(delegationData && delegationData.value);
         const amountDelegatedMicro = isDelegated ? BigInt(delegationData.value["amount-ustx"]?.value ?? "0") : null;
         const delegatedTo = isDelegated ? delegationData.value["delegated-to"]?.value ?? null : null;
@@ -19362,7 +17065,7 @@ var StacksSDK = class _StacksSDK {
         const pox5IsStaked = !!stakerInfo?.staked;
         const pox5Details = pox5IsStaked && stakerInfo?.staked ? stakerInfo.details : null;
         const unlockBurnHeight = pox5Details && pox5Info ? pox5Info.firstBurnchainBlockHeight + (pox5Details.firstRewardCycle + pox5Details.numCycles) * pox5Info.rewardCycleLength : null;
-        const inPreparePhase = pox5Info ? (0, import_bitcoin_staking.isInPreparePhase)({ burnHeight: pox5Info.currentBurnchainBlockHeight, poxInfo: pox5Info }) : false;
+        const inPreparePhase = pox5Info ? (0, import_bitcoin_staking2.isInPreparePhase)({ burnHeight: pox5Info.currentBurnchainBlockHeight, poxInfo: pox5Info }) : false;
         const statusData = {
           balance: {
             stx_total: microToStx(stxBalMicro),
@@ -19378,6 +17081,7 @@ var StacksSDK = class _StacksSDK {
           delegation: {
             applicable: delegationApplicable,
             is_delegated: isDelegated,
+            lookup_failed: delegationResult.failed,
             delegated_to: delegatedTo,
             amount_delegated: amountDelegatedMicro ? microToStx(amountDelegatedMicro) : null,
             until_burn_ht: untilBurnHt,
@@ -19392,12 +17096,22 @@ var StacksSDK = class _StacksSDK {
             unlock_burn_height: unlockBurnHeight,
             current_burn_height: pox5Info?.currentBurnchainBlockHeight ?? 0,
             current_cycle_id: pox5Info?.rewardCycleId ?? 0,
-            is_prepare_phase: inPreparePhase
+            is_prepare_phase: inPreparePhase,
+            // True when the PoX read failed: the burn-height/cycle/prepare-phase fields
+            // above are UNKNOWN (defaulted to 0/false), not authoritative zeros.
+            pox_lookup_failed: pox5Info === null
           },
           bond: bondMembership ? {
             bond_index: bondMembership.bondIndex,
             amount_stx: microToStx(bondMembership.amountUstx),
-            amount_sats: bondMembership.amountSats.toString(),
+            // Same zeroed-amount fallback as getBondPosition (single helper): early exit
+            // zeroes the membership amount while the BTC stays locked. Best-effort record
+            // read here — checkStatus is an aggregate status view, and a store failure
+            // leaves the membership value rather than failing the whole status call.
+            amount_sats: this.effectiveL1AmountSats(
+              bondMembership,
+              bondMembership.isL1Lock ? await this.lockRecordStore.loadRecord(this.address, bondMembership.bondIndex).catch(() => null) : null
+            ).toString(),
             signer_manager: bondMembership.signer,
             is_l1_lock: bondMembership.isL1Lock
           } : null
@@ -19420,7 +17134,7 @@ var StacksSDK = class _StacksSDK {
      */
     this.checkEligibility = async (pox, amountStx) => {
       try {
-        const stakerInfo = await (0, import_bitcoin_staking.fetchStakerInfo)({ address: this.address, network: this.pox5Network });
+        const stakerInfo = await (0, import_bitcoin_staking2.fetchStakerInfo)({ address: this.address, network: this.pox5Network });
         if (stakerInfo.staked) {
           return {
             eligible: false,
@@ -19464,7 +17178,6 @@ var StacksSDK = class _StacksSDK {
      * @param maxAmount - Maximum authorized STX amount, must be >= amount (number). Converted to microSTX internally.
      * @param lockPeriod - The number of cycles to lock the STX.
      * @param authId - Authorization ID for the transaction (bigint).
-     * @param note - Optional note shown in Fireblocks console during raw signing.
      * @param nonce - Optional nonce override (bigint). Defaults to next available gap-aware nonce.
      * @returns A response indicating success or failure of the transaction.
      */
@@ -19476,6 +17189,28 @@ var StacksSDK = class _StacksSDK {
         console.log(`Solo stacking ${amount} STX for ${lockPeriod} cycles`);
         const poxResponse = await this.chainService.fetchPoxInfo();
         const pox = poxResponse.data;
+        const isPox4 = String(pox.contract_id ?? "").includes("pox-4");
+        if (isPox4) {
+          const status = await this.checkStatus();
+          if (!status.success || !status.data) {
+            return { success: false, error: `Failed to check account status before solo stacking: ${status.error}` };
+          }
+          if (status.data.delegation.lookup_failed) {
+            return { success: false, error: `Could not determine delegation status. Retry once the Stacks API is reachable.` };
+          }
+          if (status.data.delegation.is_delegated) {
+            return {
+              success: false,
+              error: `Account has an active delegation to ${status.data.delegation.delegated_to}. Revoke it before solo stacking.`
+            };
+          }
+        }
+        if (stxToMicro(amount) < BigInt(pox.min_amount_ustx)) {
+          return {
+            success: false,
+            error: `Amount to stack (${amount} STX) is below the minimum of ${microToStx(BigInt(pox.min_amount_ustx))} STX.`
+          };
+        }
         const eligibilityCheck = await this.checkEligibility(pox, amount);
         if (!eligibilityCheck.eligible) {
           return {
@@ -19508,6 +17243,7 @@ var StacksSDK = class _StacksSDK {
         if (!txStatus.success || txStatus.data?.tx_status !== "success") {
           return {
             success: false,
+            unsettled: !txStatus.success,
             error: txStatus.error || txStatus.data?.tx_error || "Transaction failed at the contract level.",
             txHash: result.txid
           };
@@ -19532,7 +17268,6 @@ var StacksSDK = class _StacksSDK {
      * @param increaseBy - Amount of STX to add to the existing stack (number). Converted to microSTX internally.
      * @param maxAmount - New maximum authorized STX amount after increase (number). Converted to microSTX internally.
      * @param authId - Authorization ID for the transaction (bigint).
-     * @param note - Optional note shown in Fireblocks console during raw signing.
      * @param nonce - Optional nonce override (bigint). Defaults to next available gap-aware nonce.
      * @returns A response indicating success or failure of the transaction.
      */
@@ -19564,6 +17299,7 @@ var StacksSDK = class _StacksSDK {
         if (!txStatus.success || txStatus.data?.tx_status !== "success") {
           return {
             success: false,
+            unsettled: !txStatus.success,
             error: txStatus.error || txStatus.data?.tx_error || "Transaction failed at the contract level.",
             txHash: result.txid
           };
@@ -19588,7 +17324,6 @@ var StacksSDK = class _StacksSDK {
     * @param increaseBy - Number of additional cycles to extend the stacking period.
     * @param maxAmount - Maximum authorized STX amount for the extension (number). Converted to microSTX internally.
     * @param authId - Authorization ID for the transaction (bigint).
-    * @param note - Optional note shown in Fireblocks console during raw signing.
     * @param nonce - Optional nonce override (bigint). Defaults to next available gap-aware nonce.
     * @returns A response indicating success or failure of the transaction.
     */
@@ -19620,6 +17355,7 @@ var StacksSDK = class _StacksSDK {
         if (!txStatus.success || txStatus.data?.tx_status !== "success") {
           return {
             success: false,
+            unsettled: !txStatus.success,
             error: txStatus.error || txStatus.data?.tx_error || "Transaction failed at the contract level.",
             txHash: result.txid
           };
@@ -19643,14 +17379,14 @@ var StacksSDK = class _StacksSDK {
      * Two mutually exclusive modes — provide one, not both:
      *   - `originalTxId` only: tx is visible in the explorer. SDK looks it up, reads its nonce,
      *     and reconstructs it. Works for token_transfer and contract_call. `newFee` must be
-     *     strictly greater than the original fee. `newRecipient`/`newAmount` are optional
-     *     overrides for token_transfer only.
+     *     at least RBF_MIN_FEE_MULTIPLIER × the original fee. `newRecipient`/`newAmount` are
+     *     optional overrides for token_transfer only.
      *   - `nonceOverride` only: tx is NOT visible in the explorer. SDK skips lookup entirely.
      *     `originalTxId` is unused — omit it. Only STX transfers supported. `newRecipient` and
      *     `newAmount` are required since there is nothing to reconstruct.
      *
-     * @param originalTxId - TX ID to look up and replace. Required unless using nonceOverride.
      * @param newFee - New fee in STX. Must be > 0 and ≤ MAX_FEE_STX.
+     * @param originalTxId - TX ID to look up and replace. Required unless using nonceOverride.
      * @param newRecipient - New recipient (token_transfer only). Optional on lookup path, required on override path.
      * @param newAmount - New amount in STX (token_transfer only). Optional on lookup path, required on override path.
      * @param nonceOverride - Nonce of the stuck tx. Use only when the tx is not visible in the explorer.
@@ -19679,11 +17415,11 @@ var StacksSDK = class _StacksSDK {
           }
           const nonce2 = nonceOverride;
           const amountUstx = stxToMicro(newAmount);
-          const nonceInfo = await this.chainService.getAccountNonce(this.address);
-          if (nonce2 < nonceInfo.confirmedNonce) {
+          const confirmedNonce = await this.chainService.getConfirmedNonce(this.address);
+          if (nonce2 < confirmedNonce) {
             return {
               success: false,
-              error: `nonceOverride (${nonce2}) is below the confirmed nonce (${nonceInfo.confirmedNonce}). This transaction would be rejected.`
+              error: `nonceOverride (${nonce2}) is below the confirmed nonce (${confirmedNonce}). This transaction would be rejected.`
             };
           }
           const balance = await this.getBalance();
@@ -19749,17 +17485,11 @@ var StacksSDK = class _StacksSDK {
           };
         }
         const originalFeeUstx = BigInt(fullTx.fee_rate);
-        const minFeeUstx = originalFeeUstx + RBF_MIN_FEE_BUMP_USTX;
+        const minFeeUstx = originalFeeUstx * BigInt(Math.round(RBF_MIN_FEE_MULTIPLIER * 100)) / BigInt(100);
         if (feeBigInt < minFeeUstx) {
           return {
             success: false,
-            error: `New fee (${newFee} STX) must be greater than the original fee (${microToStx(originalFeeUstx)} STX).`
-          };
-        }
-        if (fullTx.tx_type === "contract_call" && (newRecipient !== void 0 || newAmount !== void 0)) {
-          return {
-            success: false,
-            error: "newRecipient and newAmount can only be changed for native STX transfers. This transaction is a contract_call."
+            error: `New fee (${newFee} STX) must be at least ${RBF_MIN_FEE_MULTIPLIER}x the original fee (${microToStx(originalFeeUstx)} STX). Minimum required: ${microToStx(minFeeUstx)} STX`
           };
         }
         if (fullTx.tx_type === "contract_call" && (newRecipient !== void 0 || newAmount !== void 0)) {
@@ -19927,6 +17657,39 @@ var StacksSDK = class _StacksSDK {
         };
       }
     };
+    // ── App-surface methods (Electron consumption; not present on the server branch) ──
+    /**
+     * Checks and validates transaction parameters, adjusting the amount if necessary.
+     *
+     * @param recipientAddress - The address of the recipient.
+     * @param amount - The amount to transfer in native coin.
+     * @param grossTransaction - Optional flag indicating if the transaction is gross, if so fee will be deducted from recipient (default is false).
+     * @param type - The type of transaction (default is native coin).
+     * @param token - The type of fungible token to transfer (required if type is FungibleToken).
+     * @returns A promise that resolves to an object indicating if parameters are valid, the final amount, and reason if invalid.
+     * @throws {Error} If parameter validation fails.
+     */
+    this.estimateFee = async (recipientAddress, amount, type = "STX" /* STX */, token, customTokenContractAddress, customTokenContractName) => {
+      try {
+        if (!this.address || !this.publicKey || !this.vaultAccountId) {
+          throw new Error("Address, Public Key or Vault ID are not set");
+        }
+        const microAmount = type === "Fungible Token" /* FungibleToken */ ? stxToMicro(amount) : stxToMicro(amount);
+        let microfee = 0;
+        if (type === "STX" /* STX */) {
+          microfee = await this.chainService.estimateTxFee(recipientAddress, microAmount);
+        } else if (type === "Fungible Token" /* FungibleToken */) {
+          const tokenInfo = token !== "custom-token" /* CUSTOM */ ? getTokenInfo(token, this.testnet ? "testnet" : "mainnet") : void 0;
+          const ftContractAddress = tokenInfo?.contractAddress ?? customTokenContractAddress;
+          const ftContractName = tokenInfo?.contractName ?? customTokenContractName;
+          const functionArgs = [(0, import_transactions3.uintCV)(microAmount), (0, import_transactions3.principalCV)(this.address), (0, import_transactions3.principalCV)(recipientAddress), (0, import_transactions3.noneCV)()];
+          microfee = await this.chainService.estimateContractCallFee(ftContractAddress, ftContractName, "transfer", functionArgs);
+        }
+        return { success: true, fee: microToStx(microfee), microfee };
+      } catch (error) {
+        return { success: false, error: formatErrorMessage(error) };
+      }
+    };
     /**
      * Makes a generic contract call to a given contract address and name with specified function and arguments.
      * @param contractAddress - The address of the contract to call.
@@ -20009,9 +17772,7 @@ var StacksSDK = class _StacksSDK {
         if (!this.vaultAccountId) {
           throw new Error("Vault ID is not set");
         }
-        const { hashMessage } = require_dist();
-        const { bytesToHex: bytesToHex5 } = require("@stacks/common");
-        const hash = bytesToHex5(hashMessage(message));
+        const hash = (0, import_common3.bytesToHex)((0, import_encryption.hashMessage)(message));
         const rawSignature = await this.fireblocksService.signTransaction(
           hash,
           this.vaultAccountId.toString(),
@@ -20034,12 +17795,10 @@ var StacksSDK = class _StacksSDK {
         if (!this.vaultAccountId) {
           throw new Error("Vault ID is not set");
         }
-        const { deserializeCV } = require("@stacks/transactions");
-        const { sha256: sha2565 } = require("@noble/hashes/sha256");
-        const messageCV = deserializeCV(Buffer.from(message, "hex"));
-        const domainCV = deserializeCV(Buffer.from(domain, "hex"));
+        const messageCV = (0, import_transactions3.deserializeCV)(Buffer.from(message, "hex"));
+        const domainCV = (0, import_transactions3.deserializeCV)(Buffer.from(domain, "hex"));
         const encoded = (0, import_transactions3.encodeStructuredDataBytes)({ message: messageCV, domain: domainCV });
-        const hash = Buffer.from(sha2565(encoded)).toString("hex");
+        const hash = Buffer.from((0, import_sha23.sha256)(encoded)).toString("hex");
         const rawSignature = await this.fireblocksService.signTransaction(
           hash,
           this.vaultAccountId.toString(),
@@ -20087,11 +17846,16 @@ var StacksSDK = class _StacksSDK {
         );
       }
       this.fireblocksService = new FireblocksService(fireblocksConfig);
-      this.testnet = fireblocksConfig?.testnet || false;
+      this.maxBondStxUstx = fireblocksConfig?.maxBondStxUstx;
+      this.btcRecoveryAllowlist = fireblocksConfig?.btcRecoveryAllowlist ?? [];
+      this.signerManagerRegistry = new SignerManagerRegistry(fireblocksConfig?.signerManagerAdapters ?? []);
+      this.verifyEarlyExitCosignerAtFunding = fireblocksConfig?.verifyEarlyExitCosignerAtFunding ?? false;
       this.networkProfile = resolveNetworkProfile({
-        testnet: this.testnet,
+        network: fireblocksConfig?.network,
+        testnet: fireblocksConfig?.testnet,
         stacksApiUrl: fireblocksConfig?.stacksApiUrl
       });
+      this.testnet = this.networkProfile.name !== "mainnet";
       this._pox5Network = stacksNetworkFromProfile(this.networkProfile);
       this.chainService = new StacksService(
         this.testnet,
@@ -20175,17 +17939,13 @@ var ActionType = /* @__PURE__ */ ((ActionType2) => {
   ActionType2["CHECK_STATUS"] = "checkStatus";
   ActionType2["STACK_SOLO"] = "stackSolo";
   ActionType2["GET_TX_STATUS_BY_ID"] = "getTxStatusById";
+  ActionType2["GET_BTC_TX_STATUS"] = "getBtcTxStatus";
+  ActionType2["VALIDATE_BOND_SCHEDULE"] = "validateBondSchedule";
   ActionType2["GET_POX_INFO"] = "getPoxInfo";
   ActionType2["INCREASE_STACKED_AMOUNT"] = "increaseStackedAmount";
   ActionType2["EXTEND_STACKING_PERIOD"] = "extendStackingPeriod";
-  ActionType2["GET_CONTRACT_CALL_HISTORY"] = "getContractCallHistory";
-  ActionType2["MAKE_CONTRACT_CALL"] = "makeContractCall";
-  ActionType2["SIGN_TRANSACTION"] = "signExternalTransaction";
-  ActionType2["SIGN_MESSAGE"] = "signMessage";
-  ActionType2["SIGN_STRUCTURED_MESSAGE"] = "signStructuredMessage";
   ActionType2["REPLACE_TRANSACTION"] = "replaceTransaction";
   ActionType2["GET_ACCOUNT_NONCE"] = "getAccountNonce";
-  ActionType2["ESTIMATE_FEE"] = "estimateFee";
   ActionType2["STAKE"] = "stake";
   ActionType2["UPDATE_STAKE"] = "updateStake";
   ActionType2["UNSTAKE"] = "unstake";
@@ -20197,6 +17957,7 @@ var ActionType = /* @__PURE__ */ ((ActionType2) => {
   ActionType2["VERIFY_SIGNER_GRANT"] = "verifySignerGrant";
   ActionType2["CREATE_BOND"] = "createBond";
   ActionType2["CREATE_SBTC_BOND"] = "createSbtcBond";
+  ActionType2["ROLL_SBTC_BOND"] = "rollSbtcBond";
   ActionType2["UNSTAKE_SBTC"] = "unstakeSbtc";
   ActionType2["GET_BOND_POSITION"] = "getBondPosition";
   ActionType2["ANNOUNCE_EARLY_EXIT"] = "announceEarlyExit";
@@ -20204,6 +17965,7 @@ var ActionType = /* @__PURE__ */ ((ActionType2) => {
   ActionType2["GET_EARLY_EXIT_PUBLIC_KEY"] = "getEarlyExitPublicKey";
   ActionType2["GET_REQUIREMENTS"] = "getRequirements";
   ActionType2["UNLOCK_BTC"] = "unlockMaturedBond";
+  ActionType2["REPLACE_BTC_RECOVERY_FEE"] = "replaceBtcRecoveryFee";
   ActionType2["RENEW_BOND"] = "renewBond";
   ActionType2["CALCULATE_REWARDS"] = "calculateRewards";
   ActionType2["CLAIM_REWARDS"] = "claimRewards";
@@ -20212,6 +17974,12 @@ var ActionType = /* @__PURE__ */ ((ActionType2) => {
   ActionType2["GET_BOND_LOCK_ADDRESS"] = "getBondLockAddress";
   ActionType2["FUND_BOND_LOCK_ADDRESS"] = "fundBondLockAddress";
   ActionType2["FUND_VAULT"] = "fundVault";
+  ActionType2["ESTIMATE_FEE"] = "estimateFee";
+  ActionType2["GET_CONTRACT_CALL_HISTORY"] = "getContractCallHistory";
+  ActionType2["MAKE_CONTRACT_CALL"] = "makeContractCall";
+  ActionType2["SIGN_TRANSACTION"] = "signExternalTransaction";
+  ActionType2["SIGN_MESSAGE"] = "signMessage";
+  ActionType2["SIGN_STRUCTURED_MESSAGE"] = "signStructuredMessage";
   return ActionType2;
 })(ActionType || {});
 
@@ -20242,56 +18010,75 @@ var SdkInitializationError = class extends PoolError {
 var SdkManager = class {
   constructor(baseConfig, chainApiKey, poolConfig) {
     this.sdkPool = /* @__PURE__ */ new Map();
+    // In-flight constructions keyed the same way as sdkPool. Concurrent cold calls for
+    // one key share a single creation promise so exactly one instance is built — two
+    // instances for the same vault would have independent nonce queues and could
+    // collide on nonces.
+    this.creating = /* @__PURE__ */ new Map();
     /**
-     * Get an SDK instance for a specific vault account ID
+     * Pool key for a vault. Network identity is part of the key so an instance built
+     * for one network is never handed out for another.
+     */
+    this.poolKey = (vaultAccountId) => `${this.baseConfig.testnet ? "testnet" : "mainnet"}:${vaultAccountId}`;
+    /**
+     * Get an SDK instance for a specific vault account ID. Instance acquisition is
+     * atomic: the decision path below runs synchronously (no await) up to the point a
+     * single construction promise is registered, so concurrent cold calls for the same
+     * vault share one construction rather than building duplicate instances.
      * @param vaultAccountId Fireblocks vault account ID
      * @returns StacksSDK instance
      */
     this.getSdk = async (vaultAccountId) => {
-      const poolItem = this.sdkPool.get(vaultAccountId);
-      if (poolItem && !poolItem.isInUse) {
-        console.log(`Reusing existing SDK instance for vault ${vaultAccountId}`);
+      const key = this.poolKey(vaultAccountId);
+      const poolItem = this.sdkPool.get(key);
+      if (poolItem) {
+        poolItem.refCount++;
         poolItem.lastUsed = /* @__PURE__ */ new Date();
-        poolItem.isInUse = true;
         return poolItem.sdk;
       }
-      if (this.sdkPool.size >= this.poolConfig.maxPoolSize && !poolItem) {
-        const removed = await this.removeOldestIdleSdk();
+      const inFlight = this.creating.get(key);
+      if (inFlight) {
+        return inFlight.then((sdk) => {
+          const item = this.sdkPool.get(key);
+          if (item) {
+            item.refCount++;
+            item.lastUsed = /* @__PURE__ */ new Date();
+          }
+          return sdk;
+        });
+      }
+      if (this.sdkPool.size + this.creating.size >= this.poolConfig.maxPoolSize) {
+        const removed = this.removeOldestIdleSdk();
         if (!removed) {
           throw new PoolCapacityError(
             `SDK pool is at maximum capacity (${this.poolConfig.maxPoolSize}) with no idle connections`
           );
         }
       }
-      if (!poolItem) {
-        const sdk = await this.createSdkInstance(vaultAccountId);
-        this.sdkPool.set(vaultAccountId, {
-          sdk,
-          lastUsed: /* @__PURE__ */ new Date(),
-          isInUse: true
-        });
+      const creation = this.createSdkInstance(vaultAccountId).then((sdk) => {
+        this.sdkPool.set(key, { sdk, lastUsed: /* @__PURE__ */ new Date(), refCount: 1 });
         return sdk;
-      } else {
-        poolItem.lastUsed = /* @__PURE__ */ new Date();
-        poolItem.isInUse = true;
-        return poolItem.sdk;
-      }
+      }).finally(() => {
+        this.creating.delete(key);
+      });
+      this.creating.set(key, creation);
+      return creation;
     };
     /**
      * Release an SDK instance back to the pool
      * @param vaultAccountId Vault account ID
      */
     this.releaseSdk = (vaultAccountId) => {
-      const poolItem = this.sdkPool.get(vaultAccountId);
+      const poolItem = this.sdkPool.get(this.poolKey(vaultAccountId));
       if (poolItem) {
-        poolItem.isInUse = false;
+        poolItem.refCount = Math.max(0, poolItem.refCount - 1);
         poolItem.lastUsed = /* @__PURE__ */ new Date();
       }
     };
     /**
      * Create a new SDK instance
      * @param vaultAccountId Vault account ID
-     * @returns New StacksSDK instance
+     * @returns New MovementFireblocksSDK instance
      */
     this.createSdkInstance = async (vaultAccountId) => {
       const config2 = {
@@ -20316,11 +18103,11 @@ var SdkManager = class {
      * Find and remove the oldest idle SDK instance
      * @returns True if an instance was removed, false otherwise
      */
-    this.removeOldestIdleSdk = async () => {
+    this.removeOldestIdleSdk = () => {
       let oldestKey = null;
-      let oldestDate = /* @__PURE__ */ new Date();
+      let oldestDate = null;
       for (const [key, value] of this.sdkPool.entries()) {
-        if (!value.isInUse && value.lastUsed < oldestDate) {
+        if (value.refCount === 0 && (oldestDate === null || value.lastUsed < oldestDate)) {
           oldestDate = value.lastUsed;
           oldestKey = key;
         }
@@ -20338,7 +18125,7 @@ var SdkManager = class {
       const now = /* @__PURE__ */ new Date();
       const keysToRemove = [];
       for (const [key, value] of this.sdkPool.entries()) {
-        if (!value.isInUse) {
+        if (value.refCount === 0) {
           const idleTime = now.getTime() - value.lastUsed.getTime();
           if (idleTime > this.poolConfig.idleTimeoutMs) {
             keysToRemove.push(key);
@@ -20364,7 +18151,7 @@ var SdkManager = class {
         idleInstances: 0
       };
       for (const [, value] of this.sdkPool.entries()) {
-        if (value.isInUse) {
+        if (value.refCount > 0) {
           metrics.activeInstances++;
         } else {
           metrics.idleInstances++;
@@ -20437,6 +18224,12 @@ var ApiService = class {
           case "getTxStatusById" /* GET_TX_STATUS_BY_ID */:
             result = await sdk.getTxStatusById(params.txId);
             break;
+          case "getBtcTxStatus" /* GET_BTC_TX_STATUS */:
+            result = await sdk.getBtcTxStatus(params.btcTxid);
+            break;
+          case "validateBondSchedule" /* VALIDATE_BOND_SCHEDULE */:
+            result = await sdk.validateBondSchedule({ bondIndices: params.bondIndices });
+            break;
           case "delegateToPool" /* DELEGATE_TO_POOL */:
             result = await sdk.delegateToPool(
               params.poolAddress,
@@ -20476,16 +18269,6 @@ var ApiService = class {
               params.note,
               params.nonce,
               params.externalId
-            );
-            break;
-          case "estimateFee" /* ESTIMATE_FEE */:
-            result = await sdk.estimateFee(
-              params.recipientAddress,
-              params.amount,
-              params.type,
-              params.token,
-              params.customTokenContractAddress,
-              params.customTokenContractName
             );
             break;
           case "getBalance" /* GET_BALANCE */:
@@ -20544,28 +18327,6 @@ var ApiService = class {
               params.note,
               params.externalId
             );
-            break;
-          case "getContractCallHistory" /* GET_CONTRACT_CALL_HISTORY */:
-            result = await sdk.getContractCallHistory(params.limit, params.offset);
-            break;
-          case "makeContractCall" /* MAKE_CONTRACT_CALL */:
-            result = await sdk.makeContractCall(
-              params.contractAddress,
-              params.contractName,
-              params.functionName,
-              params.functionArgs,
-              params.postConditions,
-              params.postConditionMode
-            );
-            break;
-          case "signExternalTransaction" /* SIGN_TRANSACTION */:
-            result = await sdk.signExternalTransaction(params.txHex);
-            break;
-          case "signMessage" /* SIGN_MESSAGE */:
-            result = await sdk.signMessage(params.message);
-            break;
-          case "signStructuredMessage" /* SIGN_STRUCTURED_MESSAGE */:
-            result = await sdk.signStructuredMessage(params.message, params.domain);
             break;
           case "getAccountNonce" /* GET_ACCOUNT_NONCE */:
             result = await sdk.getAccountNonce();
@@ -20634,7 +18395,7 @@ var ApiService = class {
               params.bondIndex,
               params.btcAmountSats,
               params.signerManager,
-              { note: params.note, nonce: params.nonce, externalId: params.externalId, confirmations: params.confirmations, btcTxid: params.btcTxid, amountUstxOverride: params.amountUstxOverride }
+              { note: params.note, nonce: params.nonce, externalId: params.externalId, confirmations: params.confirmations, btcTxid: params.btcTxid }
             );
             break;
           case "createSbtcBond" /* CREATE_SBTC_BOND */:
@@ -20642,7 +18403,15 @@ var ApiService = class {
               params.bondIndex,
               params.sbtcSats,
               params.signerManager,
-              { sbtcAsset: params.sbtcAsset, amountUstxOverride: params.amountUstxOverride, note: params.note, nonce: params.nonce, externalId: params.externalId }
+              { sbtcAsset: params.sbtcAsset, note: params.note, nonce: params.nonce, externalId: params.externalId }
+            );
+            break;
+          case "rollSbtcBond" /* ROLL_SBTC_BOND */:
+            result = await sdk.rollSbtcBond(
+              params.nextBondIndex,
+              params.newSbtcSats,
+              params.signerManager,
+              { sbtcAsset: params.sbtcAsset, note: params.note, nonce: params.nonce, externalId: params.externalId }
             );
             break;
           case "unstakeSbtc" /* UNSTAKE_SBTC */:
@@ -20671,11 +18440,14 @@ var ApiService = class {
           case "unlockMaturedBond" /* UNLOCK_BTC */:
             result = await sdk.unlockMaturedBond(params.destinationBtcAddress, { feeSats: params.feeSats, bondIndex: params.bondIndex });
             break;
+          case "replaceBtcRecoveryFee" /* REPLACE_BTC_RECOVERY_FEE */:
+            result = await sdk.replaceBtcRecoveryFee(params.originalTxid, params.newFeeSats, { bondIndex: params.bondIndex, kind: params.kind });
+            break;
           case "renewBond" /* RENEW_BOND */:
             result = await sdk.renewBond(params.nextBondIndex, params.signerManager, { feeSats: params.feeSats, note: params.note, nonce: params.nonce, externalId: params.externalId, confirmations: params.confirmations });
             break;
           case "updateBondRegistration" /* UPDATE_BOND_REGISTRATION */:
-            result = await sdk.updateBondRegistration(params.bondIndex, params.signerManager, params.oldSignerManager, { note: params.note, nonce: params.nonce, externalId: params.externalId });
+            result = await sdk.updateBondRegistration(params.signerManager, params.oldSignerManager, { note: params.note, nonce: params.nonce, externalId: params.externalId });
             break;
           case "calculateRewards" /* CALCULATE_REWARDS */:
             result = await sdk.calculateRewards({ note: params.note, nonce: params.nonce });
@@ -20684,7 +18456,7 @@ var ApiService = class {
             result = await sdk.claimRewards(params.bondIndices, { note: params.note, nonce: params.nonce });
             break;
           case "claimStxOnlyRewards" /* CLAIM_STX_ONLY_REWARDS */:
-            result = await sdk.claimStxOnlyRewards({ note: params.note, nonce: params.nonce });
+            result = await sdk.claimStxOnlyRewards({ note: params.note, nonce: params.nonce, fromCycle: params.fromCycle, toCycle: params.toCycle });
             break;
           case "getEarnedRewards" /* GET_EARNED_REWARDS */:
             result = await sdk.getEarnedRewards(params.signerManager, params.bondIndex);
@@ -20697,6 +18469,39 @@ var ApiService = class {
             break;
           case "fundVault" /* FUND_VAULT */:
             result = await sdk.fundVault(params.staking);
+            break;
+          // ── App-surface actions (Electron consumption; not present on the server branch) ──
+          case "estimateFee" /* ESTIMATE_FEE */:
+            result = await sdk.estimateFee(
+              params.recipientAddress,
+              params.amount,
+              params.type,
+              params.token,
+              params.customTokenContractAddress,
+              params.customTokenContractName
+            );
+            break;
+          case "getContractCallHistory" /* GET_CONTRACT_CALL_HISTORY */:
+            result = await sdk.getContractCallHistory(params.limit, params.offset);
+            break;
+          case "makeContractCall" /* MAKE_CONTRACT_CALL */:
+            result = await sdk.makeContractCall(
+              params.contractAddress,
+              params.contractName,
+              params.functionName,
+              params.functionArgs,
+              params.postConditions,
+              params.postConditionMode
+            );
+            break;
+          case "signExternalTransaction" /* SIGN_TRANSACTION */:
+            result = await sdk.signExternalTransaction(params.txHex);
+            break;
+          case "signMessage" /* SIGN_MESSAGE */:
+            result = await sdk.signMessage(params.message);
+            break;
+          case "signStructuredMessage" /* SIGN_STRUCTURED_MESSAGE */:
+            result = await sdk.signStructuredMessage(params.message, params.domain);
             break;
           default:
             throw new Error(
@@ -20741,19 +18546,273 @@ var ApiService = class {
     this.sdkManager = new SdkManager(baseConfig, config2.chainApiKey, config2.poolConfig);
   }
 };
+
+// src/staking/bonds/file-lock-record-store.ts
+var import_fs2 = require("fs");
+var import_crypto3 = require("crypto");
+var path = __toESM(require("path"));
+var SCHEMA_VERSION = 1;
+var CorruptLockStoreError = class extends Error {
+  constructor(filePath, detail) {
+    super(
+      `Lock-record store at ${filePath} is corrupt (${detail}). The file has been preserved for recovery; refusing to proceed rather than lose bond records.`
+    );
+    this.name = "CorruptLockStoreError";
+  }
+};
+var toHex = (b) => Buffer.from(b).toString("hex");
+var fromHex = (h) => new Uint8Array(Buffer.from(h, "hex"));
+var serializeRecord = (r) => ({
+  bondIndex: r.bondIndex,
+  unlockBytes: toHex(r.unlockBytes),
+  lockAddress: r.lockAddress,
+  unlockHeight: r.unlockHeight,
+  amountSats: r.amountSats.toString(),
+  isL1Lock: r.isL1Lock,
+  ...r.btcTxid !== void 0 ? { btcTxid: r.btcTxid } : {},
+  ...r.vout !== void 0 ? { vout: r.vout } : {},
+  ...r.signerManager !== void 0 ? { signerManager: r.signerManager } : {},
+  ...r.firstRewardCycle !== void 0 ? { firstRewardCycle: r.firstRewardCycle } : {},
+  ...r.fundingExternalId !== void 0 ? { fundingExternalId: r.fundingExternalId } : {},
+  ...r.stage !== void 0 ? { stage: r.stage } : {}
+});
+var deserializeRecord = (s) => ({
+  bondIndex: s.bondIndex,
+  unlockBytes: fromHex(s.unlockBytes),
+  lockAddress: s.lockAddress,
+  unlockHeight: s.unlockHeight,
+  amountSats: BigInt(s.amountSats),
+  isL1Lock: s.isL1Lock,
+  btcTxid: s.btcTxid,
+  vout: s.vout,
+  signerManager: s.signerManager,
+  firstRewardCycle: s.firstRewardCycle,
+  fundingExternalId: s.fundingExternalId,
+  stage: s.stage
+});
+var stableStringify = (records) => {
+  const sortedKeys = Object.keys(records).sort();
+  const canonical = {};
+  for (const k of sortedKeys) {
+    const rec = records[k];
+    const inner = {};
+    for (const field of Object.keys(rec).sort()) inner[field] = rec[field];
+    canonical[k] = inner;
+  }
+  return JSON.stringify(canonical);
+};
+var checksumOf = (records) => (0, import_crypto3.createHash)("sha256").update(stableStringify(records)).digest("hex");
+var FileLockRecordStore = class {
+  constructor(filePath) {
+    this.tmpCounter = 0;
+    this.filePath = path.resolve(filePath);
+    this.bakPath = `${this.filePath}.bak`;
+    this.lockPath = `${this.filePath}.lock`;
+    this.dir = path.dirname(this.filePath);
+  }
+  key(stxAddress, bondIndex) {
+    return `${stxAddress}:${bondIndex}`;
+  }
+  /**
+   * Reads and validates one store file. Returns null when the file is genuinely
+   * MISSING; throws CorruptLockStoreError when it exists but cannot be trusted.
+   */
+  async readFile(p) {
+    let raw;
+    try {
+      raw = await import_fs2.promises.readFile(p, "utf8");
+    } catch (e) {
+      if (e.code === "ENOENT") return null;
+      throw e;
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      throw new CorruptLockStoreError(p, "invalid JSON");
+    }
+    if (!parsed || typeof parsed !== "object" || typeof parsed.checksum !== "string" || typeof parsed.records !== "object" || parsed.records === null) {
+      throw new CorruptLockStoreError(p, "missing version/checksum/records");
+    }
+    if (checksumOf(parsed.records) !== parsed.checksum) {
+      throw new CorruptLockStoreError(p, "checksum mismatch");
+    }
+    return parsed.records;
+  }
+  /**
+   * Loads all records. Missing primary + missing backup → empty (new store). A
+   * corrupt primary falls back to an intact backup; if neither is trustworthy the
+   * error propagates (fail closed) and the corrupt file is left in place.
+   */
+  async loadAll() {
+    let primaryErr;
+    try {
+      const primary = await this.readFile(this.filePath);
+      if (primary) return primary;
+    } catch (e) {
+      if (!(e instanceof CorruptLockStoreError)) throw e;
+      primaryErr = e;
+    }
+    const backup = await this.readFile(this.bakPath).catch((e) => {
+      if (e instanceof CorruptLockStoreError) return null;
+      throw e;
+    });
+    if (backup) return backup;
+    if (primaryErr) throw primaryErr;
+    return {};
+  }
+  async fsyncDir() {
+    try {
+      const dh = await import_fs2.promises.open(this.dir, "r");
+      try {
+        await dh.sync();
+      } finally {
+        await dh.close();
+      }
+    } catch {
+    }
+  }
+  /** Atomically persists the full record set with a fresh checksum and a backup. */
+  async writeAll(records) {
+    const payload = {
+      version: SCHEMA_VERSION,
+      checksum: checksumOf(records),
+      records
+    };
+    const data = JSON.stringify(payload);
+    const tmp = `${this.filePath}.tmp.${process.pid}.${this.tmpCounter++}`;
+    const fh = await import_fs2.promises.open(tmp, "w");
+    try {
+      await fh.writeFile(data, "utf8");
+      await fh.sync();
+    } finally {
+      await fh.close();
+    }
+    try {
+      const currentPrimary = await this.readFile(this.filePath);
+      if (currentPrimary) {
+        await import_fs2.promises.copyFile(this.filePath, this.bakPath);
+        let bh = null;
+        try {
+          bh = await import_fs2.promises.open(this.bakPath, "r+");
+        } catch {
+        }
+        if (bh) {
+          try {
+            await bh.sync();
+          } catch (e) {
+            const code = e.code;
+            if (code !== "ENOTSUP" && code !== "EINVAL" && code !== "ENOSYS" && code !== "EPERM") throw e;
+          } finally {
+            await bh.close();
+          }
+        }
+      }
+    } catch (e) {
+      if (e instanceof CorruptLockStoreError) {
+      } else if (e.code !== "ENOENT") {
+        throw e;
+      }
+    }
+    await import_fs2.promises.rename(tmp, this.filePath);
+    await this.fsyncDir();
+  }
+  /** Simple, fail-closed inter-process lock via exclusive-create lockfile. */
+  async acquireLock(timeoutMs = 15e3, staleMs = 6e4) {
+    const start = Date.now();
+    for (; ; ) {
+      try {
+        const fh = await import_fs2.promises.open(this.lockPath, "wx");
+        try {
+          await fh.writeFile(`${process.pid} ${Date.now()}`);
+        } finally {
+          await fh.close();
+        }
+        return;
+      } catch (e) {
+        if (e.code !== "EEXIST") throw e;
+        try {
+          const st = await import_fs2.promises.stat(this.lockPath);
+          if (Date.now() - st.mtimeMs > staleMs) {
+            await import_fs2.promises.unlink(this.lockPath).catch(() => {
+            });
+            continue;
+          }
+        } catch {
+          continue;
+        }
+        if (Date.now() - start > timeoutMs) {
+          throw new Error(`Timed out acquiring lock ${this.lockPath}`);
+        }
+        await new Promise((r) => setTimeout(r, 50));
+      }
+    }
+  }
+  async releaseLock() {
+    await import_fs2.promises.unlink(this.lockPath).catch(() => {
+    });
+  }
+  async withLock(fn) {
+    await this.acquireLock();
+    try {
+      return await fn();
+    } finally {
+      await this.releaseLock();
+    }
+  }
+  async saveRecord(stxAddress, bondIndex, record) {
+    await import_fs2.promises.mkdir(this.dir, { recursive: true });
+    await this.withLock(async () => {
+      const records = await this.loadAll();
+      records[this.key(stxAddress, bondIndex)] = serializeRecord(record);
+      await this.writeAll(records);
+    });
+  }
+  async loadRecord(stxAddress, bondIndex) {
+    const records = await this.loadAll();
+    const s = records[this.key(stxAddress, bondIndex)];
+    return s ? deserializeRecord(s) : null;
+  }
+  /**
+   * Startup health check used to gate native-BTC funding. Verifies the directory is
+   * writable (temp write + fsync + rename + delete) and that the existing store, if
+   * any, is readable and not corrupt. Throws on any failure.
+   */
+  async checkHealth() {
+    await import_fs2.promises.mkdir(this.dir, { recursive: true });
+    const probe = `${this.filePath}.health.${process.pid}.${this.tmpCounter++}`;
+    const probeTarget = `${probe}.moved`;
+    const fh = await import_fs2.promises.open(probe, "w");
+    try {
+      await fh.writeFile("ok");
+      await fh.sync();
+    } finally {
+      await fh.close();
+    }
+    await import_fs2.promises.rename(probe, probeTarget);
+    await import_fs2.promises.unlink(probeTarget).catch(() => {
+    });
+    await this.loadAll();
+  }
+};
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   ActionType,
   ApiService,
   BTC_ESPLORA,
+  CorruptLockStoreError,
   DEFAULT_POX_FEE_USTX,
+  DEFAULT_SCHEDULE_BOND_INDICES,
   EARLY_EXIT_SIGNER,
+  FileLockRecordStore,
   InMemoryLockRecordStore,
   MAX_FEE_STX,
   POX4_ERRORS,
   POX5_BOND_ERRORS,
   PRIVATE1_HIRO_API_BASE,
-  RBF_MIN_FEE_BUMP_USTX,
+  PUBLIC_TESTNET_POX5_API,
+  RBF_MIN_FEE_MULTIPLIER,
+  SignerManagerRegistry,
   StackingPools,
   StacksSDK,
   TokenType,
@@ -20762,16 +18821,21 @@ var ApiService = class {
   api_constants,
   config,
   derivationPath,
+  diffBondSchedule,
   env,
+  formatBondScheduleError,
   ftInfo,
   helperConstants,
+  laterStage,
   pagination_defaults,
   parseOptionalAmount,
   parseOptionalFee,
   parseOptionalNonce,
+  planSbtcRollover,
   poolInfo,
   poxInfo,
-  stacks_info
+  stacks_info,
+  validateBondScheduleAgainstChain
 });
 /*! Bundled license information:
 
@@ -20783,10 +18847,7 @@ var ApiService = class {
   (*! noble-curves - MIT License (c) 2022 Paul Miller (paulmillr.com) *)
 
 @scure/base/index.js:
-@scure/base/lib/index.js:
+@scure/base/index.js:
 @scure/base/index.js:
   (*! scure-base - MIT License (c) 2022 Paul Miller (paulmillr.com) *)
-
-@scure/bip39/index.js:
-  (*! scure-bip39 - MIT License (c) 2022 Patricio Palladino, Paul Miller (paulmillr.com) *)
 */

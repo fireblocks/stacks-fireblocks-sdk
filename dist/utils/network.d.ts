@@ -6,7 +6,7 @@
  * and fails construction on a chain-id or PoX-contract mismatch.
  */
 import { type StacksNetwork } from "@stacks/network";
-export type NetworkName = "mainnet" | "private-devnet";
+export type NetworkName = "mainnet" | "public-testnet" | "private-devnet";
 export interface NetworkProfile {
     name: NetworkName;
     /** Stacks API base URL — shared by BOTH the PoX-5 client and StacksService. */
@@ -21,6 +21,12 @@ export interface NetworkProfile {
     cosignerUrl: string;
     /** PoX contract name expected on-chain; validated at construction. */
     expectedPoxContractName: string;
+    /**
+     * When true, construction FAILS unless the node actually serves the expected
+     * PoX-5 boot contract. Used to keep a profile explicitly unavailable until a
+     * working PoX-5 endpoint exists (public-testnet), rather than silently degrading.
+     */
+    requirePox5Active?: boolean;
 }
 export declare function accountBalanceNormalizingFetch(baseFetch?: typeof fetch): typeof fetch;
 /**
@@ -29,6 +35,7 @@ export declare function accountBalanceNormalizingFetch(baseFetch?: typeof fetch)
  * environment variable, which takes precedence over the per-network default.
  */
 export declare function resolveNetworkProfile(opts: {
+    network?: NetworkName;
     testnet?: boolean;
     stacksApiUrl?: string;
 }): NetworkProfile;

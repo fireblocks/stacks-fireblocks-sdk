@@ -14,6 +14,18 @@
  * should supply a durable backend (see StacksSDK.setLockRecordStore / the pool's
  * lockRecordStore option). Losing a record for an unspent lock can strand BTC.
  */
+/**
+ * Durable stages of a native-BTC enrollment. Persisted so a retry after a crash or
+ * restart resumes at the last completed stage instead of re-funding Bitcoin.
+ */
+export type EnrollmentStage = "lock-fixed" | "funding-requested" | "btc-broadcast" | "btc-confirmed" | "proof-built" | "registration-submitted" | "registration-confirmed";
+/**
+ * Returns the LATER of two enrollment stages. Saves along the enrollment flow must
+ * never regress a resumed record's stage (e.g. a retry re-confirming Bitcoin must not
+ * overwrite "registration-submitted" with "btc-confirmed" — recovery tooling honoring
+ * the resume-at-last-stage contract would then re-submit a settled registration).
+ */
+export declare function laterStage(a: EnrollmentStage | undefined, b: EnrollmentStage): EnrollmentStage;
 export interface BondLockRecord {
     bondIndex: number;
     /** Witness `staker-unlock-bytes` committed to the on-chain lock script. */
@@ -38,10 +50,26 @@ export interface BondLockRecord {
     signerManager?: string;
     /** First reward cycle the bond earns in — the lower bound for reward discovery. */
     firstRewardCycle?: number;
+    /**
+     * Deterministic Fireblocks external id used for the BTC funding transfer. Derived
+     * from vault + network + bondIndex + lockAddress so a retry reuses the same id and
+     * Fireblocks de-duplicates it — a second funding transfer is never created for the
+     * same enrollment.
+     */
+    fundingExternalId?: string;
+    /** Last completed durable enrollment stage — a retry resumes from here. */
+    stage?: EnrollmentStage;
 }
 export interface LockRecordStore {
     saveRecord(stxAddress: string, bondIndex: number, record: BondLockRecord): Promise<void>;
     loadRecord(stxAddress: string, bondIndex: number): Promise<BondLockRecord | null>;
+    /**
+     * Optional startup health check. When present, a durable store proves it can be
+     * written and read (and is not corrupt) before native-BTC funding is allowed.
+     * Throws on failure. The in-memory default does not implement this and is treated
+     * as non-durable.
+     */
+    checkHealth?(): Promise<void>;
 }
 export declare class InMemoryLockRecordStore implements LockRecordStore {
     private store;

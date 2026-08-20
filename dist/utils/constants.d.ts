@@ -11,7 +11,7 @@ export declare const helperConstants: {
     stacks_api_page_size: number;
     stacks_api_max_limit: number;
 };
-export declare const RBF_MIN_FEE_BUMP_USTX: bigint;
+export declare const RBF_MIN_FEE_MULTIPLIER = 1.25;
 export declare const MAX_FEE_STX = 10;
 export declare const DEFAULT_POX_FEE_USTX: bigint;
 export declare const api_constants: {
@@ -54,11 +54,14 @@ export declare const POX4_ERRORS: Record<number, {
 export declare const BTC_ESPLORA: {
     mainnet: string;
     testnet: string;
+    public_testnet: string;
 };
 export declare const PRIVATE1_HIRO_API_BASE = "https://api.private-1.hiro.so";
+export declare const PUBLIC_TESTNET_POX5_API = "https://api.testnet-pox5.hiro.so";
 export declare const EARLY_EXIT_SIGNER: {
     mainnet: string;
     testnet: string;
+    public_testnet: string;
 };
 export declare const POX5_BOND_ERRORS: Record<number, {
     name: string;

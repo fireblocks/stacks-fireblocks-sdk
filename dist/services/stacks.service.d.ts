@@ -21,7 +21,6 @@ export declare class StacksService {
      *   chain id, and magic bytes come from the resolved profile so this service and
      *   the PoX-5 client always describe the same chain. When omitted, falls back to
      *   env/default resolution for standalone use.
-     * @param hiroApiKey - Optional Hiro API key, sent as `x-hiro-api-key` on every request.
      */
     constructor(testnet?: boolean, profile?: {
         baseUrl: string;
@@ -52,6 +51,11 @@ export declare class StacksService {
      *
      * @param address - The Stacks address to query.
      */
+    /**
+     * Returns only the confirmed on-chain nonce, skipping the mempool scan.
+     * @param address - The Stacks address to query.
+     */
+    getConfirmedNonce: (address: string) => Promise<bigint>;
     getAccountNonce: (address: string) => Promise<{
         confirmedNonce: bigint;
         pendingTxCount: number;
@@ -126,7 +130,7 @@ export declare class StacksService {
      * @param functionArgs - The arguments to pass to the function.
      * @returns - The unsigned Stacks contract call transaction.
      */
-    buildUnsignedContractCall: (senderPublicKey: string, contractAddress: string, contractName: string, functionName: string, functionArgs: ClarityValue[], nonce?: bigint, postConditions?: PostConditionWire[], postConditionMode?: PostConditionMode) => Promise<StacksTransactionWire>;
+    buildUnsignedContractCall: (senderPublicKey: string, contractAddress: string, contractName: string, functionName: string, functionArgs: ClarityValue[], nonce?: bigint, postConditionMode?: PostConditionMode, postConditions?: PostConditionWire[]) => Promise<StacksTransactionWire>;
     /**
      * Serializes a transaction for STX transfer or fungible token transfer.
      * @param sender - The sender's Stacks address.

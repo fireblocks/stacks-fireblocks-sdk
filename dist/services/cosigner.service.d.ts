@@ -36,6 +36,21 @@ export declare class CosignerService {
     constructor(baseUrl: string, requestTimeoutMs?: number);
     private fetchWithTimeout;
     getPublicKey: () => Promise<CosignerPublicKeyResponse>;
+    /**
+     * Derives the leaf public key (0/0 below the service's advertised account xpub —
+     * the key committed into a bond's early-unlock-bytes) straight from `/public-key`.
+     * Reaching the service also proves it is online and pins its advertised identity.
+     */
+    getLeafPublicKey: () => Promise<Uint8Array>;
+    /**
+     * Verifies BEFORE Bitcoin is funded that the cosigner service actually holds the
+     * key committed into the proposed lock script. The lock script's early-exit branch
+     * is `0x21 <P> 0xac` (buildUnlockScript(P)); if the service's derived leaf key does
+     * not reproduce the bond's early-unlock-bytes, early exit would be impossible, so
+     * funding must be refused. A 403 / unreachable service throws here as well, so the
+     * check fails closed and names the failing service.
+     */
+    verifyCommittedKey: (expectedUnlockBytes: Uint8Array) => Promise<void>;
     sign: (req: CosignRequest) => Promise<CosignResponse>;
     /**
      * Requests the cosigner leg of an early-exit reclaim and verifies it before

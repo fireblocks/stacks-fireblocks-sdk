@@ -1,5 +1,6 @@
-import { AnnounceEarlyExitResponse, BondPositionResponse, RequirementsResponse, CheckStatusResponse, CreateBondResult, CreateTransactionResponse, UnlockBtcResponse, SpendEarlyExitResponse, RenewBondResult, CalculateRewardsResponse, ClaimRewardsResponse, EarnedRewardsResponse, BondLockAddressResponse, FundBondLockResponse, FundVaultResponse, FireblocksConfig, GetContractCallHistoryResponse, GetAccountNonceResponse, GetFtBalancesResponse, GetNativeBalanceResponse, GetPoxInfoResponse, GetTransactionHistoryResponse, GetTransactionStatusResponse, StakerInfoResponse, VerifySignerGrantResponse, TokenType, TransactionType } from "./services/types";
+import { AnnounceEarlyExitResponse, BondPositionResponse, HistoricalBondPositionResponse, RequirementsResponse, CheckStatusResponse, CreateBondResult, GetContractCallHistoryResponse, CreateTransactionResponse, UnlockBtcResponse, SpendEarlyExitResponse, BtcFeeReplacementResponse, RenewBondResult, CalculateRewardsResponse, ClaimRewardsResponse, EarnedRewardsResponse, BondLockAddressResponse, FundBondLockResponse, FundVaultResponse, FireblocksConfig, GetAccountNonceResponse, GetFtBalancesResponse, GetNativeBalanceResponse, GetPoxInfoResponse, GetTransactionHistoryResponse, GetTransactionStatusResponse, BtcTxStatusResponse, StakerInfoResponse, VerifySignerGrantResponse, TokenType, TransactionType } from "./services/types";
 import { LockRecordStore } from "./staking/bonds/unlock-bytes-store";
+import { BondScheduleValidation } from "./utils/bondScheduleChain";
 import { type PoxInfo } from "./utils/helpers";
 import { ClarityValue, PostConditionMode, PostConditionWire } from "@stacks/transactions";
 import { type PoxInfo as Pox5PoxInfo } from "@stacks/bitcoin-staking";
@@ -12,6 +13,13 @@ export declare class StacksSDK {
     private publicKey;
     private cachedTransactions;
     private testnet;
+    private maxBondStxUstx;
+    private btcRecoveryAllowlist;
+    private signerManagerRegistry;
+    private verifyEarlyExitCosignerAtFunding;
+    private sbtcAssetCache;
+    private readonly RECOVERY_SPEND_VBYTES;
+    private readonly BTC_DUST_LIMIT_SATS;
     private networkProfile;
     private _pox5Network;
     private lockRecordStore;
@@ -26,11 +34,22 @@ export declare class StacksSDK {
      */
     setLockRecordStore: (store: LockRecordStore) => void;
     /**
-     * Warns loudly before a native BTC bond is created against the non-durable
-     * in-memory lock-record store — a process restart or pool eviction between
-     * funding and recovery would lose the record and can strand BTC.
+     * Native-BTC funding is refused unless a durable, healthy lock-record store is
+     * configured. Losing a record for an unspent BTC lock can strand funds, so the
+     * default in-memory store (not durable across restarts / pool eviction) is not
+     * allowed to fund, and a configured durable store must pass its health check
+     * immediately before funding. Returns an error message when funding must be
+     * refused, or undefined when the store is safe to use.
      */
-    private warnIfLockStoreNotDurable;
+    private assertDurableLockStore;
+    /**
+     * Deterministic Fireblocks external id for a bond's BTC funding transfer, derived
+     * from the vault, network, bond index, and lock address. Because it is stable for a
+     * given enrollment, a retry reuses the same id and Fireblocks de-duplicates the
+     * transfer — a second funding transaction is never created for the same lock, even
+     * across a process crash. A genuine replacement (e.g. fee bump) must use a new id.
+     */
+    private deriveFundingExternalId;
     private constructor();
     /**
      * Creates an instance of StacksSDK.
@@ -88,6 +107,17 @@ export declare class StacksSDK {
      */
     getTxStatusById: (txId: string) => Promise<GetTransactionStatusResponse>;
     /**
+     * Retrieves the status of a BITCOIN transaction from the selected Esplora API.
+     *
+     * A Bitcoin txid (returned as `btcTxid` by createBond, renewBond, unlockMaturedBond,
+     * spendEarlyExitUtxo, and replaceBtcRecoveryFee) MUST be polled here, never through
+     * getTxStatusById — that endpoint queries the Stacks API and a BTC txid would never be
+     * found there. The response is tagged `chain: 'bitcoin'`. A txid Esplora does not know
+     * yet returns `found: false` (not an error); a transport failure returns `success:false`
+     * (UNKNOWN, never silently "not confirmed").
+     */
+    getBtcTxStatus: (btcTxid: string) => Promise<BtcTxStatusResponse>;
+    /**
      * Waits for a transaction to be settled (either success or failure) by polling its status.
      * @param txId - The transaction ID.
      * @param intervalMs - The interval in milliseconds between status checks (default is 3000ms).
@@ -124,12 +154,6 @@ export declare class StacksSDK {
      * @returns A promise that resolves to an object indicating if parameters are valid, the final amount, and reason if invalid.
      * @throws {Error} If parameter validation fails.
      */
-    estimateFee: (recipientAddress: string, amount: number, type?: TransactionType, token?: TokenType, customTokenContractAddress?: string, customTokenContractName?: string) => Promise<{
-        success: boolean;
-        fee?: number;
-        microfee?: number;
-        error?: string;
-    }>;
     private checkParamsAndAdjustAmount;
     /**
      * Resolves the nonce to use for a transaction. If an explicit nonce is
@@ -154,6 +178,12 @@ export declare class StacksSDK {
     private pox5SignAndBroadcast;
     private get pox5Network();
     /**
+     * Encodes optional signer-manager calldata as a Clarity `(optional (buff))`. Some
+     * signer managers require calldata; when none is supplied this is `none`, preserving
+     * the prior hardcoded behavior.
+     */
+    private encodeSignerCalldata;
+    /**
      * Stakes STX through a signer-manager (PoX-5). Replaces pox-4 stackSolo.
      * @param amountStx - Amount of STX to stake (number). Converted to microSTX internally.
      * @param numCycles - Number of cycles to lock (1–96).
@@ -162,7 +192,7 @@ export declare class StacksSDK {
      * @param nonce - Optional nonce override.
      * @param externalId - Optional Fireblocks external ID for idempotency.
      */
-    stake: (amountStx: number, numCycles: number, signerManager: string, note?: string, nonce?: bigint, externalId?: string) => Promise<CreateTransactionResponse>;
+    stake: (amountStx: number, numCycles: number, signerManager: string, note?: string, nonce?: bigint, externalId?: string, signerCalldata?: Uint8Array | string) => Promise<CreateTransactionResponse>;
     /**
      * Updates an existing PoX-5 staking position — extend cycles, increase amount, or rotate
      * signer-manager. All fields are optional; omit any to leave that dimension unchanged.
@@ -173,7 +203,7 @@ export declare class StacksSDK {
      * @param nonce - Optional nonce override.
      * @param externalId - Optional Fireblocks external ID for idempotency.
      */
-    updateStake: (signerManager: string, oldSignerManager: string, cyclesToExtend?: number, increaseByStx?: number, note?: string, nonce?: bigint, externalId?: string) => Promise<CreateTransactionResponse>;
+    updateStake: (signerManager: string, oldSignerManager: string, cyclesToExtend?: number, increaseByStx?: number, note?: string, nonce?: bigint, externalId?: string, signerCalldata?: Uint8Array | string) => Promise<CreateTransactionResponse>;
     /**
      * Unlocks a PoX-5 staking position early (sets unlock to end of current cycle).
      * Reverts if called during the prepare phase — the SDK checks this before submitting.
@@ -239,6 +269,20 @@ export declare class StacksSDK {
         error?: string;
     }>;
     /**
+     * Validates the SDK's local bond-schedule constants (BOND_GAP_CYCLES / BOND_LENGTH_CYCLES)
+     * against the deployed PoX-5 contract's get-bond-l1-unlock-height accessor. Returns the
+     * per-index comparison plus a mismatch list; `success:false` means either a definite
+     * schedule mismatch or an UNKNOWN chain read failure (see error). The REST server also
+     * runs this at boot and refuses to start on a definite mismatch.
+     */
+    validateBondSchedule: (opts?: {
+        bondIndices?: number[];
+    }) => Promise<{
+        success: boolean;
+        data?: BondScheduleValidation;
+        error?: string;
+    }>;
+    /**
      * Creates a native coin transaction to transfer funds to a recipient address.
      * @param recipientAddress - The address of the recipient.
      * @param amount - Amount to transfer in STX (number, e.g. 1.5 for 1.5 STX). Converted to microSTX internally.
@@ -289,6 +333,28 @@ export declare class StacksSDK {
      */
     revokeDelegation: (nonce?: bigint, externalId?: string) => Promise<CreateTransactionResponse>;
     private esploraBase;
+    /**
+     * Effective sats amount for a bond position: announce-l1-early-exit permanently
+     * zeroes the mutable membership amount while the BTC stays locked in a live UTXO, so
+     * a zeroed L1 amount falls back to the durable record's immutable funded amount.
+     * Single source of truth for every position-reporting surface (getBondPosition,
+     * checkStatus) so views cannot disagree about the same bond.
+     */
+    private effectiveL1AmountSats;
+    /**
+     * Reads the Bitcoin tip height from Esplora, failing CLOSED: a non-2xx response or a
+     * non-numeric body (e.g. an HTML error page, where `Number(text)` is NaN and any
+     * `NaN < x` guard silently passes) returns null — UNKNOWN — so maturity gates refuse
+     * rather than sign a premature CLTV spend on garbage data.
+     */
+    private readBtcTipHeight;
+    /**
+     * Estimates a Bitcoin fee (sats) for a spend of ~`vbytes` from Esplora's
+     * `/fee-estimates`, so recovery/rollover spends are broadcast with an adequate fee
+     * rather than a fixed guess that can strand a transaction unconfirmed. Falls back to
+     * a conservative floor if the estimate is unavailable, so recovery is never blocked.
+     */
+    private estimateBtcFeeSats;
     private waitForBtcConfirmations;
     /**
      * Fetches the confirmed BTC transaction, its block header, and its Merkle proof from
@@ -316,11 +382,33 @@ export declare class StacksSDK {
      */
     private buildPox5Call;
     /**
-     * Resolves the sBTC token asset for post-conditions. Prefers an explicit override,
-     * otherwise falls back to the built-in sBTC contract for this network (constants
-     * `ftInfo[TokenType.sBTC]`). Returns undefined only if neither is available.
+     * Resolves the sBTC token asset for post-conditions from the SELECTED NETWORK's
+     * pox-5 configuration — the `pox_5_sbtc_contract` field of GET /v2/pox on the same
+     * node used to build and broadcast the transaction. A static mainnet asset id is
+     * meaningless on another network, so there is deliberately no table fallback. The
+     * asset identifier is `<pox_5_sbtc_contract>::sbtc-token`.
+     *
+     * Fails closed (returns undefined) when the field is absent, malformed, or its
+     * contract address does not belong to the network this SDK operates on. An explicit
+     * override is honored ONLY when it exactly matches the contract the node reports; it
+     * cannot bypass network validation or select a different token.
      */
     private resolveSbtcAsset;
+    /**
+     * Resolves the paired-STX lock amount for a bond. The amount is normally derived
+     * from the bond's sats value (`contractMin`). An explicit override is an EXPERT
+     * path: it is only honored when a `maxBondStxUstx` policy is configured on the SDK,
+     * and only within `[contractMin, maxBondStxUstx]`. This prevents an erroneous or
+     * malicious override from locking an unbounded amount of STX for the full bond
+     * term. The override is intentionally NOT reachable through the REST server.
+     */
+    /**
+     * When a signer-manager adapter allowlist is configured (registry non-empty), refuse
+     * a manager that is not on it BEFORE any funds move — defense in depth over the
+     * contract's own signer-grant gate. An empty registry imposes no allowlist.
+     */
+    private signerManagerAllowedError;
+    private resolveBondStxAmount;
     /** Renders `fetchEligibleRegisterForBond` reason codes into a readable string. */
     private describeBondReasons;
     /**
@@ -328,7 +416,7 @@ export declare class StacksSDK {
      * (canonical `update-bond-registration`). Runs the contract eligibility preflight
      * first, then records the new manager so reward discovery routes to it.
      */
-    updateBondRegistration: (bondIndex: number, signerManager: string, oldSignerManager: string, opts?: {
+    updateBondRegistration: (signerManager: string, oldSignerManager: string, opts?: {
         note?: string;
         nonce?: bigint;
         externalId?: string;
@@ -349,7 +437,68 @@ export declare class StacksSDK {
         confirmations?: number;
         btcTxid?: string;
         amountUstxOverride?: bigint;
+        signerCalldata?: Uint8Array | string;
     }) => Promise<CreateBondResult>;
+    /**
+     * Post-signing re-check for a register-for-bond broadcast (createBond, createSbtcBond,
+     * rollSbtcBond, renewBond). Re-runs the eligibility gate at the CURRENT tip — with a
+     * freshly fetched poxInfo, never a pre-broadcast snapshot — so a signature that sat in
+     * Fireblocks approval is not broadcast into a now-certain contract rejection
+     * (prepare-phase entry, bond start, closed rollover window). Returns a reason string to
+     * discard the tx, or undefined to proceed.
+     *
+     * `requireZeroCustody` guards createSbtcBond specifically: its sBTC post-condition asserts
+     * the GROSS amount, which is only valid with no prior custody. If custody appeared during
+     * the approval window the call is now a rollover — register-for-bond would move only the
+     * net difference and the gross post-condition would abort — so discard and route to
+     * rollSbtcBond instead.
+     *
+     * `expectedCustodySats` guards every path whose post-conditions were BUILT from a custody
+     * read (the net-delta rollover, and the pox-5 custody-refund condition on native paths):
+     * if live custody differs from the baked value, the signed conditions no longer match
+     * what the contract will transfer, so discard rather than broadcast a doomed abort.
+     *
+     * `outputs` threads the SPV lockup proof through for the native-BTC paths, whose
+     * eligibility check covers the proof-dependent gates as well.
+     */
+    private revalidateRegisterForBond;
+    /**
+     * Guards the durable record slot at (address, bondIndex) before a write would
+     * overwrite it with a record for a DIFFERENT lock. The store holds ONE record per
+     * slot, and a native-BTC record may be the only in-SDK pointer to committed Bitcoin
+     * (e.g. a renewal whose L2 leg failed) — clobbering it would strand the UTXO behind
+     * an out-of-band address scan, and a lost fundingExternalId would drop the
+     * idempotency key that prevents a second Fireblocks funding.
+     *
+     * Refuses when the existing native record either
+     *  - has a funding in flight (stage "funding-requested", txid not yet known), or
+     *  - has ANY unspent Bitcoin at its lock address — matched by the recorded outpoint
+     *    when present, but falling back to any-UTXO-at-address so a stale recorded txid
+     *    (e.g. an RBF replacement) with real BTC at the address still refuses.
+     * A fully spent lock (already recovered) allows the overwrite. An unreadable store
+     * or Bitcoin state refuses (UNKNOWN, never "safe").
+     *
+     * `newLockAddress` exempts a record for the SAME lock the caller is about to write —
+     * those flows own their resume/conflict logic; omit it for sBTC registrations, whose
+     * records never legitimately share a slot with a live native lock.
+     */
+    private nativeRecordOverwriteGuard;
+    /**
+     * pox-5→staker sBTC custody-refund post-condition for calls that custody NO sBTC.
+     *
+     * `register-for-bond` (native lockup) and the STX-only `stake` path both run the
+     * contract's internal roll-sbtc with a new sBTC amount of 0, so when the staker
+     * currently custodies sBTC the contract refunds the ENTIRE custodied amount from
+     * pox-5 during the call. In Deny mode that transfer must be covered or the node
+     * aborts the transaction after the signature is spent — on the bond paths, after
+     * the Bitcoin is already committed.
+     *
+     * Returns the FT condition (empty when custody is 0) plus the custody amount so the
+     * caller can bake it into its post-signing re-check. Throws when custody is non-zero
+     * but the network sBTC asset cannot be resolved: an uncovered refund must refuse to
+     * build rather than sign permissively.
+     */
+    private custodyRefundPostConditions;
     /**
      * Registers an sBTC-backed bond: locks the paired STX and transfers sBTC to the
      * contract in a single L2 call (no Bitcoin L1 lock / SPV proof). The sBTC asset
@@ -369,13 +518,47 @@ export declare class StacksSDK {
         note?: string;
         nonce?: bigint;
         externalId?: string;
+        signerCalldata?: Uint8Array | string;
+    }) => Promise<CreateTransactionResponse>;
+    /**
+     * Rolls an existing sBTC-backed position into the next bond period at a (possibly)
+     * different sBTC amount. Distinct from the native-BTC `renewBond` (which spends a
+     * Bitcoin L1 UTXO); an sBTC rollover is a pure L2 `register-for-bond` that moves only
+     * the NET sBTC difference (answers.md §3c):
+     *   - increase (new > custodied): the staker sends `new − custodied`;
+     *   - decrease (new < custodied): the PoX-5 boot contract sends `custodied − new` back;
+     *   - unchanged: no sBTC moves, so no sBTC post-condition is attached.
+     * The paired STX leg always asserts the FULL resulting STX lock (answers.md §2a/§2c/§4).
+     * The prior custody is read from the contract via `get-staker-custodied-sbtc` so the
+     * delta is bounded from chain state, never from a caller-supplied "old" amount.
+     *
+     * NOTE: sBTC paths are not yet exercised end-to-end on a live network (PoX-5 testnet is
+     * not active — answers.md §7); the deterministic post-condition logic is unit-tested,
+     * but validate the full flow against a live node before production use.
+     *
+     * @param nextBondIndex - The bond index to roll into.
+     * @param newSbtcSats - The target sBTC amount (sats) for the new position.
+     * @param signerManager - The signer-manager principal governing the new position.
+     */
+    rollSbtcBond: (nextBondIndex: number, newSbtcSats: bigint, signerManager: string, opts?: {
+        sbtcAsset?: {
+            contractAddress: string;
+            contractName: string;
+            assetName: string;
+        };
+        amountUstxOverride?: bigint;
+        note?: string;
+        nonce?: bigint;
+        externalId?: string;
+        signerCalldata?: Uint8Array | string;
     }) => Promise<CreateTransactionResponse>;
     /**
      * Withdraws sBTC from an sBTC-backed membership (`unstake-sbtc`). The pox-5
-     * contract transfers the requested sBTC back to the staker, so when the deployed
-     * sBTC asset is supplied we bound that transfer with a deny-mode post-condition
-     * asserting the contract sends at most `amountToWithdrawSats`. Without the asset
-     * the call falls back to permissive mode (with a warning).
+     * contract transfers the requested sBTC back to the staker, so the call runs in
+     * Deny mode with two post-conditions: a will-perform-PoX condition for the PoX
+     * action, and an exact FT condition asserting the contract sends exactly
+     * `amountToWithdrawSats`. If the sBTC asset cannot be resolved for this network
+     * the call refuses to build rather than signing an unbounded withdrawal.
      *
      * NOTE: sBTC paths are not yet exercised end-to-end on a live network.
      */
@@ -442,13 +625,48 @@ export declare class StacksSDK {
      */
     private findLockUtxo;
     /**
+     * Resolves the exact lock UTXO to spend for a recovery. Prefers the immutable
+     * recorded funding outpoint; when no record exists, an operator may supply an
+     * explicit outpoint, which is validated (unspent, correct P2WSH address/script,
+     * and exact expected value) before it is returned. Only when neither is present
+     * does it fall back to a single unambiguous output at the lock address.
+     */
+    /** True if `addr` is a well-formed BTC address for the active Bitcoin network. */
+    private isValidBtcAddressForNetwork;
+    /**
+     * Resolves the destination for a native-BTC recovery spend. Under RAW signing the
+     * destination is invisible to Fireblocks, so recovery DEFAULTS to the vault's own
+     * derived BTC address; any other (external) destination must be explicitly approved
+     * via `btcRecoveryAllowlist`. Wrong-network / malformed addresses are rejected
+     * before signing.
+     */
+    private resolveRecoveryDestination;
+    private resolveRecoveryUtxo;
+    /**
+     * Reports a native-BTC bond position by index from the immutable durable lock
+     * record plus live Bitcoin UTXO state — independent of Stacks membership, which
+     * `announce-l1-early-exit` zeroes and maturity drops. This keeps a mature or
+     * exited bond visible and recoverable after its on-chain membership disappears.
+     * A Bitcoin lookup failure is reported as UNKNOWN (null), never silently as spent.
+     */
+    getHistoricalBondPosition: (bondIndex: number) => Promise<HistoricalBondPositionResponse>;
+    /**
      * Spends the matured P2WSH UTXO back to a destination BTC address via the
      * OP_IF (CLTV) branch. Only callable after `unlockHeight` has passed on the
      * BTC chain. No early-exit signer set required — unilateral staker signature.
      */
-    unlockMaturedBond: (destinationBtcAddress: string, opts?: {
+    unlockMaturedBond: (destinationBtcAddress?: string, opts?: {
         feeSats?: bigint;
         bondIndex?: number;
+        outpointOverride?: {
+            txid: string;
+            vout: number;
+        };
+        knownUtxo?: {
+            txid: string;
+            vout: number;
+            value: number;
+        };
     }) => Promise<UnlockBtcResponse>;
     /**
      * Spends the P2WSH UTXO via the OP_ELSE (early-exit) branch. The cosigner
@@ -456,10 +674,46 @@ export declare class StacksSDK {
      * Call `announceEarlyExit()` on L2 first and wait for it to settle — this is
      * pre-checked on-chain before the cosigner is contacted.
      */
-    spendEarlyExitUtxo: (destinationBtcAddress: string, opts?: {
+    spendEarlyExitUtxo: (destinationBtcAddress?: string, opts?: {
         feeSats?: bigint;
         bondIndex?: number;
+        outpointOverride?: {
+            txid: string;
+            vout: number;
+        };
+        knownUtxo?: {
+            txid: string;
+            vout: number;
+            value: number;
+        };
     }) => Promise<SpendEarlyExitResponse>;
+    /**
+     * Replaces a still-unconfirmed recovery spend (from unlockMaturedBond or
+     * spendEarlyExitUtxo) with a higher-fee transaction (BIP-125 RBF).
+     *
+     * A recovery spend is one input (the lock UTXO) and one output (the destination), so
+     * the fee can only be raised by REDUCING the destination amount — this method never
+     * claims to preserve the received amount. It:
+     *   - preserves the original lock input and destination address;
+     *   - requires the new absolute fee to exceed the original AND to clear the BIP-125
+     *     rule-4 increment (≥ 1 sat/vB over the original, so the replacement pays for its
+     *     own relay bandwidth) — since the size is fixed, a higher absolute fee is also a
+     *     higher fee rate;
+     *   - refuses to create a dust output;
+     *   - rebuilds, re-authorizes, and re-signs through Fireblocks (fresh signatures);
+     *   - rejects if the original is already confirmed or can no longer be found
+     *     (dropped/replaced), and if the still-unspent lock UTXO has been spent by a
+     *     confirmed transaction the rebuild's UTXO lookup rejects it.
+     * The response carries old/new fee and old/new destination amount for display.
+     *
+     * @param originalTxid - The txid of the recovery spend being replaced.
+     * @param newFeeSats - The new absolute fee in sats (must exceed the original fee).
+     * @param opts.kind - Force the spend branch; defaults to inferring from bond maturity.
+     */
+    replaceBtcRecoveryFee: (originalTxid: string, newFeeSats: bigint, opts?: {
+        bondIndex?: number;
+        kind?: "matured" | "early-exit";
+    }) => Promise<BtcFeeReplacementResponse>;
     /**
      * Returns the early-exit cosigner service's account xpub and metadata —
      * useful for verifying the configured service matches a bond's
@@ -489,6 +743,21 @@ export declare class StacksSDK {
      * spans BOND_END_OFFSET_PERIODS periods (≤ 6 bonds).
      */
     private bondGapCycles;
+    /**
+     * Distribution "calculation height" — the burn height at which the reward waterfall
+     * snapshots the active-bond set. calculate-rewards must submit exactly the bonds
+     * active at THIS height, not at the drifting live burn height; near a boundary the
+     * two can fall in different cycles, which is the defect FBS-41 fixes.
+     *
+     * The contract evaluates `(- (distribution-cycle-to-burn-height
+     * (current-distribution-cycle)) u1)` — one block BEFORE the current distribution-
+     * cycle boundary (pox-5 calculate-rewards). This mirrors that exactly via the same
+     * dependency helpers the authoritative fetchEligibleCalculateRewards preflight uses,
+     * replacing the earlier reward-cycle-start guess that missed every other
+     * distribution half-cycle. Fail-safe either way: a wrong height only makes the node
+     * REJECT calculate-rewards (no misdistribution).
+     */
+    private calculationHeight;
     private activeBondWindow;
     private getActiveBondsSorted;
     /**
@@ -506,10 +775,7 @@ export declare class StacksSDK {
      * one batch at a time to keep a wide cycle range from exhausting node connections.
      */
     private mapCyclesLimited;
-    /** Fetches a bigint value per cycle in batches and sums the results. */
     private sumOverCycles;
-    /** Fetches a bigint value per cycle in batches and returns the cycles with a positive result. */
-    private filterCyclesWithPositiveValue;
     /**
      * Executes the two-step signer-manager reward claim for a single reward cycle.
      * @param claimBondIndices - Bond indices passed to claim-rewards (empty for STX-only stakes).
@@ -519,20 +785,22 @@ export declare class StacksSDK {
      */
     private executeClaimCycle;
     /**
-     * Resolves the signer manager and first earning cycle for a bond independently
-     * of current membership. Prefers the live membership when it still refers to the
-     * bond, else falls back to the durable record saved at registration — so rewards
-     * stay discoverable after the bond period ends or the membership is overwritten.
-     */
-    private resolveBondSignerContext;
-    /**
      * Claims ALL accumulated sBTC rewards for the given bond indices.
      * Handles the full flow internally: calculate → distribute → claim staker share.
      *
-     * Reward context is resolved per bond from membership OR the durable record, so
-     * historical/expired bonds remain claimable, and claims are grouped by signer
-     * manager so bonds under different managers route to the correct contract. Each
-     * requested bond is probed per cycle (not just the lowest index).
+     * The signer manager that governs each reward cycle is resolved from chain
+     * (get-signer-cycle-membership) rather than the local record, so signer rotation
+     * between cycles routes each cycle's claim to the correct manager and historical
+     * cycles remain claimable after a restart with an empty cache. A chain read failure
+     * refuses the claim (unknown, never silently "no rewards").
+     *
+     * Resumable by design: the per-cycle plan is rebuilt from chain on every call and
+     * includes only cycles/bonds with a still-positive signer accrual or staker
+     * entitlement, so a re-invocation after a partial failure resumes at the first
+     * unclaimed leg without repeating confirmed work — the chain is the progress record,
+     * not a local file. Both claim legs are contract-idempotent, so re-running a leg that
+     * already settled is benign. On failure the response carries the partial `results`
+     * and `txHashes` plus the error; call again to resume.
      */
     claimRewards: (bondIndices: number[], opts?: {
         note?: string;
@@ -540,12 +808,22 @@ export declare class StacksSDK {
     }) => Promise<ClaimRewardsResponse>;
     /**
      * Claims accumulated sBTC rewards for an STX-only staker (no BTC bonds).
-     * Same two-step flow as claimRewards but uses none() for bond index and derives
-     * the signer-manager from the vault's active STX stake rather than bond membership.
+     *
+     * The signer manager is resolved PER CYCLE from get-signer-cycle-membership (not the
+     * current stake), so historical cycles route correctly across signer rotation and
+     * stay claimable after the stake expires when an explicit cycle range is supplied.
+     * Claimability per cycle is the complementary pair: the staker entitlement
+     * (get-earned-staker-rewards, positive only AFTER someone runs claim-rewards) OR the
+     * signer-level accrual (get-earned, positive only BEFORE) — the latter additionally
+     * requiring this staker to hold shares for the cycle. Gating on the staker read alone
+     * would deadlock a self-managed signer, whose first claim-rewards is reachable only
+     * through this method. A read failure refuses rather than reading as "no rewards".
      */
     claimStxOnlyRewards: (opts?: {
         note?: string;
         nonce?: bigint;
+        fromCycle?: number;
+        toCycle?: number;
     }) => Promise<ClaimRewardsResponse>;
     /**
      * Returns earned sBTC rewards (sats) for a signerManager + optional bondIndex.
@@ -573,7 +851,6 @@ export declare class StacksSDK {
      * @param maxAmount - Maximum authorized STX amount, must be >= amount (number). Converted to microSTX internally.
      * @param lockPeriod - The number of cycles to lock the STX.
      * @param authId - Authorization ID for the transaction (bigint).
-     * @param note - Optional note shown in Fireblocks console during raw signing.
      * @param nonce - Optional nonce override (bigint). Defaults to next available gap-aware nonce.
      * @returns A response indicating success or failure of the transaction.
      */
@@ -585,7 +862,6 @@ export declare class StacksSDK {
      * @param increaseBy - Amount of STX to add to the existing stack (number). Converted to microSTX internally.
      * @param maxAmount - New maximum authorized STX amount after increase (number). Converted to microSTX internally.
      * @param authId - Authorization ID for the transaction (bigint).
-     * @param note - Optional note shown in Fireblocks console during raw signing.
      * @param nonce - Optional nonce override (bigint). Defaults to next available gap-aware nonce.
      * @returns A response indicating success or failure of the transaction.
      */
@@ -597,7 +873,6 @@ export declare class StacksSDK {
     * @param increaseBy - Number of additional cycles to extend the stacking period.
     * @param maxAmount - Maximum authorized STX amount for the extension (number). Converted to microSTX internally.
     * @param authId - Authorization ID for the transaction (bigint).
-    * @param note - Optional note shown in Fireblocks console during raw signing.
     * @param nonce - Optional nonce override (bigint). Defaults to next available gap-aware nonce.
     * @returns A response indicating success or failure of the transaction.
     */
@@ -608,14 +883,14 @@ export declare class StacksSDK {
      * Two mutually exclusive modes — provide one, not both:
      *   - `originalTxId` only: tx is visible in the explorer. SDK looks it up, reads its nonce,
      *     and reconstructs it. Works for token_transfer and contract_call. `newFee` must be
-     *     strictly greater than the original fee. `newRecipient`/`newAmount` are optional
-     *     overrides for token_transfer only.
+     *     at least RBF_MIN_FEE_MULTIPLIER × the original fee. `newRecipient`/`newAmount` are
+     *     optional overrides for token_transfer only.
      *   - `nonceOverride` only: tx is NOT visible in the explorer. SDK skips lookup entirely.
      *     `originalTxId` is unused — omit it. Only STX transfers supported. `newRecipient` and
      *     `newAmount` are required since there is nothing to reconstruct.
      *
-     * @param originalTxId - TX ID to look up and replace. Required unless using nonceOverride.
      * @param newFee - New fee in STX. Must be > 0 and ≤ MAX_FEE_STX.
+     * @param originalTxId - TX ID to look up and replace. Required unless using nonceOverride.
      * @param newRecipient - New recipient (token_transfer only). Optional on lookup path, required on override path.
      * @param newAmount - New amount in STX (token_transfer only). Optional on lookup path, required on override path.
      * @param nonceOverride - Nonce of the stuck tx. Use only when the tx is not visible in the explorer.
@@ -629,6 +904,23 @@ export declare class StacksSDK {
     * @throws {Error} If fetching pox info fails.
     */
     getPoxInfo: () => Promise<GetPoxInfoResponse>;
+    /**
+     * Checks and validates transaction parameters, adjusting the amount if necessary.
+     *
+     * @param recipientAddress - The address of the recipient.
+     * @param amount - The amount to transfer in native coin.
+     * @param grossTransaction - Optional flag indicating if the transaction is gross, if so fee will be deducted from recipient (default is false).
+     * @param type - The type of transaction (default is native coin).
+     * @param token - The type of fungible token to transfer (required if type is FungibleToken).
+     * @returns A promise that resolves to an object indicating if parameters are valid, the final amount, and reason if invalid.
+     * @throws {Error} If parameter validation fails.
+     */
+    estimateFee: (recipientAddress: string, amount: number, type?: TransactionType, token?: TokenType, customTokenContractAddress?: string, customTokenContractName?: string) => Promise<{
+        success: boolean;
+        fee?: number;
+        microfee?: number;
+        error?: string;
+    }>;
     /**
      * Makes a generic contract call to a given contract address and name with specified function and arguments.
      * @param contractAddress - The address of the contract to call.
