@@ -10725,7 +10725,7 @@ var PRIVATE1_HIRO_API_BASE = "https://api.private-1.hiro.so";
 var PUBLIC_TESTNET_POX5_API = "https://api.testnet-pox5.hiro.so";
 var EARLY_EXIT_SIGNER = {
   mainnet: "",
-  testnet: "https://r25rniyw12.execute-api.eu-west-1.amazonaws.com/v1/v1",
+  testnet: "https://r25rniyw12.execute-api.eu-west-1.amazonaws.com/api/v1",
   public_testnet: ""
 };
 var POX5_BOND_ERRORS = {
