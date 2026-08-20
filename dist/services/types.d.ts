@@ -267,6 +267,10 @@ export type BondPositionData = {
     locking_address: string | null;
     still_locked: boolean | null;
     blocks_until_unlock: number | null;
+    /** Node-reported account STX unlock height (authoritative; null = none locked/unknown). */
+    stx_unlock_burn_height: number | null;
+    /** Projected paired-STX unlock from the bond phase schedule (display aid). */
+    projected_stx_unlock_burn_height: number | null;
     earned_sats: string;
     earned_btc: string;
 } | null;
@@ -329,6 +333,7 @@ export type RequirementsResponse = {
                 target_rate_bps: number;
                 min_ustx_ratio_bps: number;
                 your_allowance_sats: string;
+                projected_stx_unlock_burn_height?: number | null;
             } | null;
             next_open_bond: {
                 bond_index: number;
@@ -338,6 +343,7 @@ export type RequirementsResponse = {
                 target_rate_bps: number;
                 min_ustx_ratio_bps: number;
                 your_allowance_sats: string;
+                projected_stx_unlock_burn_height?: number | null;
                 min_stx_for_sats?: number;
                 min_ustx_for_sats?: string;
             } | null;
@@ -349,6 +355,7 @@ export type RequirementsResponse = {
                 target_rate_bps: number;
                 min_ustx_ratio_bps: number;
                 your_allowance_sats: string;
+                projected_stx_unlock_burn_height?: number | null;
                 min_stx_for_sats?: number;
                 min_ustx_for_sats?: string;
                 eligible?: boolean;

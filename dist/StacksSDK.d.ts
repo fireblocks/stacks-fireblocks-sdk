@@ -742,6 +742,13 @@ export declare class StacksSDK {
      * live index exceeds it. The window is anchored on the latest started bond and
      * spans BOND_END_OFFSET_PERIODS periods (≤ 6 bonds).
      */
+    /**
+     * Projected burn height at which a bond's paired STX unlocks, taken from the
+     * dependency's bond phase schedule (the start of the 'unlocked' phase). This is a
+     * PROJECTION for display: post-enrollment, the account's node-reported unlock height
+     * is the authoritative value and should be preferred where available.
+     */
+    private projectedStxUnlockBurnHeight;
     private bondGapCycles;
     /**
      * Distribution "calculation height" — the burn height at which the reward waterfall
