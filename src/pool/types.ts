@@ -73,6 +73,7 @@ export enum ActionType {
   ROLL_SBTC_BOND = "rollSbtcBond",
   UNSTAKE_SBTC = "unstakeSbtc",
   GET_BOND_POSITION = "getBondPosition",
+  GET_HISTORICAL_BOND_POSITION = "getHistoricalBondPosition",
   ANNOUNCE_EARLY_EXIT = "announceEarlyExit",
   SPEND_EARLY_EXIT = "spendEarlyExit",
   GET_EARLY_EXIT_PUBLIC_KEY = "getEarlyExitPublicKey",

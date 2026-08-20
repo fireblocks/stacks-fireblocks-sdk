@@ -289,6 +289,9 @@ export class ApiService {
         case ActionType.GET_BOND_POSITION:
           result = await sdk.getBondPosition();
           break;
+        case ActionType.GET_HISTORICAL_BOND_POSITION:
+          result = await sdk.getHistoricalBondPosition(params.bondIndex);
+          break;
         case ActionType.ANNOUNCE_EARLY_EXIT:
           result = await sdk.announceEarlyExit({ note: params.note, nonce: params.nonce, externalId: params.externalId });
           break;

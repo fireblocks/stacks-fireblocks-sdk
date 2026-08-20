@@ -1143,6 +1143,22 @@ export const getEarlyExitPublicKey: Handler = async (req, res, next) => {
   }
 };
 
+// GET /:vaultId/stacking/pox5/bond/historical
+export const getHistoricalBondPosition: Handler = async (req, res, next) => {
+  try {
+    const vaultId = getVaultId(req);
+    const bondIndex = Number(req.query.bondIndex ?? req.body?.bondIndex);
+    if (!Number.isInteger(bondIndex) || bondIndex < 0) {
+      res.status(400).json({ error: "Bad Request: bondIndex must be a non-negative integer" });
+      return;
+    }
+    const result = await apiService.executeAction(vaultId, ActionType.GET_HISTORICAL_BOND_POSITION, { bondIndex });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
 // GET /:vaultId/stacking/pox5/bond/lock-address
 export const getBondLockAddress: Handler = async (req, res, next) => {
   try {

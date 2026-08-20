@@ -1576,6 +1576,33 @@ router.post("/:vaultId/stacking/pox5/bond/replace-fee", validateVaultId, control
 
 /**
  * @openapi
+ * /{vaultId}/stacking/pox5/bond/historical:
+ *   get:
+ *     tags: [PoX-5 BTC Bonds]
+ *     summary: Historical native-BTC bond position by index
+ *     description: >
+ *       Reports a native-BTC bond position from the immutable durable lock record plus
+ *       live Bitcoin UTXO state — independent of the mutable on-chain membership, which
+ *       early exit zeroes and later registrations overwrite. Use for recovery UIs.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *       - in: query
+ *         name: bondIndex
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Historical position report.
+ *       400:
+ *         description: Invalid bondIndex.
+ *       500:
+ *         description: Internal server error
+ */
+router.get("/:vaultId/stacking/pox5/bond/historical", validateVaultId, controller.getHistoricalBondPosition);
+
+/**
+ * @openapi
  * /{vaultId}/stacking/pox5/bond/renew:
  *   post:
  *     tags: [PoX-5 BTC Bonds]
