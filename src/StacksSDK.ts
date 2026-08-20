@@ -145,6 +145,7 @@ import {
   fetchConstructLockupOutputScript,
   isInPreparePhase,
   isBondActiveAtHeight,
+  bondPhaseRanges,
   firstPox5RewardCycle,
   bondPeriodToRewardCycle,
   burnHeightToRewardCycle,
@@ -3716,6 +3717,16 @@ export class StacksSDK {
       const firstRewardCycle = bondPeriodToRewardCycle({ bondIndex: membership.bondIndex, poxInfo: pox });
       const cyclesUntilRewards = Math.max(0, firstRewardCycle - pox.rewardCycleId);
 
+      // Paired-STX unlock height. The node-reported account unlock height is the
+      // AUTHORITATIVE value once the lock exists (0 = nothing locked → null); the
+      // projection from the dependency's bond phase schedule is supplied alongside it
+      // for display before the lock materializes. A failed account read yields null
+      // (unknown) rather than a fabricated number.
+      const accountUnlock = await fetchAccountStatus({ address: this.address, network: this.pox5Network })
+        .then((a) => (a.unlockHeight > 0 ? a.unlockHeight : null))
+        .catch(() => null);
+      const projectedStxUnlock = this.projectedStxUnlockBurnHeight(membership.bondIndex, pox);
+
       return {
         success: true,
         data: {
@@ -3733,6 +3744,8 @@ export class StacksSDK {
             locking_address,
             still_locked,
             blocks_until_unlock,
+            stx_unlock_burn_height: accountUnlock,
+            projected_stx_unlock_burn_height: projectedStxUnlock,
             earned_sats: earnedSats.toString(),
             earned_btc: earnedBtc,
           },
@@ -3943,6 +3956,7 @@ export class StacksSDK {
           target_rate_bps: bond.targetRateBps,
           min_ustx_ratio_bps: bond.minUstxRatioBps,
           your_allowance_sats: allowance.toString(),
+          projected_stx_unlock_burn_height: this.projectedStxUnlockBurnHeight(idx, pox),
           _bond: bond,
         };
       };
@@ -3966,6 +3980,7 @@ export class StacksSDK {
           target_rate_bps: currentDetails.target_rate_bps,
           min_ustx_ratio_bps: currentDetails.min_ustx_ratio_bps,
           your_allowance_sats: currentDetails.your_allowance_sats,
+          projected_stx_unlock_burn_height: currentDetails.projected_stx_unlock_burn_height,
         } : null,
         next_open_bond: nextOpenDetails ? {
           bond_index: nextOpenDetails.bond_index,
@@ -3975,6 +3990,7 @@ export class StacksSDK {
           target_rate_bps: nextOpenDetails.target_rate_bps,
           min_ustx_ratio_bps: nextOpenDetails.min_ustx_ratio_bps,
           your_allowance_sats: nextOpenDetails.your_allowance_sats,
+          projected_stx_unlock_burn_height: nextOpenDetails.projected_stx_unlock_burn_height,
         } : null,
       };
 
@@ -4001,6 +4017,7 @@ export class StacksSDK {
             target_rate_bps: reqDetails.target_rate_bps,
             min_ustx_ratio_bps: reqDetails.min_ustx_ratio_bps,
             your_allowance_sats: reqDetails.your_allowance_sats,
+          projected_stx_unlock_burn_height: reqDetails.projected_stx_unlock_burn_height,
           };
           if (opts.btcAmountSats !== undefined) {
             const minUstx = minUstxForSatsAmount({
@@ -4997,6 +5014,21 @@ export class StacksSDK {
    * live index exceeds it. The window is anchored on the latest started bond and
    * spans BOND_END_OFFSET_PERIODS periods (≤ 6 bonds).
    */
+  /**
+   * Projected burn height at which a bond's paired STX unlocks, taken from the
+   * dependency's bond phase schedule (the start of the 'unlocked' phase). This is a
+   * PROJECTION for display: post-enrollment, the account's node-reported unlock height
+   * is the authoritative value and should be preferred where available.
+   */
+  private projectedStxUnlockBurnHeight = (bondIndex: number, pox: Pox5PoxInfo): number | null => {
+    try {
+      const unlocked = bondPhaseRanges({ bondIndex, poxInfo: pox }).find((r) => r.name === 'unlocked');
+      return unlocked ? unlocked.startBurnHeight : null;
+    } catch {
+      return null;
+    }
+  };
+
   // Cycles between consecutive bond periods (derived rather than importing the
   // constant, which the dependency does not export at the type level).
   private bondGapCycles = (pox: Pox5PoxInfo): number =>
