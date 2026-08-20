@@ -20,9 +20,10 @@ export const helperConstants = {
   stacks_api_max_limit: 200, // Maximum limit accepted from callers; service paginates internally when limit > stacks_api_page_size
 }
 
-// Minimum fee bump for replace-by-fee (RBF) transactions, in microSTX.
-// The new fee must exceed the original fee by at least this amount.
-export const RBF_MIN_FEE_BUMP_USTX = BigInt(1);
+// Minimum fee multiplier for replace-by-fee (RBF) transactions.
+// The new fee must be at least this multiple of the original fee.
+// Applied only on the lookup path (when the original tx is visible to the indexer).
+export const RBF_MIN_FEE_MULTIPLIER = 1.25;
 
 // Maximum fee accepted by the SDK in STX. Guards against typos (e.g. 100 instead of 0.001).
 export const MAX_FEE_STX = 10;
@@ -256,17 +257,25 @@ export const POX4_ERRORS: Record<number, { name: string; message: string }> = {
 export const BTC_ESPLORA = {
   mainnet: 'https://mempool.space/api',
   testnet: 'https://mempool.bitcoin.private-1.hiro.so/api',
+  // Public Bitcoin testnet3 Esplora (used by the public-testnet profile).
+  public_testnet: 'https://blockstream.info/testnet/api',
 };
 
 // PoX-5 private testnet Stacks API (chainId 256, private-1).
 export const PRIVATE1_HIRO_API_BASE = 'https://api.private-1.hiro.so';
 
+// Public PoX-5 testnet Stacks API. Currently still serves PoX-4, so the
+// public-testnet profile is gated and fails startup validation until this (or a
+// configured override) serves the PoX-5 boot contract.
+export const PUBLIC_TESTNET_POX5_API = 'https://api.testnet-pox5.hiro.so';
+
 // External KMS cosigner for the bond early-exit (OP_ELSE) spend path.
-// Auth-less public endpoints — no secrets involved. Mainnet is not provisioned
-// yet; resolveCosignerUrl throws unless EARLY_EXIT_SIGNER_URL is set.
+// Auth-less public endpoints — no secrets involved. Mainnet and public testnet are
+// not provisioned yet; resolveCosignerUrl throws unless EARLY_EXIT_SIGNER_URL is set.
 export const EARLY_EXIT_SIGNER = {
   mainnet: '',
   testnet: 'https://r25rniyw12.execute-api.eu-west-1.amazonaws.com/v1/v1',
+  public_testnet: '',
 };
 
 export const POX5_BOND_ERRORS: Record<number, { name: string; message: string }> = {

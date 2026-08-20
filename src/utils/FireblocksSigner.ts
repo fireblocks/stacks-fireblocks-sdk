@@ -12,7 +12,6 @@ import {
 import { derivationPath } from "./constants";
 import { formatErrorMessage } from "./errorHandling";
 
-
 const POLL_INITIAL_MS = 3_000;
 const POLL_CEILING_MS = 30_000;
 const POLL_TIMEOUT_MS = 30 * 60 * 1_000;

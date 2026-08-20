@@ -66,7 +66,6 @@ export class StacksService {
    *   chain id, and magic bytes come from the resolved profile so this service and
    *   the PoX-5 client always describe the same chain. When omitted, falls back to
    *   env/default resolution for standalone use.
-   * @param hiroApiKey - Optional Hiro API key, sent as `x-hiro-api-key` on every request.
    */
   constructor(
     testnet: boolean = false,
@@ -147,6 +146,25 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
    *
    * @param address - The Stacks address to query.
    */
+  /**
+   * Returns only the confirmed on-chain nonce, skipping the mempool scan.
+   * @param address - The Stacks address to query.
+   */
+  public getConfirmedNonce = async (address: string): Promise<bigint> => {
+    try {
+      const response = await this.axiosClient.get(`${this.stackBaseUrl}/v2/accounts/${address}?proof=0`);
+      if (!response?.data || response.status !== 200) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      return BigInt(response.data.nonce);
+    } catch (error) {
+      console.error(`Error fetching confirmed nonce: ${formatErrorMessage(error)}`);
+      throw new Error(
+        `Failed to fetch confirmed nonce for address ${address}: ${formatErrorMessage(error)}`,
+      );
+    }
+  };
+
   public getAccountNonce = async (address: string): Promise<{
     confirmedNonce: bigint;
     pendingTxCount: number;
@@ -154,16 +172,12 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
   }> => {
     try {
       const pageSize = helperConstants.stacks_api_page_size;
-      let nonceError: unknown;
-      const nonceRequest = this.axiosClient
-        .get(`${this.stackBaseUrl}/v2/accounts/${address}?proof=0`)
-        .catch((e) => { nonceError = e; return undefined; });
+      const nonceRequest = this.axiosClient.get(`${this.stackBaseUrl}/v2/accounts/${address}?proof=0`);
 
       const pendingNonces = new Set<bigint>();
       let pendingTxCount = 0;
       let offset = 0;
-      const maxPages = 20;
-      for (let page = 0; page < maxPages; page++) {
+      while (true) {
         const mempoolResponse = await this.axiosClient.get(
           `${this.stackBaseUrl}/extended/v1/tx/mempool`,
           { params: { sender_address: address, limit: pageSize, offset } },
@@ -179,9 +193,8 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
       }
 
       const nonceResponse = await nonceRequest;
-      if (nonceError) throw nonceError;
       if (!nonceResponse?.data || nonceResponse.status !== 200) {
-        throw new Error(`HTTP ${nonceResponse?.status}`);
+        throw new Error(`HTTP ${nonceResponse.status}`);
       }
       const confirmedNonce = BigInt(nonceResponse.data.nonce);
 
@@ -541,7 +554,6 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
           ...(nonce !== undefined ? { nonce } : {}),
           ...(fee !== undefined ? { fee } : {}),
           ...(memo !== undefined ? { memo } : {}),
-          ...(memo !== undefined ? { memo } : {}),
         });
       }
 
@@ -573,12 +585,12 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
     functionName: string,
     functionArgs: ClarityValue[],
     nonce?: bigint,
-    postConditions?: PostConditionWire[],
     postConditionMode?: PostConditionMode,
+    postConditions?: PostConditionWire[],
   ): Promise<StacksTransactionWire> => {
     try {
-      if (!validateAddress(contractAddress, this.network === STACKS_TESTNET)) {
-        throw new Error("Invalid contract address");
+      if (!validateAddress(contractAddress, this.testnet)) {
+        throw new Error("Invalid recipient address");
       }
 
       if (!isCompressedSecp256k1PubKeyHex(senderPublicKey)) {
@@ -596,9 +608,9 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
         functionArgs,
         publicKey: senderPublicKey,
         network: this.network,
-        postConditions: postConditions ?? [],
         postConditionMode: postConditionMode ?? PostConditionMode.Deny,
         ...(nonce !== undefined ? { nonce } : {}),
+        ...(postConditions !== undefined ? { postConditions } : {}),
       });
 
       return unsignedContractCall;
@@ -721,8 +733,8 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
         functionName,
         functionArgs,
         nonce,
-        postConditions,
         postConditionMode,
+        postConditions,
       );
 
       if (fee !== undefined) {
@@ -1043,7 +1055,6 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
         "delegate-stx",
         [
           uintCV(amount),
-          poolContractName ? contractPrincipalCV(delegateTo, poolContractName) : standardPrincipalCV(delegateTo),
           poolContractName ? contractPrincipalCV(delegateTo, poolContractName) : standardPrincipalCV(delegateTo),
           someCV(uintCV(until_burn_ht)),
           noneCV(),

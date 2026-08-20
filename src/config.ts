@@ -25,11 +25,11 @@ export const env = {
   POOL_MAX_SIZE: parseInt(process.env.POOL_MAX_SIZE ?? "100", 10),
   POOL_IDLE_TIMEOUT_MS: parseInt(
     process.env.POOL_IDLE_TIMEOUT_MS ?? "1800000",
-    10
+    10,
   ),
   POOL_CLEANUP_INTERVAL_MS: parseInt(
     process.env.POOL_CLEANUP_INTERVAL_MS ?? "300000",
-    10
+    10,
   ),
   NETWORK: (process.env.NETWORK ?? "").toLowerCase(),
   TESTNET: (process.env.NETWORK ?? "").toLowerCase() === "testnet",

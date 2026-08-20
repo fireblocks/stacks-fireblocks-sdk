@@ -18,7 +18,13 @@ export interface PoolConfig {
 export interface SdkPoolItem {
   sdk: StacksSDK;
   lastUsed: Date;
-  isInUse: boolean;
+  /**
+   * Number of concurrent callers currently holding this instance. Only an instance
+   * with refCount 0 is idle and therefore eligible for eviction — a shared instance
+   * must not be evicted while any caller is still mid-operation, or a replacement
+   * instance with an independent nonce queue could be built for the same vault.
+   */
+  refCount: number;
 }
 
 export interface ApiServiceConfig {
@@ -27,6 +33,7 @@ export interface ApiServiceConfig {
   basePath: BasePath | string;
   poolConfig?: Partial<PoolConfig>;
   testnet?: boolean;
+  /** Optional Hiro API key, sent as `x-hiro-api-key` on StacksService requests. */
   chainApiKey?: string;
 }
 
@@ -45,17 +52,13 @@ export enum ActionType {
   CHECK_STATUS = "checkStatus",
   STACK_SOLO = "stackSolo",
   GET_TX_STATUS_BY_ID = "getTxStatusById",
+  GET_BTC_TX_STATUS = "getBtcTxStatus",
+  VALIDATE_BOND_SCHEDULE = "validateBondSchedule",
   GET_POX_INFO = "getPoxInfo",
   INCREASE_STACKED_AMOUNT = "increaseStackedAmount",
   EXTEND_STACKING_PERIOD = "extendStackingPeriod",
-  GET_CONTRACT_CALL_HISTORY = "getContractCallHistory",
-  MAKE_CONTRACT_CALL = "makeContractCall",
-  SIGN_TRANSACTION = "signExternalTransaction",
-  SIGN_MESSAGE = "signMessage",
-  SIGN_STRUCTURED_MESSAGE = "signStructuredMessage",
   REPLACE_TRANSACTION = "replaceTransaction",
   GET_ACCOUNT_NONCE = "getAccountNonce",
-  ESTIMATE_FEE = "estimateFee",
   // PoX-5 Solo STX
   STAKE = "stake",
   UPDATE_STAKE = "updateStake",
@@ -69,6 +72,7 @@ export enum ActionType {
   // PoX-5 BTC Bonds
   CREATE_BOND = "createBond",
   CREATE_SBTC_BOND = "createSbtcBond",
+  ROLL_SBTC_BOND = "rollSbtcBond",
   UNSTAKE_SBTC = "unstakeSbtc",
   GET_BOND_POSITION = "getBondPosition",
   ANNOUNCE_EARLY_EXIT = "announceEarlyExit",
@@ -76,6 +80,7 @@ export enum ActionType {
   GET_EARLY_EXIT_PUBLIC_KEY = "getEarlyExitPublicKey",
   GET_REQUIREMENTS = "getRequirements",
   UNLOCK_BTC = "unlockMaturedBond",
+  REPLACE_BTC_RECOVERY_FEE = "replaceBtcRecoveryFee",
   RENEW_BOND = "renewBond",
   CALCULATE_REWARDS = "calculateRewards",
   CLAIM_REWARDS = "claimRewards",
@@ -84,6 +89,13 @@ export enum ActionType {
   GET_BOND_LOCK_ADDRESS = "getBondLockAddress",
   FUND_BOND_LOCK_ADDRESS = "fundBondLockAddress",
   FUND_VAULT = "fundVault",
+  // App-surface actions (Electron consumption; not present on the server branch)
+  ESTIMATE_FEE = "estimateFee",
+  GET_CONTRACT_CALL_HISTORY = "getContractCallHistory",
+  MAKE_CONTRACT_CALL = "makeContractCall",
+  SIGN_TRANSACTION = "signExternalTransaction",
+  SIGN_MESSAGE = "signMessage",
+  SIGN_STRUCTURED_MESSAGE = "signStructuredMessage",
 }
 
 export interface SdkManagerMetrics {

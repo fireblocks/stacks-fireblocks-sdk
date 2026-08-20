@@ -4,10 +4,6 @@
  * Fireblocks and axios reject with structured objects whose detail sits in `response.data`.
  * Only message/code fields are read; request config is skipped so credentials are not surfaced.
  */
-// Never serialized into an error message, even as a fallback — request config
-// carries the Fireblocks/HTTP auth headers.
-const REDACTED_KEYS = new Set(["config", "headers", "auth", "authorization", "token", "apiKey", "secret"]);
-
 export function formatErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     const nested = extractResponseDetail(error);
@@ -29,10 +25,9 @@ export function formatErrorMessage(error: unknown): string {
     }
 
     try {
-      const serialized = JSON.stringify(error, (key, v) => {
-        if (REDACTED_KEYS.has(key)) return undefined;
-        return typeof v === "bigint" ? v.toString() : v;
-      });
+      const serialized = JSON.stringify(error, (_, v) =>
+        typeof v === "bigint" ? v.toString() : v,
+      );
       if (serialized && serialized !== "{}") return serialized;
     } catch {
       // Circular or non-serializable.

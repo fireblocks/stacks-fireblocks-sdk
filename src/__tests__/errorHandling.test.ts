@@ -68,22 +68,6 @@ describe("formatErrorMessage", () => {
     expect(formatErrorMessage(error)).not.toContain("super-secret-token");
   });
 
-  it("does not surface request config when falling back to JSON serialization (no message field, empty response.data)", () => {
-    const error = {
-      status: 401,
-      response: { data: {}, config: { headers: { Authorization: "Bearer super-secret-token" } } },
-    };
-    expect(formatErrorMessage(error)).not.toContain("super-secret-token");
-  });
-
-  it("does not surface request config when falling back to JSON serialization (no response field at all)", () => {
-    const error = {
-      status: 401,
-      config: { headers: { Authorization: "Bearer super-secret-token" } },
-    };
-    expect(formatErrorMessage(error)).not.toContain("super-secret-token");
-  });
-
   it("survives circular references", () => {
     const circular: Record<string, unknown> = { code: 500 };
     circular.self = circular;

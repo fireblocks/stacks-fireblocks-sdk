@@ -11,10 +11,11 @@ import {
   BTC_ESPLORA,
   EARLY_EXIT_SIGNER,
   PRIVATE1_HIRO_API_BASE,
+  PUBLIC_TESTNET_POX5_API,
 } from "./constants";
 import { formatErrorMessage } from "./errorHandling";
 
-export type NetworkName = "mainnet" | "private-devnet";
+export type NetworkName = "mainnet" | "public-testnet" | "private-devnet";
 
 export interface NetworkProfile {
   name: NetworkName;
@@ -30,6 +31,12 @@ export interface NetworkProfile {
   cosignerUrl: string;
   /** PoX contract name expected on-chain; validated at construction. */
   expectedPoxContractName: string;
+  /**
+   * When true, construction FAILS unless the node actually serves the expected
+   * PoX-5 boot contract. Used to keep a profile explicitly unavailable until a
+   * working PoX-5 endpoint exists (public-testnet), rather than silently degrading.
+   */
+  requirePox5Active?: boolean;
 }
 
 export function accountBalanceNormalizingFetch(
@@ -69,34 +76,58 @@ export function accountBalanceNormalizingFetch(
  * environment variable, which takes precedence over the per-network default.
  */
 export function resolveNetworkProfile(opts: {
+  network?: NetworkName;
   testnet?: boolean;
   stacksApiUrl?: string;
 }): NetworkProfile {
   const envUrl = process.env.STACKS_API_URL || undefined;
 
-  if (opts.testnet) {
-    return {
-      name: "private-devnet",
-      stacksApiUrl: opts.stacksApiUrl || envUrl || PRIVATE1_HIRO_API_BASE,
-      chainId: 256,
-      magicBytes: "id",
-      esploraBaseUrl: BTC_ESPLORA.testnet,
-      bech32Prefix: "bcrt",
-      cosignerUrl: EARLY_EXIT_SIGNER.testnet,
-      expectedPoxContractName: "pox-5",
-    };
-  }
+  // An explicit network name takes precedence. Otherwise the legacy boolean maps
+  // testnet → private-devnet (its historical meaning) and false → mainnet.
+  const name: NetworkName =
+    opts.network ?? (opts.testnet ? "private-devnet" : "mainnet");
 
-  return {
-    name: "mainnet",
-    stacksApiUrl: opts.stacksApiUrl || envUrl || api_constants.stacks_mainnet_rpc,
-    chainId: STACKS_MAINNET.chainId,
-    magicBytes: STACKS_MAINNET.magicBytes,
-    esploraBaseUrl: BTC_ESPLORA.mainnet,
-    bech32Prefix: undefined,
-    cosignerUrl: EARLY_EXIT_SIGNER.mainnet,
-    expectedPoxContractName: "pox-5",
-  };
+  switch (name) {
+    case "private-devnet":
+      return {
+        name: "private-devnet",
+        stacksApiUrl: opts.stacksApiUrl || envUrl || PRIVATE1_HIRO_API_BASE,
+        chainId: 256,
+        magicBytes: "id",
+        esploraBaseUrl: BTC_ESPLORA.testnet,
+        bech32Prefix: "bcrt",
+        cosignerUrl: EARLY_EXIT_SIGNER.testnet,
+        expectedPoxContractName: "pox-5",
+      };
+    case "public-testnet":
+      // Public PoX-5 testnet. Gated (requirePox5Active) so construction fails until a
+      // node actually serves the PoX-5 boot contract — the current public endpoint
+      // still reports PoX-4, so this profile is intentionally unavailable until a
+      // working endpoint passes startup validation.
+      return {
+        name: "public-testnet",
+        stacksApiUrl: opts.stacksApiUrl || envUrl || PUBLIC_TESTNET_POX5_API,
+        chainId: STACKS_TESTNET.chainId,
+        magicBytes: STACKS_TESTNET.magicBytes,
+        esploraBaseUrl: BTC_ESPLORA.public_testnet,
+        bech32Prefix: "tb",
+        cosignerUrl: EARLY_EXIT_SIGNER.public_testnet,
+        expectedPoxContractName: "pox-5",
+        requirePox5Active: true,
+      };
+    case "mainnet":
+    default:
+      return {
+        name: "mainnet",
+        stacksApiUrl: opts.stacksApiUrl || envUrl || api_constants.stacks_mainnet_rpc,
+        chainId: STACKS_MAINNET.chainId,
+        magicBytes: STACKS_MAINNET.magicBytes,
+        esploraBaseUrl: BTC_ESPLORA.mainnet,
+        bech32Prefix: undefined,
+        cosignerUrl: EARLY_EXIT_SIGNER.mainnet,
+        expectedPoxContractName: "pox-5",
+      };
+  }
 }
 
 /**
@@ -148,25 +179,39 @@ export async function validateNetworkProfile(
     );
   }
 
-  // The active PoX contract is only warned on, never hard-failed: a network may
-  // legitimately still run an older PoX contract while this SDK's bond features
-  // target a newer one, and blocking construction would also break the SDK's
-  // non-bond operations (transfers, balances) on that network.
+  // For a non-gated profile the active PoX contract is only warned on, never
+  // hard-failed: a network may legitimately still run an older PoX contract while
+  // this SDK's bond features target a newer one, and blocking construction would
+  // also break the SDK's non-bond operations (transfers, balances) on that network.
+  // A profile with `requirePox5Active` (e.g. public-testnet) instead fails closed:
+  // it is only "supported" once the node actually serves the PoX-5 boot contract.
   try {
     const poxRes = await fetch(`${profile.stacksApiUrl}/v2/pox`);
     if (poxRes.ok) {
       const pox = await poxRes.json();
       const contractId: string | undefined = pox?.contract_id;
-      if (
+      const pox5Active =
         typeof contractId === "string" &&
-        !contractId.endsWith(`.${profile.expectedPoxContractName}`)
-      ) {
+        contractId.endsWith(`.${profile.expectedPoxContractName}`);
+      if (!pox5Active) {
+        if (profile.requirePox5Active) {
+          throw new Error(
+            `Network profile "${profile.name}" requires an active ${profile.expectedPoxContractName} contract, but ${profile.stacksApiUrl} reports "${contractId ?? "unknown"}". This network is not yet supported.`,
+          );
+        }
         console.warn(
           `Active PoX contract "${contractId}" is not ".${profile.expectedPoxContractName}"; PoX-5 bond operations may be unavailable on this network.`,
         );
       }
+    } else if (profile.requirePox5Active) {
+      throw new Error(
+        `Network profile "${profile.name}" could not confirm an active ${profile.expectedPoxContractName} contract (GET /v2/pox returned HTTP ${poxRes.status}). This network is not yet supported.`,
+      );
     }
   } catch (error) {
+    // A gated profile must fail closed when PoX-5 cannot be confirmed — propagate
+    // both the explicit "not supported" error above and any transport failure.
+    if (profile.requirePox5Active) throw error;
     console.warn(`PoX contract check skipped: ${formatErrorMessage(error)}`);
   }
 }

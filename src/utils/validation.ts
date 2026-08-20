@@ -10,7 +10,8 @@ export class ValidationError extends Error {
 export function parseOptionalNonce(value: unknown): bigint | undefined {
   if (value === undefined || value === "") return undefined;
   if (typeof value === "bigint") {
-    if (value < BigInt(0)) throw new ValidationError("nonce must be a non-negative integer");
+    if (value < BigInt(0))
+      throw new ValidationError("nonce must be a non-negative integer");
     return value;
   }
   if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) {
@@ -44,7 +45,9 @@ export function parseOptionalFee(value: unknown): number | undefined {
     throw new ValidationError("fee must be a positive number (STX)");
   }
   if (fee > MAX_FEE_STX) {
-    throw new ValidationError(`fee ${fee} STX exceeds the safety limit of ${MAX_FEE_STX} STX`);
+    throw new ValidationError(
+      `fee ${fee} STX exceeds the safety limit of ${MAX_FEE_STX} STX`,
+    );
   }
   return fee;
 }

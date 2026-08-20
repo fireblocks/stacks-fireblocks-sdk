@@ -61,6 +61,12 @@ export class ApiService {
         case ActionType.GET_TX_STATUS_BY_ID:
           result = await sdk.getTxStatusById(params.txId);
           break;
+        case ActionType.GET_BTC_TX_STATUS:
+          result = await sdk.getBtcTxStatus(params.btcTxid);
+          break;
+        case ActionType.VALIDATE_BOND_SCHEDULE:
+          result = await sdk.validateBondSchedule({ bondIndices: params.bondIndices });
+          break;
 
         case ActionType.DELEGATE_TO_POOL:
           result = await sdk.delegateToPool(
@@ -101,16 +107,6 @@ export class ApiService {
             params.note,
             params.nonce,
             params.externalId,
-          );
-          break;
-        case ActionType.ESTIMATE_FEE:
-          result = await sdk.estimateFee(
-            params.recipientAddress,
-            params.amount,
-            params.type,
-            params.token,
-            params.customTokenContractAddress,
-            params.customTokenContractName,
           );
           break;
         case ActionType.GET_BALANCE:
@@ -169,28 +165,6 @@ export class ApiService {
             params.note,
             params.externalId,
           );
-          break;
-        case ActionType.GET_CONTRACT_CALL_HISTORY:
-          result = await sdk.getContractCallHistory(params.limit, params.offset);
-          break;
-        case ActionType.MAKE_CONTRACT_CALL:
-          result = await sdk.makeContractCall(
-            params.contractAddress,
-            params.contractName,
-            params.functionName,
-            params.functionArgs,
-            params.postConditions,
-            params.postConditionMode,
-          );
-          break;
-        case ActionType.SIGN_TRANSACTION:
-          result = await sdk.signExternalTransaction(params.txHex);
-          break;
-        case ActionType.SIGN_MESSAGE:
-          result = await sdk.signMessage(params.message);
-          break;
-        case ActionType.SIGN_STRUCTURED_MESSAGE:
-          result = await sdk.signStructuredMessage(params.message, params.domain);
           break;
         case ActionType.GET_ACCOUNT_NONCE:
           result = await sdk.getAccountNonce();
@@ -259,7 +233,7 @@ export class ApiService {
             params.bondIndex,
             params.btcAmountSats,
             params.signerManager,
-            { note: params.note, nonce: params.nonce, externalId: params.externalId, confirmations: params.confirmations, btcTxid: params.btcTxid, amountUstxOverride: params.amountUstxOverride },
+            { note: params.note, nonce: params.nonce, externalId: params.externalId, confirmations: params.confirmations, btcTxid: params.btcTxid },
           );
           break;
         case ActionType.CREATE_SBTC_BOND:
@@ -267,7 +241,15 @@ export class ApiService {
             params.bondIndex,
             params.sbtcSats,
             params.signerManager,
-            { sbtcAsset: params.sbtcAsset, amountUstxOverride: params.amountUstxOverride, note: params.note, nonce: params.nonce, externalId: params.externalId },
+            { sbtcAsset: params.sbtcAsset, note: params.note, nonce: params.nonce, externalId: params.externalId },
+          );
+          break;
+        case ActionType.ROLL_SBTC_BOND:
+          result = await sdk.rollSbtcBond(
+            params.nextBondIndex,
+            params.newSbtcSats,
+            params.signerManager,
+            { sbtcAsset: params.sbtcAsset, note: params.note, nonce: params.nonce, externalId: params.externalId },
           );
           break;
         case ActionType.UNSTAKE_SBTC:
@@ -296,11 +278,14 @@ export class ApiService {
         case ActionType.UNLOCK_BTC:
           result = await sdk.unlockMaturedBond(params.destinationBtcAddress, { feeSats: params.feeSats, bondIndex: params.bondIndex });
           break;
+        case ActionType.REPLACE_BTC_RECOVERY_FEE:
+          result = await sdk.replaceBtcRecoveryFee(params.originalTxid, params.newFeeSats, { bondIndex: params.bondIndex, kind: params.kind });
+          break;
         case ActionType.RENEW_BOND:
           result = await sdk.renewBond(params.nextBondIndex, params.signerManager, { feeSats: params.feeSats, note: params.note, nonce: params.nonce, externalId: params.externalId, confirmations: params.confirmations });
           break;
         case ActionType.UPDATE_BOND_REGISTRATION:
-          result = await sdk.updateBondRegistration(params.bondIndex, params.signerManager, params.oldSignerManager, { note: params.note, nonce: params.nonce, externalId: params.externalId });
+          result = await sdk.updateBondRegistration(params.signerManager, params.oldSignerManager, { note: params.note, nonce: params.nonce, externalId: params.externalId });
           break;
         case ActionType.CALCULATE_REWARDS:
           result = await sdk.calculateRewards({ note: params.note, nonce: params.nonce });
@@ -309,7 +294,7 @@ export class ApiService {
           result = await sdk.claimRewards(params.bondIndices, { note: params.note, nonce: params.nonce });
           break;
         case ActionType.CLAIM_STX_ONLY_REWARDS:
-          result = await sdk.claimStxOnlyRewards({ note: params.note, nonce: params.nonce });
+          result = await sdk.claimStxOnlyRewards({ note: params.note, nonce: params.nonce, fromCycle: params.fromCycle, toCycle: params.toCycle });
           break;
         case ActionType.GET_EARNED_REWARDS:
           result = await sdk.getEarnedRewards(params.signerManager, params.bondIndex);
@@ -322,6 +307,39 @@ export class ApiService {
           break;
         case ActionType.FUND_VAULT:
           result = await sdk.fundVault(params.staking);
+          break;
+        // ── App-surface actions (Electron consumption; not present on the server branch) ──
+        case ActionType.ESTIMATE_FEE:
+          result = await sdk.estimateFee(
+            params.recipientAddress,
+            params.amount,
+            params.type,
+            params.token,
+            params.customTokenContractAddress,
+            params.customTokenContractName,
+          );
+          break;
+        case ActionType.GET_CONTRACT_CALL_HISTORY:
+          result = await sdk.getContractCallHistory(params.limit, params.offset);
+          break;
+        case ActionType.MAKE_CONTRACT_CALL:
+          result = await sdk.makeContractCall(
+            params.contractAddress,
+            params.contractName,
+            params.functionName,
+            params.functionArgs,
+            params.postConditions,
+            params.postConditionMode,
+          );
+          break;
+        case ActionType.SIGN_TRANSACTION:
+          result = await sdk.signExternalTransaction(params.txHex);
+          break;
+        case ActionType.SIGN_MESSAGE:
+          result = await sdk.signMessage(params.message);
+          break;
+        case ActionType.SIGN_STRUCTURED_MESSAGE:
+          result = await sdk.signStructuredMessage(params.message, params.domain);
           break;
         default:
           throw new Error(
@@ -360,3 +378,4 @@ export class ApiService {
     return this.sdkManager.shutdown();
   };
 }
+

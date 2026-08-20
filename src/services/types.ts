@@ -1,4 +1,5 @@
 import { BasePath } from "@fireblocks/ts-sdk";
+import { SignerManagerAdapter } from "../staking/signer-manager-adapter";
 
 
 export type Network = "mainnet" | "testnet";
@@ -26,18 +27,67 @@ export type FireblocksConfig = {
   basePath?: BasePath;
   testnet?: boolean;
   /**
+   * Explicit network profile. Takes precedence over `testnet`. `public-testnet` is
+   * currently gated and fails construction until a node serving the PoX-5 boot
+   * contract is available. When omitted, `testnet: true` maps to `private-devnet`
+   * and `testnet` unset/false maps to `mainnet`.
+   */
+  network?: "mainnet" | "public-testnet" | "private-devnet";
+  /**
    * Explicit Stacks API base URL. Overrides the STACKS_API_URL env var and the
    * per-network default. Applied to BOTH the PoX-5 client and StacksService so
    * they always target the same node.
    */
   stacksApiUrl?: string;
+  /**
+   * Expert policy ceiling (µSTX) for a bond's paired-STX lock amount. The normal API
+   * derives the amount from the bond's sats value; an explicit per-call override is
+   * only accepted when this ceiling is configured, and only within
+   * [contract-minimum, maxBondStxUstx]. Prevents an erroneous override from locking
+   * an unbounded amount of STX for the full bond term. Not exposed over the REST
+   * server.
+   */
+  maxBondStxUstx?: bigint;
+  /**
+   * Approved EXTERNAL Bitcoin destinations for native-BTC recovery. Under RAW signing
+   * Fireblocks cannot see the destination, so recovery defaults to the vault's own
+   * derived BTC address; any other destination must appear here to be permitted.
+   */
+  btcRecoveryAllowlist?: string[];
+  /**
+   * Signer-manager adapters supported by this deployment. Each supplies the payout
+   * policy used to bound the `claim-staker-rewards` leg; a claim through a manager
+   * with no registered adapter/policy is refused rather than signed permissively.
+   */
+  signerManagerAdapters?: SignerManagerAdapter[];
+  /**
+   * When true, native-BTC funding is refused unless the early-exit cosigner service
+   * is reachable AND holds the exact key committed into the bond's lock script. Off
+   * by default: a bond still recovers via natural maturity without the cosigner, so
+   * enabling this trades that fallback's availability for a guaranteed early-exit path.
+   */
+  verifyEarlyExitCosignerAtFunding?: boolean;
 };
 
 export type CreateTransactionResponse = {
   success: boolean;
   txHash?: string;
-  transaction?: any; // the serialized signed transaction
+  /** The serialized signed transaction (populated by the generic contract-call path). */
+  transaction?: any;
   error?: string;
+  /**
+   * Non-fatal advisory for an operation that SUCCEEDED on-chain but left local
+   * bookkeeping incomplete (e.g. a signer rotation confirmed, but no durable record
+   * existed to update). Surfaced so the condition is visible rather than silent.
+   */
+  warning?: string;
+  /**
+   * True when settlement polling TIMED OUT — the transaction was broadcast but its
+   * final on-chain state is UNKNOWN and may still succeed. Distinct from a confirmed
+   * contract failure (where `unsettled` is falsy). Callers must NOT treat this as a
+   * definite failure or re-submit blindly; poll `txHash` on its chain instead.
+   */
+  unsettled?: boolean;
 };
 
 export type GetTransactionHistoryResponse = {
@@ -45,12 +95,6 @@ export type GetTransactionHistoryResponse = {
   data?: any[];
   error?: string;
 };
-
-export type GetTransactionHistoryParams = {
-  getCachedTransactions?: boolean;
-  limit?: number;
-  offset?: number;
-}
 
 export type GetPoxInfoResponse = {
   success: boolean;
@@ -68,7 +112,31 @@ export type TransactionDetails = {
 
 export type GetTransactionStatusResponse = {
   success: boolean;
+  /** The chain this status was read from — always Stacks for this endpoint. */
+  chain?: 'stacks';
   data?: TransactionDetails;
+  error?: string;
+};
+
+/**
+ * Status of a Bitcoin transaction read from the selected Esplora API. A Bitcoin txid must
+ * be polled here, never through the Stacks status endpoint. `found: false` means the txid
+ * is not (yet) known to Esplora — distinct from a read failure, which sets `success:false`.
+ */
+export type BtcTxStatusResponse = {
+  success: boolean;
+  chain: 'bitcoin';
+  data?: {
+    txid: string;
+    found: boolean;
+    confirmed: boolean;
+    block_height?: number | null;
+    block_hash?: string | null;
+    // Confirmation depth. `null` means confirmed but the depth is UNKNOWN (the tip read
+    // failed, or Esplora reported no block height yet) — distinct from 0, which means
+    // not yet confirmed.
+    confirmations: number | null;
+  };
   error?: string;
 };
 
@@ -83,24 +151,6 @@ export type Transaction = {
   timestamp: any;
   success: boolean;
   pending?: boolean;
-};
-
-export type ContractCallTransaction = {
-  transaction_hash: string;
-  timestamp: any;
-  success: boolean;
-  sender: string;
-  contractId: string;
-  contractAddress: string;
-  contractName: string;
-  functionName: string;
-  functionArgs: { name: string; type: string; repr: string }[];
-};
-
-export type GetContractCallHistoryResponse = {
-  success: boolean;
-  data?: ContractCallTransaction[];
-  error?: string;
 };
 
 export type CheckStatusData = {
@@ -120,6 +170,11 @@ export type CheckStatusData = {
      */
     applicable: boolean;
     is_delegated: boolean;
+    /**
+     * True when the on-chain delegation read failed, meaning `is_delegated: false`
+     * reflects an unknown state rather than a confirmed absence of delegation.
+     */
+    lookup_failed: boolean;
     delegated_to: string | null;
     amount_delegated: number | null;
     until_burn_ht: number | null;
@@ -135,6 +190,8 @@ export type CheckStatusData = {
     current_burn_height: number;
     current_cycle_id: number;
     is_prepare_phase: boolean;
+    /** True when the PoX read failed: the height/cycle/prepare fields are unknown, not authoritative. */
+    pox_lookup_failed: boolean;
   };
   bond: {
     bond_index: number;
@@ -219,6 +276,8 @@ export type CreateBondResult = {
   unlockHeight?: number;
   amountUstx?: string;
   error?: string;
+  /** Settlement timed out — state unknown, may still succeed (not a confirmed failure). */
+  unsettled?: boolean;
 };
 
 export type BondPositionData = {
@@ -253,10 +312,30 @@ export type BondPositionResponse = {
   error?: string;
 };
 
+export type HistoricalBondPositionResponse = {
+  success: boolean;
+  data?: {
+    bond_index: number;
+    amount_sats: string;
+    amount_btc: string;
+    lock_address: string;
+    unlock_height: number;
+    btc_txid: string | null;
+    vout: number | null;
+    /** Live UTXO state; null when the Bitcoin lookup failed (unknown, not spent). */
+    still_locked: boolean | null;
+    recovered: boolean | null;
+    matured: boolean | null;
+  };
+  error?: string;
+};
+
 export type AnnounceEarlyExitResponse = {
   success: boolean;
   txHash?: string;
   error?: string;
+  /** Settlement timed out — state unknown, may still succeed (not a confirmed failure). */
+  unsettled?: boolean;
 };
 
 export type RequirementsResponse = {
@@ -342,6 +421,29 @@ export type SpendEarlyExitResponse = {
   error?: string;
 };
 
+/**
+ * Result of a BIP-125 fee replacement of a recovery spend. `replacement` carries the
+ * before/after values a UI must display before the replacement is authorized: the old
+ * and new absolute fee, the old and new amount the destination receives (the recovery
+ * spend has a single output, so the fee increase is taken from the destination amount),
+ * and the corresponding fee rates.
+ */
+export type BtcFeeReplacementResponse = {
+  success: boolean;
+  btcTxid?: string;
+  error?: string;
+  replacement?: {
+    oldFeeSats: string;
+    newFeeSats: string;
+    oldDestinationSats: string;
+    newDestinationSats: string;
+    feeRateOldSatVb: string;
+    feeRateNewSatVb: string;
+    destination: string;
+    branch: 'matured' | 'early-exit';
+  };
+};
+
 export type RenewBondResult = {
   success: boolean;
   btcTxid?: string;
@@ -351,18 +453,44 @@ export type RenewBondResult = {
   unlockHeight?: number;
   amountUstx?: string;
   error?: string;
+  /** Settlement timed out — state unknown, may still succeed (not a confirmed failure). */
+  unsettled?: boolean;
 };
 
 export type CalculateRewardsResponse = {
   success: boolean;
   txHash?: string;
   error?: string;
+  /** Settlement timed out — state unknown, may still succeed (not a confirmed failure). */
+  unsettled?: boolean;
+};
+
+/** One structured record per (bond, cycle) claim leg. */
+export type ClaimResultItem = {
+  /** null for an STX-only claim (bond index `none`). */
+  bondIndex: number | null;
+  rewardCycle: number;
+  signerManager: string;
+  /** Signer-cohort accrual for this bond+cycle (get-earned) — NOT the vault's payout. */
+  signerAccruedSats: string;
+  /** This staker's own entitlement (get-earned-staker-rewards); null if unread. */
+  stakerPaidSats: string | null;
+  /** signer-manager `claim-rewards` transaction id (shared across the cycle's bonds). */
+  signerClaimTxid: string | null;
+  /** `claim-staker-rewards` transaction id for this bond. */
+  stakerClaimTxid: string | null;
+  status: "claimed" | "failed";
+  error?: string;
 };
 
 export type ClaimRewardsResponse = {
   success: boolean;
   txHashes?: string[];
+  /** Structured per-(bond,cycle) results — accrual, payout, both tx ids, and status. */
+  results?: ClaimResultItem[];
   error?: string;
+  /** A leg's settlement timed out — state unknown, may still succeed (not a confirmed failure). */
+  unsettled?: boolean;
 };
 
 export type EarnedRewardsResponse = {
@@ -402,3 +530,27 @@ export type SDKResponse =
   | GetTransactionHistoryResponse
   | GetAccountNonceResponse
   | StakerInfoResponse;
+
+// ── App-surface types (Electron consumption; not present on the server branch) ──
+export type GetTransactionHistoryParams = {
+  getCachedTransactions?: boolean;
+  limit?: number;
+  offset?: number;
+}
+export type ContractCallTransaction = {
+  transaction_hash: string;
+  timestamp: any;
+  success: boolean;
+  sender: string;
+  contractId: string;
+  contractAddress: string;
+  contractName: string;
+  functionName: string;
+  functionArgs: { name: string; type: string; repr: string }[];
+};
+export type GetContractCallHistoryResponse = {
+  success: boolean;
+  data?: ContractCallTransaction[];
+  error?: string;
+};
+
