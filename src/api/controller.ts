@@ -955,11 +955,18 @@ export const createBond: Handler = async (req, res, next) => {
     const externalId = req.body.externalId ? String(req.body.externalId) : undefined;
     const confirmations = req.body.confirmations !== undefined ? Number(req.body.confirmations) : undefined;
     const btcTxid = req.body.btcTxid ? String(req.body.btcTxid).trim() : undefined;
-    // The paired-STX amount override is an expert, policy-gated path and is
-    // deliberately NOT exposed over REST — the amount is always derived here.
+    // The paired-STX amount override and the raw signerCalldata are expert, policy-gated
+    // paths and are deliberately NOT exposed over REST — the amount is always derived here,
+    // and reward routing goes through the validated rewardBtcAddress/rewardMaxFeeSats pair.
+    const rewardBtcAddress = req.body.rewardBtcAddress ? String(req.body.rewardBtcAddress).trim() : undefined;
+    if (req.body.rewardMaxFeeSats !== undefined && !/^[0-9]+$/.test(String(req.body.rewardMaxFeeSats))) {
+      res.status(400).json({ error: "Bad Request: rewardMaxFeeSats must be a non-negative integer string" });
+      return;
+    }
+    const rewardMaxFeeSats = req.body.rewardMaxFeeSats !== undefined ? BigInt(String(req.body.rewardMaxFeeSats)) : undefined;
 
     const result = await apiService.executeAction(vaultId, ActionType.CREATE_BOND, {
-      bondIndex, btcAmountSats, signerManager, note, nonce, externalId, confirmations, btcTxid,
+      bondIndex, btcAmountSats, signerManager, note, nonce, externalId, confirmations, btcTxid, rewardBtcAddress, rewardMaxFeeSats,
     });
     res.json(result);
   } catch (err) {
@@ -1259,7 +1266,13 @@ export const renewBond: Handler = async (req, res, next) => {
     const nonce = parseOptionalNonce(req.body.nonce);
     const externalId = req.body.externalId ? String(req.body.externalId) : undefined;
     const confirmations = req.body.confirmations !== undefined ? Number(req.body.confirmations) : undefined;
-    const result = await apiService.executeAction(vaultId, ActionType.RENEW_BOND, { nextBondIndex, signerManager, feeSats, note, nonce, externalId, confirmations });
+    const rewardBtcAddress = req.body.rewardBtcAddress ? String(req.body.rewardBtcAddress).trim() : undefined;
+    if (req.body.rewardMaxFeeSats !== undefined && !/^[0-9]+$/.test(String(req.body.rewardMaxFeeSats))) {
+      res.status(400).json({ error: "Bad Request: rewardMaxFeeSats must be a non-negative integer string" });
+      return;
+    }
+    const rewardMaxFeeSats = req.body.rewardMaxFeeSats !== undefined ? BigInt(String(req.body.rewardMaxFeeSats)) : undefined;
+    const result = await apiService.executeAction(vaultId, ActionType.RENEW_BOND, { nextBondIndex, signerManager, feeSats, note, nonce, externalId, confirmations, rewardBtcAddress, rewardMaxFeeSats });
     res.json(result);
   } catch (err) {
     next(err);
@@ -1281,7 +1294,13 @@ export const updateBondRegistration: Handler = async (req, res, next) => {
     const note = req.body.note ? String(req.body.note) : undefined;
     const nonce = parseOptionalNonce(req.body.nonce);
     const externalId = req.body.externalId ? String(req.body.externalId) : undefined;
-    const result = await apiService.executeAction(vaultId, ActionType.UPDATE_BOND_REGISTRATION, { signerManager, oldSignerManager, note, nonce, externalId });
+    const rewardBtcAddress = req.body.rewardBtcAddress ? String(req.body.rewardBtcAddress).trim() : undefined;
+    if (req.body.rewardMaxFeeSats !== undefined && !/^[0-9]+$/.test(String(req.body.rewardMaxFeeSats))) {
+      res.status(400).json({ error: "Bad Request: rewardMaxFeeSats must be a non-negative integer string" });
+      return;
+    }
+    const rewardMaxFeeSats = req.body.rewardMaxFeeSats !== undefined ? BigInt(String(req.body.rewardMaxFeeSats)) : undefined;
+    const result = await apiService.executeAction(vaultId, ActionType.UPDATE_BOND_REGISTRATION, { signerManager, oldSignerManager, note, nonce, externalId, rewardBtcAddress, rewardMaxFeeSats });
     res.json(result);
   } catch (err) {
     next(err);

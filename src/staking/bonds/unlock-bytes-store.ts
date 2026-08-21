@@ -88,6 +88,14 @@ export interface BondLockRecord {
    * so a completed-but-unseen transfer is never lost and never double-sent.
    */
   fireblocksId?: string;
+  /**
+   * Native-BTC reward destination (a Bitcoin address) and its max-fee budget in sats,
+   * persisted so renewBond / updateBondRegistration re-supply the signer-manager calldata
+   * that routes rewards there — passing `none` would map-delete the pox-addr and silently
+   * revert the staker to sBTC-to-principal payouts.
+   */
+  rewardBtcAddress?: string;
+  rewardMaxFeeSats?: bigint;
   /** Last completed durable enrollment stage — a retry resumes from here. */
   stage?: EnrollmentStage;
 }

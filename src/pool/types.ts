@@ -33,6 +33,13 @@ export interface ApiServiceConfig {
   basePath: BasePath | string;
   poolConfig?: Partial<PoolConfig>;
   testnet?: boolean;
+  /**
+   * When true, every pooled SDK verifies the committed early-exit cosigner key at bond
+   * FUNDING time (not just at announce). Threaded through to each per-vault StacksSDK's
+   * FireblocksConfig — without this the flag set on the config would be dropped at the
+   * pool boundary and the funding-time check could never be enabled through the pool.
+   */
+  verifyEarlyExitCosignerAtFunding?: boolean;
 }
 
 export enum ActionType {

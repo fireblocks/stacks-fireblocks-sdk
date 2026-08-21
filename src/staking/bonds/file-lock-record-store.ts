@@ -40,6 +40,8 @@ interface SerializedRecord {
   // instead of re-funding Bitcoin (FBS-02).
   fundingExternalId?: string;
   fireblocksId?: string;
+  rewardBtcAddress?: string;
+  rewardMaxFeeSats?: string;
   stage?: EnrollmentStage;
 }
 
@@ -76,6 +78,8 @@ const serializeRecord = (r: BondLockRecord): SerializedRecord => ({
   ...(r.firstRewardCycle !== undefined ? { firstRewardCycle: r.firstRewardCycle } : {}),
   ...(r.fundingExternalId !== undefined ? { fundingExternalId: r.fundingExternalId } : {}),
   ...(r.fireblocksId !== undefined ? { fireblocksId: r.fireblocksId } : {}),
+  ...(r.rewardBtcAddress !== undefined ? { rewardBtcAddress: r.rewardBtcAddress } : {}),
+  ...(r.rewardMaxFeeSats !== undefined ? { rewardMaxFeeSats: r.rewardMaxFeeSats.toString() } : {}),
   ...(r.stage !== undefined ? { stage: r.stage } : {}),
 });
 
@@ -92,6 +96,8 @@ const deserializeRecord = (s: SerializedRecord): BondLockRecord => ({
   firstRewardCycle: s.firstRewardCycle,
   fundingExternalId: s.fundingExternalId,
   fireblocksId: s.fireblocksId,
+  rewardBtcAddress: s.rewardBtcAddress,
+  rewardMaxFeeSats: s.rewardMaxFeeSats !== undefined ? BigInt(s.rewardMaxFeeSats) : undefined,
   stage: s.stage,
 });
 

@@ -12,6 +12,8 @@ const apiConfig: ApiServiceConfig = {
   apiSecret: process.env.FIREBLOCKS_SECRET_KEY_PATH || "",
   basePath: (process.env.FIREBLOCKS_BASE_PATH as BasePath) || BasePath.US,
   testnet: (process.env.NETWORK ?? "").toLowerCase() === "testnet",
+  verifyEarlyExitCosignerAtFunding:
+    (process.env.VERIFY_EARLY_EXIT_COSIGNER_AT_FUNDING ?? "").toLowerCase() === "true",
   // Optional: customize pool size/timeouts here
   poolConfig: {
     maxPoolSize: parseInt(process.env.POOL_MAX_SIZE || "100"),
@@ -42,6 +44,7 @@ export class ApiService {
       basePath: (config.basePath as BasePath) || BasePath.US,
       vaultAccountId: "", // Will be overridden per request
       testnet: !!config.testnet,
+      verifyEarlyExitCosignerAtFunding: !!config.verifyEarlyExitCosignerAtFunding,
     };
 
     this.sdkManager = new SdkManager(baseConfig, config.poolConfig);
@@ -259,7 +262,7 @@ export class ApiService {
             params.bondIndex,
             params.btcAmountSats,
             params.signerManager,
-            { note: params.note, nonce: params.nonce, externalId: params.externalId, confirmations: params.confirmations, btcTxid: params.btcTxid },
+            { note: params.note, nonce: params.nonce, externalId: params.externalId, confirmations: params.confirmations, btcTxid: params.btcTxid, signerCalldata: params.signerCalldata, rewardBtcAddress: params.rewardBtcAddress, rewardMaxFeeSats: params.rewardMaxFeeSats },
           );
           break;
         case ActionType.CREATE_SBTC_BOND:
@@ -311,10 +314,10 @@ export class ApiService {
           result = await sdk.replaceBtcRecoveryFee(params.originalTxid, params.newFeeSats, { bondIndex: params.bondIndex, kind: params.kind });
           break;
         case ActionType.RENEW_BOND:
-          result = await sdk.renewBond(params.nextBondIndex, params.signerManager, { feeSats: params.feeSats, note: params.note, nonce: params.nonce, externalId: params.externalId, confirmations: params.confirmations });
+          result = await sdk.renewBond(params.nextBondIndex, params.signerManager, { feeSats: params.feeSats, note: params.note, nonce: params.nonce, externalId: params.externalId, confirmations: params.confirmations, signerCalldata: params.signerCalldata, rewardBtcAddress: params.rewardBtcAddress, rewardMaxFeeSats: params.rewardMaxFeeSats });
           break;
         case ActionType.UPDATE_BOND_REGISTRATION:
-          result = await sdk.updateBondRegistration(params.signerManager, params.oldSignerManager, { note: params.note, nonce: params.nonce, externalId: params.externalId });
+          result = await sdk.updateBondRegistration(params.signerManager, params.oldSignerManager, { note: params.note, nonce: params.nonce, externalId: params.externalId, signerCalldata: params.signerCalldata, rewardBtcAddress: params.rewardBtcAddress, rewardMaxFeeSats: params.rewardMaxFeeSats });
           break;
         case ActionType.CALCULATE_REWARDS:
           result = await sdk.calculateRewards({ note: params.note, nonce: params.nonce });
