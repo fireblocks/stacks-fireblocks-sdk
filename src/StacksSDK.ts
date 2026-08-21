@@ -72,6 +72,7 @@ import { createHash } from "crypto";
 import { parseOptionalFee, ValidationError } from "./utils/validation";
 import { formatErrorMessage } from "./utils/errorHandling";
 import { checkFeeReplacement, ParsedRecoveryTx } from "./utils/rbf";
+import { encodeRewardAddressCalldata, REWARD_CALLDATA_MAX_BYTES } from "./utils/rewardCalldata";
 import { validateBondScheduleAgainstChain, BondScheduleValidation } from "./utils/bondScheduleChain";
 import { planSbtcRollover } from "./staking/bonds/sbtc-rollover";
 import { validateApiCredentials } from "./utils/fireblocks.utils";
@@ -1226,14 +1227,53 @@ export class StacksSDK {
   }
 
   /**
-   * Encodes optional signer-manager calldata as a Clarity `(optional (buff))`. Some
+   * Encodes optional signer-manager calldata as a Clarity `(optional (buff 500))`. Some
    * signer managers require calldata; when none is supplied this is `none`, preserving
-   * the prior hardcoded behavior.
+   * the prior hardcoded behavior. A supplied value is validated to be hex-parseable and
+   * within the contract's 500-byte limit — an over-long or non-hex buffer would abort the
+   * transaction after signing, and (on the bond paths) after the BTC is committed.
    */
-  private encodeSignerCalldata = (calldata?: Uint8Array | string): ClarityValue =>
-    calldata === undefined
-      ? Cl.none()
-      : Cl.some(typeof calldata === "string" ? Cl.bufferFromHex(calldata) : Cl.buffer(calldata));
+  private encodeSignerCalldata = (calldata?: Uint8Array | string): ClarityValue => {
+    if (calldata === undefined) return Cl.none();
+    let bytes: Uint8Array;
+    if (typeof calldata === "string") {
+      if (!/^(0x)?([0-9a-fA-F]{2})*$/.test(calldata)) {
+        throw new Error("signerCalldata must be a hex string (even length).");
+      }
+      bytes = hexToBytes(calldata.replace(/^0x/, ""));
+    } else {
+      bytes = calldata;
+    }
+    if (bytes.length > REWARD_CALLDATA_MAX_BYTES) {
+      throw new Error(`signerCalldata is ${bytes.length} bytes, exceeding the ${REWARD_CALLDATA_MAX_BYTES}-byte contract limit.`);
+    }
+    return Cl.some(Cl.buffer(bytes));
+  };
+
+  /**
+   * Resolves the signer-calldata for a register/renew/rotate call from an explicit
+   * caller-supplied value OR a reward destination (Bitcoin address + max-fee) that the
+   * SDK encodes into the signer-manager's pox-addr calldata tuple. Enforces network +
+   * checksum on the reward address before it is used. Returns the raw bytes to thread
+   * through builders (and to persist for re-supply), or undefined for `none`.
+   */
+  private resolveSignerCalldata = (opts?: {
+    signerCalldata?: Uint8Array | string;
+    rewardBtcAddress?: string;
+    rewardMaxFeeSats?: bigint;
+  }): Uint8Array | string | undefined => {
+    if (opts?.signerCalldata !== undefined) return opts.signerCalldata;
+    if (opts?.rewardBtcAddress === undefined) return undefined;
+    if (opts.rewardMaxFeeSats === undefined) {
+      throw new Error(
+        "rewardMaxFeeSats is required with rewardBtcAddress: it is the BTC-withdrawal fee budget (sats) reserved from each cycle's rewards, and a cycle whose earned rewards fall below it is unclaimable until re-staked — so the SDK will not guess it.",
+      );
+    }
+    if (!this.isValidBtcAddressForNetwork(opts.rewardBtcAddress)) {
+      throw new Error(`Reward BTC address ${opts.rewardBtcAddress} is not a valid address for this network.`);
+    }
+    return encodeRewardAddressCalldata(opts.rewardBtcAddress, opts.rewardMaxFeeSats);
+  };
 
   // ─── PoX-5 Solo STX ──────────────────────────────────────────────────────────
 
@@ -2619,7 +2659,7 @@ export class StacksSDK {
   public updateBondRegistration = async (
     signerManager: string,
     oldSignerManager: string,
-    opts?: { note?: string; nonce?: bigint; externalId?: string },
+    opts?: { note?: string; nonce?: bigint; externalId?: string; signerCalldata?: Uint8Array | string; rewardBtcAddress?: string; rewardMaxFeeSats?: bigint },
   ): Promise<CreateTransactionResponse> => {
     try {
       if (!this.address || !this.publicKey || !this.vaultAccountId) {
@@ -2642,6 +2682,20 @@ export class StacksSDK {
         return { success: false, error: "No active bond membership to rotate the signer for." };
       }
 
+      // A rotation re-runs the new manager's validate-stake! with this calldata, so it
+      // must RE-SUPPLY the reward destination or `none` map-deletes the pox-addr and the
+      // rewards silently revert to sBTC-to-principal. Carry it forward from the current
+      // bond's record unless the caller overrides it.
+      const rotateRecord = await this.lockRecordStore.loadRecord(this.address, membershipBefore.bondIndex).catch(() => null);
+      const rewardBtcAddress = opts?.rewardBtcAddress ?? rotateRecord?.rewardBtcAddress;
+      const rewardMaxFeeSats = opts?.rewardMaxFeeSats ?? rotateRecord?.rewardMaxFeeSats;
+      let rotateCalldata: Uint8Array | string | undefined;
+      try {
+        rotateCalldata = this.resolveSignerCalldata({ signerCalldata: opts?.signerCalldata, rewardBtcAddress, rewardMaxFeeSats });
+      } catch (e) {
+        return { success: false, error: `Invalid reward/signer calldata: ${formatErrorMessage(e)}` };
+      }
+
       const eligible = await fetchEligibleUpdateBondRegistration({
         staker: this.address,
         signerManager,
@@ -2657,7 +2711,7 @@ export class StacksSDK {
         const resolvedNonce = await this.resolveNonce(opts?.nonce);
         const tx = await this.buildPox5Call(
           "update-bond-registration",
-          [Cl.address(signerManager), Cl.address(oldSignerManager), Cl.none()],
+          [Cl.address(signerManager), Cl.address(oldSignerManager), this.encodeSignerCalldata(rotateCalldata)],
           {
             nonce: resolvedNonce,
             // Deny mode; a pre-start signer swap moves no assets but the contract
@@ -2715,7 +2769,14 @@ export class StacksSDK {
       }
       // Record the rotated manager so reward discovery uses it for this bond
       // (pre-start rotation governs the whole bond period).
-      await this.lockRecordStore.saveRecord(this.address, derivedBondIndex, { ...existing, signerManager });
+      await this.lockRecordStore.saveRecord(this.address, derivedBondIndex, {
+        ...existing,
+        signerManager,
+        // Keep the persisted reward destination in step with what was just re-supplied
+        // (a caller override changes it; otherwise it is unchanged).
+        ...(rewardBtcAddress !== undefined ? { rewardBtcAddress } : {}),
+        ...(rewardMaxFeeSats !== undefined ? { rewardMaxFeeSats } : {}),
+      });
 
       return { success: true, txHash: result.txid };
     } catch (error) {
@@ -2738,7 +2799,7 @@ export class StacksSDK {
     bondIndex: number,
     btcAmountSats: bigint,
     signerManager: string,
-    opts?: { note?: string; nonce?: bigint; externalId?: string; confirmations?: number; btcTxid?: string; amountUstxOverride?: bigint; signerCalldata?: Uint8Array | string },
+    opts?: { note?: string; nonce?: bigint; externalId?: string; confirmations?: number; btcTxid?: string; amountUstxOverride?: bigint; signerCalldata?: Uint8Array | string; rewardBtcAddress?: string; rewardMaxFeeSats?: bigint },
   ): Promise<CreateBondResult> => {
     // Tracks the funding outpoint once BTC is committed, so even the catch-all error
     // return carries the pointer to the locked Bitcoin (the durable record persists it
@@ -2756,6 +2817,15 @@ export class StacksSDK {
       // retries are refused by the resume/conflict gates.
       if (opts?.btcTxid !== undefined && !/^[0-9a-fA-F]{64}$/.test(opts.btcTxid)) {
         return { success: false, error: `Invalid btcTxid: ${opts.btcTxid} (expected 64 hex chars).` };
+      }
+      // Resolve (and validate) the signer calldata up front — a wrong-network / malformed
+      // reward address, a missing max-fee, or over-long calldata must fail BEFORE any BTC
+      // is committed, not after the register-for-bond signature aborts on-chain.
+      let signerCalldata: Uint8Array | string | undefined;
+      try {
+        signerCalldata = this.resolveSignerCalldata(opts);
+      } catch (e) {
+        return { success: false, error: `Invalid reward/signer calldata (no BTC committed): ${formatErrorMessage(e)}` };
       }
       const storeError = await this.assertDurableLockStore();
       if (storeError) return { success: false, error: storeError };
@@ -2982,6 +3052,10 @@ export class StacksSDK {
         signerManager,
         firstRewardCycle: bondPeriodToRewardCycle({ bondIndex, poxInfo: pox }),
         fundingExternalId,
+        // Persist the reward destination so renewBond / updateBondRegistration re-supply
+        // the pox-addr calldata rather than dropping it (a `none` map-deletes it).
+        ...(opts?.rewardBtcAddress !== undefined ? { rewardBtcAddress: opts.rewardBtcAddress } : {}),
+        ...(opts?.rewardMaxFeeSats !== undefined ? { rewardMaxFeeSats: opts.rewardMaxFeeSats } : {}),
         stage: "lock-fixed",
         ...(canResumeFunding
           ? {
@@ -3117,7 +3191,7 @@ export class StacksSDK {
           outputs: [lockupProof],
           unlockBytes: metadata.unlockBytes,
           nonce: resolvedNonce,
-          signerCalldata: opts?.signerCalldata,
+          signerCalldata,
           // Bound the paired STX lock to exactly the required amount.
           postConditionMode: PostConditionMode.Deny,
           postConditions: [Pc.origin().willSendEq(amountUstx).ustxToLock(), ...custodyRefund.conditions],
@@ -4779,7 +4853,7 @@ export class StacksSDK {
   public renewBond = async (
     nextBondIndex: number,
     signerManager: string,
-    opts?: { feeSats?: bigint; note?: string; nonce?: bigint; externalId?: string; confirmations?: number },
+    opts?: { feeSats?: bigint; note?: string; nonce?: bigint; externalId?: string; confirmations?: number; signerCalldata?: Uint8Array | string; rewardBtcAddress?: string; rewardMaxFeeSats?: bigint },
   ): Promise<RenewBondResult> => {
     // Tracks the re-lock outpoint once BTC is committed, so even the catch-all error
     // return carries the pointer to the re-locked Bitcoin (a throw after the broadcast
@@ -4826,6 +4900,23 @@ export class StacksSDK {
         return { success: false, error: 'Next bond lockup script mismatch — NOT proceeding' };
       }
 
+      // The reward destination carries forward across the renewal unless the caller
+      // overrides it: register-for-bond passing `none` would map-delete the pox-addr and
+      // silently revert the staker to sBTC-to-principal payouts. Resolve (and validate)
+      // it BEFORE the BTC re-lock so a bad address / missing max-fee fails first.
+      const currentMembership = await fetchBondMembership({ address: this.address, network: this.pox5Network }).catch(() => null);
+      const priorBondRecord = currentMembership
+        ? await this.lockRecordStore.loadRecord(this.address, currentMembership.bondIndex).catch(() => null)
+        : null;
+      const rewardBtcAddress = opts?.rewardBtcAddress ?? priorBondRecord?.rewardBtcAddress;
+      const rewardMaxFeeSats = opts?.rewardMaxFeeSats ?? priorBondRecord?.rewardMaxFeeSats;
+      let signerCalldata: Uint8Array | string | undefined;
+      try {
+        signerCalldata = this.resolveSignerCalldata({ signerCalldata: opts?.signerCalldata, rewardBtcAddress, rewardMaxFeeSats });
+      } catch (e) {
+        return { success: false, error: `Invalid reward/signer calldata (no BTC re-locked): ${formatErrorMessage(e)}` };
+      }
+
       const nextRecordFor = (amountSats: bigint, extra: Partial<BondLockRecord> = {}): BondLockRecord => ({
         bondIndex: nextBondIndex,
         unlockBytes: nextMeta.unlockBytes,
@@ -4835,6 +4926,9 @@ export class StacksSDK {
         isL1Lock: true,
         signerManager,
         firstRewardCycle: bondPeriodToRewardCycle({ bondIndex: nextBondIndex, poxInfo: pox }),
+        // Carry the reward destination onto the new position's record.
+        ...(rewardBtcAddress !== undefined ? { rewardBtcAddress } : {}),
+        ...(rewardMaxFeeSats !== undefined ? { rewardMaxFeeSats } : {}),
         ...extra,
       });
 
@@ -5057,6 +5151,7 @@ export class StacksSDK {
           outputs: [lockupProof],
           unlockBytes: nextMeta.unlockBytes,
           nonce: resolvedNonce,
+          signerCalldata,
           // Bound the paired STX lock to exactly the required amount.
           postConditionMode: PostConditionMode.Deny,
           postConditions: [Pc.origin().willSendEq(amountUstx).ustxToLock(), ...custodyRefund.conditions],
