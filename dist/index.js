@@ -12229,6 +12229,7 @@ __export(index_exports, {
   PRIVATE1_HIRO_API_BASE: () => PRIVATE1_HIRO_API_BASE,
   PUBLIC_TESTNET_POX5_API: () => PUBLIC_TESTNET_POX5_API,
   RBF_MIN_FEE_MULTIPLIER: () => RBF_MIN_FEE_MULTIPLIER,
+  REWARD_CALLDATA_MAX_BYTES: () => REWARD_CALLDATA_MAX_BYTES,
   SignerManagerRegistry: () => SignerManagerRegistry,
   StackingPools: () => StackingPools,
   StacksSDK: () => StacksSDK,
@@ -12239,6 +12240,7 @@ __export(index_exports, {
   config: () => config,
   derivationPath: () => derivationPath,
   diffBondSchedule: () => diffBondSchedule,
+  encodeRewardAddressCalldata: () => encodeRewardAddressCalldata,
   env: () => env,
   formatBondScheduleError: () => formatBondScheduleError,
   ftInfo: () => ftInfo,
@@ -14711,6 +14713,25 @@ function checkFeeReplacement(orig, newFeeSats, lockAddress, recordedOutpoint) {
   };
 }
 
+// src/utils/rewardCalldata.ts
+var import_stacking2 = require("@stacks/stacking");
+var import_transactions3 = require("@stacks/transactions");
+var REWARD_CALLDATA_MAX_BYTES = 500;
+function encodeRewardAddressCalldata(rewardBtcAddress, maxFeeSats) {
+  if (maxFeeSats < BigInt(0)) {
+    throw new Error(`rewardMaxFeeSats must be non-negative, got ${maxFeeSats}`);
+  }
+  const poxAddr = (0, import_stacking2.poxAddressToTuple)(rewardBtcAddress);
+  const tuple2 = import_transactions3.Cl.tuple({ "pox-addr": poxAddr, "max-fee": import_transactions3.Cl.uint(maxFeeSats) });
+  const bytes2 = (0, import_transactions3.serializeCVBytes)(tuple2);
+  if (bytes2.length > REWARD_CALLDATA_MAX_BYTES) {
+    throw new Error(
+      `Encoded reward calldata is ${bytes2.length} bytes, exceeding the ${REWARD_CALLDATA_MAX_BYTES}-byte contract limit.`
+    );
+  }
+  return bytes2;
+}
+
 // src/utils/bondScheduleChain.ts
 var import_bitcoin_staking = __toESM(require_dist3());
 var BitcoinStaking = __toESM(require_dist3());
@@ -14778,7 +14799,7 @@ function planSbtcRollover(oldCustodiedSats, newSats) {
 }
 
 // src/StacksSDK.ts
-var import_transactions3 = require("@stacks/transactions");
+var import_transactions4 = require("@stacks/transactions");
 var import_bitcoin_staking2 = __toESM(require_dist3());
 init_btc_signer();
 var import_encryption = require("@stacks/encryption");
@@ -15253,10 +15274,10 @@ var StacksSDK = class _StacksSDK {
           const ftContractAddress = tokenInfo?.contractAddress ?? customTokenContractAddress;
           const ftContractName = tokenInfo?.contractName ?? customTokenContractName;
           const functionArgs = [
-            (0, import_transactions3.uintCV)(microAmount),
-            (0, import_transactions3.principalCV)(this.address),
-            (0, import_transactions3.principalCV)(recipientAddress),
-            (0, import_transactions3.noneCV)()
+            (0, import_transactions4.uintCV)(microAmount),
+            (0, import_transactions4.principalCV)(this.address),
+            (0, import_transactions4.principalCV)(recipientAddress),
+            (0, import_transactions4.noneCV)()
           ];
           microfee = await this.chainService.estimateContractCallFee(
             ftContractAddress,
@@ -15400,7 +15421,7 @@ var StacksSDK = class _StacksSDK {
             externalId
           );
           const signature = concatSignature(rawSignature.fullSig, rawSignature.v);
-          transactionToSign.unsignedTx.auth.spendingCondition.signature = (0, import_transactions3.createMessageSignature)(signature);
+          transactionToSign.unsignedTx.auth.spendingCondition.signature = (0, import_transactions4.createMessageSignature)(signature);
           return await this.chainService.broadcastTransaction(
             transactionToSign.unsignedTx
           );
@@ -15538,7 +15559,7 @@ var StacksSDK = class _StacksSDK {
             externalId
           );
           const signature = concatSignature(rawSignature.fullSig, rawSignature.v);
-          transactionToSign.unsignedContractCall.auth.spendingCondition.signature = (0, import_transactions3.createMessageSignature)(signature);
+          transactionToSign.unsignedContractCall.auth.spendingCondition.signature = (0, import_transactions4.createMessageSignature)(signature);
           return await this.chainService.broadcastTransaction(transactionToSign.unsignedContractCall);
         });
       } catch (error) {
@@ -15550,7 +15571,7 @@ var StacksSDK = class _StacksSDK {
     };
     this.pox5SignAndBroadcast = async (tx, note, externalId, revalidate) => {
       const sigHash = tx.signBegin();
-      const preSignSigHash = (0, import_transactions3.sigHashPreSign)(
+      const preSignSigHash = (0, import_transactions4.sigHashPreSign)(
         sigHash,
         tx.auth.authType,
         tx.auth.spendingCondition.fee,
@@ -15563,7 +15584,7 @@ var StacksSDK = class _StacksSDK {
         externalId
       );
       const signature = concatSignature(rawSignature.fullSig, rawSignature.v);
-      tx.auth.spendingCondition.signature = (0, import_transactions3.createMessageSignature)(signature);
+      tx.auth.spendingCondition.signature = (0, import_transactions4.createMessageSignature)(signature);
       if (revalidate) {
         const changed = await revalidate();
         if (changed) {
@@ -15573,11 +15594,56 @@ var StacksSDK = class _StacksSDK {
       return this.chainService.broadcastTransaction(tx, this.pox5Network);
     };
     /**
-     * Encodes optional signer-manager calldata as a Clarity `(optional (buff))`. Some
+     * Encodes optional signer-manager calldata as a Clarity `(optional (buff 500))`. Some
      * signer managers require calldata; when none is supplied this is `none`, preserving
-     * the prior hardcoded behavior.
+     * the prior hardcoded behavior. A supplied value is validated to be hex-parseable and
+     * within the contract's 500-byte limit — an over-long or non-hex buffer would abort the
+     * transaction after signing, and (on the bond paths) after the BTC is committed.
      */
-    this.encodeSignerCalldata = (calldata) => calldata === void 0 ? import_transactions3.Cl.none() : import_transactions3.Cl.some(typeof calldata === "string" ? import_transactions3.Cl.bufferFromHex(calldata) : import_transactions3.Cl.buffer(calldata));
+    this.encodeSignerCalldata = (calldata) => {
+      if (calldata === void 0) return import_transactions4.Cl.none();
+      let bytes2;
+      if (typeof calldata === "string") {
+        if (!/^(0x)?([0-9a-fA-F]{2})*$/.test(calldata)) {
+          throw new Error("signerCalldata must be a hex string (even length).");
+        }
+        bytes2 = (0, import_common2.hexToBytes)(calldata.replace(/^0x/, ""));
+      } else {
+        bytes2 = calldata;
+      }
+      if (bytes2.length > REWARD_CALLDATA_MAX_BYTES) {
+        throw new Error(`signerCalldata is ${bytes2.length} bytes, exceeding the ${REWARD_CALLDATA_MAX_BYTES}-byte contract limit.`);
+      }
+      return import_transactions4.Cl.some(import_transactions4.Cl.buffer(bytes2));
+    };
+    /**
+     * Resolves the signer-calldata for a register/renew/rotate call from an explicit
+     * caller-supplied value OR a reward destination (Bitcoin address + max-fee) that the
+     * SDK encodes into the signer-manager's pox-addr calldata tuple. Enforces network +
+     * checksum on the reward address before it is used. Returns the raw bytes to thread
+     * through builders (and to persist for re-supply), or undefined for `none`.
+     */
+    this.resolveSignerCalldata = (opts) => {
+      if (opts?.signerCalldata !== void 0) {
+        if (opts.rewardBtcAddress !== void 0) {
+          throw new Error(
+            "Pass either signerCalldata OR rewardBtcAddress, not both: the reward destination is encoded into the signer calldata, so supplying both is ambiguous."
+          );
+        }
+        this.encodeSignerCalldata(opts.signerCalldata);
+        return opts.signerCalldata;
+      }
+      if (opts?.rewardBtcAddress === void 0) return void 0;
+      if (opts.rewardMaxFeeSats === void 0) {
+        throw new Error(
+          "rewardMaxFeeSats is required with rewardBtcAddress: it is the BTC-withdrawal fee budget (sats) reserved from each cycle's rewards, and a cycle whose earned rewards fall below it is unclaimable until re-staked \u2014 so the SDK will not guess it."
+        );
+      }
+      if (!this.isValidBtcAddressForNetwork(opts.rewardBtcAddress)) {
+        throw new Error(`Reward BTC address ${opts.rewardBtcAddress} is not a valid address for this network.`);
+      }
+      return encodeRewardAddressCalldata(opts.rewardBtcAddress, opts.rewardMaxFeeSats);
+    };
     // ─── PoX-5 Solo STX ──────────────────────────────────────────────────────────
     /**
      * Stakes STX through a signer-manager (PoX-5). Replaces pox-4 stackSolo.
@@ -15620,18 +15686,18 @@ var StacksSDK = class _StacksSDK {
           const tx = await this.buildPox5Call(
             "stake",
             [
-              import_transactions3.Cl.address(signerManager),
-              import_transactions3.Cl.uint(amountUstx),
-              import_transactions3.Cl.uint(numCycles),
-              import_transactions3.Cl.uint(pox.currentBurnchainBlockHeight),
+              import_transactions4.Cl.address(signerManager),
+              import_transactions4.Cl.uint(amountUstx),
+              import_transactions4.Cl.uint(numCycles),
+              import_transactions4.Cl.uint(pox.currentBurnchainBlockHeight),
               this.encodeSignerCalldata(signerCalldata)
             ],
             {
               nonce: resolvedNonce,
-              postConditionMode: import_transactions3.PostConditionMode.Deny,
+              postConditionMode: import_transactions4.PostConditionMode.Deny,
               postConditions: [
                 // Deny mode bounding the STX lock to exactly the staked amount.
-                import_transactions3.Pc.origin().willSendEq(amountUstx).ustxToLock(),
+                import_transactions4.Pc.origin().willSendEq(amountUstx).ustxToLock(),
                 // An sBTC-bond holder rolling into a solo STX stake is refunded their
                 // entire custodied sBTC from pox-5 during this call — cover it or abort.
                 ...custodyRefund.conditions
@@ -15716,20 +15782,20 @@ var StacksSDK = class _StacksSDK {
             return { error: "Cannot update stake: no active staking position found for this account." };
           }
           const currentAmountUstx = BigInt(current.details.amountUstx);
-          const postCondition = import_transactions3.Pc.origin().willSendEq(currentAmountUstx + amountIncrease).ustxToLock();
+          const postCondition = import_transactions4.Pc.origin().willSendEq(currentAmountUstx + amountIncrease).ustxToLock();
           const resolvedNonce = await this.resolveNonce(nonce);
           const tx = await this.buildPox5Call(
             "stake-update",
             [
-              import_transactions3.Cl.address(signerManager),
-              import_transactions3.Cl.address(oldSignerManager),
-              import_transactions3.Cl.uint(cyclesToExtend ?? 0),
-              import_transactions3.Cl.uint(amountIncrease),
+              import_transactions4.Cl.address(signerManager),
+              import_transactions4.Cl.address(oldSignerManager),
+              import_transactions4.Cl.uint(cyclesToExtend ?? 0),
+              import_transactions4.Cl.uint(amountIncrease),
               this.encodeSignerCalldata(signerCalldata)
             ],
             {
               nonce: resolvedNonce,
-              postConditionMode: import_transactions3.PostConditionMode.Deny,
+              postConditionMode: import_transactions4.PostConditionMode.Deny,
               postConditions: [postCondition]
             }
           );
@@ -15803,12 +15869,12 @@ var StacksSDK = class _StacksSDK {
           const resolvedNonce = await this.resolveNonce(nonce);
           const tx = await this.buildPox5Call(
             "unstake",
-            [import_transactions3.Cl.address(oldSignerManager)],
+            [import_transactions4.Cl.address(oldSignerManager)],
             {
               nonce: resolvedNonce,
               // Deny mode; unstake performs a PoX unlock with no fixed transfer.
-              postConditionMode: import_transactions3.PostConditionMode.Deny,
-              postConditions: [import_transactions3.Pc.origin().willPerformPox()]
+              postConditionMode: import_transactions4.PostConditionMode.Deny,
+              postConditions: [import_transactions4.Pc.origin().willPerformPox()]
             }
           );
           return this.pox5SignAndBroadcast(tx, note || "unstake STX", externalId, async () => {
@@ -15881,25 +15947,25 @@ var StacksSDK = class _StacksSDK {
             grantExternalId
           );
           const signerSignature = (0, import_common2.signatureVrsToRsv)(concatSignature(rawGrantSig.fullSig, rawGrantSig.v));
-          const tx = await (0, import_transactions3.makeUnsignedContractCall)({
+          const tx = await (0, import_transactions4.makeUnsignedContractCall)({
             contractAddress: smAddress,
             contractName: smName,
             functionName: "register-self",
             functionArgs: [
-              (0, import_transactions3.contractPrincipalCV)(smAddress, smName),
+              (0, import_transactions4.contractPrincipalCV)(smAddress, smName),
               // signer-manager trait = the contract itself
-              (0, import_transactions3.bufferCV)((0, import_common2.hexToBytes)(this.publicKey)),
+              (0, import_transactions4.bufferCV)((0, import_common2.hexToBytes)(this.publicKey)),
               // signer-key (buff 33)
-              (0, import_transactions3.uintCV)(authId),
+              (0, import_transactions4.uintCV)(authId),
               // auth-id
-              (0, import_transactions3.bufferCV)((0, import_common2.hexToBytes)(signerSignature))
+              (0, import_transactions4.bufferCV)((0, import_common2.hexToBytes)(signerSignature))
               // signer-sig (buff 65)
             ],
             publicKey: this.publicKey,
             fee: DEFAULT_POX_FEE_USTX,
             nonce: resolvedNonce,
             network: this.pox5Network,
-            postConditionMode: import_transactions3.PostConditionMode.Deny,
+            postConditionMode: import_transactions4.PostConditionMode.Deny,
             postConditions: []
           });
           return this.pox5SignAndBroadcast(tx, note || "register signer (register-self)", registerExternalId);
@@ -15938,14 +16004,14 @@ var StacksSDK = class _StacksSDK {
           const resolvedNonce = await this.resolveNonce(nonce);
           const tx = await this.buildPox5Call(
             "revoke-signer-grant",
-            [import_transactions3.Cl.address(signerManager), import_transactions3.Cl.buffer((0, import_common2.hexToBytes)(signerKey))],
+            [import_transactions4.Cl.address(signerManager), import_transactions4.Cl.buffer((0, import_common2.hexToBytes)(signerKey))],
             {
               nonce: resolvedNonce,
               // Deny mode with no post-conditions: revoking a signer grant records no
               // PoX/Stacking action and moves no assets, so there is nothing for the
               // node's action gate to cover. A will-perform-PoX condition here would be
               // uncovered and the node would reject the transaction after signing.
-              postConditionMode: import_transactions3.PostConditionMode.Deny,
+              postConditionMode: import_transactions4.PostConditionMode.Deny,
               postConditions: []
             }
           );
@@ -16490,37 +16556,37 @@ var StacksSDK = class _StacksSDK {
      * delegating to the dependency builder.
      */
     this.buildRegisterForBondTx = async (args) => {
-      const buf = (v) => typeof v === "string" ? import_transactions3.Cl.bufferFromHex(v) : import_transactions3.Cl.buffer(v);
+      const buf = (v) => typeof v === "string" ? import_transactions4.Cl.bufferFromHex(v) : import_transactions4.Cl.buffer(v);
       const bootAddr = this.pox5Network.bootAddress;
-      const lockupCV = args.sbtcSats !== void 0 ? import_transactions3.Cl.error(import_transactions3.Cl.uint(args.sbtcSats)) : import_transactions3.Cl.ok(
-        import_transactions3.Cl.tuple({
-          outputs: import_transactions3.Cl.list(
+      const lockupCV = args.sbtcSats !== void 0 ? import_transactions4.Cl.error(import_transactions4.Cl.uint(args.sbtcSats)) : import_transactions4.Cl.ok(
+        import_transactions4.Cl.tuple({
+          outputs: import_transactions4.Cl.list(
             (args.outputs ?? []).map(
-              (o) => import_transactions3.Cl.tuple({
-                height: import_transactions3.Cl.uint(o.height),
+              (o) => import_transactions4.Cl.tuple({
+                height: import_transactions4.Cl.uint(o.height),
                 tx: buf(o.tx),
-                "output-index": import_transactions3.Cl.uint(o.outputIndex),
+                "output-index": import_transactions4.Cl.uint(o.outputIndex),
                 header: buf(o.header),
-                "leaf-hashes": import_transactions3.Cl.list(o.leafHashes.map((h) => buf(h))),
-                "tx-count": import_transactions3.Cl.uint(o.txCount),
-                "tx-index": import_transactions3.Cl.uint(o.txIndex),
-                amount: import_transactions3.Cl.uint(o.amount),
+                "leaf-hashes": import_transactions4.Cl.list(o.leafHashes.map((h) => buf(h))),
+                "tx-count": import_transactions4.Cl.uint(o.txCount),
+                "tx-index": import_transactions4.Cl.uint(o.txIndex),
+                amount: import_transactions4.Cl.uint(o.amount),
                 // The field the dependency builder drops, but the contract requires.
-                "unlock-burn-height": import_transactions3.Cl.uint(o.unlockBurnHeight)
+                "unlock-burn-height": import_transactions4.Cl.uint(o.unlockBurnHeight)
               })
             )
           ),
           "staker-unlock-bytes": buf(args.unlockBytes ?? new Uint8Array())
         })
       );
-      return (0, import_transactions3.makeUnsignedContractCall)({
+      return (0, import_transactions4.makeUnsignedContractCall)({
         contractAddress: bootAddr,
         contractName: "pox-5",
         functionName: "register-for-bond",
         functionArgs: [
-          import_transactions3.Cl.uint(args.bondIndex),
-          import_transactions3.Cl.address(args.signerManager),
-          import_transactions3.Cl.uint(args.amountUstx),
+          import_transactions4.Cl.uint(args.bondIndex),
+          import_transactions4.Cl.address(args.signerManager),
+          import_transactions4.Cl.uint(args.amountUstx),
           lockupCV,
           this.encodeSignerCalldata(args.signerCalldata)
         ],
@@ -16530,7 +16596,7 @@ var StacksSDK = class _StacksSDK {
         network: this.pox5Network,
         // Fail closed: fund-moving PoX-5 calls must opt IN to any asset movement, so
         // the default is Deny with no conditions rather than permissive Allow.
-        postConditionMode: args.postConditionMode ?? import_transactions3.PostConditionMode.Deny,
+        postConditionMode: args.postConditionMode ?? import_transactions4.PostConditionMode.Deny,
         postConditions: args.postConditions ?? []
       });
     };
@@ -16543,7 +16609,7 @@ var StacksSDK = class _StacksSDK {
      */
     this.buildPox5Call = async (functionName, functionArgs, opts) => {
       const bootAddr = this.pox5Network.bootAddress;
-      return (0, import_transactions3.makeUnsignedContractCall)({
+      return (0, import_transactions4.makeUnsignedContractCall)({
         contractAddress: bootAddr,
         contractName: "pox-5",
         functionName,
@@ -16554,7 +16620,7 @@ var StacksSDK = class _StacksSDK {
         network: this.pox5Network,
         // Fail closed: default to Deny with no conditions so a caller must explicitly
         // authorize any asset movement rather than inheriting permissive Allow.
-        postConditionMode: opts.postConditionMode ?? import_transactions3.PostConditionMode.Deny,
+        postConditionMode: opts.postConditionMode ?? import_transactions4.PostConditionMode.Deny,
         postConditions: opts.postConditions ?? []
       });
     };
@@ -16655,6 +16721,22 @@ var StacksSDK = class _StacksSDK {
         if (!membershipBefore) {
           return { success: false, error: "No active bond membership to rotate the signer for." };
         }
+        let rotateRecord = null;
+        if (opts?.rewardBtcAddress === void 0) {
+          try {
+            rotateRecord = await this.lockRecordStore.loadRecord(this.address, membershipBefore.bondIndex);
+          } catch (e) {
+            return { success: false, error: `Cannot update bond registration: the reward-destination record for bond ${membershipBefore.bondIndex} is unreadable (${formatErrorMessage(e)}). Refusing to rotate the signer when a persisted reward address might be silently dropped \u2014 retry once the lock-record store is reachable, or pass rewardBtcAddress explicitly.` };
+          }
+        }
+        const rewardBtcAddress = opts?.rewardBtcAddress ?? rotateRecord?.rewardBtcAddress;
+        const rewardMaxFeeSats = opts?.rewardMaxFeeSats ?? rotateRecord?.rewardMaxFeeSats;
+        let rotateCalldata;
+        try {
+          rotateCalldata = this.resolveSignerCalldata({ signerCalldata: opts?.signerCalldata, rewardBtcAddress, rewardMaxFeeSats });
+        } catch (e) {
+          return { success: false, error: `Invalid reward/signer calldata: ${formatErrorMessage(e)}` };
+        }
         const eligible = await (0, import_bitcoin_staking2.fetchEligibleUpdateBondRegistration)({
           staker: this.address,
           signerManager,
@@ -16669,14 +16751,14 @@ var StacksSDK = class _StacksSDK {
           const resolvedNonce = await this.resolveNonce(opts?.nonce);
           const tx = await this.buildPox5Call(
             "update-bond-registration",
-            [import_transactions3.Cl.address(signerManager), import_transactions3.Cl.address(oldSignerManager), import_transactions3.Cl.none()],
+            [import_transactions4.Cl.address(signerManager), import_transactions4.Cl.address(oldSignerManager), this.encodeSignerCalldata(rotateCalldata)],
             {
               nonce: resolvedNonce,
               // Deny mode; a pre-start signer swap moves no assets but the contract
               // still records a PoX action, which the node's action gate requires be
               // covered by a will-perform-PoX condition.
-              postConditionMode: import_transactions3.PostConditionMode.Deny,
-              postConditions: [import_transactions3.Pc.origin().willPerformPox()]
+              postConditionMode: import_transactions4.PostConditionMode.Deny,
+              postConditions: [import_transactions4.Pc.origin().willPerformPox()]
             }
           );
           return this.pox5SignAndBroadcast(tx, opts?.note ?? `update-bond-registration-${membershipBefore.bondIndex}`, opts?.externalId);
@@ -16714,7 +16796,14 @@ var StacksSDK = class _StacksSDK {
             warning: `Signer rotation confirmed for bond ${derivedBondIndex}, but no durable lock record exists to update \u2014 reward routing for this bond may be stale until a record is present.`
           };
         }
-        await this.lockRecordStore.saveRecord(this.address, derivedBondIndex, { ...existing, signerManager });
+        await this.lockRecordStore.saveRecord(this.address, derivedBondIndex, {
+          ...existing,
+          signerManager,
+          // Keep the persisted reward destination in step with what was just re-supplied
+          // (a caller override changes it; otherwise it is unchanged).
+          ...rewardBtcAddress !== void 0 ? { rewardBtcAddress } : {},
+          ...rewardMaxFeeSats !== void 0 ? { rewardMaxFeeSats } : {}
+        });
         return { success: true, txHash: result.txid };
       } catch (error) {
         return { success: false, error: `Failed to update bond registration: ${formatErrorMessage(error)}` };
@@ -16738,6 +16827,12 @@ var StacksSDK = class _StacksSDK {
         }
         if (opts?.btcTxid !== void 0 && !/^[0-9a-fA-F]{64}$/.test(opts.btcTxid)) {
           return { success: false, error: `Invalid btcTxid: ${opts.btcTxid} (expected 64 hex chars).` };
+        }
+        let signerCalldata;
+        try {
+          signerCalldata = this.resolveSignerCalldata(opts);
+        } catch (e) {
+          return { success: false, error: `Invalid reward/signer calldata (no BTC committed): ${formatErrorMessage(e)}` };
         }
         const storeError = await this.assertDurableLockStore();
         if (storeError) return { success: false, error: storeError };
@@ -16794,24 +16889,24 @@ var StacksSDK = class _StacksSDK {
         });
         {
           const bootAddr = this.pox5Network?.bootAddress ?? (this.testnet ? "ST000000000000000000002AMW42H" : "SP000000000000000000002Q6VF78");
-          const buf = (v) => typeof v === "string" ? import_transactions3.Cl.bufferFromHex(v) : import_transactions3.Cl.buffer(v);
-          const rawResult = await (0, import_transactions3.fetchCallReadOnlyFunction)({
+          const buf = (v) => typeof v === "string" ? import_transactions4.Cl.bufferFromHex(v) : import_transactions4.Cl.buffer(v);
+          const rawResult = await (0, import_transactions4.fetchCallReadOnlyFunction)({
             contractAddress: bootAddr,
             contractName: "pox-5",
             functionName: "construct-lockup-output-script",
             functionArgs: [
-              import_transactions3.Cl.address(this.address),
-              import_transactions3.Cl.uint(metadata.unlockHeight),
+              import_transactions4.Cl.address(this.address),
+              import_transactions4.Cl.uint(metadata.unlockHeight),
               buf(metadata.unlockBytes),
               buf(bond.earlyUnlockBytes)
             ],
             senderAddress: bootAddr,
             network: this.pox5Network
           });
-          if (rawResult.type === import_transactions3.ClarityType.ResponseErr) {
-            return { success: false, error: `construct-lockup-output-script contract error: ${import_transactions3.Cl.prettyPrint(rawResult.value)}` };
+          if (rawResult.type === import_transactions4.ClarityType.ResponseErr) {
+            return { success: false, error: `construct-lockup-output-script contract error: ${import_transactions4.Cl.prettyPrint(rawResult.value)}` };
           }
-          const inner = rawResult.type === import_transactions3.ClarityType.ResponseOk ? rawResult.value : rawResult;
+          const inner = rawResult.type === import_transactions4.ClarityType.ResponseOk ? rawResult.value : rawResult;
           const onchainScriptHex = inner.value;
           if ((0, import_common2.bytesToHex)(metadata.outputScript) !== onchainScriptHex.replace(/^0x/, "")) {
             return { success: false, error: `Lockup script mismatch \u2014 SDK: ${(0, import_common2.bytesToHex)(metadata.outputScript)}, contract: ${onchainScriptHex}` };
@@ -16832,6 +16927,19 @@ var StacksSDK = class _StacksSDK {
           return { success: false, error: `Lock-record store unreadable for bond ${bondIndex} (UNKNOWN, not "no prior attempt") \u2014 refusing to fund: ${formatErrorMessage(e)}` };
         }
         const priorAtThisLock = priorRecord?.lockAddress === metadata.lockAddress;
+        const callerSuppliedRawCalldata = opts?.signerCalldata !== void 0;
+        const effectiveRewardBtcAddress = callerSuppliedRawCalldata ? void 0 : opts?.rewardBtcAddress ?? priorRecord?.rewardBtcAddress;
+        const effectiveRewardMaxFeeSats = callerSuppliedRawCalldata ? void 0 : opts?.rewardMaxFeeSats ?? priorRecord?.rewardMaxFeeSats;
+        if (signerCalldata === void 0 && effectiveRewardBtcAddress !== void 0) {
+          try {
+            signerCalldata = this.resolveSignerCalldata({
+              rewardBtcAddress: effectiveRewardBtcAddress,
+              rewardMaxFeeSats: effectiveRewardMaxFeeSats
+            });
+          } catch (e) {
+            return { success: false, error: `Persisted reward destination for bond ${bondIndex} is invalid (${formatErrorMessage(e)}); cannot resume register-for-bond without dropping reward routing.` };
+          }
+        }
         const hasInFlightFireblocks = priorAtThisLock && priorRecord.btcTxid === void 0 && priorRecord.fireblocksId !== void 0;
         if (opts?.btcTxid !== void 0 && priorAtThisLock) {
           if (priorRecord.btcTxid !== void 0 && opts.btcTxid !== priorRecord.btcTxid) {
@@ -16884,6 +16992,10 @@ var StacksSDK = class _StacksSDK {
           signerManager,
           firstRewardCycle: (0, import_bitcoin_staking2.bondPeriodToRewardCycle)({ bondIndex, poxInfo: pox }),
           fundingExternalId,
+          // Persist the reward destination so renewBond / updateBondRegistration re-supply
+          // the pox-addr calldata rather than dropping it (a `none` map-deletes it).
+          ...effectiveRewardBtcAddress !== void 0 ? { rewardBtcAddress: effectiveRewardBtcAddress } : {},
+          ...effectiveRewardMaxFeeSats !== void 0 ? { rewardMaxFeeSats: effectiveRewardMaxFeeSats } : {},
           stage: "lock-fixed",
           ...canResumeFunding ? {
             btcTxid: priorRecord.btcTxid,
@@ -16979,10 +17091,10 @@ var StacksSDK = class _StacksSDK {
             outputs: [lockupProof],
             unlockBytes: metadata.unlockBytes,
             nonce: resolvedNonce,
-            signerCalldata: opts?.signerCalldata,
+            signerCalldata,
             // Bound the paired STX lock to exactly the required amount.
-            postConditionMode: import_transactions3.PostConditionMode.Deny,
-            postConditions: [import_transactions3.Pc.origin().willSendEq(amountUstx).ustxToLock(), ...custodyRefund.conditions]
+            postConditionMode: import_transactions4.PostConditionMode.Deny,
+            postConditions: [import_transactions4.Pc.origin().willSendEq(amountUstx).ustxToLock(), ...custodyRefund.conditions]
           });
           return this.pox5SignAndBroadcast(
             tx,
@@ -17166,7 +17278,7 @@ var StacksSDK = class _StacksSDK {
       const pox5ContractId = `${bootAddr}.pox-5`;
       const sbtcContractId = `${sbtcAsset.contractAddress}.${sbtcAsset.contractName}`;
       return {
-        conditions: [import_transactions3.Pc.principal(pox5ContractId).willSendEq(custodiedSats).ft(sbtcContractId, sbtcAsset.assetName)],
+        conditions: [import_transactions4.Pc.principal(pox5ContractId).willSendEq(custodiedSats).ft(sbtcContractId, sbtcAsset.assetName)],
         custodiedSats
       };
     };
@@ -17234,10 +17346,10 @@ var StacksSDK = class _StacksSDK {
             signerCalldata: opts?.signerCalldata,
             // Bound both legs: the paired STX lock and the exact sBTC transfer (the
             // staker is the tx origin, so origin sends both).
-            postConditionMode: import_transactions3.PostConditionMode.Deny,
+            postConditionMode: import_transactions4.PostConditionMode.Deny,
             postConditions: [
-              import_transactions3.Pc.origin().willSendEq(amountUstx).ustxToLock(),
-              import_transactions3.Pc.origin().willSendEq(sbtcSats).ft(sbtcContractId, sbtcAsset.assetName)
+              import_transactions4.Pc.origin().willSendEq(amountUstx).ustxToLock(),
+              import_transactions4.Pc.origin().willSendEq(sbtcSats).ft(sbtcContractId, sbtcAsset.assetName)
             ]
           });
           return this.pox5SignAndBroadcast(
@@ -17340,12 +17452,12 @@ var StacksSDK = class _StacksSDK {
         const postConditions = [
           // Paired STX: assert the FULL resulting STX lock (register-for-bond records a
           // Stacking action for the full resulting lock — answers.md §2a).
-          import_transactions3.Pc.origin().willSendEq(amountUstx).ustxToLock()
+          import_transactions4.Pc.origin().willSendEq(amountUstx).ustxToLock()
         ];
         if (rollover.direction === "origin-sends") {
-          postConditions.push(import_transactions3.Pc.origin().willSendEq(rollover.amountSats).ft(sbtcContractId, sbtcAsset.assetName));
+          postConditions.push(import_transactions4.Pc.origin().willSendEq(rollover.amountSats).ft(sbtcContractId, sbtcAsset.assetName));
         } else if (rollover.direction === "boot-sends") {
-          postConditions.push(import_transactions3.Pc.principal(pox5ContractId).willSendEq(rollover.amountSats).ft(sbtcContractId, sbtcAsset.assetName));
+          postConditions.push(import_transactions4.Pc.principal(pox5ContractId).willSendEq(rollover.amountSats).ft(sbtcContractId, sbtcAsset.assetName));
         }
         const result = await this.runNonceExclusive(async () => {
           const resolvedNonce = await this.resolveNonce(opts?.nonce);
@@ -17356,7 +17468,7 @@ var StacksSDK = class _StacksSDK {
             sbtcSats: newSbtcSats,
             nonce: resolvedNonce,
             signerCalldata: opts?.signerCalldata,
-            postConditionMode: import_transactions3.PostConditionMode.Deny,
+            postConditionMode: import_transactions4.PostConditionMode.Deny,
             postConditions
           });
           return this.pox5SignAndBroadcast(
@@ -17423,16 +17535,16 @@ var StacksSDK = class _StacksSDK {
         const bootAddr = this.pox5Network.bootAddress;
         const pox5ContractId = `${bootAddr}.pox-5`;
         const sbtcContractId = `${resolvedSbtc.contractAddress}.${resolvedSbtc.contractName}`;
-        const postConditionMode = import_transactions3.PostConditionMode.Deny;
+        const postConditionMode = import_transactions4.PostConditionMode.Deny;
         const postConditions = [
-          import_transactions3.Pc.origin().willPerformPox(),
-          import_transactions3.Pc.principal(pox5ContractId).willSendEq(amountToWithdrawSats).ft(sbtcContractId, resolvedSbtc.assetName)
+          import_transactions4.Pc.origin().willPerformPox(),
+          import_transactions4.Pc.principal(pox5ContractId).willSendEq(amountToWithdrawSats).ft(sbtcContractId, resolvedSbtc.assetName)
         ];
         const result = await this.runNonceExclusive(async () => {
           const resolvedNonce = await this.resolveNonce(opts?.nonce);
           const tx = await this.buildPox5Call(
             "unstake-sbtc",
-            [import_transactions3.Cl.address(signerManager), import_transactions3.Cl.uint(amountToWithdrawSats)],
+            [import_transactions4.Cl.address(signerManager), import_transactions4.Cl.uint(amountToWithdrawSats)],
             { nonce: resolvedNonce, postConditionMode, postConditions }
           );
           return this.pox5SignAndBroadcast(tx, opts?.note ?? "unstake-sbtc", opts?.externalId);
@@ -17595,12 +17707,12 @@ var StacksSDK = class _StacksSDK {
           const resolvedNonce = await this.resolveNonce(opts?.nonce);
           const tx = await this.buildPox5Call(
             "announce-l1-early-exit",
-            [import_transactions3.Cl.address(this.address), import_transactions3.Cl.address(membership.signer)],
+            [import_transactions4.Cl.address(this.address), import_transactions4.Cl.address(membership.signer)],
             {
               nonce: resolvedNonce,
               // Deny mode; announcing early exit performs a PoX state change only.
-              postConditionMode: import_transactions3.PostConditionMode.Deny,
-              postConditions: [import_transactions3.Pc.origin().willPerformPox()]
+              postConditionMode: import_transactions4.PostConditionMode.Deny,
+              postConditions: [import_transactions4.Pc.origin().willPerformPox()]
             }
           );
           return this.pox5SignAndBroadcast(tx, opts?.note ?? "announce-l1-early-exit", opts?.externalId, async () => {
@@ -18308,6 +18420,23 @@ var StacksSDK = class _StacksSDK {
         if ((0, import_common2.bytesToHex)(nextMeta.outputScript) !== (0, import_common2.bytesToHex)(onchainNext)) {
           return { success: false, error: "Next bond lockup script mismatch \u2014 NOT proceeding" };
         }
+        const currentMembership = await (0, import_bitcoin_staking2.fetchBondMembership)({ address: this.address, network: this.pox5Network }).catch(() => null);
+        let priorBondRecord = null;
+        if (currentMembership && opts?.rewardBtcAddress === void 0) {
+          try {
+            priorBondRecord = await this.lockRecordStore.loadRecord(this.address, currentMembership.bondIndex);
+          } catch (e) {
+            return { success: false, error: `Cannot renew bond: the reward-destination record for bond ${currentMembership.bondIndex} is unreadable (${formatErrorMessage(e)}). Refusing to re-lock BTC when a persisted reward address might be silently dropped \u2014 retry once the lock-record store is reachable, or pass rewardBtcAddress explicitly.` };
+          }
+        }
+        const rewardBtcAddress = opts?.rewardBtcAddress ?? priorBondRecord?.rewardBtcAddress;
+        const rewardMaxFeeSats = opts?.rewardMaxFeeSats ?? priorBondRecord?.rewardMaxFeeSats;
+        let signerCalldata;
+        try {
+          signerCalldata = this.resolveSignerCalldata({ signerCalldata: opts?.signerCalldata, rewardBtcAddress, rewardMaxFeeSats });
+        } catch (e) {
+          return { success: false, error: `Invalid reward/signer calldata (no BTC re-locked): ${formatErrorMessage(e)}` };
+        }
         const nextRecordFor = (amountSats, extra = {}) => ({
           bondIndex: nextBondIndex,
           unlockBytes: nextMeta.unlockBytes,
@@ -18317,6 +18446,9 @@ var StacksSDK = class _StacksSDK {
           isL1Lock: true,
           signerManager,
           firstRewardCycle: (0, import_bitcoin_staking2.bondPeriodToRewardCycle)({ bondIndex: nextBondIndex, poxInfo: pox }),
+          // Carry the reward destination onto the new position's record.
+          ...rewardBtcAddress !== void 0 ? { rewardBtcAddress } : {},
+          ...rewardMaxFeeSats !== void 0 ? { rewardMaxFeeSats } : {},
           ...extra
         });
         const requiredUstx = (sats) => (0, import_bitcoin_staking2.minUstxForSatsAmount)({
@@ -18453,9 +18585,10 @@ var StacksSDK = class _StacksSDK {
             outputs: [lockupProof],
             unlockBytes: nextMeta.unlockBytes,
             nonce: resolvedNonce,
+            signerCalldata,
             // Bound the paired STX lock to exactly the required amount.
-            postConditionMode: import_transactions3.PostConditionMode.Deny,
-            postConditions: [import_transactions3.Pc.origin().willSendEq(amountUstx).ustxToLock(), ...custodyRefund.conditions]
+            postConditionMode: import_transactions4.PostConditionMode.Deny,
+            postConditions: [import_transactions4.Pc.origin().willSendEq(amountUstx).ustxToLock(), ...custodyRefund.conditions]
           });
           return this.pox5SignAndBroadcast(
             stacksTx,
@@ -18692,11 +18825,11 @@ var StacksSDK = class _StacksSDK {
       let signerClaimTxid = null;
       if (totalRewards > BigInt(0)) {
         const smClaim = await broadcastLeg(
-          (n) => (0, import_transactions3.makeUnsignedContractCall)({
+          (n) => (0, import_transactions4.makeUnsignedContractCall)({
             contractAddress: signerContractAddress,
             contractName: signerContractName,
             functionName: "claim-rewards",
-            functionArgs: [import_transactions3.Cl.list(uniqueBondIndices.map((i) => import_transactions3.Cl.uint(i))), import_transactions3.Cl.uint(cycle)],
+            functionArgs: [import_transactions4.Cl.list(uniqueBondIndices.map((i) => import_transactions4.Cl.uint(i))), import_transactions4.Cl.uint(cycle)],
             publicKey: this.publicKey,
             fee: DEFAULT_POX_FEE_USTX,
             nonce: n,
@@ -18705,7 +18838,7 @@ var StacksSDK = class _StacksSDK {
             // this cycle. Computed from the same chain state read just above.
             postConditionMode: "deny",
             postConditions: [
-              import_transactions3.Pc.principal(pox5ContractId).willSendEq(totalRewards).ft(sbtcContractId, sbtcAsset.assetName)
+              import_transactions4.Pc.principal(pox5ContractId).willSendEq(totalRewards).ft(sbtcContractId, sbtcAsset.assetName)
             ]
           }),
           `sm-claim-rewards-cycle-${cycle}`
@@ -18749,14 +18882,14 @@ var StacksSDK = class _StacksSDK {
         const defaultNote = bondIndex !== void 0 ? `sm-claim-staker-rewards-cycle-${cycle}-bond-${bondIndex}` : `sm-claim-staker-stx-rewards-cycle-${cycle}`;
         const bondSuffix = bondIndex !== void 0 ? ` bond ${bondIndex}` : "";
         const smStaker = await broadcastLeg(
-          (n) => (0, import_transactions3.makeUnsignedContractCall)({
+          (n) => (0, import_transactions4.makeUnsignedContractCall)({
             contractAddress: signerContractAddress,
             contractName: signerContractName,
             functionName: "claim-staker-rewards",
             functionArgs: [
-              import_transactions3.Cl.address(this.address),
-              import_transactions3.Cl.uint(cycle),
-              bondIndex !== void 0 ? import_transactions3.Cl.some(import_transactions3.Cl.uint(bondIndex)) : import_transactions3.Cl.none()
+              import_transactions4.Cl.address(this.address),
+              import_transactions4.Cl.uint(cycle),
+              bondIndex !== void 0 ? import_transactions4.Cl.some(import_transactions4.Cl.uint(bondIndex)) : import_transactions4.Cl.none()
             ],
             publicKey: this.publicKey,
             fee: DEFAULT_POX_FEE_USTX,
@@ -18766,7 +18899,7 @@ var StacksSDK = class _StacksSDK {
             // policy asset (a deliberate upper bound, per answers §3a).
             postConditionMode: "deny",
             postConditions: [
-              import_transactions3.Pc.principal(signerManager).willSendLte(stakerPayoutPolicy.maxPayoutSats).ft(stakerPayoutAssetId, stakerPayoutPolicy.asset.assetName)
+              import_transactions4.Pc.principal(signerManager).willSendLte(stakerPayoutPolicy.maxPayoutSats).ft(stakerPayoutAssetId, stakerPayoutPolicy.asset.assetName)
             ]
           }),
           note ?? defaultNote
@@ -19440,7 +19573,7 @@ var StacksSDK = class _StacksSDK {
             externalId
           );
           const signature2 = concatSignature(rawSignature2.fullSig, rawSignature2.v);
-          transactionToSign.unsignedTx.auth.spendingCondition.signature = (0, import_transactions3.createMessageSignature)(signature2);
+          transactionToSign.unsignedTx.auth.spendingCondition.signature = (0, import_transactions4.createMessageSignature)(signature2);
           const result2 = await this.chainService.broadcastTransaction(transactionToSign.unsignedTx);
           if (!result2 || result2.error || !result2.txid || result2.reason) {
             const msg = result2?.error && result2?.reason ? `${result2.error} - ${result2.reason}` : result2?.error || result2?.reason || "unknown error";
@@ -19527,16 +19660,16 @@ var StacksSDK = class _StacksSDK {
           const [contractAddress, contractName] = fullTx.contract_call.contract_id.split(".");
           const functionName = fullTx.contract_call.function_name;
           const functionArgs = fullTx.contract_call.function_args.map(
-            (arg) => (0, import_transactions3.hexToCV)(arg.hex)
+            (arg) => (0, import_transactions4.hexToCV)(arg.hex)
           );
           let postConditions;
           let postConditionMode;
           try {
             const modeStr = fullTx.post_condition_mode;
-            postConditionMode = modeStr === "allow" ? import_transactions3.PostConditionMode.Allow : import_transactions3.PostConditionMode.Deny;
+            postConditionMode = modeStr === "allow" ? import_transactions4.PostConditionMode.Allow : import_transactions4.PostConditionMode.Deny;
             postConditions = fullTx.post_conditions.map((pc) => {
               const principalStr = pc.principal.type_id === "principal_contract" ? `${pc.principal.address}.${pc.principal.contract_name}` : pc.principal.address;
-              const pcBuilder = pc.principal.type_id === "principal_origin" ? import_transactions3.Pc.origin() : import_transactions3.Pc.principal(principalStr);
+              const pcBuilder = pc.principal.type_id === "principal_origin" ? import_transactions4.Pc.origin() : import_transactions4.Pc.principal(principalStr);
               const amount = BigInt(pc.amount);
               const withCode = (() => {
                 switch (pc.condition_code) {
@@ -19600,7 +19733,7 @@ var StacksSDK = class _StacksSDK {
           externalId
         );
         const signature = concatSignature(rawSignature.fullSig, rawSignature.v);
-        unsignedTxWire.auth.spendingCondition.signature = (0, import_transactions3.createMessageSignature)(signature);
+        unsignedTxWire.auth.spendingCondition.signature = (0, import_transactions4.createMessageSignature)(signature);
         const result = await this.chainService.broadcastTransaction(unsignedTxWire);
         if (!result || result.error || !result.txid || result.reason) {
           const errorAndReason = result?.error && result?.reason ? `${result.error} - ${result.reason}` : result?.error || result?.reason || "unknown error";
@@ -19670,7 +19803,7 @@ var StacksSDK = class _StacksSDK {
           const tokenInfo = token !== "custom-token" /* CUSTOM */ ? getTokenInfo(token, this.testnet ? "testnet" : "mainnet") : void 0;
           const ftContractAddress = tokenInfo?.contractAddress ?? customTokenContractAddress;
           const ftContractName = tokenInfo?.contractName ?? customTokenContractName;
-          const functionArgs = [(0, import_transactions3.uintCV)(microAmount), (0, import_transactions3.principalCV)(this.address), (0, import_transactions3.principalCV)(recipientAddress), (0, import_transactions3.noneCV)()];
+          const functionArgs = [(0, import_transactions4.uintCV)(microAmount), (0, import_transactions4.principalCV)(this.address), (0, import_transactions4.principalCV)(recipientAddress), (0, import_transactions4.noneCV)()];
           microfee = await this.chainService.estimateContractCallFee(ftContractAddress, ftContractName, "transfer", functionArgs);
         }
         return { success: true, fee: microToStx(microfee), microfee };
@@ -19730,9 +19863,9 @@ var StacksSDK = class _StacksSDK {
           throw new Error("Public key or vault ID are not set");
         }
         const txBytes = Buffer.from(txHex, "hex");
-        const tx = (0, import_transactions3.deserializeTransaction)(txBytes);
+        const tx = (0, import_transactions4.deserializeTransaction)(txBytes);
         const sigHash = tx.signBegin();
-        const preSignSigHash = (0, import_transactions3.sigHashPreSign)(
+        const preSignSigHash = (0, import_transactions4.sigHashPreSign)(
           sigHash,
           tx.auth.authType,
           tx.auth.spendingCondition.fee,
@@ -19745,8 +19878,8 @@ var StacksSDK = class _StacksSDK {
           externalId
         );
         const signature = concatSignature(rawSignature.fullSig, rawSignature.v);
-        tx.auth.spendingCondition.signature = (0, import_transactions3.createMessageSignature)(signature);
-        const signedTxHex = (0, import_transactions3.serializeTransaction)(tx);
+        tx.auth.spendingCondition.signature = (0, import_transactions4.createMessageSignature)(signature);
+        const signedTxHex = (0, import_transactions4.serializeTransaction)(tx);
         return { success: true, txHex: signedTxHex };
       } catch (error) {
         return { success: false, error: formatErrorMessage(error) };
@@ -19783,9 +19916,9 @@ var StacksSDK = class _StacksSDK {
         if (!this.vaultAccountId) {
           throw new Error("Vault ID is not set");
         }
-        const messageCV = (0, import_transactions3.deserializeCV)(Buffer.from(message, "hex"));
-        const domainCV = (0, import_transactions3.deserializeCV)(Buffer.from(domain, "hex"));
-        const encoded = (0, import_transactions3.encodeStructuredDataBytes)({ message: messageCV, domain: domainCV });
+        const messageCV = (0, import_transactions4.deserializeCV)(Buffer.from(message, "hex"));
+        const domainCV = (0, import_transactions4.deserializeCV)(Buffer.from(domain, "hex"));
+        const encoded = (0, import_transactions4.encodeStructuredDataBytes)({ message: messageCV, domain: domainCV });
         const hash = Buffer.from((0, import_sha23.sha256)(encoded)).toString("hex");
         const rawSignature = await this.fireblocksService.signTransaction(
           hash,
@@ -20384,7 +20517,7 @@ var ApiService = class {
               params.bondIndex,
               params.btcAmountSats,
               params.signerManager,
-              { note: params.note, nonce: params.nonce, externalId: params.externalId, confirmations: params.confirmations, btcTxid: params.btcTxid }
+              { note: params.note, nonce: params.nonce, externalId: params.externalId, confirmations: params.confirmations, btcTxid: params.btcTxid, signerCalldata: params.signerCalldata, rewardBtcAddress: params.rewardBtcAddress, rewardMaxFeeSats: params.rewardMaxFeeSats }
             );
             break;
           case "createSbtcBond" /* CREATE_SBTC_BOND */:
@@ -20436,10 +20569,10 @@ var ApiService = class {
             result = await sdk.replaceBtcRecoveryFee(params.originalTxid, params.newFeeSats, { bondIndex: params.bondIndex, kind: params.kind });
             break;
           case "renewBond" /* RENEW_BOND */:
-            result = await sdk.renewBond(params.nextBondIndex, params.signerManager, { feeSats: params.feeSats, note: params.note, nonce: params.nonce, externalId: params.externalId, confirmations: params.confirmations });
+            result = await sdk.renewBond(params.nextBondIndex, params.signerManager, { feeSats: params.feeSats, note: params.note, nonce: params.nonce, externalId: params.externalId, confirmations: params.confirmations, signerCalldata: params.signerCalldata, rewardBtcAddress: params.rewardBtcAddress, rewardMaxFeeSats: params.rewardMaxFeeSats });
             break;
           case "updateBondRegistration" /* UPDATE_BOND_REGISTRATION */:
-            result = await sdk.updateBondRegistration(params.signerManager, params.oldSignerManager, { note: params.note, nonce: params.nonce, externalId: params.externalId });
+            result = await sdk.updateBondRegistration(params.signerManager, params.oldSignerManager, { note: params.note, nonce: params.nonce, externalId: params.externalId, signerCalldata: params.signerCalldata, rewardBtcAddress: params.rewardBtcAddress, rewardMaxFeeSats: params.rewardMaxFeeSats });
             break;
           case "calculateRewards" /* CALCULATE_REWARDS */:
             result = await sdk.calculateRewards({ note: params.note, nonce: params.nonce });
@@ -20533,7 +20666,8 @@ var ApiService = class {
       basePath: config2.basePath || import_ts_sdk4.BasePath.US,
       vaultAccountId: "",
       // Will be overridden per request
-      testnet: !!config2.testnet
+      testnet: !!config2.testnet,
+      verifyEarlyExitCosignerAtFunding: !!config2.verifyEarlyExitCosignerAtFunding
     };
     this.sdkManager = new SdkManager(baseConfig, config2.chainApiKey, config2.poolConfig);
   }
@@ -20567,6 +20701,8 @@ var serializeRecord = (r) => ({
   ...r.firstRewardCycle !== void 0 ? { firstRewardCycle: r.firstRewardCycle } : {},
   ...r.fundingExternalId !== void 0 ? { fundingExternalId: r.fundingExternalId } : {},
   ...r.fireblocksId !== void 0 ? { fireblocksId: r.fireblocksId } : {},
+  ...r.rewardBtcAddress !== void 0 ? { rewardBtcAddress: r.rewardBtcAddress } : {},
+  ...r.rewardMaxFeeSats !== void 0 ? { rewardMaxFeeSats: r.rewardMaxFeeSats.toString() } : {},
   ...r.stage !== void 0 ? { stage: r.stage } : {}
 });
 var deserializeRecord = (s) => ({
@@ -20582,6 +20718,8 @@ var deserializeRecord = (s) => ({
   firstRewardCycle: s.firstRewardCycle,
   fundingExternalId: s.fundingExternalId,
   fireblocksId: s.fireblocksId,
+  rewardBtcAddress: s.rewardBtcAddress,
+  rewardMaxFeeSats: s.rewardMaxFeeSats !== void 0 ? BigInt(s.rewardMaxFeeSats) : void 0,
   stage: s.stage
 });
 var stableStringify = (records) => {
@@ -20806,6 +20944,7 @@ var FileLockRecordStore = class {
   PRIVATE1_HIRO_API_BASE,
   PUBLIC_TESTNET_POX5_API,
   RBF_MIN_FEE_MULTIPLIER,
+  REWARD_CALLDATA_MAX_BYTES,
   SignerManagerRegistry,
   StackingPools,
   StacksSDK,
@@ -20816,6 +20955,7 @@ var FileLockRecordStore = class {
   config,
   derivationPath,
   diffBondSchedule,
+  encodeRewardAddressCalldata,
   env,
   formatBondScheduleError,
   ftInfo,

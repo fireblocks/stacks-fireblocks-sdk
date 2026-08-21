@@ -178,11 +178,21 @@ export declare class StacksSDK {
     private pox5SignAndBroadcast;
     private get pox5Network();
     /**
-     * Encodes optional signer-manager calldata as a Clarity `(optional (buff))`. Some
+     * Encodes optional signer-manager calldata as a Clarity `(optional (buff 500))`. Some
      * signer managers require calldata; when none is supplied this is `none`, preserving
-     * the prior hardcoded behavior.
+     * the prior hardcoded behavior. A supplied value is validated to be hex-parseable and
+     * within the contract's 500-byte limit — an over-long or non-hex buffer would abort the
+     * transaction after signing, and (on the bond paths) after the BTC is committed.
      */
     private encodeSignerCalldata;
+    /**
+     * Resolves the signer-calldata for a register/renew/rotate call from an explicit
+     * caller-supplied value OR a reward destination (Bitcoin address + max-fee) that the
+     * SDK encodes into the signer-manager's pox-addr calldata tuple. Enforces network +
+     * checksum on the reward address before it is used. Returns the raw bytes to thread
+     * through builders (and to persist for re-supply), or undefined for `none`.
+     */
+    private resolveSignerCalldata;
     /**
      * Stakes STX through a signer-manager (PoX-5). Replaces pox-4 stackSolo.
      * @param amountStx - Amount of STX to stake (number). Converted to microSTX internally.
@@ -420,6 +430,9 @@ export declare class StacksSDK {
         note?: string;
         nonce?: bigint;
         externalId?: string;
+        signerCalldata?: Uint8Array | string;
+        rewardBtcAddress?: string;
+        rewardMaxFeeSats?: bigint;
     }) => Promise<CreateTransactionResponse>;
     /**
      * Creates a native-BTC PoX-5 bond: locks BTC on L1 via Fireblocks and registers
@@ -438,6 +451,8 @@ export declare class StacksSDK {
         btcTxid?: string;
         amountUstxOverride?: bigint;
         signerCalldata?: Uint8Array | string;
+        rewardBtcAddress?: string;
+        rewardMaxFeeSats?: bigint;
     }) => Promise<CreateBondResult>;
     /**
      * Post-signing re-check for a register-for-bond broadcast (createBond, createSbtcBond,
@@ -741,6 +756,9 @@ export declare class StacksSDK {
         nonce?: bigint;
         externalId?: string;
         confirmations?: number;
+        signerCalldata?: Uint8Array | string;
+        rewardBtcAddress?: string;
+        rewardMaxFeeSats?: bigint;
     }) => Promise<RenewBondResult>;
     /**
      * Derives the bond-period indices that can be active at the current burn height

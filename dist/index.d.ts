@@ -10,4 +10,5 @@ export * from "./staking/bonds/sbtc-rollover";
 export * from "./staking/signer-manager-adapter";
 export * from "./utils/bondSchedule";
 export * from "./utils/bondScheduleChain";
+export * from "./utils/rewardCalldata";
 export * from "./utils/validation";

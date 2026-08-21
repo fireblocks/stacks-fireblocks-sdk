@@ -35,6 +35,13 @@ export interface ApiServiceConfig {
   testnet?: boolean;
   /** Optional Hiro API key, sent as `x-hiro-api-key` on StacksService requests. */
   chainApiKey?: string;
+  /**
+   * When true, every pooled SDK verifies the committed early-exit cosigner key at bond
+   * FUNDING time (not just at announce). Threaded through to each per-vault StacksSDK's
+   * FireblocksConfig — without this the flag set on the config would be dropped at the
+   * pool boundary and the funding-time check could never be enabled through the pool.
+   */
+  verifyEarlyExitCosignerAtFunding?: boolean;
 }
 
 export enum ActionType {
