@@ -56,9 +56,37 @@ export declare class FireblocksService {
      * @returns A promise that resolves to the signature when the transaction is successfully signed.
      * @throws {Error} If any parameter is invalid or if the transaction fails.
      **/
-    createBitcoinTransaction: (destination: string, amountSats: bigint, vaultAccountId: string | number, note?: string, externalId?: string) => Promise<{
+    createBitcoinTransaction: (destination: string, amountSats: bigint, vaultAccountId: string | number, note?: string, externalId?: string, onSubmitted?: (fireblocksId: string) => Promise<void> | void) => Promise<{
         fireblocksId: string;
         btcTxid: string;
     }>;
+    /**
+     * Polls an already-submitted Fireblocks BTC transfer (by its Fireblocks id) to
+     * completion and returns its Bitcoin txid. Used to resume a funding attempt whose
+     * confirmation poll timed out or crashed after the transfer was accepted.
+     */
+    awaitBitcoinTransaction: (fireblocksId: string) => Promise<string>;
+    /**
+     * Looks up a prior BTC transfer by its external id (the deterministic funding id) and
+     * awaits its Bitcoin txid. Used when a retry's re-submit is rejected as a duplicate
+     * external id (Fireblocks error 1438): the transfer already exists, so resolve it
+     * rather than failing. Returns null when Fireblocks has no transaction for the id.
+     */
+    resolveBitcoinTransactionByExternalId: (externalId: string) => Promise<{
+        fireblocksId: string;
+        btcTxid: string;
+    } | null>;
+    /**
+     * True when an error is Fireblocks' duplicate-external-id rejection (code 1438). The
+     * message match requires 1438 as a standalone token AND a duplicate/external cue, so an
+     * unrelated error that merely contains "1438" in an amount/id/timestamp is not misread.
+     */
+    static isDuplicateExternalIdError: (error: unknown) => boolean;
+    /**
+     * True when a transfer error means the Fireblocks transaction reached a TERMINAL
+     * failure state (Blocked/Cancelled/Failed/Rejected) — as opposed to a timeout or a
+     * transient read error. Matches the message raised by FireblocksSigner.getTxStatus.
+     */
+    static isTerminalTransferFailure: (error: unknown) => boolean;
     signTransaction: (content: string, vaultAccountId: string, txNote?: string, externalId?: string) => Promise<any>;
 }

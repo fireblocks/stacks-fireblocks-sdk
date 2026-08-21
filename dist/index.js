@@ -41,8 +41,931 @@ var __toESM = (mod2, isNodeMode, target) => (target = mod2 != null ? __create(__
 ));
 var __toCommonJS = (mod2) => __copyProps(__defProp({}, "__esModule", { value: true }), mod2);
 
-// node_modules/@stacks/bitcoin-staking/dist/types.js
+// node_modules/@stacks/common/dist/config.js
+var require_config = __commonJS({
+  "node_modules/@stacks/common/dist/config.js"(exports2) {
+    "use strict";
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.config = void 0;
+    var config2 = {
+      network: {
+        layer1: "placeholder"
+      },
+      logLevel: "debug"
+    };
+    exports2.config = config2;
+  }
+});
+
+// node_modules/@stacks/common/dist/errors.js
+var require_errors = __commonJS({
+  "node_modules/@stacks/common/dist/errors.js"(exports2) {
+    "use strict";
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.PreconditionFailedError = exports2.PayloadTooLargeError = exports2.ValidationError = exports2.BadPathError = exports2.NotEnoughProofError = exports2.ConflictError = exports2.DoesNotExist = exports2.GaiaHubError = exports2.NoSessionDataError = exports2.InvalidStateError = exports2.FailedDecryptionError = exports2.SignatureVerificationError = exports2.LoginFailedError = exports2.InvalidAmountError = exports2.NotEnoughFundsError = exports2.InvalidDIDError = exports2.RemoteServiceError = exports2.MissingParameterError = exports2.InvalidParameterError = exports2.BlockstackError = exports2.ERROR_CODES = void 0;
+    exports2.ERROR_CODES = {
+      MISSING_PARAMETER: "missing_parameter",
+      REMOTE_SERVICE_ERROR: "remote_service_error",
+      INVALID_STATE: "invalid_state",
+      NO_SESSION_DATA: "no_session_data",
+      DOES_NOT_EXIST: "does_not_exist",
+      FAILED_DECRYPTION_ERROR: "failed_decryption_error",
+      INVALID_DID_ERROR: "invalid_did_error",
+      NOT_ENOUGH_FUNDS_ERROR: "not_enough_error",
+      INVALID_AMOUNT_ERROR: "invalid_amount_error",
+      LOGIN_FAILED_ERROR: "login_failed",
+      SIGNATURE_VERIFICATION_ERROR: "signature_verification_failure",
+      CONFLICT_ERROR: "conflict_error",
+      NOT_ENOUGH_PROOF_ERROR: "not_enough_proof_error",
+      BAD_PATH_ERROR: "bad_path_error",
+      VALIDATION_ERROR: "validation_error",
+      PAYLOAD_TOO_LARGE_ERROR: "payload_too_large_error",
+      PRECONDITION_FAILED_ERROR: "precondition_failed_error",
+      UNKNOWN: "unknown"
+    };
+    Object.freeze(exports2.ERROR_CODES);
+    var BlockstackError = class extends Error {
+      constructor(error) {
+        super();
+        let message = error.message;
+        let bugDetails = `Error Code: ${error.code}`;
+        let stack = this.stack;
+        if (!stack) {
+          try {
+            throw new Error();
+          } catch (e) {
+            stack = e.stack;
+          }
+        } else {
+          bugDetails += `Stack Trace:
+${stack}`;
+        }
+        message += `
+If you believe this exception is caused by a bug in stacks.js,
+      please file a bug report: https://github.com/blockstack/stacks.js/issues
+
+${bugDetails}`;
+        this.message = message;
+        this.code = error.code;
+        this.parameter = error.parameter ? error.parameter : void 0;
+      }
+      toString() {
+        return `${super.toString()}
+    code: ${this.code} param: ${this.parameter ? this.parameter : "n/a"}`;
+      }
+    };
+    exports2.BlockstackError = BlockstackError;
+    var InvalidParameterError = class extends BlockstackError {
+      constructor(parameter, message = "") {
+        super({ code: exports2.ERROR_CODES.MISSING_PARAMETER, message, parameter });
+        this.name = "MissingParametersError";
+      }
+    };
+    exports2.InvalidParameterError = InvalidParameterError;
+    var MissingParameterError = class extends BlockstackError {
+      constructor(parameter, message = "") {
+        super({ code: exports2.ERROR_CODES.MISSING_PARAMETER, message, parameter });
+        this.name = "MissingParametersError";
+      }
+    };
+    exports2.MissingParameterError = MissingParameterError;
+    var RemoteServiceError = class extends BlockstackError {
+      constructor(response, message = "") {
+        super({ code: exports2.ERROR_CODES.REMOTE_SERVICE_ERROR, message });
+        this.response = response;
+      }
+    };
+    exports2.RemoteServiceError = RemoteServiceError;
+    var InvalidDIDError = class extends BlockstackError {
+      constructor(message = "") {
+        super({ code: exports2.ERROR_CODES.INVALID_DID_ERROR, message });
+        this.name = "InvalidDIDError";
+      }
+    };
+    exports2.InvalidDIDError = InvalidDIDError;
+    var NotEnoughFundsError = class extends BlockstackError {
+      constructor(leftToFund) {
+        const message = `Not enough UTXOs to fund. Left to fund: ${leftToFund}`;
+        super({ code: exports2.ERROR_CODES.NOT_ENOUGH_FUNDS_ERROR, message });
+        this.leftToFund = leftToFund;
+        this.name = "NotEnoughFundsError";
+        this.message = message;
+      }
+    };
+    exports2.NotEnoughFundsError = NotEnoughFundsError;
+    var InvalidAmountError = class extends BlockstackError {
+      constructor(fees, specifiedAmount) {
+        const message = `Not enough coin to fund fees transaction fees. Fees would be ${fees}, specified spend is  ${specifiedAmount}`;
+        super({ code: exports2.ERROR_CODES.INVALID_AMOUNT_ERROR, message });
+        this.specifiedAmount = specifiedAmount;
+        this.fees = fees;
+        this.name = "InvalidAmountError";
+        this.message = message;
+      }
+    };
+    exports2.InvalidAmountError = InvalidAmountError;
+    var LoginFailedError = class extends BlockstackError {
+      constructor(reason) {
+        const message = `Failed to login: ${reason}`;
+        super({ code: exports2.ERROR_CODES.LOGIN_FAILED_ERROR, message });
+        this.message = message;
+        this.name = "LoginFailedError";
+      }
+    };
+    exports2.LoginFailedError = LoginFailedError;
+    var SignatureVerificationError = class extends BlockstackError {
+      constructor(reason) {
+        const message = `Failed to verify signature: ${reason}`;
+        super({ code: exports2.ERROR_CODES.SIGNATURE_VERIFICATION_ERROR, message });
+        this.message = message;
+        this.name = "SignatureVerificationError";
+      }
+    };
+    exports2.SignatureVerificationError = SignatureVerificationError;
+    var FailedDecryptionError = class extends BlockstackError {
+      constructor(message = "Unable to decrypt cipher object.") {
+        super({ code: exports2.ERROR_CODES.FAILED_DECRYPTION_ERROR, message });
+        this.message = message;
+        this.name = "FailedDecryptionError";
+      }
+    };
+    exports2.FailedDecryptionError = FailedDecryptionError;
+    var InvalidStateError = class extends BlockstackError {
+      constructor(message) {
+        super({ code: exports2.ERROR_CODES.INVALID_STATE, message });
+        this.message = message;
+        this.name = "InvalidStateError";
+      }
+    };
+    exports2.InvalidStateError = InvalidStateError;
+    var NoSessionDataError = class extends BlockstackError {
+      constructor(message) {
+        super({ code: exports2.ERROR_CODES.INVALID_STATE, message });
+        this.message = message;
+        this.name = "NoSessionDataError";
+      }
+    };
+    exports2.NoSessionDataError = NoSessionDataError;
+    var GaiaHubError = class extends BlockstackError {
+      constructor(error, response) {
+        super(error);
+        if (response) {
+          this.hubError = {
+            statusCode: response.status,
+            statusText: response.statusText
+          };
+          if (typeof response.body === "string") {
+            this.hubError.message = response.body;
+          } else if (typeof response.body === "object") {
+            Object.assign(this.hubError, response.body);
+          }
+        }
+      }
+    };
+    exports2.GaiaHubError = GaiaHubError;
+    var DoesNotExist = class extends GaiaHubError {
+      constructor(message, response) {
+        super({ message, code: exports2.ERROR_CODES.DOES_NOT_EXIST }, response);
+        this.name = "DoesNotExist";
+      }
+    };
+    exports2.DoesNotExist = DoesNotExist;
+    var ConflictError = class extends GaiaHubError {
+      constructor(message, response) {
+        super({ message, code: exports2.ERROR_CODES.CONFLICT_ERROR }, response);
+        this.name = "ConflictError";
+      }
+    };
+    exports2.ConflictError = ConflictError;
+    var NotEnoughProofError = class extends GaiaHubError {
+      constructor(message, response) {
+        super({ message, code: exports2.ERROR_CODES.NOT_ENOUGH_PROOF_ERROR }, response);
+        this.name = "NotEnoughProofError";
+      }
+    };
+    exports2.NotEnoughProofError = NotEnoughProofError;
+    var BadPathError = class extends GaiaHubError {
+      constructor(message, response) {
+        super({ message, code: exports2.ERROR_CODES.BAD_PATH_ERROR }, response);
+        this.name = "BadPathError";
+      }
+    };
+    exports2.BadPathError = BadPathError;
+    var ValidationError2 = class extends GaiaHubError {
+      constructor(message, response) {
+        super({ message, code: exports2.ERROR_CODES.VALIDATION_ERROR }, response);
+        this.name = "ValidationError";
+      }
+    };
+    exports2.ValidationError = ValidationError2;
+    var PayloadTooLargeError = class extends GaiaHubError {
+      constructor(message, response, maxUploadByteSize) {
+        super({ message, code: exports2.ERROR_CODES.PAYLOAD_TOO_LARGE_ERROR }, response);
+        this.name = "PayloadTooLargeError";
+        this.maxUploadByteSize = maxUploadByteSize;
+      }
+    };
+    exports2.PayloadTooLargeError = PayloadTooLargeError;
+    var PreconditionFailedError = class extends GaiaHubError {
+      constructor(message, response) {
+        super({ message, code: exports2.ERROR_CODES.PRECONDITION_FAILED_ERROR }, response);
+        this.name = "PreconditionFailedError";
+      }
+    };
+    exports2.PreconditionFailedError = PreconditionFailedError;
+  }
+});
+
+// node_modules/@stacks/common/dist/logger.js
+var require_logger = __commonJS({
+  "node_modules/@stacks/common/dist/logger.js"(exports2) {
+    "use strict";
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.Logger = void 0;
+    var config_1 = require_config();
+    var levels = ["debug", "info", "warn", "error", "none"];
+    var levelToInt = {};
+    var intToLevel = {};
+    for (let index = 0; index < levels.length; index++) {
+      const level = levels[index];
+      levelToInt[level] = index;
+      intToLevel[index] = level;
+    }
+    var Logger = class {
+      static error(message) {
+        if (!this.shouldLog("error"))
+          return;
+        console.error(this.logMessage("error", message));
+      }
+      static warn(message) {
+        if (!this.shouldLog("warn"))
+          return;
+        console.warn(this.logMessage("warn", message));
+      }
+      static info(message) {
+        if (!this.shouldLog("info"))
+          return;
+        console.log(this.logMessage("info", message));
+      }
+      static debug(message) {
+        if (!this.shouldLog("debug"))
+          return;
+        console.log(this.logMessage("debug", message));
+      }
+      static logMessage(level, message) {
+        return `[${level.toUpperCase()}] ${message}`;
+      }
+      static shouldLog(level) {
+        const currentLevel = levelToInt[config_1.config.logLevel];
+        return currentLevel <= levelToInt[level];
+      }
+    };
+    exports2.Logger = Logger;
+  }
+});
+
+// node_modules/@stacks/common/dist/utils.js
+var require_utils = __commonJS({
+  "node_modules/@stacks/common/dist/utils.js"(exports2) {
+    "use strict";
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.BLOCKSTACK_HANDLER = void 0;
+    exports2.nextYear = nextYear;
+    exports2.nextMonth = nextMonth;
+    exports2.nextHour = nextHour;
+    exports2.megabytesToBytes = megabytesToBytes;
+    exports2.getAesCbcOutputLength = getAesCbcOutputLength;
+    exports2.getBase64OutputLength = getBase64OutputLength;
+    exports2.updateQueryStringParameter = updateQueryStringParameter;
+    exports2.isLaterVersion = isLaterVersion;
+    exports2.makeUUID4 = makeUUID4;
+    exports2.isSameOriginAbsoluteUrl = isSameOriginAbsoluteUrl;
+    exports2.getGlobalScope = getGlobalScope;
+    exports2.getGlobalObject = getGlobalObject;
+    exports2.getGlobalObjects = getGlobalObjects;
+    exports2.intToBytes = intToBytes;
+    exports2.intToBigInt = intToBigInt;
+    exports2.with0x = with0x;
+    exports2.without0x = without0x;
+    exports2.hexToBigInt = hexToBigInt;
+    exports2.intToHex = intToHex;
+    exports2.hexToInt = hexToInt;
+    exports2.bigIntToBytes = bigIntToBytes;
+    exports2.toTwos = toTwos;
+    exports2.bytesToTwosBigInt = bytesToTwosBigInt;
+    exports2.fromTwos = fromTwos;
+    exports2.bytesToHex = bytesToHex4;
+    exports2.hexToBytes = hexToBytes4;
+    exports2.utf8ToBytes = utf8ToBytes;
+    exports2.bytesToUtf8 = bytesToUtf8;
+    exports2.asciiToBytes = asciiToBytes2;
+    exports2.bytesToAscii = bytesToAscii;
+    exports2.octetsToBytes = octetsToBytes;
+    exports2.concatBytes = concatBytes4;
+    exports2.concatArray = concatArray;
+    exports2.isInstance = isInstance;
+    exports2.validateHash256 = validateHash256;
+    var logger_1 = require_logger();
+    exports2.BLOCKSTACK_HANDLER = "blockstack";
+    function nextYear() {
+      return new Date((/* @__PURE__ */ new Date()).setFullYear((/* @__PURE__ */ new Date()).getFullYear() + 1));
+    }
+    function nextMonth() {
+      return new Date((/* @__PURE__ */ new Date()).setMonth((/* @__PURE__ */ new Date()).getMonth() + 1));
+    }
+    function nextHour() {
+      return new Date((/* @__PURE__ */ new Date()).setHours((/* @__PURE__ */ new Date()).getHours() + 1));
+    }
+    function megabytesToBytes(megabytes) {
+      if (!Number.isFinite(megabytes)) {
+        return 0;
+      }
+      return Math.floor(megabytes * 1024 * 1024);
+    }
+    function getAesCbcOutputLength(inputByteLength) {
+      const cipherTextLength = (Math.floor(inputByteLength / 16) + 1) * 16;
+      return cipherTextLength;
+    }
+    function getBase64OutputLength(inputByteLength) {
+      const encodedLength = Math.ceil(inputByteLength / 3) * 4;
+      return encodedLength;
+    }
+    function updateQueryStringParameter(uri, key, value) {
+      const re = new RegExp(`([?&])${key}=.*?(&|$)`, "i");
+      const separator = uri.indexOf("?") !== -1 ? "&" : "?";
+      if (uri.match(re)) {
+        return uri.replace(re, `$1${key}=${value}$2`);
+      } else {
+        return `${uri}${separator}${key}=${value}`;
+      }
+    }
+    function isLaterVersion(v1, v2) {
+      if (v1 === void 0 || v1 === "") {
+        v1 = "0.0.0";
+      }
+      if (v2 === void 0 || v1 === "") {
+        v2 = "0.0.0";
+      }
+      const v1tuple = v1.split(".").map((x) => parseInt(x, 10));
+      const v2tuple = v2.split(".").map((x) => parseInt(x, 10));
+      for (let index = 0; index < v2.length; index++) {
+        if (index >= v1.length) {
+          v2tuple.push(0);
+        }
+        if (v1tuple[index] < v2tuple[index]) {
+          return false;
+        }
+      }
+      return true;
+    }
+    function makeUUID4() {
+      let d = (/* @__PURE__ */ new Date()).getTime();
+      if (typeof performance !== "undefined" && typeof performance.now === "function") {
+        d += performance.now();
+      }
+      return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+        const r = (d + Math.random() * 16) % 16 | 0;
+        d = Math.floor(d / 16);
+        return (c === "x" ? r : r & 3 | 8).toString(16);
+      });
+    }
+    function isSameOriginAbsoluteUrl(uri1, uri2) {
+      try {
+        const parsedUri1 = new URL(uri1);
+        const parsedUri2 = new URL(uri2);
+        const port1 = parseInt(parsedUri1.port || "0", 10) | 0 || (parsedUri1.protocol === "https:" ? 443 : 80);
+        const port2 = parseInt(parsedUri2.port || "0", 10) | 0 || (parsedUri2.protocol === "https:" ? 443 : 80);
+        const match2 = {
+          scheme: parsedUri1.protocol === parsedUri2.protocol,
+          hostname: parsedUri1.hostname === parsedUri2.hostname,
+          port: port1 === port2,
+          absolute: (uri1.includes("http://") || uri1.includes("https://")) && (uri2.includes("http://") || uri2.includes("https://"))
+        };
+        return match2.scheme && match2.hostname && match2.port && match2.absolute;
+      } catch (error) {
+        console.log(error);
+        console.log("Parsing error in same URL origin check");
+        return false;
+      }
+    }
+    function getGlobalScope() {
+      if (typeof self !== "undefined") {
+        return self;
+      }
+      if (typeof window !== "undefined") {
+        return window;
+      }
+      if (typeof global !== "undefined") {
+        return global;
+      }
+      throw new Error("Unexpected runtime environment - no supported global scope (`window`, `self`, `global`) available");
+    }
+    function getAPIUsageErrorMessage(scopeObject, apiName, usageDesc) {
+      if (usageDesc) {
+        return `Use of '${usageDesc}' requires \`${apiName}\` which is unavailable on the '${scopeObject}' object within the currently executing environment.`;
+      } else {
+        return `\`${apiName}\` is unavailable on the '${scopeObject}' object within the currently executing environment.`;
+      }
+    }
+    function getGlobalObject(name, { throwIfUnavailable, usageDesc, returnEmptyObject } = {}) {
+      let globalScope = void 0;
+      try {
+        globalScope = getGlobalScope();
+        if (globalScope) {
+          const obj = globalScope[name];
+          if (obj) {
+            return obj;
+          }
+        }
+      } catch (error) {
+        logger_1.Logger.error(`Error getting object '${name}' from global scope '${globalScope}': ${error}`);
+      }
+      if (throwIfUnavailable) {
+        const errMsg = getAPIUsageErrorMessage(globalScope, name.toString(), usageDesc);
+        logger_1.Logger.error(errMsg);
+        throw new Error(errMsg);
+      }
+      if (returnEmptyObject) {
+        return {};
+      }
+      return void 0;
+    }
+    function getGlobalObjects(names, { throwIfUnavailable, usageDesc, returnEmptyObject } = {}) {
+      let globalScope;
+      try {
+        globalScope = getGlobalScope();
+      } catch (error) {
+        logger_1.Logger.error(`Error getting global scope: ${error}`);
+        if (throwIfUnavailable) {
+          const errMsg = getAPIUsageErrorMessage(globalScope, names[0].toString(), usageDesc);
+          logger_1.Logger.error(errMsg);
+          throw errMsg;
+        } else if (returnEmptyObject) {
+          globalScope = {};
+        }
+      }
+      const result = {};
+      for (let i = 0; i < names.length; i++) {
+        const name = names[i];
+        try {
+          if (globalScope) {
+            const obj = globalScope[name];
+            if (obj) {
+              result[name] = obj;
+            } else if (throwIfUnavailable) {
+              const errMsg = getAPIUsageErrorMessage(globalScope, name.toString(), usageDesc);
+              logger_1.Logger.error(errMsg);
+              throw new Error(errMsg);
+            } else if (returnEmptyObject) {
+              result[name] = {};
+            }
+          }
+        } catch (error) {
+          if (throwIfUnavailable) {
+            const errMsg = getAPIUsageErrorMessage(globalScope, name.toString(), usageDesc);
+            logger_1.Logger.error(errMsg);
+            throw new Error(errMsg);
+          }
+        }
+      }
+      return result;
+    }
+    function intToBytes(value, byteLength) {
+      return bigIntToBytes(intToBigInt(value), byteLength);
+    }
+    function intToBigInt(value) {
+      if (typeof value === "bigint")
+        return value;
+      if (typeof value === "string")
+        return BigInt(value);
+      if (typeof value === "number") {
+        if (!Number.isInteger(value)) {
+          throw new RangeError(`Invalid value. Values of type 'number' must be an integer.`);
+        }
+        if (value > Number.MAX_SAFE_INTEGER) {
+          throw new RangeError(`Invalid value. Values of type 'number' must be less than or equal to ${Number.MAX_SAFE_INTEGER}. For larger values, try using a BigInt instead.`);
+        }
+        return BigInt(value);
+      }
+      if (isInstance(value, Uint8Array))
+        return BigInt(`0x${bytesToHex4(value)}`);
+      throw new TypeError(`intToBigInt: Invalid value type. Must be a number, bigint, BigInt-compatible string, or Uint8Array.`);
+    }
+    function with0x(value) {
+      return /^0x/i.test(value) ? value : `0x${value}`;
+    }
+    function without0x(value) {
+      return /^0x/i.test(value) ? value.slice(2) : value;
+    }
+    function hexToBigInt(hex4) {
+      if (typeof hex4 !== "string")
+        throw new TypeError(`hexToBigInt: expected string, got ${typeof hex4}`);
+      return BigInt(`0x${hex4}`);
+    }
+    function intToHex(integer, byteLength = 8) {
+      const value = typeof integer === "bigint" ? integer : intToBigInt(integer);
+      return value.toString(16).padStart(byteLength * 2, "0");
+    }
+    function hexToInt(hex4) {
+      return parseInt(hex4, 16);
+    }
+    function bigIntToBytes(value, length = 16) {
+      const hex4 = intToHex(value, length);
+      return hexToBytes4(hex4);
+    }
+    function toTwos(value, width) {
+      if (value < -(BigInt(1) << width - BigInt(1)) || (BigInt(1) << width - BigInt(1)) - BigInt(1) < value) {
+        throw `Unable to represent integer in width: ${width}`;
+      }
+      if (value >= BigInt(0)) {
+        return BigInt(value);
+      }
+      return value + (BigInt(1) << width);
+    }
+    function nthBit(value, n) {
+      return value & BigInt(1) << n;
+    }
+    function bytesToTwosBigInt(bytes2) {
+      return fromTwos(BigInt(`0x${bytesToHex4(bytes2)}`), BigInt(bytes2.byteLength * 8));
+    }
+    function fromTwos(value, width) {
+      if (nthBit(value, width - BigInt(1))) {
+        return value - (BigInt(1) << width);
+      }
+      return value;
+    }
+    var hexes = Array.from({ length: 256 }, (_, i) => i.toString(16).padStart(2, "0"));
+    function bytesToHex4(uint8a) {
+      if (!(uint8a instanceof Uint8Array))
+        throw new Error("Uint8Array expected");
+      let hex4 = "";
+      for (const u of uint8a) {
+        hex4 += hexes[u];
+      }
+      return hex4;
+    }
+    function hexToBytes4(hex4) {
+      if (typeof hex4 !== "string") {
+        throw new TypeError(`hexToBytes: expected string, got ${typeof hex4}`);
+      }
+      hex4 = without0x(hex4);
+      hex4 = hex4.length % 2 ? `0${hex4}` : hex4;
+      const array2 = new Uint8Array(hex4.length / 2);
+      for (let i = 0; i < array2.length; i++) {
+        const j = i * 2;
+        const hexByte = hex4.slice(j, j + 2);
+        const byte = Number.parseInt(hexByte, 16);
+        if (Number.isNaN(byte) || byte < 0)
+          throw new Error("Invalid byte sequence");
+        array2[i] = byte;
+      }
+      return array2;
+    }
+    function utf8ToBytes(str2) {
+      return new TextEncoder().encode(str2);
+    }
+    function bytesToUtf8(arr) {
+      return new TextDecoder().decode(arr);
+    }
+    function asciiToBytes2(str2) {
+      const byteArray = [];
+      for (let i = 0; i < str2.length; i++) {
+        byteArray.push(str2.charCodeAt(i) & 255);
+      }
+      return new Uint8Array(byteArray);
+    }
+    function bytesToAscii(arr) {
+      return String.fromCharCode.apply(null, arr);
+    }
+    function isNotOctet(octet) {
+      return !Number.isInteger(octet) || octet < 0 || octet > 255;
+    }
+    function octetsToBytes(numbers) {
+      if (numbers.some(isNotOctet))
+        throw new Error("Some values are invalid bytes.");
+      return new Uint8Array(numbers);
+    }
+    function concatBytes4(...arrays) {
+      if (!arrays.every((a) => a instanceof Uint8Array))
+        throw new Error("Uint8Array list expected");
+      if (arrays.length === 1)
+        return arrays[0];
+      const length = arrays.reduce((a, arr) => a + arr.length, 0);
+      const result = new Uint8Array(length);
+      for (let i = 0, pad = 0; i < arrays.length; i++) {
+        const arr = arrays[i];
+        result.set(arr, pad);
+        pad += arr.length;
+      }
+      return result;
+    }
+    function concatArray(elements) {
+      return concatBytes4(...elements.map((e) => {
+        if (typeof e === "number")
+          return octetsToBytes([e]);
+        if (e instanceof Array)
+          return octetsToBytes(e);
+        return e;
+      }));
+    }
+    function isInstance(object, clazz) {
+      return object instanceof clazz || object?.constructor?.name?.toLowerCase() === clazz.name;
+    }
+    function validateHash256(hex4) {
+      hex4 = without0x(hex4);
+      if (hex4.length !== 64)
+        return false;
+      return /^[0-9a-fA-F]+$/.test(hex4);
+    }
+  }
+});
+
+// node_modules/@stacks/common/dist/constants.js
+var require_constants = __commonJS({
+  "node_modules/@stacks/common/dist/constants.js"(exports2) {
+    "use strict";
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.PRIVATE_KEY_BYTES_UNCOMPRESSED = exports2.PRIVATE_KEY_BYTES_COMPRESSED = exports2.GAIA_URL = exports2.DEVNET_URL = exports2.HIRO_TESTNET_URL = exports2.HIRO_MAINNET_URL = void 0;
+    exports2.HIRO_MAINNET_URL = "https://api.mainnet.hiro.so";
+    exports2.HIRO_TESTNET_URL = "https://api.testnet.hiro.so";
+    exports2.DEVNET_URL = "http://localhost:3999";
+    exports2.GAIA_URL = "https://hub.blockstack.org";
+    exports2.PRIVATE_KEY_BYTES_COMPRESSED = 33;
+    exports2.PRIVATE_KEY_BYTES_UNCOMPRESSED = 32;
+  }
+});
+
+// node_modules/@stacks/common/dist/signatures.js
+var require_signatures = __commonJS({
+  "node_modules/@stacks/common/dist/signatures.js"(exports2) {
+    "use strict";
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.parseRecoverableSignatureVrs = parseRecoverableSignatureVrs;
+    exports2.signatureVrsToRsv = signatureVrsToRsv2;
+    exports2.signatureRsvToVrs = signatureRsvToVrs;
+    var utils_1 = require_utils();
+    var COORDINATE_BYTES = 32;
+    function parseRecoverableSignatureVrs(signature) {
+      if (signature.length < COORDINATE_BYTES * 2 * 2 + 1) {
+        throw new Error("Invalid signature");
+      }
+      const recoveryIdHex = signature.slice(0, 2);
+      const r = signature.slice(2, 2 + COORDINATE_BYTES * 2);
+      const s = signature.slice(2 + COORDINATE_BYTES * 2);
+      return {
+        recoveryId: (0, utils_1.hexToInt)(recoveryIdHex),
+        r,
+        s
+      };
+    }
+    function signatureVrsToRsv2(signature) {
+      return signature.slice(2) + signature.slice(0, 2);
+    }
+    function signatureRsvToVrs(signature) {
+      return signature.slice(-2) + signature.slice(0, -2);
+    }
+  }
+});
+
+// node_modules/@stacks/common/dist/keys.js
+var require_keys = __commonJS({
+  "node_modules/@stacks/common/dist/keys.js"(exports2) {
+    "use strict";
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.privateKeyToBytes = privateKeyToBytes;
+    var utils_1 = require_utils();
+    function privateKeyToBytes(privateKey) {
+      const privateKeyBuffer = typeof privateKey === "string" ? (0, utils_1.hexToBytes)(privateKey) : privateKey;
+      if (privateKeyBuffer.length != 32 && privateKeyBuffer.length != 33) {
+        throw new Error(`Improperly formatted private-key. Private-key byte length should be 32 or 33. Length provided: ${privateKeyBuffer.length}`);
+      }
+      if (privateKeyBuffer.length == 33 && privateKeyBuffer[32] !== 1) {
+        throw new Error("Improperly formatted private-key. 33 bytes indicate compressed key, but the last byte must be == 01");
+      }
+      return privateKeyBuffer;
+    }
+  }
+});
+
+// node_modules/@stacks/common/dist/buffer.js
+var require_buffer = __commonJS({
+  "node_modules/@stacks/common/dist/buffer.js"(exports2) {
+    "use strict";
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.equals = equals;
+    exports2.alloc = alloc;
+    exports2.readUInt16BE = readUInt16BE;
+    exports2.writeUInt16BE = writeUInt16BE;
+    exports2.readUInt8 = readUInt8;
+    exports2.writeUInt8 = writeUInt8;
+    exports2.readUInt16LE = readUInt16LE;
+    exports2.writeUInt16LE = writeUInt16LE;
+    exports2.readUInt32BE = readUInt32BE;
+    exports2.writeUInt32BE = writeUInt32BE;
+    exports2.readUInt32LE = readUInt32LE;
+    exports2.writeUInt32LE = writeUInt32LE;
+    function equals(a, b) {
+      if (a.byteLength !== b.byteLength)
+        return false;
+      for (let i = 0; i < a.byteLength; i++) {
+        if (a[i] !== b[i])
+          return false;
+      }
+      return true;
+    }
+    function alloc(length, value) {
+      const a = new Uint8Array(length);
+      for (let i = 0; i < length; i++) {
+        a[i] = value;
+      }
+      return a;
+    }
+    function readUInt16BE(source, offset) {
+      return (source[offset + 0] << 8 | source[offset + 1]) >>> 0;
+    }
+    function writeUInt16BE(destination, value, offset = 0) {
+      destination[offset + 0] = value >>> 8;
+      destination[offset + 1] = value >>> 0;
+      return destination;
+    }
+    function readUInt8(source, offset) {
+      return source[offset];
+    }
+    function writeUInt8(destination, value, offset = 0) {
+      destination[offset] = value;
+      return destination;
+    }
+    function readUInt16LE(source, offset) {
+      return source[offset + 0] << 0 >>> 0 | source[offset + 1] << 8 >>> 0;
+    }
+    function writeUInt16LE(destination, value, offset = 0) {
+      destination[offset + 0] = value & 255;
+      value >>>= 8;
+      destination[offset + 1] = value & 255;
+      return destination;
+    }
+    function readUInt32BE(source, offset) {
+      return source[offset] * 2 ** 24 + source[offset + 1] * 2 ** 16 + source[offset + 2] * 2 ** 8 + source[offset + 3];
+    }
+    function writeUInt32BE(destination, value, offset = 0) {
+      destination[offset + 3] = value;
+      value >>>= 8;
+      destination[offset + 2] = value;
+      value >>>= 8;
+      destination[offset + 1] = value;
+      value >>>= 8;
+      destination[offset] = value;
+      return destination;
+    }
+    function readUInt32LE(source, offset) {
+      return source[offset + 0] << 0 >>> 0 | source[offset + 1] << 8 >>> 0 | source[offset + 2] << 16 >>> 0 | source[offset + 3] << 24 >>> 0;
+    }
+    function writeUInt32LE(destination, value, offset = 0) {
+      destination[offset + 0] = value & 255;
+      value >>>= 8;
+      destination[offset + 1] = value & 255;
+      value >>>= 8;
+      destination[offset + 2] = value & 255;
+      value >>>= 8;
+      destination[offset + 3] = value & 255;
+      return destination;
+    }
+  }
+});
+
+// node_modules/@stacks/common/dist/types.js
 var require_types = __commonJS({
+  "node_modules/@stacks/common/dist/types.js"(exports2) {
+    "use strict";
+    Object.defineProperty(exports2, "__esModule", { value: true });
+  }
+});
+
+// node_modules/@stacks/common/dist/fetch.js
+var require_fetch = __commonJS({
+  "node_modules/@stacks/common/dist/fetch.js"(exports2) {
+    "use strict";
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.setFetchOptions = exports2.getFetchOptions = void 0;
+    exports2.fetchWrapper = fetchWrapper;
+    exports2.hostMatches = hostMatches;
+    exports2.createApiKeyMiddleware = createApiKeyMiddleware;
+    exports2.createFetchFn = createFetchFn;
+    var defaultFetchOpts = {
+      referrerPolicy: "origin",
+      headers: {
+        "x-hiro-product": "stacksjs"
+      }
+    };
+    var getFetchOptions = () => {
+      return defaultFetchOpts;
+    };
+    exports2.getFetchOptions = getFetchOptions;
+    var setFetchOptions = (ops) => {
+      return Object.assign(defaultFetchOpts, ops);
+    };
+    exports2.setFetchOptions = setFetchOptions;
+    async function fetchWrapper(input, init) {
+      const fetchOpts = {};
+      Object.assign(fetchOpts, defaultFetchOpts, init);
+      const fetchResult = await fetch(input, fetchOpts);
+      return fetchResult;
+    }
+    function hostMatches(host, pattern) {
+      if (typeof pattern === "string")
+        return pattern === host;
+      return pattern.exec(host);
+    }
+    function createApiKeyMiddleware({ apiKey, host = /(.*)api(.*)(\.stacks\.co|\.hiro\.so)$/i, httpHeader = "x-api-key" }) {
+      return {
+        pre: (context) => {
+          const reqUrl = new URL(context.url);
+          if (!hostMatches(reqUrl.host, host))
+            return;
+          const headers = context.init.headers instanceof Headers ? context.init.headers : context.init.headers = new Headers(context.init.headers);
+          headers.set(httpHeader, apiKey);
+        }
+      };
+    }
+    function argsForCreateFetchFn(args) {
+      let fetchLib = fetchWrapper;
+      let middlewares = [];
+      if (args.length > 0 && typeof args[0] === "function") {
+        fetchLib = args.shift();
+      }
+      if (args.length > 0) {
+        middlewares = args;
+      }
+      return { fetchLib, middlewares };
+    }
+    function createFetchFn(...args) {
+      const { fetchLib, middlewares } = argsForCreateFetchFn(args);
+      const fetchFn = async (url, init) => {
+        let fetchParams = { url, init: init ?? {} };
+        for (const middleware of middlewares) {
+          if (typeof middleware.pre === "function") {
+            const result = await Promise.resolve(middleware.pre({
+              fetch: fetchLib,
+              ...fetchParams
+            }));
+            fetchParams = result ?? fetchParams;
+          }
+        }
+        let response = await fetchLib(fetchParams.url, fetchParams.init);
+        for (const middleware of middlewares) {
+          if (typeof middleware.post === "function") {
+            const result = await Promise.resolve(middleware.post({
+              fetch: fetchLib,
+              url: fetchParams.url,
+              init: fetchParams.init,
+              response: response?.clone() ?? response
+            }));
+            response = result ?? response;
+          }
+        }
+        return response;
+      };
+      return fetchFn;
+    }
+  }
+});
+
+// node_modules/@stacks/common/dist/index.js
+var require_dist = __commonJS({
+  "node_modules/@stacks/common/dist/index.js"(exports2) {
+    "use strict";
+    var __createBinding = exports2 && exports2.__createBinding || (Object.create ? (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      var desc = Object.getOwnPropertyDescriptor(m, k);
+      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+        desc = { enumerable: true, get: function() {
+          return m[k];
+        } };
+      }
+      Object.defineProperty(o, k2, desc);
+    }) : (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      o[k2] = m[k];
+    }));
+    var __exportStar = exports2 && exports2.__exportStar || function(m, exports3) {
+      for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports3, p)) __createBinding(exports3, m, p);
+    };
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    __exportStar(require_config(), exports2);
+    __exportStar(require_errors(), exports2);
+    __exportStar(require_logger(), exports2);
+    __exportStar(require_utils(), exports2);
+    __exportStar(require_constants(), exports2);
+    __exportStar(require_signatures(), exports2);
+    __exportStar(require_keys(), exports2);
+    __exportStar(require_buffer(), exports2);
+    __exportStar(require_types(), exports2);
+    __exportStar(require_fetch(), exports2);
+  }
+});
+
+// node_modules/@stacks/bitcoin-staking/dist/types.js
+var require_types2 = __commonJS({
   "node_modules/@stacks/bitcoin-staking/dist/types.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
@@ -50,7 +973,7 @@ var require_types = __commonJS({
 });
 
 // node_modules/@stacks/bitcoin-staking/dist/constants.js
-var require_constants = __commonJS({
+var require_constants2 = __commonJS({
   "node_modules/@stacks/bitcoin-staking/dist/constants.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
@@ -261,13 +1184,13 @@ function validateObject(object, fields = {}, optFields = {}) {
   iter(fields, false);
   iter(optFields, true);
 }
-var import_utils, abytes, anumber, bytesToHex3, concatBytes, hexToBytes2, isBytes, randomBytes, _0n, _1n, isPosBig, bitMask;
+var import_utils, abytes, anumber, bytesToHex2, concatBytes, hexToBytes2, isBytes, randomBytes, _0n, _1n, isPosBig, bitMask;
 var init_utils = __esm({
   "node_modules/@noble/curves/utils.js"() {
     import_utils = require("@noble/hashes/utils.js");
     abytes = (value, length, title) => (0, import_utils.abytes)(value, length, title);
     anumber = import_utils.anumber;
-    bytesToHex3 = import_utils.bytesToHex;
+    bytesToHex2 = import_utils.bytesToHex;
     concatBytes = (...arrays) => (0, import_utils.concatBytes)(...arrays);
     hexToBytes2 = (hex4) => (0, import_utils.hexToBytes)(hex4);
     isBytes = import_utils.isBytes;
@@ -721,7 +1644,7 @@ function calcWOpts(W, scalarBits) {
   const shiftBy = BigInt(W);
   return { windows, windowSize, mask, maxNumber, shiftBy };
 }
-function calcOffsets(n, window, wOpts) {
+function calcOffsets(n, window2, wOpts) {
   const { windowSize, mask, maxNumber, shiftBy } = wOpts;
   let wbits = Number(n & mask);
   let nextN = n >> shiftBy;
@@ -729,11 +1652,11 @@ function calcOffsets(n, window, wOpts) {
     wbits -= maxNumber;
     nextN += _1n3;
   }
-  const offsetStart = window * windowSize;
+  const offsetStart = window2 * windowSize;
   const offset = offsetStart + Math.abs(wbits) - 1;
   const isZero = wbits === 0;
   const isNeg = wbits < 0;
-  const isNegF = window % 2 !== 0;
+  const isNegF = window2 % 2 !== 0;
   const offsetF = offsetStart;
   return { nextN, offset, isZero, isNeg, isNegF, offsetF };
 }
@@ -845,7 +1768,7 @@ var init_curve = __esm({
         const points = [];
         let p = point;
         let base = p;
-        for (let window = 0; window < windows; window++) {
+        for (let window2 = 0; window2 < windows; window2++) {
           base = p;
           points.push(base);
           for (let i = 1; i < windowSize; i++) {
@@ -868,8 +1791,8 @@ var init_curve = __esm({
         let p = this.ZERO;
         let f = this.BASE;
         const wo = calcWOpts(W, this.bits);
-        for (let window = 0; window < wo.windows; window++) {
-          const { nextN, offset, isZero, isNeg, isNegF, offsetF } = calcOffsets(n, window, wo);
+        for (let window2 = 0; window2 < wo.windows; window2++) {
+          const { nextN, offset, isZero, isNeg, isNegF, offsetF } = calcOffsets(n, window2, wo);
           n = nextN;
           if (isZero) {
             f = f.add(negateCt(isNegF, precomputes[offsetF]));
@@ -888,10 +1811,10 @@ var init_curve = __esm({
        */
       wNAFUnsafe(W, precomputes, n, acc = this.ZERO) {
         const wo = calcWOpts(W, this.bits);
-        for (let window = 0; window < wo.windows; window++) {
+        for (let window2 = 0; window2 < wo.windows; window2++) {
           if (n === _0n3)
             break;
-          const { nextN, offset, isZero, isNeg } = calcOffsets(n, window, wo);
+          const { nextN, offset, isZero, isNeg } = calcOffsets(n, window2, wo);
           n = nextN;
           if (isZero) {
             continue;
@@ -1396,7 +2319,7 @@ function weierstrass(params, extraOpts = {}) {
       return encodePoint(Point2, this, isCompressed);
     }
     toHex(isCompressed = true) {
-      return bytesToHex3(this.toBytes(isCompressed));
+      return bytesToHex2(this.toBytes(isCompressed));
     }
     toString() {
       return `<Point ${this.is0() ? "ZERO" : this.toHex()}>`;
@@ -1613,7 +2536,7 @@ function ecdsa(Point2, hash, ecdsaOpts = {}) {
       return concatBytes(rb, sb);
     }
     toHex(format) {
-      return bytesToHex3(this.toBytes(format));
+      return bytesToHex2(this.toBytes(format));
     }
   }
   Object.freeze(Signature.prototype);
@@ -6162,9 +7085,9 @@ var init_transaction = __esm({
             delete inp.finalScriptWitness;
         }
         const outputs = this.outputs.map((i) => cleanPSBTFields(PSBTVersion, PSBTOutput, i));
-        const global = { ...this.global };
+        const global2 = { ...this.global };
         if (PSBTVersion === 0) {
-          global.unsignedTx = RawOldTx.decode(RawOldTx.encode({
+          global2.unsignedTx = RawOldTx.decode(RawOldTx.encode({
             version: this.version,
             lockTime: this.lockTime,
             inputs: this.inputs.map((i) => inputBeforeSign(i)).map((i) => ({
@@ -6173,19 +7096,19 @@ var init_transaction = __esm({
             })),
             outputs: this.outputs.map((o) => outputBeforeSign(o))
           }));
-          delete global.fallbackLocktime;
-          delete global.txVersion;
-          delete global.inputCount;
-          delete global.outputCount;
-          delete global.version;
+          delete global2.fallbackLocktime;
+          delete global2.txVersion;
+          delete global2.inputCount;
+          delete global2.outputCount;
+          delete global2.version;
         } else {
-          delete global.unsignedTx;
-          global.version = PSBTVersion;
-          global.txVersion = this.version;
-          global.inputCount = this.inputs.length;
-          global.outputCount = this.outputs.length;
-          if (global.fallbackLocktime && global.fallbackLocktime === DEFAULT_LOCKTIME)
-            delete global.fallbackLocktime;
+          delete global2.unsignedTx;
+          global2.version = PSBTVersion;
+          global2.txVersion = this.version;
+          global2.inputCount = this.inputs.length;
+          global2.outputCount = this.outputs.length;
+          if (global2.fallbackLocktime && global2.fallbackLocktime === DEFAULT_LOCKTIME)
+            delete global2.fallbackLocktime;
         }
         if (this.opts.bip174jsCompat) {
           if (!inputs.length)
@@ -6193,7 +7116,7 @@ var init_transaction = __esm({
           if (!outputs.length)
             outputs.push({});
         }
-        const raw = { global, inputs, outputs };
+        const raw = { global: global2, inputs, outputs };
         return PSBTVersion === 0 ? RawPSBTV0.encode(raw) : RawPSBTV2.encode(raw);
       }
       // BIP370 lockTime (https://github.com/bitcoin/bips/blob/master/bip-0370.mediawiki#determining-lock-time)
@@ -7412,6 +8335,929 @@ var init_btc_signer = __esm({
   }
 });
 
+// node_modules/@stacks/bitcoin-staking/node_modules/@stacks/common/dist/config.js
+var require_config2 = __commonJS({
+  "node_modules/@stacks/bitcoin-staking/node_modules/@stacks/common/dist/config.js"(exports2) {
+    "use strict";
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.config = void 0;
+    var config2 = {
+      network: {
+        layer1: "placeholder"
+      },
+      logLevel: "debug"
+    };
+    exports2.config = config2;
+  }
+});
+
+// node_modules/@stacks/bitcoin-staking/node_modules/@stacks/common/dist/errors.js
+var require_errors2 = __commonJS({
+  "node_modules/@stacks/bitcoin-staking/node_modules/@stacks/common/dist/errors.js"(exports2) {
+    "use strict";
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.PreconditionFailedError = exports2.PayloadTooLargeError = exports2.ValidationError = exports2.BadPathError = exports2.NotEnoughProofError = exports2.ConflictError = exports2.DoesNotExist = exports2.GaiaHubError = exports2.NoSessionDataError = exports2.InvalidStateError = exports2.FailedDecryptionError = exports2.SignatureVerificationError = exports2.LoginFailedError = exports2.InvalidAmountError = exports2.NotEnoughFundsError = exports2.InvalidDIDError = exports2.RemoteServiceError = exports2.MissingParameterError = exports2.InvalidParameterError = exports2.BlockstackError = exports2.ERROR_CODES = void 0;
+    exports2.ERROR_CODES = {
+      MISSING_PARAMETER: "missing_parameter",
+      REMOTE_SERVICE_ERROR: "remote_service_error",
+      INVALID_STATE: "invalid_state",
+      NO_SESSION_DATA: "no_session_data",
+      DOES_NOT_EXIST: "does_not_exist",
+      FAILED_DECRYPTION_ERROR: "failed_decryption_error",
+      INVALID_DID_ERROR: "invalid_did_error",
+      NOT_ENOUGH_FUNDS_ERROR: "not_enough_error",
+      INVALID_AMOUNT_ERROR: "invalid_amount_error",
+      LOGIN_FAILED_ERROR: "login_failed",
+      SIGNATURE_VERIFICATION_ERROR: "signature_verification_failure",
+      CONFLICT_ERROR: "conflict_error",
+      NOT_ENOUGH_PROOF_ERROR: "not_enough_proof_error",
+      BAD_PATH_ERROR: "bad_path_error",
+      VALIDATION_ERROR: "validation_error",
+      PAYLOAD_TOO_LARGE_ERROR: "payload_too_large_error",
+      PRECONDITION_FAILED_ERROR: "precondition_failed_error",
+      UNKNOWN: "unknown"
+    };
+    Object.freeze(exports2.ERROR_CODES);
+    var BlockstackError = class extends Error {
+      constructor(error) {
+        super();
+        let message = error.message;
+        let bugDetails = `Error Code: ${error.code}`;
+        let stack = this.stack;
+        if (!stack) {
+          try {
+            throw new Error();
+          } catch (e) {
+            stack = e.stack;
+          }
+        } else {
+          bugDetails += `Stack Trace:
+${stack}`;
+        }
+        message += `
+If you believe this exception is caused by a bug in stacks.js,
+      please file a bug report: https://github.com/blockstack/stacks.js/issues
+
+${bugDetails}`;
+        this.message = message;
+        this.code = error.code;
+        this.parameter = error.parameter ? error.parameter : void 0;
+      }
+      toString() {
+        return `${super.toString()}
+    code: ${this.code} param: ${this.parameter ? this.parameter : "n/a"}`;
+      }
+    };
+    exports2.BlockstackError = BlockstackError;
+    var InvalidParameterError = class extends BlockstackError {
+      constructor(parameter, message = "") {
+        super({ code: exports2.ERROR_CODES.MISSING_PARAMETER, message, parameter });
+        this.name = "MissingParametersError";
+      }
+    };
+    exports2.InvalidParameterError = InvalidParameterError;
+    var MissingParameterError = class extends BlockstackError {
+      constructor(parameter, message = "") {
+        super({ code: exports2.ERROR_CODES.MISSING_PARAMETER, message, parameter });
+        this.name = "MissingParametersError";
+      }
+    };
+    exports2.MissingParameterError = MissingParameterError;
+    var RemoteServiceError = class extends BlockstackError {
+      constructor(response, message = "") {
+        super({ code: exports2.ERROR_CODES.REMOTE_SERVICE_ERROR, message });
+        this.response = response;
+      }
+    };
+    exports2.RemoteServiceError = RemoteServiceError;
+    var InvalidDIDError = class extends BlockstackError {
+      constructor(message = "") {
+        super({ code: exports2.ERROR_CODES.INVALID_DID_ERROR, message });
+        this.name = "InvalidDIDError";
+      }
+    };
+    exports2.InvalidDIDError = InvalidDIDError;
+    var NotEnoughFundsError = class extends BlockstackError {
+      constructor(leftToFund) {
+        const message = `Not enough UTXOs to fund. Left to fund: ${leftToFund}`;
+        super({ code: exports2.ERROR_CODES.NOT_ENOUGH_FUNDS_ERROR, message });
+        this.leftToFund = leftToFund;
+        this.name = "NotEnoughFundsError";
+        this.message = message;
+      }
+    };
+    exports2.NotEnoughFundsError = NotEnoughFundsError;
+    var InvalidAmountError = class extends BlockstackError {
+      constructor(fees, specifiedAmount) {
+        const message = `Not enough coin to fund fees transaction fees. Fees would be ${fees}, specified spend is  ${specifiedAmount}`;
+        super({ code: exports2.ERROR_CODES.INVALID_AMOUNT_ERROR, message });
+        this.specifiedAmount = specifiedAmount;
+        this.fees = fees;
+        this.name = "InvalidAmountError";
+        this.message = message;
+      }
+    };
+    exports2.InvalidAmountError = InvalidAmountError;
+    var LoginFailedError = class extends BlockstackError {
+      constructor(reason) {
+        const message = `Failed to login: ${reason}`;
+        super({ code: exports2.ERROR_CODES.LOGIN_FAILED_ERROR, message });
+        this.message = message;
+        this.name = "LoginFailedError";
+      }
+    };
+    exports2.LoginFailedError = LoginFailedError;
+    var SignatureVerificationError = class extends BlockstackError {
+      constructor(reason) {
+        const message = `Failed to verify signature: ${reason}`;
+        super({ code: exports2.ERROR_CODES.SIGNATURE_VERIFICATION_ERROR, message });
+        this.message = message;
+        this.name = "SignatureVerificationError";
+      }
+    };
+    exports2.SignatureVerificationError = SignatureVerificationError;
+    var FailedDecryptionError = class extends BlockstackError {
+      constructor(message = "Unable to decrypt cipher object.") {
+        super({ code: exports2.ERROR_CODES.FAILED_DECRYPTION_ERROR, message });
+        this.message = message;
+        this.name = "FailedDecryptionError";
+      }
+    };
+    exports2.FailedDecryptionError = FailedDecryptionError;
+    var InvalidStateError = class extends BlockstackError {
+      constructor(message) {
+        super({ code: exports2.ERROR_CODES.INVALID_STATE, message });
+        this.message = message;
+        this.name = "InvalidStateError";
+      }
+    };
+    exports2.InvalidStateError = InvalidStateError;
+    var NoSessionDataError = class extends BlockstackError {
+      constructor(message) {
+        super({ code: exports2.ERROR_CODES.INVALID_STATE, message });
+        this.message = message;
+        this.name = "NoSessionDataError";
+      }
+    };
+    exports2.NoSessionDataError = NoSessionDataError;
+    var GaiaHubError = class extends BlockstackError {
+      constructor(error, response) {
+        super(error);
+        if (response) {
+          this.hubError = {
+            statusCode: response.status,
+            statusText: response.statusText
+          };
+          if (typeof response.body === "string") {
+            this.hubError.message = response.body;
+          } else if (typeof response.body === "object") {
+            Object.assign(this.hubError, response.body);
+          }
+        }
+      }
+    };
+    exports2.GaiaHubError = GaiaHubError;
+    var DoesNotExist = class extends GaiaHubError {
+      constructor(message, response) {
+        super({ message, code: exports2.ERROR_CODES.DOES_NOT_EXIST }, response);
+        this.name = "DoesNotExist";
+      }
+    };
+    exports2.DoesNotExist = DoesNotExist;
+    var ConflictError = class extends GaiaHubError {
+      constructor(message, response) {
+        super({ message, code: exports2.ERROR_CODES.CONFLICT_ERROR }, response);
+        this.name = "ConflictError";
+      }
+    };
+    exports2.ConflictError = ConflictError;
+    var NotEnoughProofError = class extends GaiaHubError {
+      constructor(message, response) {
+        super({ message, code: exports2.ERROR_CODES.NOT_ENOUGH_PROOF_ERROR }, response);
+        this.name = "NotEnoughProofError";
+      }
+    };
+    exports2.NotEnoughProofError = NotEnoughProofError;
+    var BadPathError = class extends GaiaHubError {
+      constructor(message, response) {
+        super({ message, code: exports2.ERROR_CODES.BAD_PATH_ERROR }, response);
+        this.name = "BadPathError";
+      }
+    };
+    exports2.BadPathError = BadPathError;
+    var ValidationError2 = class extends GaiaHubError {
+      constructor(message, response) {
+        super({ message, code: exports2.ERROR_CODES.VALIDATION_ERROR }, response);
+        this.name = "ValidationError";
+      }
+    };
+    exports2.ValidationError = ValidationError2;
+    var PayloadTooLargeError = class extends GaiaHubError {
+      constructor(message, response, maxUploadByteSize) {
+        super({ message, code: exports2.ERROR_CODES.PAYLOAD_TOO_LARGE_ERROR }, response);
+        this.name = "PayloadTooLargeError";
+        this.maxUploadByteSize = maxUploadByteSize;
+      }
+    };
+    exports2.PayloadTooLargeError = PayloadTooLargeError;
+    var PreconditionFailedError = class extends GaiaHubError {
+      constructor(message, response) {
+        super({ message, code: exports2.ERROR_CODES.PRECONDITION_FAILED_ERROR }, response);
+        this.name = "PreconditionFailedError";
+      }
+    };
+    exports2.PreconditionFailedError = PreconditionFailedError;
+  }
+});
+
+// node_modules/@stacks/bitcoin-staking/node_modules/@stacks/common/dist/logger.js
+var require_logger2 = __commonJS({
+  "node_modules/@stacks/bitcoin-staking/node_modules/@stacks/common/dist/logger.js"(exports2) {
+    "use strict";
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.Logger = void 0;
+    var config_1 = require_config2();
+    var levels = ["debug", "info", "warn", "error", "none"];
+    var levelToInt = {};
+    var intToLevel = {};
+    for (let index = 0; index < levels.length; index++) {
+      const level = levels[index];
+      levelToInt[level] = index;
+      intToLevel[index] = level;
+    }
+    var Logger = class {
+      static error(message) {
+        if (!this.shouldLog("error"))
+          return;
+        console.error(this.logMessage("error", message));
+      }
+      static warn(message) {
+        if (!this.shouldLog("warn"))
+          return;
+        console.warn(this.logMessage("warn", message));
+      }
+      static info(message) {
+        if (!this.shouldLog("info"))
+          return;
+        console.log(this.logMessage("info", message));
+      }
+      static debug(message) {
+        if (!this.shouldLog("debug"))
+          return;
+        console.log(this.logMessage("debug", message));
+      }
+      static logMessage(level, message) {
+        return `[${level.toUpperCase()}] ${message}`;
+      }
+      static shouldLog(level) {
+        const currentLevel = levelToInt[config_1.config.logLevel];
+        return currentLevel <= levelToInt[level];
+      }
+    };
+    exports2.Logger = Logger;
+  }
+});
+
+// node_modules/@stacks/bitcoin-staking/node_modules/@stacks/common/dist/utils.js
+var require_utils2 = __commonJS({
+  "node_modules/@stacks/bitcoin-staking/node_modules/@stacks/common/dist/utils.js"(exports2) {
+    "use strict";
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.BLOCKSTACK_HANDLER = void 0;
+    exports2.nextYear = nextYear;
+    exports2.nextMonth = nextMonth;
+    exports2.nextHour = nextHour;
+    exports2.megabytesToBytes = megabytesToBytes;
+    exports2.getAesCbcOutputLength = getAesCbcOutputLength;
+    exports2.getBase64OutputLength = getBase64OutputLength;
+    exports2.updateQueryStringParameter = updateQueryStringParameter;
+    exports2.isLaterVersion = isLaterVersion;
+    exports2.makeUUID4 = makeUUID4;
+    exports2.isSameOriginAbsoluteUrl = isSameOriginAbsoluteUrl;
+    exports2.getGlobalScope = getGlobalScope;
+    exports2.getGlobalObject = getGlobalObject;
+    exports2.getGlobalObjects = getGlobalObjects;
+    exports2.intToBytes = intToBytes;
+    exports2.intToBigInt = intToBigInt;
+    exports2.with0x = with0x;
+    exports2.without0x = without0x;
+    exports2.hexToBigInt = hexToBigInt;
+    exports2.intToHex = intToHex;
+    exports2.hexToInt = hexToInt;
+    exports2.bigIntToBytes = bigIntToBytes;
+    exports2.toTwos = toTwos;
+    exports2.bytesToTwosBigInt = bytesToTwosBigInt;
+    exports2.fromTwos = fromTwos;
+    exports2.bytesToHex = bytesToHex4;
+    exports2.hexToBytes = hexToBytes4;
+    exports2.utf8ToBytes = utf8ToBytes;
+    exports2.bytesToUtf8 = bytesToUtf8;
+    exports2.asciiToBytes = asciiToBytes2;
+    exports2.bytesToAscii = bytesToAscii;
+    exports2.octetsToBytes = octetsToBytes;
+    exports2.concatBytes = concatBytes4;
+    exports2.concatArray = concatArray;
+    exports2.isInstance = isInstance;
+    exports2.validateHash256 = validateHash256;
+    var logger_1 = require_logger2();
+    exports2.BLOCKSTACK_HANDLER = "blockstack";
+    function nextYear() {
+      return new Date((/* @__PURE__ */ new Date()).setFullYear((/* @__PURE__ */ new Date()).getFullYear() + 1));
+    }
+    function nextMonth() {
+      return new Date((/* @__PURE__ */ new Date()).setMonth((/* @__PURE__ */ new Date()).getMonth() + 1));
+    }
+    function nextHour() {
+      return new Date((/* @__PURE__ */ new Date()).setHours((/* @__PURE__ */ new Date()).getHours() + 1));
+    }
+    function megabytesToBytes(megabytes) {
+      if (!Number.isFinite(megabytes)) {
+        return 0;
+      }
+      return Math.floor(megabytes * 1024 * 1024);
+    }
+    function getAesCbcOutputLength(inputByteLength) {
+      const cipherTextLength = (Math.floor(inputByteLength / 16) + 1) * 16;
+      return cipherTextLength;
+    }
+    function getBase64OutputLength(inputByteLength) {
+      const encodedLength = Math.ceil(inputByteLength / 3) * 4;
+      return encodedLength;
+    }
+    function updateQueryStringParameter(uri, key, value) {
+      const re = new RegExp(`([?&])${key}=.*?(&|$)`, "i");
+      const separator = uri.indexOf("?") !== -1 ? "&" : "?";
+      if (uri.match(re)) {
+        return uri.replace(re, `$1${key}=${value}$2`);
+      } else {
+        return `${uri}${separator}${key}=${value}`;
+      }
+    }
+    function isLaterVersion(v1, v2) {
+      if (v1 === void 0 || v1 === "") {
+        v1 = "0.0.0";
+      }
+      if (v2 === void 0 || v1 === "") {
+        v2 = "0.0.0";
+      }
+      const v1tuple = v1.split(".").map((x) => parseInt(x, 10));
+      const v2tuple = v2.split(".").map((x) => parseInt(x, 10));
+      for (let index = 0; index < v2.length; index++) {
+        if (index >= v1.length) {
+          v2tuple.push(0);
+        }
+        if (v1tuple[index] < v2tuple[index]) {
+          return false;
+        }
+      }
+      return true;
+    }
+    function makeUUID4() {
+      let d = (/* @__PURE__ */ new Date()).getTime();
+      if (typeof performance !== "undefined" && typeof performance.now === "function") {
+        d += performance.now();
+      }
+      return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+        const r = (d + Math.random() * 16) % 16 | 0;
+        d = Math.floor(d / 16);
+        return (c === "x" ? r : r & 3 | 8).toString(16);
+      });
+    }
+    function isSameOriginAbsoluteUrl(uri1, uri2) {
+      try {
+        const parsedUri1 = new URL(uri1);
+        const parsedUri2 = new URL(uri2);
+        const port1 = parseInt(parsedUri1.port || "0", 10) | 0 || (parsedUri1.protocol === "https:" ? 443 : 80);
+        const port2 = parseInt(parsedUri2.port || "0", 10) | 0 || (parsedUri2.protocol === "https:" ? 443 : 80);
+        const match2 = {
+          scheme: parsedUri1.protocol === parsedUri2.protocol,
+          hostname: parsedUri1.hostname === parsedUri2.hostname,
+          port: port1 === port2,
+          absolute: (uri1.includes("http://") || uri1.includes("https://")) && (uri2.includes("http://") || uri2.includes("https://"))
+        };
+        return match2.scheme && match2.hostname && match2.port && match2.absolute;
+      } catch (error) {
+        console.log(error);
+        console.log("Parsing error in same URL origin check");
+        return false;
+      }
+    }
+    function getGlobalScope() {
+      if (typeof self !== "undefined") {
+        return self;
+      }
+      if (typeof window !== "undefined") {
+        return window;
+      }
+      if (typeof global !== "undefined") {
+        return global;
+      }
+      throw new Error("Unexpected runtime environment - no supported global scope (`window`, `self`, `global`) available");
+    }
+    function getAPIUsageErrorMessage(scopeObject, apiName, usageDesc) {
+      if (usageDesc) {
+        return `Use of '${usageDesc}' requires \`${apiName}\` which is unavailable on the '${scopeObject}' object within the currently executing environment.`;
+      } else {
+        return `\`${apiName}\` is unavailable on the '${scopeObject}' object within the currently executing environment.`;
+      }
+    }
+    function getGlobalObject(name, { throwIfUnavailable, usageDesc, returnEmptyObject } = {}) {
+      let globalScope = void 0;
+      try {
+        globalScope = getGlobalScope();
+        if (globalScope) {
+          const obj = globalScope[name];
+          if (obj) {
+            return obj;
+          }
+        }
+      } catch (error) {
+        logger_1.Logger.error(`Error getting object '${name}' from global scope '${globalScope}': ${error}`);
+      }
+      if (throwIfUnavailable) {
+        const errMsg = getAPIUsageErrorMessage(globalScope, name.toString(), usageDesc);
+        logger_1.Logger.error(errMsg);
+        throw new Error(errMsg);
+      }
+      if (returnEmptyObject) {
+        return {};
+      }
+      return void 0;
+    }
+    function getGlobalObjects(names, { throwIfUnavailable, usageDesc, returnEmptyObject } = {}) {
+      let globalScope;
+      try {
+        globalScope = getGlobalScope();
+      } catch (error) {
+        logger_1.Logger.error(`Error getting global scope: ${error}`);
+        if (throwIfUnavailable) {
+          const errMsg = getAPIUsageErrorMessage(globalScope, names[0].toString(), usageDesc);
+          logger_1.Logger.error(errMsg);
+          throw errMsg;
+        } else if (returnEmptyObject) {
+          globalScope = {};
+        }
+      }
+      const result = {};
+      for (let i = 0; i < names.length; i++) {
+        const name = names[i];
+        try {
+          if (globalScope) {
+            const obj = globalScope[name];
+            if (obj) {
+              result[name] = obj;
+            } else if (throwIfUnavailable) {
+              const errMsg = getAPIUsageErrorMessage(globalScope, name.toString(), usageDesc);
+              logger_1.Logger.error(errMsg);
+              throw new Error(errMsg);
+            } else if (returnEmptyObject) {
+              result[name] = {};
+            }
+          }
+        } catch (error) {
+          if (throwIfUnavailable) {
+            const errMsg = getAPIUsageErrorMessage(globalScope, name.toString(), usageDesc);
+            logger_1.Logger.error(errMsg);
+            throw new Error(errMsg);
+          }
+        }
+      }
+      return result;
+    }
+    function intToBytes(value, byteLength) {
+      return bigIntToBytes(intToBigInt(value), byteLength);
+    }
+    function intToBigInt(value) {
+      if (typeof value === "bigint")
+        return value;
+      if (typeof value === "string")
+        return BigInt(value);
+      if (typeof value === "number") {
+        if (!Number.isInteger(value)) {
+          throw new RangeError(`Invalid value. Values of type 'number' must be an integer.`);
+        }
+        if (value > Number.MAX_SAFE_INTEGER) {
+          throw new RangeError(`Invalid value. Values of type 'number' must be less than or equal to ${Number.MAX_SAFE_INTEGER}. For larger values, try using a BigInt instead.`);
+        }
+        return BigInt(value);
+      }
+      if (isInstance(value, Uint8Array))
+        return BigInt(`0x${bytesToHex4(value)}`);
+      throw new TypeError(`intToBigInt: Invalid value type. Must be a number, bigint, BigInt-compatible string, or Uint8Array.`);
+    }
+    function with0x(value) {
+      return /^0x/i.test(value) ? value : `0x${value}`;
+    }
+    function without0x(value) {
+      return /^0x/i.test(value) ? value.slice(2) : value;
+    }
+    function hexToBigInt(hex4) {
+      if (typeof hex4 !== "string")
+        throw new TypeError(`hexToBigInt: expected string, got ${typeof hex4}`);
+      return BigInt(with0x(hex4));
+    }
+    function intToHex(integer, byteLength = 8) {
+      const value = typeof integer === "bigint" ? integer : intToBigInt(integer);
+      return value.toString(16).padStart(byteLength * 2, "0");
+    }
+    function hexToInt(hex4) {
+      return parseInt(hex4, 16);
+    }
+    function bigIntToBytes(value, length = 16) {
+      const hex4 = intToHex(value, length);
+      return hexToBytes4(hex4);
+    }
+    function toTwos(value, width) {
+      if (value < -(BigInt(1) << width - BigInt(1)) || (BigInt(1) << width - BigInt(1)) - BigInt(1) < value) {
+        throw `Unable to represent integer in width: ${width}`;
+      }
+      if (value >= BigInt(0)) {
+        return BigInt(value);
+      }
+      return value + (BigInt(1) << width);
+    }
+    function nthBit(value, n) {
+      return value & BigInt(1) << n;
+    }
+    function bytesToTwosBigInt(bytes2) {
+      return fromTwos(BigInt(`0x${bytesToHex4(bytes2)}`), BigInt(bytes2.byteLength * 8));
+    }
+    function fromTwos(value, width) {
+      if (nthBit(value, width - BigInt(1))) {
+        return value - (BigInt(1) << width);
+      }
+      return value;
+    }
+    var hexes = Array.from({ length: 256 }, (_, i) => i.toString(16).padStart(2, "0"));
+    function bytesToHex4(uint8a) {
+      if (!(uint8a instanceof Uint8Array))
+        throw new Error("Uint8Array expected");
+      let hex4 = "";
+      for (const u of uint8a) {
+        hex4 += hexes[u];
+      }
+      return hex4;
+    }
+    function hexToBytes4(hex4) {
+      if (typeof hex4 !== "string") {
+        throw new TypeError(`hexToBytes: expected string, got ${typeof hex4}`);
+      }
+      hex4 = without0x(hex4);
+      hex4 = hex4.length % 2 ? `0${hex4}` : hex4;
+      const array2 = new Uint8Array(hex4.length / 2);
+      for (let i = 0; i < array2.length; i++) {
+        const j = i * 2;
+        const hexByte = hex4.slice(j, j + 2);
+        const byte = Number.parseInt(hexByte, 16);
+        if (Number.isNaN(byte) || byte < 0)
+          throw new Error("Invalid byte sequence");
+        array2[i] = byte;
+      }
+      return array2;
+    }
+    function utf8ToBytes(str2) {
+      return new TextEncoder().encode(str2);
+    }
+    function bytesToUtf8(arr) {
+      return new TextDecoder().decode(arr);
+    }
+    function asciiToBytes2(str2) {
+      const byteArray = [];
+      for (let i = 0; i < str2.length; i++) {
+        byteArray.push(str2.charCodeAt(i) & 255);
+      }
+      return new Uint8Array(byteArray);
+    }
+    function bytesToAscii(arr) {
+      return String.fromCharCode.apply(null, arr);
+    }
+    function isNotOctet(octet) {
+      return !Number.isInteger(octet) || octet < 0 || octet > 255;
+    }
+    function octetsToBytes(numbers) {
+      if (numbers.some(isNotOctet))
+        throw new Error("Some values are invalid bytes.");
+      return new Uint8Array(numbers);
+    }
+    function concatBytes4(...arrays) {
+      if (!arrays.every((a) => a instanceof Uint8Array))
+        throw new Error("Uint8Array list expected");
+      if (arrays.length === 1)
+        return arrays[0];
+      const length = arrays.reduce((a, arr) => a + arr.length, 0);
+      const result = new Uint8Array(length);
+      for (let i = 0, pad = 0; i < arrays.length; i++) {
+        const arr = arrays[i];
+        result.set(arr, pad);
+        pad += arr.length;
+      }
+      return result;
+    }
+    function concatArray(elements) {
+      return concatBytes4(...elements.map((e) => {
+        if (typeof e === "number")
+          return octetsToBytes([e]);
+        if (e instanceof Array)
+          return octetsToBytes(e);
+        return e;
+      }));
+    }
+    function isInstance(object, clazz) {
+      return object instanceof clazz || object?.constructor?.name?.toLowerCase() === clazz.name;
+    }
+    function validateHash256(hex4) {
+      hex4 = without0x(hex4);
+      if (hex4.length !== 64)
+        return false;
+      return /^[0-9a-fA-F]+$/.test(hex4);
+    }
+  }
+});
+
+// node_modules/@stacks/bitcoin-staking/node_modules/@stacks/common/dist/constants.js
+var require_constants3 = __commonJS({
+  "node_modules/@stacks/bitcoin-staking/node_modules/@stacks/common/dist/constants.js"(exports2) {
+    "use strict";
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.PRIVATE_KEY_BYTES_UNCOMPRESSED = exports2.PRIVATE_KEY_BYTES_COMPRESSED = exports2.GAIA_URL = exports2.DEVNET_URL = exports2.HIRO_TESTNET_URL = exports2.HIRO_MAINNET_URL = void 0;
+    exports2.HIRO_MAINNET_URL = "https://api.mainnet.hiro.so";
+    exports2.HIRO_TESTNET_URL = "https://api.testnet.hiro.so";
+    exports2.DEVNET_URL = "http://localhost:3999";
+    exports2.GAIA_URL = "https://hub.blockstack.org";
+    exports2.PRIVATE_KEY_BYTES_COMPRESSED = 33;
+    exports2.PRIVATE_KEY_BYTES_UNCOMPRESSED = 32;
+  }
+});
+
+// node_modules/@stacks/bitcoin-staking/node_modules/@stacks/common/dist/signatures.js
+var require_signatures2 = __commonJS({
+  "node_modules/@stacks/bitcoin-staking/node_modules/@stacks/common/dist/signatures.js"(exports2) {
+    "use strict";
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.parseRecoverableSignatureVrs = parseRecoverableSignatureVrs;
+    exports2.signatureVrsToRsv = signatureVrsToRsv2;
+    exports2.signatureRsvToVrs = signatureRsvToVrs;
+    var utils_1 = require_utils2();
+    var COORDINATE_BYTES = 32;
+    function parseRecoverableSignatureVrs(signature) {
+      if (signature.length < COORDINATE_BYTES * 2 * 2 + 1) {
+        throw new Error("Invalid signature");
+      }
+      const recoveryIdHex = signature.slice(0, 2);
+      const r = signature.slice(2, 2 + COORDINATE_BYTES * 2);
+      const s = signature.slice(2 + COORDINATE_BYTES * 2);
+      return {
+        recoveryId: (0, utils_1.hexToInt)(recoveryIdHex),
+        r,
+        s
+      };
+    }
+    function signatureVrsToRsv2(signature) {
+      return signature.slice(2) + signature.slice(0, 2);
+    }
+    function signatureRsvToVrs(signature) {
+      return signature.slice(-2) + signature.slice(0, -2);
+    }
+  }
+});
+
+// node_modules/@stacks/bitcoin-staking/node_modules/@stacks/common/dist/keys.js
+var require_keys2 = __commonJS({
+  "node_modules/@stacks/bitcoin-staking/node_modules/@stacks/common/dist/keys.js"(exports2) {
+    "use strict";
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.privateKeyToBytes = privateKeyToBytes;
+    var utils_1 = require_utils2();
+    function privateKeyToBytes(privateKey) {
+      const privateKeyBuffer = typeof privateKey === "string" ? (0, utils_1.hexToBytes)(privateKey) : privateKey;
+      if (privateKeyBuffer.length != 32 && privateKeyBuffer.length != 33) {
+        throw new Error(`Improperly formatted private-key. Private-key byte length should be 32 or 33. Length provided: ${privateKeyBuffer.length}`);
+      }
+      if (privateKeyBuffer.length == 33 && privateKeyBuffer[32] !== 1) {
+        throw new Error("Improperly formatted private-key. 33 bytes indicate compressed key, but the last byte must be == 01");
+      }
+      return privateKeyBuffer;
+    }
+  }
+});
+
+// node_modules/@stacks/bitcoin-staking/node_modules/@stacks/common/dist/buffer.js
+var require_buffer2 = __commonJS({
+  "node_modules/@stacks/bitcoin-staking/node_modules/@stacks/common/dist/buffer.js"(exports2) {
+    "use strict";
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.equals = equals;
+    exports2.alloc = alloc;
+    exports2.readUInt16BE = readUInt16BE;
+    exports2.writeUInt16BE = writeUInt16BE;
+    exports2.readUInt8 = readUInt8;
+    exports2.writeUInt8 = writeUInt8;
+    exports2.readUInt16LE = readUInt16LE;
+    exports2.writeUInt16LE = writeUInt16LE;
+    exports2.readUInt32BE = readUInt32BE;
+    exports2.writeUInt32BE = writeUInt32BE;
+    exports2.readUInt32LE = readUInt32LE;
+    exports2.writeUInt32LE = writeUInt32LE;
+    function equals(a, b) {
+      if (a.byteLength !== b.byteLength)
+        return false;
+      for (let i = 0; i < a.byteLength; i++) {
+        if (a[i] !== b[i])
+          return false;
+      }
+      return true;
+    }
+    function alloc(length, value) {
+      const a = new Uint8Array(length);
+      for (let i = 0; i < length; i++) {
+        a[i] = value;
+      }
+      return a;
+    }
+    function readUInt16BE(source, offset) {
+      return (source[offset + 0] << 8 | source[offset + 1]) >>> 0;
+    }
+    function writeUInt16BE(destination, value, offset = 0) {
+      destination[offset + 0] = value >>> 8;
+      destination[offset + 1] = value >>> 0;
+      return destination;
+    }
+    function readUInt8(source, offset) {
+      return source[offset];
+    }
+    function writeUInt8(destination, value, offset = 0) {
+      destination[offset] = value;
+      return destination;
+    }
+    function readUInt16LE(source, offset) {
+      return source[offset + 0] << 0 >>> 0 | source[offset + 1] << 8 >>> 0;
+    }
+    function writeUInt16LE(destination, value, offset = 0) {
+      destination[offset + 0] = value & 255;
+      value >>>= 8;
+      destination[offset + 1] = value & 255;
+      return destination;
+    }
+    function readUInt32BE(source, offset) {
+      return source[offset] * 2 ** 24 + source[offset + 1] * 2 ** 16 + source[offset + 2] * 2 ** 8 + source[offset + 3];
+    }
+    function writeUInt32BE(destination, value, offset = 0) {
+      destination[offset + 3] = value;
+      value >>>= 8;
+      destination[offset + 2] = value;
+      value >>>= 8;
+      destination[offset + 1] = value;
+      value >>>= 8;
+      destination[offset] = value;
+      return destination;
+    }
+    function readUInt32LE(source, offset) {
+      return source[offset + 0] << 0 >>> 0 | source[offset + 1] << 8 >>> 0 | source[offset + 2] << 16 >>> 0 | source[offset + 3] << 24 >>> 0;
+    }
+    function writeUInt32LE(destination, value, offset = 0) {
+      destination[offset + 0] = value & 255;
+      value >>>= 8;
+      destination[offset + 1] = value & 255;
+      value >>>= 8;
+      destination[offset + 2] = value & 255;
+      value >>>= 8;
+      destination[offset + 3] = value & 255;
+      return destination;
+    }
+  }
+});
+
+// node_modules/@stacks/bitcoin-staking/node_modules/@stacks/common/dist/types.js
+var require_types3 = __commonJS({
+  "node_modules/@stacks/bitcoin-staking/node_modules/@stacks/common/dist/types.js"(exports2) {
+    "use strict";
+    Object.defineProperty(exports2, "__esModule", { value: true });
+  }
+});
+
+// node_modules/@stacks/bitcoin-staking/node_modules/@stacks/common/dist/fetch.js
+var require_fetch2 = __commonJS({
+  "node_modules/@stacks/bitcoin-staking/node_modules/@stacks/common/dist/fetch.js"(exports2) {
+    "use strict";
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.setFetchOptions = exports2.getFetchOptions = void 0;
+    exports2.fetchWrapper = fetchWrapper;
+    exports2.hostMatches = hostMatches;
+    exports2.createApiKeyMiddleware = createApiKeyMiddleware;
+    exports2.createFetchFn = createFetchFn;
+    var defaultFetchOpts = {
+      referrerPolicy: "origin",
+      headers: {
+        "x-hiro-product": "stacksjs"
+      }
+    };
+    var getFetchOptions = () => {
+      return defaultFetchOpts;
+    };
+    exports2.getFetchOptions = getFetchOptions;
+    var setFetchOptions = (ops) => {
+      return Object.assign(defaultFetchOpts, ops);
+    };
+    exports2.setFetchOptions = setFetchOptions;
+    async function fetchWrapper(input, init) {
+      const fetchOpts = {};
+      Object.assign(fetchOpts, defaultFetchOpts, init);
+      const fetchResult = await fetch(input, fetchOpts);
+      return fetchResult;
+    }
+    function hostMatches(host, pattern) {
+      if (typeof pattern === "string")
+        return pattern === host;
+      return pattern.exec(host);
+    }
+    function createApiKeyMiddleware({ apiKey, host = /(.*)api(.*)(\.stacks\.co|\.hiro\.so)$/i, httpHeader = "x-api-key" }) {
+      return {
+        pre: (context) => {
+          const reqUrl = new URL(context.url);
+          if (!hostMatches(reqUrl.host, host))
+            return;
+          const headers = context.init.headers instanceof Headers ? context.init.headers : context.init.headers = new Headers(context.init.headers);
+          headers.set(httpHeader, apiKey);
+        }
+      };
+    }
+    function argsForCreateFetchFn(args) {
+      let fetchLib = fetchWrapper;
+      let middlewares = [];
+      if (args.length > 0 && typeof args[0] === "function") {
+        fetchLib = args.shift();
+      }
+      if (args.length > 0) {
+        middlewares = args;
+      }
+      return { fetchLib, middlewares };
+    }
+    function createFetchFn(...args) {
+      const { fetchLib, middlewares } = argsForCreateFetchFn(args);
+      const fetchFn = async (url, init) => {
+        let fetchParams = { url, init: init ?? {} };
+        for (const middleware of middlewares) {
+          if (typeof middleware.pre === "function") {
+            const result = await Promise.resolve(middleware.pre({
+              fetch: fetchLib,
+              ...fetchParams
+            }));
+            fetchParams = result ?? fetchParams;
+          }
+        }
+        let response = await fetchLib(fetchParams.url, fetchParams.init);
+        for (const middleware of middlewares) {
+          if (typeof middleware.post === "function") {
+            const result = await Promise.resolve(middleware.post({
+              fetch: fetchLib,
+              url: fetchParams.url,
+              init: fetchParams.init,
+              response: response?.clone() ?? response
+            }));
+            response = result ?? response;
+          }
+        }
+        return response;
+      };
+      return fetchFn;
+    }
+  }
+});
+
+// node_modules/@stacks/bitcoin-staking/node_modules/@stacks/common/dist/index.js
+var require_dist2 = __commonJS({
+  "node_modules/@stacks/bitcoin-staking/node_modules/@stacks/common/dist/index.js"(exports2) {
+    "use strict";
+    var __createBinding = exports2 && exports2.__createBinding || (Object.create ? (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      var desc = Object.getOwnPropertyDescriptor(m, k);
+      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+        desc = { enumerable: true, get: function() {
+          return m[k];
+        } };
+      }
+      Object.defineProperty(o, k2, desc);
+    }) : (function(o, m, k, k2) {
+      if (k2 === void 0) k2 = k;
+      o[k2] = m[k];
+    }));
+    var __exportStar = exports2 && exports2.__exportStar || function(m, exports3) {
+      for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports3, p)) __createBinding(exports3, m, p);
+    };
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    __exportStar(require_config2(), exports2);
+    __exportStar(require_errors2(), exports2);
+    __exportStar(require_logger2(), exports2);
+    __exportStar(require_utils2(), exports2);
+    __exportStar(require_constants3(), exports2);
+    __exportStar(require_signatures2(), exports2);
+    __exportStar(require_keys2(), exports2);
+    __exportStar(require_buffer2(), exports2);
+    __exportStar(require_types3(), exports2);
+    __exportStar(require_fetch2(), exports2);
+  }
+});
+
 // node_modules/@stacks/bitcoin-staking/dist/cycles.js
 var require_cycles = __commonJS({
   "node_modules/@stacks/bitcoin-staking/dist/cycles.js"(exports2) {
@@ -7431,7 +9277,7 @@ var require_cycles = __commonJS({
     exports2.isBondActiveAtHeight = isBondActiveAtHeight2;
     exports2.bondPhaseRanges = bondPhaseRanges2;
     exports2.bondStatus = bondStatus;
-    var constants_1 = require_constants();
+    var constants_1 = require_constants2();
     function firstPox5RewardCycle2(poxInfo2) {
       const entry = poxInfo2.contractVersions.find((v) => v.contractId.endsWith(`.${constants_1.POX5_CONTRACT_NAME}`));
       return entry?.firstRewardCycleId;
@@ -7602,7 +9448,7 @@ var require_script = __commonJS({
     exports2.buildRegisterMetadata = buildRegisterMetadata2;
     var btc = __importStar((init_btc_signer(), __toCommonJS(btc_signer_exports)));
     var sha2_js_1 = require("@noble/hashes/sha2.js");
-    var common_1 = require("@stacks/common");
+    var common_1 = require_dist2();
     var transactions_1 = require("@stacks/transactions");
     var cycles_1 = require_cycles();
     var network_1 = require_network();
@@ -7829,7 +9675,7 @@ var require_proof = __commonJS({
     exports2.buildLockProofFromBlock = buildLockProofFromBlock;
     var btc = __importStar((init_btc_signer(), __toCommonJS(btc_signer_exports)));
     var sha2_js_1 = require("@noble/hashes/sha2.js");
-    var common_1 = require("@stacks/common");
+    var common_1 = require_dist2();
     var script_1 = require_script();
     var MAX_TX_BYTES = 1e5;
     function serializeBitcoinTx(tx) {
@@ -7958,7 +9804,7 @@ var require_build = __commonJS({
     exports2.buildGrantSignerKey = buildGrantSignerKey;
     exports2.buildRevokeSignerGrant = buildRevokeSignerGrant;
     var transactions_1 = require("@stacks/transactions");
-    var constants_1 = require_constants();
+    var constants_1 = require_constants2();
     var network_1 = require("@stacks/network");
     function clBufferFrom(value) {
       return typeof value === "string" ? transactions_1.Cl.bufferFromHex(value) : transactions_1.Cl.buffer(value);
@@ -8094,7 +9940,7 @@ var require_build = __commonJS({
 });
 
 // node_modules/@stacks/bitcoin-staking/dist/fetch.js
-var require_fetch = __commonJS({
+var require_fetch3 = __commonJS({
   "node_modules/@stacks/bitcoin-staking/dist/fetch.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
@@ -8156,10 +10002,10 @@ var require_fetch = __commonJS({
     exports2.fetchVerifySignerKeyGrant = fetchVerifySignerKeyGrant2;
     exports2.fetchSignerKeyGrantUsed = fetchSignerKeyGrantUsed;
     exports2.fetchSignerGrantMessageHash = fetchSignerGrantMessageHash2;
-    var common_1 = require("@stacks/common");
+    var common_1 = require_dist2();
     var network_1 = require("@stacks/network");
     var transactions_1 = require("@stacks/transactions");
-    var constants_1 = require_constants();
+    var constants_1 = require_constants2();
     var cycles_1 = require_cycles();
     function bondIndexCV(bondIndex) {
       return bondIndex === void 0 ? transactions_1.Cl.none() : transactions_1.Cl.some(transactions_1.Cl.uint(bondIndex));
@@ -8994,7 +10840,7 @@ var require_fetch = __commonJS({
 });
 
 // node_modules/@stacks/bitcoin-staking/dist/errors.js
-var require_errors = __commonJS({
+var require_errors3 = __commonJS({
   "node_modules/@stacks/bitcoin-staking/dist/errors.js"(exports2) {
     "use strict";
     Object.defineProperty(exports2, "__esModule", { value: true });
@@ -9701,10 +11547,10 @@ var require_btc_address = __commonJS({
     exports2.parse = parse;
     exports2.stringify = stringify;
     var base_1 = (init_base3(), __toCommonJS(base_exports));
-    var common_1 = require("@stacks/common");
+    var common_1 = require_dist2();
     var encryption_1 = require("@stacks/encryption");
     var transactions_1 = require("@stacks/transactions");
-    var constants_1 = require_constants();
+    var constants_1 = require_constants2();
     var network_1 = require_network();
     function btcAddressVersionToLegacyHashMode(btcAddressVersion) {
       switch (btcAddressVersion) {
@@ -9840,7 +11686,7 @@ var require_signer = __commonJS({
     exports2.buildSignerCalldata = buildSignerCalldata;
     exports2.decodeSignerCalldata = decodeSignerCalldata;
     var sha2_js_1 = require("@noble/hashes/sha2.js");
-    var common_1 = require("@stacks/common");
+    var common_1 = require_dist2();
     var encryption_1 = require("@stacks/encryption");
     var transactions_1 = require("@stacks/transactions");
     var btc_address_1 = require_btc_address();
@@ -9927,13 +11773,13 @@ var require_eligibility = __commonJS({
     exports2.fetchEligibleStake = fetchEligibleStake2;
     exports2.fetchEligibleGrantSignerKey = fetchEligibleGrantSignerKey;
     exports2.fetchEligibleRevokeSignerGrant = fetchEligibleRevokeSignerGrant;
-    var common_1 = require("@stacks/common");
+    var common_1 = require_dist2();
     var network_1 = require("@stacks/network");
     var transactions_1 = require("@stacks/transactions");
-    var constants_1 = require_constants();
+    var constants_1 = require_constants2();
     var cycles_1 = require_cycles();
-    var errors_1 = require_errors();
-    var fetch_1 = require_fetch();
+    var errors_1 = require_errors3();
+    var fetch_1 = require_fetch3();
     var proof_1 = require_proof();
     var signer_1 = require_signer();
     async function fetchEligibleRegisterForBond2(opts) {
@@ -10305,7 +12151,7 @@ var require_eligibility = __commonJS({
 });
 
 // node_modules/@stacks/bitcoin-staking/dist/index.js
-var require_dist = __commonJS({
+var require_dist3 = __commonJS({
   "node_modules/@stacks/bitcoin-staking/dist/index.js"(exports2) {
     "use strict";
     var __createBinding = exports2 && exports2.__createBinding || (Object.create ? (function(o, m, k, k2) {
@@ -10350,16 +12196,16 @@ var require_dist = __commonJS({
     })();
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.BtcAddress = void 0;
-    __exportStar(require_types(), exports2);
-    __exportStar(require_constants(), exports2);
+    __exportStar(require_types2(), exports2);
+    __exportStar(require_constants2(), exports2);
     __exportStar(require_network(), exports2);
     __exportStar(require_script(), exports2);
     __exportStar(require_proof(), exports2);
     __exportStar(require_build(), exports2);
-    __exportStar(require_fetch(), exports2);
+    __exportStar(require_fetch3(), exports2);
     __exportStar(require_eligibility(), exports2);
     __exportStar(require_cycles(), exports2);
-    __exportStar(require_errors(), exports2);
+    __exportStar(require_errors3(), exports2);
     __exportStar(require_signer(), exports2);
     exports2.BtcAddress = __importStar(require_btc_address());
   }
@@ -10753,7 +12599,6 @@ var POX5_BOND_ERRORS = {
 var import_stacking = require("@stacks/stacking");
 var import_transactions = require("@stacks/transactions");
 var import_sha256 = require("@noble/hashes/sha256");
-var import_common = require("@stacks/common");
 var import_secp256k1 = require("@noble/secp256k1");
 function getTokenInfo(token, network) {
   return ftInfo[token]?.[network];
@@ -12348,7 +14193,7 @@ var FireblocksService = class {
      * @returns A promise that resolves to the signature when the transaction is successfully signed.
      * @throws {Error} If any parameter is invalid or if the transaction fails.
      **/
-    this.createBitcoinTransaction = async (destination, amountSats, vaultAccountId, note, externalId) => {
+    this.createBitcoinTransaction = async (destination, amountSats, vaultAccountId, note, externalId, onSubmitted) => {
       const assetId = this.testnet ? "BTC_TEST" : "BTC";
       const whole = amountSats / BigInt(1e8);
       const frac = (amountSats % BigInt(1e8)).toString().padStart(8, "0");
@@ -12366,9 +14211,39 @@ var FireblocksService = class {
       });
       const fireblocksId = response.data.id;
       if (!fireblocksId) throw new Error("Fireblocks BTC transaction creation returned no ID");
+      await onSubmitted?.(fireblocksId);
+      const btcTxid = await this.awaitBitcoinTransaction(fireblocksId);
+      return { fireblocksId, btcTxid };
+    };
+    /**
+     * Polls an already-submitted Fireblocks BTC transfer (by its Fireblocks id) to
+     * completion and returns its Bitcoin txid. Used to resume a funding attempt whose
+     * confirmation poll timed out or crashed after the transfer was accepted.
+     */
+    this.awaitBitcoinTransaction = async (fireblocksId) => {
       const completedTx = await this.fireblocksSigner.getTxStatus(fireblocksId);
       const btcTxid = completedTx.txHash;
       if (!btcTxid) throw new Error(`BTC transaction ${fireblocksId} completed but has no txHash`);
+      return btcTxid;
+    };
+    /**
+     * Looks up a prior BTC transfer by its external id (the deterministic funding id) and
+     * awaits its Bitcoin txid. Used when a retry's re-submit is rejected as a duplicate
+     * external id (Fireblocks error 1438): the transfer already exists, so resolve it
+     * rather than failing. Returns null when Fireblocks has no transaction for the id.
+     */
+    this.resolveBitcoinTransactionByExternalId = async (externalId) => {
+      let existing;
+      try {
+        existing = await this.fireblocksSDK.transactions.getTransactionByExternalId({ externalTxId: externalId });
+      } catch (e) {
+        const status = e?.response?.status ?? e?.status;
+        if (status === 404) return null;
+        throw e;
+      }
+      const fireblocksId = existing?.data?.id;
+      if (!fireblocksId) return null;
+      const btcTxid = await this.awaitBitcoinTransaction(fireblocksId);
       return { fireblocksId, btcTxid };
     };
     this.signTransaction = async (content, vaultAccountId, txNote, externalId) => {
@@ -12402,14 +14277,45 @@ var FireblocksService = class {
     });
     this.fireblocksSigner = new FireblocksSigner(this.fireblocksSDK);
   }
+  static {
+    /**
+     * True when an error is Fireblocks' duplicate-external-id rejection (code 1438). The
+     * message match requires 1438 as a standalone token AND a duplicate/external cue, so an
+     * unrelated error that merely contains "1438" in an amount/id/timestamp is not misread.
+     */
+    this.isDuplicateExternalIdError = (error) => {
+      const anyErr = error;
+      if (anyErr?.response?.data?.code === 1438 || anyErr?.code === 1438) return true;
+      const msg = typeof anyErr?.message === "string" ? anyErr.message : "";
+      return /\b1438\b/.test(msg) && /duplicat|external/i.test(msg);
+    };
+  }
+  static {
+    /**
+     * True when a transfer error means the Fireblocks transaction reached a TERMINAL
+     * failure state (Blocked/Cancelled/Failed/Rejected) — as opposed to a timeout or a
+     * transient read error. Matches the message raised by FireblocksSigner.getTxStatus.
+     */
+    this.isTerminalTransferFailure = (error) => {
+      const msg = typeof error?.message === "string" ? error.message : "";
+      return /status is (BLOCKED|CANCELLED|FAILED|REJECTED)/i.test(msg) || msg.includes("failed/blocked/cancelled");
+    };
+  }
 };
 
 // src/services/cosigner.service.ts
-var import_common2 = require("@stacks/common");
+var import_common = __toESM(require_dist());
 var import_secp256k12 = require("@noble/secp256k1");
 var import_bip32 = require("@scure/bip32");
 var DEFAULT_REQUEST_TIMEOUT_MS = 15e3;
 var COSIGNER_BIP32_DERIVATION = "m/48'/1'/0'/2'/0/0";
+var BIP32_VERSIONS = {
+  mainnet: { private: 76066276, public: 76067358 },
+  // xprv / xpub
+  testnet: { private: 70615956, public: 70617039 }
+  // tprv / tpub (testnet + regtest)
+};
+var versionsForExtendedKey = (key) => key.startsWith("tpub") || key.startsWith("tprv") ? BIP32_VERSIONS.testnet : BIP32_VERSIONS.mainnet;
 var resolveCosignerUrl = (testnet) => {
   const url = env.EARLY_EXIT_SIGNER_URL || EARLY_EXIT_SIGNER[testnet ? "testnet" : "mainnet"];
   if (!url) {
@@ -12451,7 +14357,7 @@ var CosignerService = class {
      */
     this.getLeafPublicKey = async () => {
       const info = await this.getPublicKey();
-      const account = import_bip32.HDKey.fromExtendedKey(info.xpub);
+      const account = import_bip32.HDKey.fromExtendedKey(info.xpub, versionsForExtendedKey(info.xpub));
       const leaf = account.deriveChild(0).deriveChild(0);
       if (!leaf.publicKey) {
         throw new Error("Cosigner xpub did not yield a leaf public key");
@@ -12469,7 +14375,7 @@ var CosignerService = class {
     this.verifyCommittedKey = async (expectedUnlockBytes) => {
       const pubkey = await this.getLeafPublicKey();
       const unlockScript = new Uint8Array([33, ...pubkey, 172]);
-      if ((0, import_common2.bytesToHex)(unlockScript) !== (0, import_common2.bytesToHex)(expectedUnlockBytes)) {
+      if ((0, import_common.bytesToHex)(unlockScript) !== (0, import_common.bytesToHex)(expectedUnlockBytes)) {
         throw new Error(
           `Early-exit cosigner key at ${this.baseUrl} does not match the bond's committed lock script \u2014 refusing to fund (early exit would be impossible for this bond).`
         );
@@ -12509,17 +14415,17 @@ var CosignerService = class {
         },
         witness_script: args.witnessScriptHex
       });
-      if (res.sighash.toLowerCase() !== (0, import_common2.bytesToHex)(args.expectedSighash)) {
+      if (res.sighash.toLowerCase() !== (0, import_common.bytesToHex)(args.expectedSighash)) {
         throw new Error("Cosigner sighash mismatch \u2014 refusing signature");
       }
-      const pubkey = (0, import_common2.hexToBytes)(res.public_key);
+      const pubkey = (0, import_common.hexToBytes)(res.public_key);
       const unlockScript = new Uint8Array([33, ...pubkey, 172]);
-      if ((0, import_common2.bytesToHex)(unlockScript) !== (0, import_common2.bytesToHex)(args.expectedUnlockBytes)) {
+      if ((0, import_common.bytesToHex)(unlockScript) !== (0, import_common.bytesToHex)(args.expectedUnlockBytes)) {
         throw new Error(
           "Cosigner public key does not match bond early-unlock-bytes"
         );
       }
-      const der = (0, import_common2.hexToBytes)(res.signature);
+      const der = (0, import_common.hexToBytes)(res.signature);
       let parsedSig;
       try {
         parsedSig = import_secp256k12.Signature.fromDER(der);
@@ -12806,8 +14712,8 @@ function checkFeeReplacement(orig, newFeeSats, lockAddress, recordedOutpoint) {
 }
 
 // src/utils/bondScheduleChain.ts
-var import_bitcoin_staking = __toESM(require_dist());
-var BitcoinStaking = __toESM(require_dist());
+var import_bitcoin_staking = __toESM(require_dist3());
+var BitcoinStaking = __toESM(require_dist3());
 
 // src/utils/bondSchedule.ts
 function diffBondSchedule(pairs) {
@@ -12873,12 +14779,12 @@ function planSbtcRollover(oldCustodiedSats, newSats) {
 
 // src/StacksSDK.ts
 var import_transactions3 = require("@stacks/transactions");
-var import_bitcoin_staking2 = __toESM(require_dist());
+var import_bitcoin_staking2 = __toESM(require_dist3());
 init_btc_signer();
 var import_encryption = require("@stacks/encryption");
 var import_sha23 = require("@noble/hashes/sha2");
 var import_secp256k14 = require("@noble/secp256k1");
-var import_common3 = require("@stacks/common");
+var import_common2 = __toESM(require_dist());
 
 // src/utils/der.ts
 function encodeDerScalar(bytes2) {
@@ -12995,7 +14901,7 @@ var StacksSDK = class _StacksSDK {
      */
     this.getBtcVaultAddress = () => {
       if (!this.publicKey) return "";
-      const pub = (0, import_common3.hexToBytes)(this.publicKey);
+      const pub = (0, import_common2.hexToBytes)(this.publicKey);
       return p2wpkh(pub, this.btcNetwork).address;
     };
     /**
@@ -13974,7 +15880,7 @@ var StacksSDK = class _StacksSDK {
             note || "sign grant signer key message",
             grantExternalId
           );
-          const signerSignature = (0, import_common3.signatureVrsToRsv)(concatSignature(rawGrantSig.fullSig, rawGrantSig.v));
+          const signerSignature = (0, import_common2.signatureVrsToRsv)(concatSignature(rawGrantSig.fullSig, rawGrantSig.v));
           const tx = await (0, import_transactions3.makeUnsignedContractCall)({
             contractAddress: smAddress,
             contractName: smName,
@@ -13982,11 +15888,11 @@ var StacksSDK = class _StacksSDK {
             functionArgs: [
               (0, import_transactions3.contractPrincipalCV)(smAddress, smName),
               // signer-manager trait = the contract itself
-              (0, import_transactions3.bufferCV)((0, import_common3.hexToBytes)(this.publicKey)),
+              (0, import_transactions3.bufferCV)((0, import_common2.hexToBytes)(this.publicKey)),
               // signer-key (buff 33)
               (0, import_transactions3.uintCV)(authId),
               // auth-id
-              (0, import_transactions3.bufferCV)((0, import_common3.hexToBytes)(signerSignature))
+              (0, import_transactions3.bufferCV)((0, import_common2.hexToBytes)(signerSignature))
               // signer-sig (buff 65)
             ],
             publicKey: this.publicKey,
@@ -14032,7 +15938,7 @@ var StacksSDK = class _StacksSDK {
           const resolvedNonce = await this.resolveNonce(nonce);
           const tx = await this.buildPox5Call(
             "revoke-signer-grant",
-            [import_transactions3.Cl.address(signerManager), import_transactions3.Cl.buffer((0, import_common3.hexToBytes)(signerKey))],
+            [import_transactions3.Cl.address(signerManager), import_transactions3.Cl.buffer((0, import_common2.hexToBytes)(signerKey))],
             {
               nonce: resolvedNonce,
               // Deny mode with no post-conditions: revoking a signer grant records no
@@ -14525,6 +16431,9 @@ var StacksSDK = class _StacksSDK {
       }
     };
     this.waitForBtcConfirmations = async (btcTxid, required = 3, pollMs = 3e4, timeoutMs = 90 * 6e4) => {
+      if (!/^[0-9a-fA-F]{64}$/.test(btcTxid)) {
+        throw new Error(`Cannot wait for confirmations on a malformed BTC txid: ${btcTxid}`);
+      }
       const deadline = Date.now() + timeoutMs;
       let unknownDepthPolls = 0;
       while (Date.now() < deadline) {
@@ -14827,6 +16736,9 @@ var StacksSDK = class _StacksSDK {
         if (!this.address || !this.publicKey || !this.vaultAccountId) {
           throw new Error("Address, Public Key or Vault ID are not set");
         }
+        if (opts?.btcTxid !== void 0 && !/^[0-9a-fA-F]{64}$/.test(opts.btcTxid)) {
+          return { success: false, error: `Invalid btcTxid: ${opts.btcTxid} (expected 64 hex chars).` };
+        }
         const storeError = await this.assertDurableLockStore();
         if (storeError) return { success: false, error: storeError };
         const smAllowError = this.signerManagerAllowedError(signerManager);
@@ -14901,15 +16813,13 @@ var StacksSDK = class _StacksSDK {
           }
           const inner = rawResult.type === import_transactions3.ClarityType.ResponseOk ? rawResult.value : rawResult;
           const onchainScriptHex = inner.value;
-          if ((0, import_common3.bytesToHex)(metadata.outputScript) !== onchainScriptHex.replace(/^0x/, "")) {
-            return { success: false, error: `Lockup script mismatch \u2014 SDK: ${(0, import_common3.bytesToHex)(metadata.outputScript)}, contract: ${onchainScriptHex}` };
+          if ((0, import_common2.bytesToHex)(metadata.outputScript) !== onchainScriptHex.replace(/^0x/, "")) {
+            return { success: false, error: `Lockup script mismatch \u2014 SDK: ${(0, import_common2.bytesToHex)(metadata.outputScript)}, contract: ${onchainScriptHex}` };
           }
         }
         if (this.verifyEarlyExitCosignerAtFunding) {
           try {
-            const cosigner = new CosignerService(resolveCosignerUrl(this.testnet));
-            const earlyUnlockBytes = typeof bond.earlyUnlockBytes === "string" ? (0, import_common3.hexToBytes)(bond.earlyUnlockBytes) : bond.earlyUnlockBytes;
-            await cosigner.verifyCommittedKey(earlyUnlockBytes);
+            await this.verifyCommittedCosignerKey(bond);
           } catch (error) {
             return { success: false, error: `Early-exit cosigner preflight failed (no BTC committed): ${formatErrorMessage(error)}` };
           }
@@ -14921,13 +16831,23 @@ var StacksSDK = class _StacksSDK {
         } catch (e) {
           return { success: false, error: `Lock-record store unreadable for bond ${bondIndex} (UNKNOWN, not "no prior attempt") \u2014 refusing to fund: ${formatErrorMessage(e)}` };
         }
-        if (opts?.btcTxid !== void 0 && priorRecord?.btcTxid !== void 0 && priorRecord.lockAddress === metadata.lockAddress && opts.btcTxid !== priorRecord.btcTxid) {
-          return {
-            success: false,
-            error: `Bond ${bondIndex} already has a recorded funding tx ${priorRecord.btcTxid} at this lock address; refusing to replace it with ${opts.btcTxid}. Omit btcTxid to resume the recorded funding, or recover it first.`,
-            btcTxid: priorRecord.btcTxid,
-            vout: priorRecord.vout
-          };
+        const priorAtThisLock = priorRecord?.lockAddress === metadata.lockAddress;
+        const hasInFlightFireblocks = priorAtThisLock && priorRecord.btcTxid === void 0 && priorRecord.fireblocksId !== void 0;
+        if (opts?.btcTxid !== void 0 && priorAtThisLock) {
+          if (priorRecord.btcTxid !== void 0 && opts.btcTxid !== priorRecord.btcTxid) {
+            return {
+              success: false,
+              error: `Bond ${bondIndex} already has a recorded funding tx ${priorRecord.btcTxid} at this lock address; refusing to replace it with ${opts.btcTxid}. Omit btcTxid to resume the recorded funding, or recover it first.`,
+              btcTxid: priorRecord.btcTxid,
+              vout: priorRecord.vout
+            };
+          }
+          if (hasInFlightFireblocks) {
+            return {
+              success: false,
+              error: `Bond ${bondIndex} has an in-flight Fireblocks funding transfer (id ${priorRecord.fireblocksId}) at this lock address; refusing to also fund from a supplied btcTxid, which could double-fund the lock. Retry WITHOUT btcTxid to resolve the in-flight transfer, or recover it first.`
+            };
+          }
         }
         const canResumeFunding = priorRecord?.btcTxid !== void 0 && priorRecord.lockAddress === metadata.lockAddress;
         const staleLockGuard = await this.nativeRecordOverwriteGuard(bondIndex, metadata.lockAddress);
@@ -14946,10 +16866,10 @@ var StacksSDK = class _StacksSDK {
             };
           }
         }
-        if (canResumeFunding && priorRecord.amountSats !== BigInt(btcAmountSats)) {
+        if ((canResumeFunding || hasInFlightFireblocks) && priorRecord.amountSats !== BigInt(btcAmountSats)) {
           return {
             success: false,
-            error: `A prior funding attempt for bond ${bondIndex} committed ${priorRecord.amountSats} sats (txid ${priorRecord.btcTxid}); this retry requests ${btcAmountSats} sats. Retry with the funded amount, or recover the locked BTC first.`,
+            error: `A prior funding attempt for bond ${bondIndex} committed ${priorRecord.amountSats} sats${priorRecord.btcTxid ? ` (txid ${priorRecord.btcTxid})` : ` (Fireblocks id ${priorRecord.fireblocksId})`}; this retry requests ${btcAmountSats} sats. Retry with the funded amount, or recover the prior funding first.`,
             btcTxid: priorRecord.btcTxid,
             vout: priorRecord.vout
           };
@@ -14979,17 +16899,45 @@ var StacksSDK = class _StacksSDK {
           await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, btcTxid, stage: laterStage(lockRecord.stage, "btc-broadcast") });
         } else if (canResumeFunding) {
           btcTxid = priorRecord.btcTxid;
+        } else if (hasInFlightFireblocks) {
+          try {
+            btcTxid = await this.fireblocksService.awaitBitcoinTransaction(priorRecord.fireblocksId);
+          } catch (awaitErr) {
+            if (FireblocksService.isTerminalTransferFailure(awaitErr)) {
+              return {
+                success: false,
+                error: `The prior Fireblocks funding transfer (id ${priorRecord.fireblocksId}) for bond ${bondIndex} terminally failed: ${formatErrorMessage(awaitErr)}. Its external id ${fundingExternalId} is consumed and cannot be reused, so this lock cannot be re-funded automatically \u2014 enroll under a different bond index, or resolve the transfer in Fireblocks and retry with opts.btcTxid.`
+              };
+            }
+            throw awaitErr;
+          }
+          await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, btcTxid, fireblocksId: priorRecord.fireblocksId, stage: laterStage(lockRecord.stage, "btc-broadcast") });
         } else {
           await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, stage: laterStage(lockRecord.stage, "funding-requested") });
-          const result2 = await this.fireblocksService.createBitcoinTransaction(
-            metadata.lockAddress,
-            btcAmountSats,
-            this.vaultAccountId.toString(),
-            opts?.note || `BTC bond ${bondIndex} lock`,
-            fundingExternalId
-          );
+          let result2;
+          try {
+            result2 = await this.fireblocksService.createBitcoinTransaction(
+              metadata.lockAddress,
+              btcAmountSats,
+              this.vaultAccountId.toString(),
+              opts?.note || `BTC bond ${bondIndex} lock`,
+              fundingExternalId,
+              // Persist the Fireblocks id the instant the transfer is accepted, BEFORE the
+              // confirmation poll — so a timeout/crash here still leaves a durable pointer.
+              (fireblocksId) => this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, fireblocksId, stage: laterStage(lockRecord.stage, "funding-requested") })
+            );
+          } catch (fundErr) {
+            if (FireblocksService.isDuplicateExternalIdError(fundErr)) {
+              const resolved = await this.fireblocksService.resolveBitcoinTransactionByExternalId(fundingExternalId);
+              if (!resolved) throw fundErr;
+              result2 = resolved;
+              await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, fireblocksId: resolved.fireblocksId, stage: laterStage(lockRecord.stage, "funding-requested") });
+            } else {
+              throw fundErr;
+            }
+          }
           btcTxid = result2.btcTxid;
-          await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, btcTxid, stage: laterStage(lockRecord.stage, "btc-broadcast") });
+          await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, btcTxid, fireblocksId: result2.fireblocksId, stage: laterStage(lockRecord.stage, "btc-broadcast") });
         }
         committedBtc.btcTxid = btcTxid;
         const { blockHash } = await this.waitForBtcConfirmations(btcTxid, opts?.confirmations ?? 3);
@@ -15603,6 +17551,17 @@ var StacksSDK = class _StacksSDK {
       }
     };
     /**
+     * Verifies the early-exit cosigner service still holds the key committed into `bond`'s
+     * early-unlock-bytes. Throws (fail closed) on mismatch or an unreachable/misconfigured
+     * service — including an unprovisioned mainnet URL. Shared by the funding-time preflight
+     * and the irreversible announce gate so both apply the identical check.
+     */
+    this.verifyCommittedCosignerKey = async (bond) => {
+      const earlyUnlockBytes = typeof bond.earlyUnlockBytes === "string" ? (0, import_common2.hexToBytes)(bond.earlyUnlockBytes) : bond.earlyUnlockBytes;
+      const cosigner = new CosignerService(resolveCosignerUrl(this.testnet));
+      await cosigner.verifyCommittedKey(earlyUnlockBytes);
+    };
+    /**
      * Announces an L1 early exit for an active BTC-locked bond (L2 leg only).
      * Zeroes the L2 amountSats; paired STX remains locked through the bond's normal
      * unlock cycle. The L1 BTC recovery (OP_ELSE spend) is a separate step requiring
@@ -15624,6 +17583,13 @@ var StacksSDK = class _StacksSDK {
         if (!eligible.ok) {
           const reasons = eligible.reasons ?? [];
           return { success: false, error: `Cannot announce early exit: ${this.describeBondReasons(reasons)}` };
+        }
+        const bond = await (0, import_bitcoin_staking2.fetchBond)({ bondIndex: membership.bondIndex, network: this.pox5Network });
+        if (!bond) return { success: false, error: `Bond ${membership.bondIndex} not found` };
+        try {
+          await this.verifyCommittedCosignerKey(bond);
+        } catch (error) {
+          return { success: false, error: `Refusing to announce early exit \u2014 cannot confirm the cosigner holds this bond's committed key (early exit would be unspendable and its rewards forfeited): ${formatErrorMessage(error)}` };
         }
         const result = await this.runNonceExclusive(async () => {
           const resolvedNonce = await this.resolveNonce(opts?.nonce);
@@ -15884,7 +17850,7 @@ var StacksSDK = class _StacksSDK {
     };
     this.signBtcSighash = async (sighash) => {
       const rawSig = await this.fireblocksService.signTransaction(
-        (0, import_common3.bytesToHex)(sighash),
+        (0, import_common2.bytesToHex)(sighash),
         this.vaultAccountId.toString(),
         "BTC P2WSH spend"
       );
@@ -15910,7 +17876,7 @@ var StacksSDK = class _StacksSDK {
       if (record && record.isL1Lock === false) return null;
       const bond = await (0, import_bitcoin_staking2.fetchBond)({ bondIndex, network: this.pox5Network });
       if (!bond) throw new Error(`Bond ${bondIndex} not found`);
-      const unlockBytes = record?.unlockBytes ?? (0, import_bitcoin_staking2.buildUnlockScript)((0, import_common3.hexToBytes)(this.publicKey));
+      const unlockBytes = record?.unlockBytes ?? (0, import_bitcoin_staking2.buildUnlockScript)((0, import_common2.hexToBytes)(this.publicKey));
       const unlockHeight = record?.unlockHeight ?? (0, import_bitcoin_staking2.computeBondUnlockHeight)({ bondIndex, poxInfo: pox });
       const lockScriptOpts = {
         stxAddress: addr,
@@ -15923,7 +17889,7 @@ var StacksSDK = class _StacksSDK {
         unlockHeight,
         lockScript: (0, import_bitcoin_staking2.buildLockScript)(lockScriptOpts),
         lockingAddress: record?.lockAddress ?? (0, import_bitcoin_staking2.buildLockAddress)({ ...lockScriptOpts, network: this.pox5Network }),
-        earlyUnlockBytes: typeof bond.earlyUnlockBytes === "string" ? (0, import_common3.hexToBytes)(bond.earlyUnlockBytes) : bond.earlyUnlockBytes,
+        earlyUnlockBytes: typeof bond.earlyUnlockBytes === "string" ? (0, import_common2.hexToBytes)(bond.earlyUnlockBytes) : bond.earlyUnlockBytes,
         unlockBytes,
         // Use the immutable recorded amount; membership.amountSats is zeroed by
         // announce-l1-early-exit and absent after maturity, so never default to 0
@@ -16118,7 +18084,7 @@ var StacksSDK = class _StacksSDK {
         const sighash = this.btcSegwitSighash(tx, 0, lock.lockScript, actualUtxoSats);
         const stakerSig = await this.signBtcSighash(sighash);
         this.setP2wshWitness(tx, 0, [stakerSig, new Uint8Array([1]), lock.lockScript]);
-        const rawHex = (0, import_common3.bytesToHex)(tx.extract());
+        const rawHex = (0, import_common2.bytesToHex)(tx.extract());
         const btcTxid = await this.broadcastBtc(rawHex);
         return { success: true, btcTxid };
       } catch (error) {
@@ -16164,22 +18130,22 @@ var StacksSDK = class _StacksSDK {
         });
         tx.addOutputAddress(destination, outputAmount, this.btcNetwork);
         const sighash = this.btcSegwitSighash(tx, 0, lock.lockScript, actualUtxoSats);
-        const unsignedTxHex = (0, import_common3.bytesToHex)(tx.toBytes(false, false));
+        const unsignedTxHex = (0, import_common2.bytesToHex)(tx.toBytes(false, false));
         const cosigner = new CosignerService(resolveCosignerUrl(this.testnet));
         const [stakerSig, earlyExitSig] = await Promise.all([
           this.signBtcSighash(sighash),
           cosigner.cosignEarlyExit({
             unsignedTxHex,
-            prevoutScriptPubKeyHex: (0, import_common3.bytesToHex)(p2wshScript),
+            prevoutScriptPubKeyHex: (0, import_common2.bytesToHex)(p2wshScript),
             prevoutValueSats: Number(actualUtxoSats),
-            witnessScriptHex: (0, import_common3.bytesToHex)(lock.lockScript),
+            witnessScriptHex: (0, import_common2.bytesToHex)(lock.lockScript),
             expectedSighash: sighash,
             expectedUnlockBytes: lock.earlyUnlockBytes
           })
         ]);
         const preimage = (0, import_bitcoin_staking2.computeRegisterPreimage)(this.address);
         this.setP2wshWitness(tx, 0, [stakerSig, earlyExitSig, preimage, new Uint8Array([]), lock.lockScript]);
-        const btcTxid = await this.broadcastBtc((0, import_common3.bytesToHex)(tx.extract()));
+        const btcTxid = await this.broadcastBtc((0, import_common2.bytesToHex)(tx.extract()));
         return { success: true, btcTxid };
       } catch (error) {
         return { success: false, error: `Failed to spend early exit UTXO: ${formatErrorMessage(error)}` };
@@ -16339,7 +18305,7 @@ var StacksSDK = class _StacksSDK {
           earlyUnlockBytes: nextBond.earlyUnlockBytes,
           network: this.pox5Network
         });
-        if ((0, import_common3.bytesToHex)(nextMeta.outputScript) !== (0, import_common3.bytesToHex)(onchainNext)) {
+        if ((0, import_common2.bytesToHex)(nextMeta.outputScript) !== (0, import_common2.bytesToHex)(onchainNext)) {
           return { success: false, error: "Next bond lockup script mismatch \u2014 NOT proceeding" };
         }
         const nextRecordFor = (amountSats, extra = {}) => ({
@@ -16431,7 +18397,7 @@ var StacksSDK = class _StacksSDK {
           await this.lockRecordStore.saveRecord(this.address, nextBondIndex, nextRecordFor(outputAmount, { btcTxid }));
           let broadcastTxid;
           try {
-            broadcastTxid = await this.broadcastBtc((0, import_common3.bytesToHex)(btcTx.extract()));
+            broadcastTxid = await this.broadcastBtc((0, import_common2.bytesToHex)(btcTx.extract()));
           } catch (e) {
             if (rebuildingOverDeadTxid && priorNextRecord) {
               await this.lockRecordStore.saveRecord(this.address, nextBondIndex, priorNextRecord).catch(() => {
@@ -17794,7 +19760,7 @@ var StacksSDK = class _StacksSDK {
         if (!this.vaultAccountId) {
           throw new Error("Vault ID is not set");
         }
-        const hash = (0, import_common3.bytesToHex)((0, import_encryption.hashMessage)(message));
+        const hash = (0, import_common2.bytesToHex)((0, import_encryption.hashMessage)(message));
         const rawSignature = await this.fireblocksService.signTransaction(
           hash,
           this.vaultAccountId.toString(),
@@ -18600,6 +20566,7 @@ var serializeRecord = (r) => ({
   ...r.signerManager !== void 0 ? { signerManager: r.signerManager } : {},
   ...r.firstRewardCycle !== void 0 ? { firstRewardCycle: r.firstRewardCycle } : {},
   ...r.fundingExternalId !== void 0 ? { fundingExternalId: r.fundingExternalId } : {},
+  ...r.fireblocksId !== void 0 ? { fireblocksId: r.fireblocksId } : {},
   ...r.stage !== void 0 ? { stage: r.stage } : {}
 });
 var deserializeRecord = (s) => ({
@@ -18614,6 +20581,7 @@ var deserializeRecord = (s) => ({
   signerManager: s.signerManager,
   firstRewardCycle: s.firstRewardCycle,
   fundingExternalId: s.fundingExternalId,
+  fireblocksId: s.fireblocksId,
   stage: s.stage
 });
 var stableStringify = (records) => {

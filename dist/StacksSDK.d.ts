@@ -577,6 +577,13 @@ export declare class StacksSDK {
      */
     getBondPosition: () => Promise<BondPositionResponse>;
     /**
+     * Verifies the early-exit cosigner service still holds the key committed into `bond`'s
+     * early-unlock-bytes. Throws (fail closed) on mismatch or an unreachable/misconfigured
+     * service — including an unprovisioned mainnet URL. Shared by the funding-time preflight
+     * and the irreversible announce gate so both apply the identical check.
+     */
+    private verifyCommittedCosignerKey;
+    /**
      * Announces an L1 early exit for an active BTC-locked bond (L2 leg only).
      * Zeroes the L2 amountSats; paired STX remains locked through the bond's normal
      * unlock cycle. The L1 BTC recovery (OP_ELSE spend) is a separate step requiring
