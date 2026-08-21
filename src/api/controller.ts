@@ -1166,6 +1166,29 @@ export const getHistoricalBondPosition: Handler = async (req, res, next) => {
   }
 };
 
+// GET /:vaultId/stacking/pox5/bond/reward-address
+export const getCommittedRewardAddress: Handler = async (req, res, next) => {
+  try {
+    const vaultId = getVaultId(req);
+    // Both optional: bondIndex resolves the signer manager from the durable record; an
+    // explicit signerManager overrides. With neither, the active membership is used.
+    const bondIndexRaw = req.query.bondIndex ?? req.body?.bondIndex;
+    let bondIndex: number | undefined;
+    if (bondIndexRaw !== undefined && bondIndexRaw !== "") {
+      bondIndex = Number(bondIndexRaw);
+      if (!Number.isInteger(bondIndex) || bondIndex < 0) {
+        res.status(400).json({ error: "Bad Request: bondIndex must be a non-negative integer" });
+        return;
+      }
+    }
+    const signerManager = req.query.signerManager ? String(req.query.signerManager).trim() : (req.body?.signerManager ? String(req.body.signerManager).trim() : undefined);
+    const result = await apiService.executeAction(vaultId, ActionType.GET_COMMITTED_REWARD_ADDRESS, { bondIndex, signerManager });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
 // GET /:vaultId/stacking/pox5/bond/lock-address
 export const getBondLockAddress: Handler = async (req, res, next) => {
   try {

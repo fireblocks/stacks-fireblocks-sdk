@@ -71,7 +71,7 @@ import { createHash } from "crypto";
 import { parseOptionalFee, ValidationError } from "./utils/validation";
 import { formatErrorMessage } from "./utils/errorHandling";
 import { checkFeeReplacement, ParsedRecoveryTx } from "./utils/rbf";
-import { encodeRewardAddressCalldata, REWARD_CALLDATA_MAX_BYTES } from "./utils/rewardCalldata";
+import { encodeRewardAddressCalldata, REWARD_CALLDATA_MAX_BYTES, decodeCommittedRewardMapValue, CommittedRewardDestination } from "./utils/rewardCalldata";
 import { validateBondScheduleAgainstChain, BondScheduleValidation } from "./utils/bondScheduleChain";
 import { planSbtcRollover } from "./staking/bonds/sbtc-rollover";
 import { validateApiCredentials } from "./utils/fireblocks.utils";
@@ -97,6 +97,7 @@ import {
   createMessageSignature,
   fetchCallReadOnlyFunction,
   hexToCV,
+  serializeCV,
   Pc,
   PostCondition,
   PostConditionMode,
@@ -1259,6 +1260,90 @@ export class StacksSDK {
       throw new Error(`Reward BTC address ${opts.rewardBtcAddress} is not a valid address for this network.`);
     }
     return encodeRewardAddressCalldata(opts.rewardBtcAddress, opts.rewardMaxFeeSats);
+  };
+
+  /**
+   * Reads the ACTUALLY-COMMITTED reward destination for a staker from a signer-manager's
+   * `pox-addrs` map via the node `/v2/map_entry` RPC (the contract exposes no read-only
+   * getter). The map is keyed by the staker principal and holds
+   * `(optional { pox-addr, max-fee })`; returns null when the entry is `none` (rewards fall
+   * back to sBTC-to-principal). Distinct from the persisted lock-record value — this is the
+   * on-chain truth, so the caller can verify a renewal/rotation preserved the destination.
+   */
+  private fetchCommittedRewardDestination = async (
+    signerManager: string,
+    staker: string,
+  ): Promise<CommittedRewardDestination | null> => {
+    const dot = signerManager.indexOf(".");
+    if (dot < 0) {
+      throw new Error(`signerManager must be a fully-qualified contract id (address.name), got ${signerManager}`);
+    }
+    const contractAddress = signerManager.slice(0, dot);
+    const contractName = signerManager.slice(dot + 1);
+    // map_entry expects the serialized key CV as a JSON string of its 0x-prefixed hex.
+    const keyHex = serializeCV(principalCV(staker));
+    const body = JSON.stringify(keyHex.startsWith("0x") ? keyHex : `0x${keyHex}`);
+    const url = `${this.networkProfile.stacksApiUrl}/v2/map_entry/${contractAddress}/${contractName}/pox-addrs?proof=0`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+    });
+    if (!res.ok) {
+      throw new Error(`map_entry ${contractName}.pox-addrs HTTP ${res.status}`);
+    }
+    const json = (await res.json()) as { data?: string };
+    if (!json.data) {
+      throw new Error(`map_entry ${contractName}.pox-addrs response had no data field`);
+    }
+    return decodeCommittedRewardMapValue(json.data, this.testnet ? "testnet" : "mainnet");
+  };
+
+  /**
+   * Resolves the signer-manager to read the committed reward address from: an explicit
+   * override, else the durable lock record for the given/active bond. Returns null when
+   * none can be determined (no override and no record with a signerManager).
+   */
+  private resolveSignerManagerForRewardRead = async (
+    opts?: { bondIndex?: number; signerManager?: string },
+  ): Promise<string | null> => {
+    if (opts?.signerManager) return opts.signerManager;
+    let bondIndex = opts?.bondIndex;
+    if (bondIndex === undefined) {
+      const membership = await fetchBondMembership({ address: this.address!, network: this.pox5Network }).catch(() => null);
+      bondIndex = membership?.bondIndex;
+    }
+    if (bondIndex === undefined) return null;
+    const record = await this.lockRecordStore.loadRecord(this.address!, bondIndex).catch(() => null);
+    return record?.signerManager ?? null;
+  };
+
+  /**
+   * Public: read the on-chain committed reward destination for this vault's staker under a
+   * given bond (or the active membership). Resolves the signer-manager from the bond's
+   * durable record unless one is passed explicitly. `data` is null when no reward address
+   * is committed (rewards go to sBTC-to-principal). max-fee is returned as a string to keep
+   * the JSON/REST surface bigint-safe.
+   */
+  public getCommittedRewardAddress = async (
+    opts?: { bondIndex?: number; signerManager?: string },
+  ): Promise<{ success: boolean; data?: { reward_btc_address: string; reward_max_fee_sats: string } | null; error?: string }> => {
+    try {
+      if (!this.address) throw new Error("Address not set");
+      const signerManager = await this.resolveSignerManagerForRewardRead(opts);
+      if (!signerManager) {
+        return { success: false, error: "Could not resolve a signer manager for the committed-reward read — pass signerManager, or a bondIndex whose durable record records one." };
+      }
+      const committed = await this.fetchCommittedRewardDestination(signerManager, this.address);
+      return {
+        success: true,
+        data: committed
+          ? { reward_btc_address: committed.rewardBtcAddress, reward_max_fee_sats: committed.rewardMaxFeeSats.toString() }
+          : null,
+      };
+    } catch (error) {
+      return { success: false, error: `Failed to read committed reward address: ${formatErrorMessage(error)}` };
+    }
   };
 
   // ─── PoX-5 Solo STX ──────────────────────────────────────────────────────────

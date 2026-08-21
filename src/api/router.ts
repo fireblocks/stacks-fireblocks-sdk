@@ -1603,6 +1603,42 @@ router.get("/:vaultId/stacking/pox5/bond/historical", validateVaultId, controlle
 
 /**
  * @openapi
+ * /{vaultId}/stacking/pox5/bond/reward-address:
+ *   get:
+ *     tags: [PoX-5 BTC Bonds]
+ *     summary: Read the on-chain committed native-BTC reward destination
+ *     description: >
+ *       Returns the reward Bitcoin address actually committed in the signer manager's
+ *       pox-addrs map for this vault's staker (not merely the locally persisted value), so
+ *       a caller can display the real destination and verify a renewal/rotation preserved
+ *       it. `data` is null when no reward address is committed (rewards go to
+ *       sBTC-to-principal). The signer manager is resolved from the bond's durable record
+ *       unless signerManager is supplied.
+ *     parameters:
+ *       - in: path
+ *         name: vaultId
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: bondIndex
+ *         required: false
+ *         schema: { type: integer, minimum: 0 }
+ *       - in: query
+ *         name: signerManager
+ *         required: false
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Committed reward destination (or null when none is set).
+ *       400:
+ *         description: Invalid bondIndex.
+ *       500:
+ *         description: Internal server error
+ */
+router.get("/:vaultId/stacking/pox5/bond/reward-address", validateVaultId, controller.getCommittedRewardAddress);
+
+/**
+ * @openapi
  * /{vaultId}/stacking/pox5/bond/renew:
  *   post:
  *     tags: [PoX-5 BTC Bonds]
