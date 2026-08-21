@@ -84,6 +84,7 @@ export declare enum ActionType {
     UNLOCK_BTC = "unlockMaturedBond",
     REPLACE_BTC_RECOVERY_FEE = "replaceBtcRecoveryFee",
     RENEW_BOND = "renewBond",
+    GET_COMMITTED_REWARD_ADDRESS = "getCommittedRewardAddress",
     CALCULATE_REWARDS = "calculateRewards",
     CLAIM_REWARDS = "claimRewards",
     CLAIM_STX_ONLY_REWARDS = "claimStxOnlyRewards",

@@ -24,3 +24,22 @@ export declare const REWARD_CALLDATA_MAX_BYTES = 500;
  * structurally invalid address (via poxAddressToTuple) and a negative fee.
  */
 export declare function encodeRewardAddressCalldata(rewardBtcAddress: string, maxFeeSats: bigint): Uint8Array;
+/** The committed reward destination read back from the signer-manager `pox-addrs` map. */
+export interface CommittedRewardDestination {
+    /** The Bitcoin address rewards are routed to (inverse of the on-chain pox-addr tuple). */
+    rewardBtcAddress: string;
+    /** The committed BTC-withdrawal fee budget in sats. */
+    rewardMaxFeeSats: bigint;
+}
+/**
+ * Decodes the serialized VALUE returned by a Stacks node `/v2/map_entry` read of the
+ * signer-manager's `pox-addrs` map. The map value type is
+ *   (optional { pox-addr: { version: (buff 1), hashbytes: (buff 32) }, max-fee: uint })
+ * (signer-manager.clar map `pox-addrs`, keyed by the staker principal), so this reads the
+ * ACTUALLY-COMMITTED reward destination — the app uses it to display the real on-chain
+ * address and to verify a renewal/rotation preserved it.
+ *
+ * Returns null when the entry is `none` — the staker has no committed reward address and
+ * rewards fall back to sBTC-to-principal. Throws only on a genuinely malformed value.
+ */
+export declare function decodeCommittedRewardMapValue(dataHex: string, network: "mainnet" | "testnet"): CommittedRewardDestination | null;

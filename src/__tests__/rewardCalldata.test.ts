@@ -1,5 +1,6 @@
-import { encodeRewardAddressCalldata, REWARD_CALLDATA_MAX_BYTES } from "../utils/rewardCalldata";
-import { deserializeCV } from "@stacks/transactions";
+import { encodeRewardAddressCalldata, REWARD_CALLDATA_MAX_BYTES, decodeCommittedRewardMapValue } from "../utils/rewardCalldata";
+import { Cl, deserializeCV, serializeCV } from "@stacks/transactions";
+import { poxAddressToTuple } from "@stacks/stacking";
 
 /**
  * The reward-address calldata must be exactly what the reference signer-manager's
@@ -69,5 +70,34 @@ describe("encodeRewardAddressCalldata", () => {
   it("stays within the 500-byte calldata limit", () => {
     expect(encodeRewardAddressCalldata(P2WSH_MAINNET, BigInt("18446744073709551615")).length)
       .toBeLessThanOrEqual(REWARD_CALLDATA_MAX_BYTES);
+  });
+});
+
+/**
+ * Builds the serialized VALUE a node `/v2/map_entry` read of pox-addrs returns for a
+ * committed staker: `(some { pox-addr, max-fee })`. decodeCommittedRewardMapValue must
+ * invert it back to the exact Bitcoin address + max-fee.
+ */
+function committedMapValueHex(btcAddress: string, maxFee: bigint): string {
+  const value = Cl.some(Cl.tuple({ "pox-addr": poxAddressToTuple(btcAddress), "max-fee": Cl.uint(maxFee) }));
+  return serializeCV(value);
+}
+
+describe("decodeCommittedRewardMapValue", () => {
+  it("round-trips a committed testnet P2WPKH destination", () => {
+    const out = decodeCommittedRewardMapValue(committedMapValueHex(P2WPKH_TESTNET, BigInt(5000)), "testnet");
+    expect(out).not.toBeNull();
+    expect(out!.rewardBtcAddress).toBe(P2WPKH_TESTNET);
+    expect(out!.rewardMaxFeeSats).toBe(BigInt(5000));
+  });
+
+  it("round-trips a committed mainnet P2WSH destination and preserves a large max-fee", () => {
+    const out = decodeCommittedRewardMapValue(committedMapValueHex(P2WSH_MAINNET, BigInt("4294967297")), "mainnet");
+    expect(out!.rewardBtcAddress).toBe(P2WSH_MAINNET);
+    expect(out!.rewardMaxFeeSats).toBe(BigInt("4294967297"));
+  });
+
+  it("returns null for a `none` entry (no committed reward address)", () => {
+    expect(decodeCommittedRewardMapValue(serializeCV(Cl.none()), "mainnet")).toBeNull();
   });
 });

@@ -1,5 +1,5 @@
-import { poxAddressToTuple } from "@stacks/stacking";
-import { Cl, serializeCVBytes } from "@stacks/transactions";
+import { poxAddressToTuple, poxAddressToBtcAddress } from "@stacks/stacking";
+import { Cl, serializeCVBytes, deserializeCV } from "@stacks/transactions";
 
 /** The signer-manager's signer-calldata argument is `(optional (buff 500))`. */
 export const REWARD_CALLDATA_MAX_BYTES = 500;
@@ -40,4 +40,54 @@ export function encodeRewardAddressCalldata(rewardBtcAddress: string, maxFeeSats
     );
   }
   return bytes;
+}
+
+/** The committed reward destination read back from the signer-manager `pox-addrs` map. */
+export interface CommittedRewardDestination {
+  /** The Bitcoin address rewards are routed to (inverse of the on-chain pox-addr tuple). */
+  rewardBtcAddress: string;
+  /** The committed BTC-withdrawal fee budget in sats. */
+  rewardMaxFeeSats: bigint;
+}
+
+const stripHex = (h: string): string => h.replace(/^0x/, "");
+
+/**
+ * Decodes the serialized VALUE returned by a Stacks node `/v2/map_entry` read of the
+ * signer-manager's `pox-addrs` map. The map value type is
+ *   (optional { pox-addr: { version: (buff 1), hashbytes: (buff 32) }, max-fee: uint })
+ * (signer-manager.clar map `pox-addrs`, keyed by the staker principal), so this reads the
+ * ACTUALLY-COMMITTED reward destination — the app uses it to display the real on-chain
+ * address and to verify a renewal/rotation preserved it.
+ *
+ * Returns null when the entry is `none` — the staker has no committed reward address and
+ * rewards fall back to sBTC-to-principal. Throws only on a genuinely malformed value.
+ */
+export function decodeCommittedRewardMapValue(
+  dataHex: string,
+  network: "mainnet" | "testnet",
+): CommittedRewardDestination | null {
+  const cv: any = deserializeCV(dataHex);
+  // map_entry wraps the value in `(optional ...)`: `none` => no committed reward address.
+  if (cv.type === "none") return null;
+  if (cv.type !== "some") {
+    throw new Error(`Unexpected committed reward map value: expected optional, got ${cv.type}`);
+  }
+  const tuple = cv.value;
+  if (!tuple || tuple.type !== "tuple") {
+    throw new Error(`Expected a tuple in the committed reward entry, got ${tuple?.type}`);
+  }
+  const fields = tuple.value;
+  const poxAddr = fields["pox-addr"]?.value;
+  const versionHex: unknown = poxAddr?.["version"]?.value;
+  const hashHex: unknown = poxAddr?.["hashbytes"]?.value;
+  const maxFee: unknown = fields["max-fee"]?.value;
+  if (typeof versionHex !== "string" || typeof hashHex !== "string" || typeof maxFee !== "bigint") {
+    throw new Error("Committed reward entry is missing or malformed pox-addr/max-fee fields");
+  }
+  const version = parseInt(stripHex(versionHex), 16);
+  const hashClean = stripHex(hashHex);
+  const hashBytes = Uint8Array.from((hashClean.match(/.{2}/g) ?? []).map((b) => parseInt(b, 16)));
+  const rewardBtcAddress = poxAddressToBtcAddress(version, hashBytes, network);
+  return { rewardBtcAddress, rewardMaxFeeSats: maxFee };
 }

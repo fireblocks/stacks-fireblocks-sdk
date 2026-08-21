@@ -12238,6 +12238,7 @@ __export(index_exports, {
   ValidationError: () => ValidationError,
   api_constants: () => api_constants,
   config: () => config,
+  decodeCommittedRewardMapValue: () => decodeCommittedRewardMapValue,
   derivationPath: () => derivationPath,
   diffBondSchedule: () => diffBondSchedule,
   encodeRewardAddressCalldata: () => encodeRewardAddressCalldata,
@@ -14731,6 +14732,31 @@ function encodeRewardAddressCalldata(rewardBtcAddress, maxFeeSats) {
   }
   return bytes2;
 }
+var stripHex = (h) => h.replace(/^0x/, "");
+function decodeCommittedRewardMapValue(dataHex, network) {
+  const cv = (0, import_transactions3.deserializeCV)(dataHex);
+  if (cv.type === "none") return null;
+  if (cv.type !== "some") {
+    throw new Error(`Unexpected committed reward map value: expected optional, got ${cv.type}`);
+  }
+  const tuple2 = cv.value;
+  if (!tuple2 || tuple2.type !== "tuple") {
+    throw new Error(`Expected a tuple in the committed reward entry, got ${tuple2?.type}`);
+  }
+  const fields = tuple2.value;
+  const poxAddr = fields["pox-addr"]?.value;
+  const versionHex = poxAddr?.["version"]?.value;
+  const hashHex = poxAddr?.["hashbytes"]?.value;
+  const maxFee = fields["max-fee"]?.value;
+  if (typeof versionHex !== "string" || typeof hashHex !== "string" || typeof maxFee !== "bigint") {
+    throw new Error("Committed reward entry is missing or malformed pox-addr/max-fee fields");
+  }
+  const version = parseInt(stripHex(versionHex), 16);
+  const hashClean = stripHex(hashHex);
+  const hashBytes = Uint8Array.from((hashClean.match(/.{2}/g) ?? []).map((b) => parseInt(b, 16)));
+  const rewardBtcAddress = (0, import_stacking2.poxAddressToBtcAddress)(version, hashBytes, network);
+  return { rewardBtcAddress, rewardMaxFeeSats: maxFee };
+}
 
 // src/utils/bondScheduleChain.ts
 var import_bitcoin_staking = __toESM(require_dist3());
@@ -15643,6 +15669,77 @@ var StacksSDK = class _StacksSDK {
         throw new Error(`Reward BTC address ${opts.rewardBtcAddress} is not a valid address for this network.`);
       }
       return encodeRewardAddressCalldata(opts.rewardBtcAddress, opts.rewardMaxFeeSats);
+    };
+    /**
+     * Reads the ACTUALLY-COMMITTED reward destination for a staker from a signer-manager's
+     * `pox-addrs` map via the node `/v2/map_entry` RPC (the contract exposes no read-only
+     * getter). The map is keyed by the staker principal and holds
+     * `(optional { pox-addr, max-fee })`; returns null when the entry is `none` (rewards fall
+     * back to sBTC-to-principal). Distinct from the persisted lock-record value — this is the
+     * on-chain truth, so the caller can verify a renewal/rotation preserved the destination.
+     */
+    this.fetchCommittedRewardDestination = async (signerManager, staker) => {
+      const dot = signerManager.indexOf(".");
+      if (dot < 0) {
+        throw new Error(`signerManager must be a fully-qualified contract id (address.name), got ${signerManager}`);
+      }
+      const contractAddress = signerManager.slice(0, dot);
+      const contractName = signerManager.slice(dot + 1);
+      const keyHex = (0, import_transactions4.serializeCV)((0, import_transactions4.principalCV)(staker));
+      const body = JSON.stringify(keyHex.startsWith("0x") ? keyHex : `0x${keyHex}`);
+      const url = `${this.networkProfile.stacksApiUrl}/v2/map_entry/${contractAddress}/${contractName}/pox-addrs?proof=0`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body
+      });
+      if (!res.ok) {
+        throw new Error(`map_entry ${contractName}.pox-addrs HTTP ${res.status}`);
+      }
+      const json = await res.json();
+      if (!json.data) {
+        throw new Error(`map_entry ${contractName}.pox-addrs response had no data field`);
+      }
+      return decodeCommittedRewardMapValue(json.data, this.testnet ? "testnet" : "mainnet");
+    };
+    /**
+     * Resolves the signer-manager to read the committed reward address from: an explicit
+     * override, else the durable lock record for the given/active bond. Returns null when
+     * none can be determined (no override and no record with a signerManager).
+     */
+    this.resolveSignerManagerForRewardRead = async (opts) => {
+      if (opts?.signerManager) return opts.signerManager;
+      let bondIndex = opts?.bondIndex;
+      if (bondIndex === void 0) {
+        const membership = await (0, import_bitcoin_staking2.fetchBondMembership)({ address: this.address, network: this.pox5Network }).catch(() => null);
+        bondIndex = membership?.bondIndex;
+      }
+      if (bondIndex === void 0) return null;
+      const record = await this.lockRecordStore.loadRecord(this.address, bondIndex).catch(() => null);
+      return record?.signerManager ?? null;
+    };
+    /**
+     * Public: read the on-chain committed reward destination for this vault's staker under a
+     * given bond (or the active membership). Resolves the signer-manager from the bond's
+     * durable record unless one is passed explicitly. `data` is null when no reward address
+     * is committed (rewards go to sBTC-to-principal). max-fee is returned as a string to keep
+     * the JSON/REST surface bigint-safe.
+     */
+    this.getCommittedRewardAddress = async (opts) => {
+      try {
+        if (!this.address) throw new Error("Address not set");
+        const signerManager = await this.resolveSignerManagerForRewardRead(opts);
+        if (!signerManager) {
+          return { success: false, error: "Could not resolve a signer manager for the committed-reward read \u2014 pass signerManager, or a bondIndex whose durable record records one." };
+        }
+        const committed = await this.fetchCommittedRewardDestination(signerManager, this.address);
+        return {
+          success: true,
+          data: committed ? { reward_btc_address: committed.rewardBtcAddress, reward_max_fee_sats: committed.rewardMaxFeeSats.toString() } : null
+        };
+      } catch (error) {
+        return { success: false, error: `Failed to read committed reward address: ${formatErrorMessage(error)}` };
+      }
     };
     // ─── PoX-5 Solo STX ──────────────────────────────────────────────────────────
     /**
@@ -20089,6 +20186,7 @@ var ActionType = /* @__PURE__ */ ((ActionType2) => {
   ActionType2["UNLOCK_BTC"] = "unlockMaturedBond";
   ActionType2["REPLACE_BTC_RECOVERY_FEE"] = "replaceBtcRecoveryFee";
   ActionType2["RENEW_BOND"] = "renewBond";
+  ActionType2["GET_COMMITTED_REWARD_ADDRESS"] = "getCommittedRewardAddress";
   ActionType2["CALCULATE_REWARDS"] = "calculateRewards";
   ActionType2["CLAIM_REWARDS"] = "claimRewards";
   ActionType2["CLAIM_STX_ONLY_REWARDS"] = "claimStxOnlyRewards";
@@ -20574,6 +20672,9 @@ var ApiService = class {
           case "updateBondRegistration" /* UPDATE_BOND_REGISTRATION */:
             result = await sdk.updateBondRegistration(params.signerManager, params.oldSignerManager, { note: params.note, nonce: params.nonce, externalId: params.externalId, signerCalldata: params.signerCalldata, rewardBtcAddress: params.rewardBtcAddress, rewardMaxFeeSats: params.rewardMaxFeeSats });
             break;
+          case "getCommittedRewardAddress" /* GET_COMMITTED_REWARD_ADDRESS */:
+            result = await sdk.getCommittedRewardAddress({ bondIndex: params.bondIndex, signerManager: params.signerManager });
+            break;
           case "calculateRewards" /* CALCULATE_REWARDS */:
             result = await sdk.calculateRewards({ note: params.note, nonce: params.nonce });
             break;
@@ -20953,6 +21054,7 @@ var FileLockRecordStore = class {
   ValidationError,
   api_constants,
   config,
+  decodeCommittedRewardMapValue,
   derivationPath,
   diffBondSchedule,
   encodeRewardAddressCalldata,

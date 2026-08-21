@@ -194,6 +194,39 @@ export declare class StacksSDK {
      */
     private resolveSignerCalldata;
     /**
+     * Reads the ACTUALLY-COMMITTED reward destination for a staker from a signer-manager's
+     * `pox-addrs` map via the node `/v2/map_entry` RPC (the contract exposes no read-only
+     * getter). The map is keyed by the staker principal and holds
+     * `(optional { pox-addr, max-fee })`; returns null when the entry is `none` (rewards fall
+     * back to sBTC-to-principal). Distinct from the persisted lock-record value — this is the
+     * on-chain truth, so the caller can verify a renewal/rotation preserved the destination.
+     */
+    private fetchCommittedRewardDestination;
+    /**
+     * Resolves the signer-manager to read the committed reward address from: an explicit
+     * override, else the durable lock record for the given/active bond. Returns null when
+     * none can be determined (no override and no record with a signerManager).
+     */
+    private resolveSignerManagerForRewardRead;
+    /**
+     * Public: read the on-chain committed reward destination for this vault's staker under a
+     * given bond (or the active membership). Resolves the signer-manager from the bond's
+     * durable record unless one is passed explicitly. `data` is null when no reward address
+     * is committed (rewards go to sBTC-to-principal). max-fee is returned as a string to keep
+     * the JSON/REST surface bigint-safe.
+     */
+    getCommittedRewardAddress: (opts?: {
+        bondIndex?: number;
+        signerManager?: string;
+    }) => Promise<{
+        success: boolean;
+        data?: {
+            reward_btc_address: string;
+            reward_max_fee_sats: string;
+        } | null;
+        error?: string;
+    }>;
+    /**
      * Stakes STX through a signer-manager (PoX-5). Replaces pox-4 stackSolo.
      * @param amountStx - Amount of STX to stake (number). Converted to microSTX internally.
      * @param numCycles - Number of cycles to lock (1–96).

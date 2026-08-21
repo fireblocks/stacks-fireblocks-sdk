@@ -291,6 +291,9 @@ export class ApiService {
         case ActionType.UPDATE_BOND_REGISTRATION:
           result = await sdk.updateBondRegistration(params.signerManager, params.oldSignerManager, { note: params.note, nonce: params.nonce, externalId: params.externalId, signerCalldata: params.signerCalldata, rewardBtcAddress: params.rewardBtcAddress, rewardMaxFeeSats: params.rewardMaxFeeSats });
           break;
+        case ActionType.GET_COMMITTED_REWARD_ADDRESS:
+          result = await sdk.getCommittedRewardAddress({ bondIndex: params.bondIndex, signerManager: params.signerManager });
+          break;
         case ActionType.CALCULATE_REWARDS:
           result = await sdk.calculateRewards({ note: params.note, nonce: params.nonce });
           break;
