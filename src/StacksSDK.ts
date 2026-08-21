@@ -2301,6 +2301,12 @@ export class StacksSDK {
     pollMs = 30_000,
     timeoutMs = 90 * 60_000,
   ): Promise<{ blockHash: string }> => {
+    // A structurally-invalid txid can never confirm — fail fast instead of polling for
+    // the full timeout on a permanent rejection. (createBond already rejects a malformed
+    // caller-supplied id at entry; this guards every other caller too.)
+    if (!/^[0-9a-fA-F]{64}$/.test(btcTxid)) {
+      throw new Error(`Cannot wait for confirmations on a malformed BTC txid: ${btcTxid}`);
+    }
     const deadline = Date.now() + timeoutMs;
     // Reuses getBtcTxStatus (single copy of the tx/tip/depth logic) so a TRANSIENT read
     // failure skips one poll rather than aborting a flow whose BTC is already committed.
@@ -2714,6 +2720,14 @@ export class StacksSDK {
       if (!this.address || !this.publicKey || !this.vaultAccountId) {
         throw new Error('Address, Public Key or Vault ID are not set');
       }
+      // A caller-supplied funding txid is written to the durable record and drives every
+      // downstream resume/confirmation decision, so reject a malformed one at entry,
+      // before any BTC moves. Otherwise the record is poisoned with an unusable id and
+      // the (vault, bond) wedges: the confirmation poll spins on the rejection and later
+      // retries are refused by the resume/conflict gates.
+      if (opts?.btcTxid !== undefined && !/^[0-9a-fA-F]{64}$/.test(opts.btcTxid)) {
+        return { success: false, error: `Invalid btcTxid: ${opts.btcTxid} (expected 64 hex chars).` };
+      }
       const storeError = await this.assertDurableLockStore();
       if (storeError) return { success: false, error: storeError };
 
@@ -2956,20 +2970,44 @@ export class StacksSDK {
       } else if (canResumeFunding) {
         // Resume: this exact lock was already funded — never send BTC twice.
         btcTxid = priorRecord!.btcTxid!;
+      } else if (priorRecord?.fireblocksId) {
+        // A prior attempt was ACCEPTED by Fireblocks (id persisted) but its confirmation
+        // poll timed out or crashed before a txid was recorded. Await that SAME transfer
+        // — re-submitting would be rejected as a duplicate external id, and the transfer
+        // may well have completed meanwhile, leaving BTC at the lock with no pointer.
+        btcTxid = await this.fireblocksService.awaitBitcoinTransaction(priorRecord.fireblocksId);
+        await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, btcTxid, fireblocksId: priorRecord.fireblocksId, stage: laterStage(lockRecord.stage, "btc-broadcast") });
       } else {
         // Record intent (with the deterministic external id) before calling Fireblocks,
         // so a crash mid-send is recoverable and a retry reuses the same id — which
         // Fireblocks de-duplicates, preventing a double funding transfer.
         await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, stage: laterStage(lockRecord.stage, "funding-requested") });
-        const result = await this.fireblocksService.createBitcoinTransaction(
-          metadata.lockAddress,
-          btcAmountSats,
-          this.vaultAccountId.toString(),
-          opts?.note || `BTC bond ${bondIndex} lock`,
-          fundingExternalId,
-        );
+        let result: { fireblocksId: string; btcTxid: string };
+        try {
+          result = await this.fireblocksService.createBitcoinTransaction(
+            metadata.lockAddress,
+            btcAmountSats,
+            this.vaultAccountId.toString(),
+            opts?.note || `BTC bond ${bondIndex} lock`,
+            fundingExternalId,
+            // Persist the Fireblocks id the instant the transfer is accepted, BEFORE the
+            // confirmation poll — so a timeout/crash here still leaves a durable pointer.
+            (fireblocksId) => this.lockRecordStore.saveRecord(this.address!, bondIndex, { ...lockRecord, fireblocksId, stage: laterStage(lockRecord.stage, "funding-requested") }),
+          );
+        } catch (fundErr) {
+          // A prior submit already consumed the external id (a crash before onSubmitted
+          // persisted it): resolve the existing transfer instead of failing.
+          if (FireblocksService.isDuplicateExternalIdError(fundErr)) {
+            const resolved = await this.fireblocksService.resolveBitcoinTransactionByExternalId(fundingExternalId);
+            if (!resolved) throw fundErr;
+            result = resolved;
+            await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, fireblocksId: resolved.fireblocksId, stage: laterStage(lockRecord.stage, "funding-requested") });
+          } else {
+            throw fundErr;
+          }
+        }
         btcTxid = result.btcTxid;
-        await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, btcTxid, stage: laterStage(lockRecord.stage, "btc-broadcast") });
+        await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, btcTxid, fireblocksId: result.fireblocksId, stage: laterStage(lockRecord.stage, "btc-broadcast") });
       }
 
       committedBtc.btcTxid = btcTxid;
@@ -3758,6 +3796,27 @@ export class StacksSDK {
       if (!eligible.ok) {
         const reasons = (eligible as { reasons?: number[] }).reasons ?? [];
         return { success: false, error: `Cannot announce early exit: ${this.describeBondReasons(reasons)}` };
+      }
+
+      // Announce is IRREVERSIBLE: it unstakes the term's remaining sats and zeroes
+      // amount-sats (pox-5.clar:1237-1245), and the only way to then recover the BTC is
+      // the early-exit (OP_ELSE) spend, which needs the cosigner's co-signature over the
+      // key committed into THIS bond's early-unlock-bytes. A liveness probe is not
+      // enough — a key rotation between funding and announce would pass a mere reachability
+      // check yet leave the witness unsignable. Verify the cosigner still holds the exact
+      // committed key before the announce, unconditionally (not the opt-in funding flag),
+      // and fail closed: on mainnet the empty cosigner URL throws here, which correctly
+      // blocks an announce that could never be completed.
+      const bond = await fetchBond({ bondIndex: membership.bondIndex, network: this.pox5Network });
+      if (!bond) return { success: false, error: `Bond ${membership.bondIndex} not found` };
+      try {
+        const earlyUnlockBytes = typeof bond.earlyUnlockBytes === 'string'
+          ? hexToBytes(bond.earlyUnlockBytes)
+          : bond.earlyUnlockBytes;
+        const cosigner = new CosignerService(resolveCosignerUrl(this.testnet));
+        await cosigner.verifyCommittedKey(earlyUnlockBytes);
+      } catch (error) {
+        return { success: false, error: `Refusing to announce early exit — cannot confirm the cosigner holds this bond's committed key (early exit would be unspendable and its rewards forfeited): ${formatErrorMessage(error)}` };
       }
 
       const result = await this.runNonceExclusive(async () => {

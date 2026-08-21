@@ -39,6 +39,7 @@ interface SerializedRecord {
   // Persisted so a crash + restart resumes at the last completed enrollment stage
   // instead of re-funding Bitcoin (FBS-02).
   fundingExternalId?: string;
+  fireblocksId?: string;
   stage?: EnrollmentStage;
 }
 
@@ -74,6 +75,7 @@ const serializeRecord = (r: BondLockRecord): SerializedRecord => ({
   ...(r.signerManager !== undefined ? { signerManager: r.signerManager } : {}),
   ...(r.firstRewardCycle !== undefined ? { firstRewardCycle: r.firstRewardCycle } : {}),
   ...(r.fundingExternalId !== undefined ? { fundingExternalId: r.fundingExternalId } : {}),
+  ...(r.fireblocksId !== undefined ? { fireblocksId: r.fireblocksId } : {}),
   ...(r.stage !== undefined ? { stage: r.stage } : {}),
 });
 
@@ -89,6 +91,7 @@ const deserializeRecord = (s: SerializedRecord): BondLockRecord => ({
   signerManager: s.signerManager,
   firstRewardCycle: s.firstRewardCycle,
   fundingExternalId: s.fundingExternalId,
+  fireblocksId: s.fireblocksId,
   stage: s.stage,
 });
 

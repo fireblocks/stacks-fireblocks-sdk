@@ -200,6 +200,12 @@ export class FireblocksService {
     vaultAccountId: string | number,
     note?: string,
     externalId?: string,
+    // Invoked the instant Fireblocks accepts the request and assigns an id — BEFORE the
+    // confirmation poll, which can throw (30-min timeout, or a terminal Blocked/Cancelled/
+    // Failed/Rejected status). The caller persists the id here so a later retry can await
+    // or resolve the SAME transfer instead of re-submitting under the (now-consumed)
+    // external id.
+    onSubmitted?: (fireblocksId: string) => Promise<void> | void,
   ): Promise<{ fireblocksId: string; btcTxid: string }> => {
     const assetId = this.testnet ? 'BTC_TEST' : 'BTC';
     const whole = amountSats / BigInt(100000000);
@@ -220,12 +226,53 @@ export class FireblocksService {
 
     const fireblocksId = response.data.id;
     if (!fireblocksId) throw new Error('Fireblocks BTC transaction creation returned no ID');
+    await onSubmitted?.(fireblocksId);
 
+    const btcTxid = await this.awaitBitcoinTransaction(fireblocksId);
+    return { fireblocksId, btcTxid };
+  };
+
+  /**
+   * Polls an already-submitted Fireblocks BTC transfer (by its Fireblocks id) to
+   * completion and returns its Bitcoin txid. Used to resume a funding attempt whose
+   * confirmation poll timed out or crashed after the transfer was accepted.
+   */
+  public awaitBitcoinTransaction = async (fireblocksId: string): Promise<string> => {
     const completedTx = await this.fireblocksSigner.getTxStatus(fireblocksId);
     const btcTxid = completedTx.txHash;
     if (!btcTxid) throw new Error(`BTC transaction ${fireblocksId} completed but has no txHash`);
+    return btcTxid;
+  };
 
+  /**
+   * Looks up a prior BTC transfer by its external id (the deterministic funding id) and
+   * awaits its Bitcoin txid. Used when a retry's re-submit is rejected as a duplicate
+   * external id (Fireblocks error 1438): the transfer already exists, so resolve it
+   * rather than failing. Returns null when Fireblocks has no transaction for the id.
+   */
+  public resolveBitcoinTransactionByExternalId = async (
+    externalId: string,
+  ): Promise<{ fireblocksId: string; btcTxid: string } | null> => {
+    let existing;
+    try {
+      existing = await this.fireblocksSDK.transactions.getTransactionByExternalId({ externalTxId: externalId });
+    } catch {
+      return null; // 404 / not found — no prior transfer under this id
+    }
+    const fireblocksId = existing?.data?.id;
+    if (!fireblocksId) return null;
+    const btcTxid = await this.awaitBitcoinTransaction(fireblocksId);
     return { fireblocksId, btcTxid };
+  };
+
+  /** True when an error is Fireblocks' duplicate-external-id rejection (code 1438). */
+  public static isDuplicateExternalIdError = (error: unknown): boolean => {
+    const anyErr = error as { response?: { data?: { code?: number } }; code?: number; message?: string };
+    return (
+      anyErr?.response?.data?.code === 1438 ||
+      anyErr?.code === 1438 ||
+      (typeof anyErr?.message === 'string' && anyErr.message.includes('1438'))
+    );
   };
 
   public signTransaction = async (

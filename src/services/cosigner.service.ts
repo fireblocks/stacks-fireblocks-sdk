@@ -41,6 +41,16 @@ export interface CosignerPublicKeyResponse {
 // `0x21 <P> 0xac` script is embedded as the bond's early-unlock-bytes.
 export const COSIGNER_BIP32_DERIVATION = "m/48'/1'/0'/2'/0/0";
 
+// BIP-32 extended-key version bytes, chosen from the key's HRP prefix. @scure/bip32
+// only knows Bitcoin mainnet (xpub/xprv) by default; a cosigner on testnet/regtest
+// advertises a tpub, which must be parsed with the testnet versions or it throws.
+const BIP32_VERSIONS = {
+  mainnet: { private: 0x0488ade4, public: 0x0488b21e }, // xprv / xpub
+  testnet: { private: 0x04358394, public: 0x043587cf }, // tprv / tpub (testnet + regtest)
+};
+const versionsForExtendedKey = (key: string): { private: number; public: number } =>
+  key.startsWith("tpub") || key.startsWith("tprv") ? BIP32_VERSIONS.testnet : BIP32_VERSIONS.mainnet;
+
 export const resolveCosignerUrl = (testnet: boolean): string => {
   const url =
     env.EARLY_EXIT_SIGNER_URL ||
@@ -89,7 +99,10 @@ export class CosignerService {
    */
   public getLeafPublicKey = async (): Promise<Uint8Array> => {
     const info = await this.getPublicKey();
-    const account = HDKey.fromExtendedKey(info.xpub);
+    // @scure/bip32 defaults to Bitcoin MAINNET version bytes and throws "Version
+    // mismatch" on a testnet/regtest tpub, so select the versions from the key's own
+    // human-readable prefix rather than assuming mainnet.
+    const account = HDKey.fromExtendedKey(info.xpub, versionsForExtendedKey(info.xpub));
     const leaf = account.deriveChild(0).deriveChild(0);
     if (!leaf.publicKey) {
       throw new Error("Cosigner xpub did not yield a leaf public key");
