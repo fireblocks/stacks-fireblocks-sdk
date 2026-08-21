@@ -63,21 +63,39 @@ describe("CosignerService", () => {
   });
 
   describe("verifyCommittedKey", () => {
+    // Mainnet key: version bytes and the network body agree (no longer a
+    // mainnet-versioned key mislabeled testnet, which hid the tpub parse bug).
     const master = HDKey.fromMasterSeed(new Uint8Array(32).fill(9));
     const XPUB = master.publicExtendedKey;
     const LEAF = HDKey.fromExtendedKey(XPUB).deriveChild(0).deriveChild(0).publicKey!;
     const EXPECTED_UNLOCK = new Uint8Array([0x21, ...LEAF, 0xac]);
-    const pubKeyResponse = (xpub: string) => ({
+
+    // Genuine testnet key: a tpub. Before the version-bytes fix, getLeafPublicKey's bare
+    // HDKey.fromExtendedKey(tpub) threw "Version mismatch" — so this case proves the
+    // testnet cosigner (the one actually deployed) is verifiable.
+    const TESTNET_VERSIONS = { private: 0x04358394, public: 0x043587cf };
+    const tnMaster = HDKey.fromMasterSeed(new Uint8Array(32).fill(7), TESTNET_VERSIONS);
+    const TPUB = tnMaster.publicExtendedKey;
+    const TLEAF = HDKey.fromExtendedKey(TPUB, TESTNET_VERSIONS).deriveChild(0).deriveChild(0).publicKey!;
+    const TESTNET_EXPECTED_UNLOCK = new Uint8Array([0x21, ...TLEAF, 0xac]);
+
+    const pubKeyResponse = (xpub: string, network = "mainnet") => ({
       key_id: 0,
       xpub,
       derivation_path: "m/48'/1'/0'/2'",
       fingerprint: "00000000",
-      network: "testnet",
+      network,
     });
 
-    it("passes when the derived leaf key matches the committed lock script", async () => {
+    it("passes when the derived leaf key matches the committed lock script (mainnet xpub)", async () => {
       mockFetchOnce(200, pubKeyResponse(XPUB));
       await expect(service.verifyCommittedKey(EXPECTED_UNLOCK)).resolves.toBeUndefined();
+    });
+
+    it("passes for a testnet tpub (regression: no 'Version mismatch')", async () => {
+      mockFetchOnce(200, pubKeyResponse(TPUB, "testnet"));
+      expect(TPUB.startsWith("tpub")).toBe(true);
+      await expect(service.verifyCommittedKey(TESTNET_EXPECTED_UNLOCK)).resolves.toBeUndefined();
     });
 
     it("throws when the committed lock script does not match the service key", async () => {

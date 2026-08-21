@@ -80,6 +80,14 @@ export interface BondLockRecord {
    * same enrollment.
    */
   fundingExternalId?: string;
+  /**
+   * The Fireblocks transaction id of the BTC funding transfer, persisted as soon as
+   * Fireblocks accepts the request — BEFORE the (long, throwable) confirmation poll. A
+   * retry after a poll timeout / crash uses it to await or resolve the SAME transfer
+   * rather than re-submitting (which the external id would reject as a duplicate),
+   * so a completed-but-unseen transfer is never lost and never double-sent.
+   */
+  fireblocksId?: string;
   /** Last completed durable enrollment stage — a retry resumes from here. */
   stage?: EnrollmentStage;
 }
