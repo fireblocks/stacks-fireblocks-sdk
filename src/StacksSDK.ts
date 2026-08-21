@@ -2842,11 +2842,7 @@ export class StacksSDK {
       // exit impossible, so funding is refused when this policy is enabled.
       if (this.verifyEarlyExitCosignerAtFunding) {
         try {
-          const cosigner = new CosignerService(resolveCosignerUrl(this.testnet));
-          const earlyUnlockBytes = typeof bond.earlyUnlockBytes === 'string'
-            ? hexToBytes(bond.earlyUnlockBytes)
-            : bond.earlyUnlockBytes;
-          await cosigner.verifyCommittedKey(earlyUnlockBytes);
+          await this.verifyCommittedCosignerKey(bond);
         } catch (error) {
           return { success: false, error: `Early-exit cosigner preflight failed (no BTC committed): ${formatErrorMessage(error)}` };
         }
@@ -2865,23 +2861,32 @@ export class StacksSDK {
       } catch (e) {
         return { success: false, error: `Lock-record store unreadable for bond ${bondIndex} (UNKNOWN, not "no prior attempt") — refusing to fund: ${formatErrorMessage(e)}` };
       }
-      // A caller-supplied btcTxid that CONFLICTS with a recorded funding txid for the
-      // same lock must refuse outright: overwriting the record would erase the only
-      // durable pointer to already-committed Bitcoin (and skipping the resume gates
-      // would bypass the amount check below). The caller either resumes the recorded
-      // funding (omit btcTxid / pass the recorded one) or recovers it first.
-      if (
-        opts?.btcTxid !== undefined &&
-        priorRecord?.btcTxid !== undefined &&
-        priorRecord.lockAddress === metadata.lockAddress &&
-        opts.btcTxid !== priorRecord.btcTxid
-      ) {
-        return {
-          success: false,
-          error: `Bond ${bondIndex} already has a recorded funding tx ${priorRecord.btcTxid} at this lock address; refusing to replace it with ${opts.btcTxid}. Omit btcTxid to resume the recorded funding, or recover it first.`,
-          btcTxid: priorRecord.btcTxid,
-          vout: priorRecord.vout,
-        };
+      const priorAtThisLock = priorRecord?.lockAddress === metadata.lockAddress;
+      // A prior attempt that Fireblocks ACCEPTED but whose txid was never recorded (poll
+      // timeout / crash) — the funding may be mid-flight or already landed.
+      const hasInFlightFireblocks =
+        priorAtThisLock && priorRecord!.btcTxid === undefined && priorRecord!.fireblocksId !== undefined;
+
+      // A caller-supplied btcTxid that CONFLICTS with an existing funding for the same
+      // lock must refuse outright: overwriting the record would erase the only durable
+      // pointer to already-committed Bitcoin (recorded txid), or abandon an in-flight
+      // Fireblocks transfer that will still land — double-funding the lock. The caller
+      // resumes the existing funding (omit btcTxid) or recovers it first.
+      if (opts?.btcTxid !== undefined && priorAtThisLock) {
+        if (priorRecord!.btcTxid !== undefined && opts.btcTxid !== priorRecord!.btcTxid) {
+          return {
+            success: false,
+            error: `Bond ${bondIndex} already has a recorded funding tx ${priorRecord!.btcTxid} at this lock address; refusing to replace it with ${opts.btcTxid}. Omit btcTxid to resume the recorded funding, or recover it first.`,
+            btcTxid: priorRecord!.btcTxid,
+            vout: priorRecord!.vout,
+          };
+        }
+        if (hasInFlightFireblocks) {
+          return {
+            success: false,
+            error: `Bond ${bondIndex} has an in-flight Fireblocks funding transfer (id ${priorRecord!.fireblocksId}) at this lock address; refusing to also fund from a supplied btcTxid, which could double-fund the lock. Retry WITHOUT btcTxid to resolve the in-flight transfer, or recover it first.`,
+          };
+        }
       }
       const canResumeFunding =
         priorRecord?.btcTxid !== undefined &&
@@ -2915,13 +2920,15 @@ export class StacksSDK {
         }
       }
       // The lock address is amount-independent, so a resume at a DIFFERENT amount would
-      // silently reuse the old funding txid while the allowance check, SPV preflight and
+      // silently reuse the old funding while the allowance check, SPV preflight and
       // register-for-bond all run with the new amount against the old UTXO — every retry
-      // would then fail after the fact. Refuse up front with the funded amount.
-      if (canResumeFunding && priorRecord!.amountSats !== BigInt(btcAmountSats)) {
+      // would then fail after the fact. Covers BOTH resume paths (a recorded txid, and an
+      // in-flight Fireblocks transfer whose id is recorded), since both reuse the prior
+      // amount. Refuse up front with the funded amount.
+      if ((canResumeFunding || hasInFlightFireblocks) && priorRecord!.amountSats !== BigInt(btcAmountSats)) {
         return {
           success: false,
-          error: `A prior funding attempt for bond ${bondIndex} committed ${priorRecord!.amountSats} sats (txid ${priorRecord!.btcTxid}); this retry requests ${btcAmountSats} sats. Retry with the funded amount, or recover the locked BTC first.`,
+          error: `A prior funding attempt for bond ${bondIndex} committed ${priorRecord!.amountSats} sats${priorRecord!.btcTxid ? ` (txid ${priorRecord!.btcTxid})` : ` (Fireblocks id ${priorRecord!.fireblocksId})`}; this retry requests ${btcAmountSats} sats. Retry with the funded amount, or recover the prior funding first.`,
           btcTxid: priorRecord!.btcTxid,
           vout: priorRecord!.vout,
         };
@@ -2970,13 +2977,29 @@ export class StacksSDK {
       } else if (canResumeFunding) {
         // Resume: this exact lock was already funded — never send BTC twice.
         btcTxid = priorRecord!.btcTxid!;
-      } else if (priorRecord?.fireblocksId) {
+      } else if (hasInFlightFireblocks) {
         // A prior attempt was ACCEPTED by Fireblocks (id persisted) but its confirmation
         // poll timed out or crashed before a txid was recorded. Await that SAME transfer
         // — re-submitting would be rejected as a duplicate external id, and the transfer
         // may well have completed meanwhile, leaving BTC at the lock with no pointer.
-        btcTxid = await this.fireblocksService.awaitBitcoinTransaction(priorRecord.fireblocksId);
-        await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, btcTxid, fireblocksId: priorRecord.fireblocksId, stage: laterStage(lockRecord.stage, "btc-broadcast") });
+        try {
+          btcTxid = await this.fireblocksService.awaitBitcoinTransaction(priorRecord!.fireblocksId!);
+        } catch (awaitErr) {
+          // A TERMINALLY failed transfer (Blocked/Cancelled/Failed/Rejected) can never
+          // yield a txid, and its external id is permanently consumed — so re-funding
+          // this exact (vault, bond, lock) is impossible without operator intervention.
+          // Surface that as a clear, non-retryable dead-end rather than an opaque throw
+          // that repeats on every retry. A timeout/transient error rethrows so a later
+          // retry can await again.
+          if (FireblocksService.isTerminalTransferFailure(awaitErr)) {
+            return {
+              success: false,
+              error: `The prior Fireblocks funding transfer (id ${priorRecord!.fireblocksId}) for bond ${bondIndex} terminally failed: ${formatErrorMessage(awaitErr)}. Its external id ${fundingExternalId} is consumed and cannot be reused, so this lock cannot be re-funded automatically — enroll under a different bond index, or resolve the transfer in Fireblocks and retry with opts.btcTxid.`,
+            };
+          }
+          throw awaitErr;
+        }
+        await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, btcTxid, fireblocksId: priorRecord!.fireblocksId, stage: laterStage(lockRecord.stage, "btc-broadcast") });
       } else {
         // Record intent (with the deterministic external id) before calling Fireblocks,
         // so a crash mid-send is recoverable and a retry reuses the same id — which
@@ -3767,6 +3790,20 @@ export class StacksSDK {
   };
 
   /**
+   * Verifies the early-exit cosigner service still holds the key committed into `bond`'s
+   * early-unlock-bytes. Throws (fail closed) on mismatch or an unreachable/misconfigured
+   * service — including an unprovisioned mainnet URL. Shared by the funding-time preflight
+   * and the irreversible announce gate so both apply the identical check.
+   */
+  private verifyCommittedCosignerKey = async (bond: { earlyUnlockBytes: string | Uint8Array }): Promise<void> => {
+    const earlyUnlockBytes = typeof bond.earlyUnlockBytes === 'string'
+      ? hexToBytes(bond.earlyUnlockBytes)
+      : bond.earlyUnlockBytes;
+    const cosigner = new CosignerService(resolveCosignerUrl(this.testnet));
+    await cosigner.verifyCommittedKey(earlyUnlockBytes);
+  };
+
+  /**
    * Announces an L1 early exit for an active BTC-locked bond (L2 leg only).
    * Zeroes the L2 amountSats; paired STX remains locked through the bond's normal
    * unlock cycle. The L1 BTC recovery (OP_ELSE spend) is a separate step requiring
@@ -3810,11 +3847,7 @@ export class StacksSDK {
       const bond = await fetchBond({ bondIndex: membership.bondIndex, network: this.pox5Network });
       if (!bond) return { success: false, error: `Bond ${membership.bondIndex} not found` };
       try {
-        const earlyUnlockBytes = typeof bond.earlyUnlockBytes === 'string'
-          ? hexToBytes(bond.earlyUnlockBytes)
-          : bond.earlyUnlockBytes;
-        const cosigner = new CosignerService(resolveCosignerUrl(this.testnet));
-        await cosigner.verifyCommittedKey(earlyUnlockBytes);
+        await this.verifyCommittedCosignerKey(bond);
       } catch (error) {
         return { success: false, error: `Refusing to announce early exit — cannot confirm the cosigner holds this bond's committed key (early exit would be unspendable and its rewards forfeited): ${formatErrorMessage(error)}` };
       }

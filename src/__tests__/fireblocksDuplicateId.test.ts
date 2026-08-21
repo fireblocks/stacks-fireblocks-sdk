@@ -25,4 +25,26 @@ describe("FireblocksService.isDuplicateExternalIdError", () => {
     expect(FireblocksService.isDuplicateExternalIdError(null)).toBe(false);
     expect(FireblocksService.isDuplicateExternalIdError(undefined)).toBe(false);
   });
+
+  it("does not misclassify a message that merely contains 1438 in a number", () => {
+    // Amount / id / timestamp containing the substring must not read as a duplicate-id.
+    expect(FireblocksService.isDuplicateExternalIdError(new Error("amount 0.01438 rejected"))).toBe(false);
+    expect(FireblocksService.isDuplicateExternalIdError(new Error("request 9a1438bc timed out"))).toBe(false);
+    // A genuine duplicate-external-id message still matches.
+    expect(FireblocksService.isDuplicateExternalIdError(new Error("code 1438: duplicate externalTxId"))).toBe(true);
+  });
+});
+
+describe("FireblocksService.isTerminalTransferFailure", () => {
+  it("matches the getTxStatus terminal-status message", () => {
+    for (const s of ["BLOCKED", "CANCELLED", "FAILED", "REJECTED"]) {
+      expect(FireblocksService.isTerminalTransferFailure(new Error(`Signing request failed/blocked/cancelled: Transaction: abc status is ${s}`))).toBe(true);
+    }
+  });
+
+  it("does NOT match a timeout or transient error (retryable)", () => {
+    expect(FireblocksService.isTerminalTransferFailure(new Error("Signing request timed out after 30 minutes: Transaction abc is still SUBMITTED"))).toBe(false);
+    expect(FireblocksService.isTerminalTransferFailure(new Error("ECONNRESET"))).toBe(false);
+    expect(FireblocksService.isTerminalTransferFailure(null)).toBe(false);
+  });
 });

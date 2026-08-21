@@ -256,8 +256,14 @@ export class FireblocksService {
     let existing;
     try {
       existing = await this.fireblocksSDK.transactions.getTransactionByExternalId({ externalTxId: externalId });
-    } catch {
-      return null; // 404 / not found — no prior transfer under this id
+    } catch (e) {
+      // ONLY a genuine 404 means "no transfer under this id". A transient 5xx/network
+      // error must NOT masquerade as not-found — that would turn a recoverable resume
+      // into a hard failure — so it rethrows and the caller surfaces a retryable error.
+      const status = (e as { response?: { status?: number }; status?: number })?.response?.status
+        ?? (e as { status?: number })?.status;
+      if (status === 404) return null;
+      throw e;
     }
     const fireblocksId = existing?.data?.id;
     if (!fireblocksId) return null;
@@ -265,14 +271,27 @@ export class FireblocksService {
     return { fireblocksId, btcTxid };
   };
 
-  /** True when an error is Fireblocks' duplicate-external-id rejection (code 1438). */
+  /**
+   * True when an error is Fireblocks' duplicate-external-id rejection (code 1438). The
+   * message match requires 1438 as a standalone token AND a duplicate/external cue, so an
+   * unrelated error that merely contains "1438" in an amount/id/timestamp is not misread.
+   */
   public static isDuplicateExternalIdError = (error: unknown): boolean => {
     const anyErr = error as { response?: { data?: { code?: number } }; code?: number; message?: string };
-    return (
-      anyErr?.response?.data?.code === 1438 ||
-      anyErr?.code === 1438 ||
-      (typeof anyErr?.message === 'string' && anyErr.message.includes('1438'))
-    );
+    if (anyErr?.response?.data?.code === 1438 || anyErr?.code === 1438) return true;
+    const msg = typeof anyErr?.message === 'string' ? anyErr.message : '';
+    return /\b1438\b/.test(msg) && /duplicat|external/i.test(msg);
+  };
+
+  /**
+   * True when a transfer error means the Fireblocks transaction reached a TERMINAL
+   * failure state (Blocked/Cancelled/Failed/Rejected) — as opposed to a timeout or a
+   * transient read error. Matches the message raised by FireblocksSigner.getTxStatus.
+   */
+  public static isTerminalTransferFailure = (error: unknown): boolean => {
+    const msg = typeof (error as { message?: string })?.message === 'string' ? (error as { message: string }).message : '';
+    return /status is (BLOCKED|CANCELLED|FAILED|REJECTED)/i.test(msg)
+      || msg.includes('failed/blocked/cancelled');
   };
 
   public signTransaction = async (
