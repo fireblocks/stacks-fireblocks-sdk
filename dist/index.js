@@ -17750,7 +17750,7 @@ var StacksSDK = class _StacksSDK {
           "rewardMaxFeeSats is required with rewardBtcAddress: it is the BTC-withdrawal fee budget (sats) reserved from each cycle's rewards, and a cycle whose earned rewards fall below it is unclaimable until re-staked \u2014 so the SDK will not guess it."
         );
       }
-      if (!this.isValidBtcAddressForNetwork(opts.rewardBtcAddress)) {
+      if (!this.isValidRewardBtcAddress(opts.rewardBtcAddress)) {
         throw new Error(`Reward BTC address ${opts.rewardBtcAddress} is not a valid address for this network.`);
       }
       return encodeRewardAddressCalldata(opts.rewardBtcAddress, opts.rewardMaxFeeSats);
@@ -18243,16 +18243,31 @@ var StacksSDK = class _StacksSDK {
       }
     };
     /**
-     * Verifies the full signer-key grant state for a (signerManager, signerKey) pair.
+     * Reports whether a signer manager is currently accepting stakers.
      *
-     * Two distinct checks are performed:
-     * 1. grant_exists  — the on-chain grant exists and has NOT been consumed yet
-     *                    (fetchVerifySignerKeyGrant). A consumed or missing grant → false.
-     * 2. signer_registered — the signer-manager contract has a registered signer key
-     *                    (fetchSignerInfo). The grant alone does not mean the signer is
-     *                    active; registration is a separate step (register-self / admin path).
+     * A staker NEVER grants anything. The grant is between the signer manager and its own
+     * registered signer key: the manager's admin calls `register-self`, which runs pox-5
+     * `grant-signer-key` for that key and then `register-signer`. Every pox-5 stake path
+     * (`register-for-bond`, `update-bond-registration`, `stake`, `stake-update`) then reads
+     * the same pair — `get-signer-info` followed by `verify-signer-key-grant` on the
+     * REGISTERED key. This method reports exactly that pair, so it answers the question the
+     * chain actually asks. (It previously verified the grant against the calling vault's own
+     * public key, which no ordinary staker ever holds, so every enrollment was refused.)
      *
-     * ready_to_stake is true only when both checks pass.
+     * Grants are NOT consumed by staking: `signer-key-grants` is a permanent flag that only
+     * the signer key's principal can clear via `revoke-signer-grant`. A false result therefore
+     * means "not registered" or "revoked" — never "used up" — and only the manager's operator
+     * can remedy it.
+     *
+     * 1. signer_registered — `get-signer-info` returns a key for this manager.
+     * 2. grant_exists      — that registered key has an active (unrevoked) grant.
+     *
+     * ready_to_stake is true when both pass. `registered_key` is always reported, so a caller
+     * running its own manager can still compare it against a key it controls.
+     *
+     * Note this is only the signer-manager gate. Two unrelated conditions can still block a
+     * specific staker: the pox-5 bond allowlist (ERR_NOT_ALLOWLISTED) and the manager's
+     * `validate-stake!`, which only runs inside the transaction.
      *
      * If txid is supplied, the transaction is polled first and its status is included.
      * A non-success tx status causes ready_to_stake to be false regardless of on-chain state.
@@ -18270,23 +18285,16 @@ var StacksSDK = class _StacksSDK {
             return { success: true, grant_exists: false, signer_registered: false, ready_to_stake: false, tx_status: txStatus, notes };
           }
         }
-        const signerKey = this.publicKey;
-        const [grantExists, signerInfo] = await Promise.all([
-          (0, import_bitcoin_staking2.fetchVerifySignerKeyGrant)({ signerKey, signerManager, network: this.pox5Network }),
-          (0, import_bitcoin_staking2.fetchSignerInfo)({ signerManager, network: this.pox5Network })
-        ]);
-        const signerRegistered = !!signerInfo?.signerKey;
+        const signerInfo = await (0, import_bitcoin_staking2.fetchSignerInfo)({ signerManager, network: this.pox5Network });
         const registeredKey = signerInfo?.signerKey ?? null;
-        if (!grantExists) {
-          notes.push("No unconsumed grant found for this (signerKey, signerManager) pair. Either the grant was never created, has already been consumed (authId reuse), or was revoked.");
-        }
+        const signerRegistered = !!registeredKey;
+        const grantExists = signerRegistered ? await (0, import_bitcoin_staking2.fetchVerifySignerKeyGrant)({ signerKey: registeredKey, signerManager, network: this.pox5Network }) : false;
         if (!signerRegistered) {
-          notes.push("The signer-manager has no registered signer key. The grant alone is not sufficient \u2014 registration (register-self or admin path) must also complete before stakes are accepted.");
+          notes.push("This signer manager has no registered signer key, so it is not currently accepting enrollments. Registration is the manager operator's action (register-self); a staker cannot change it. Choose a different signer manager or contact the operator.");
+        } else if (!grantExists) {
+          notes.push(`The signer manager's registered key (${registeredKey}) has no active grant, so it is not currently accepting enrollments. Grants are permanent until the signer's own principal revokes them, so this indicates a revocation \u2014 the manager operator must re-grant. Choose a different signer manager or contact the operator.`);
         }
-        if (grantExists && signerRegistered && registeredKey !== signerKey) {
-          notes.push(`The registered key (${registeredKey}) does not match the expected signerKey. The signer-manager may be registered to a different signer.`);
-        }
-        const readyToStake = grantExists && signerRegistered && registeredKey === signerKey;
+        const readyToStake = signerRegistered && grantExists;
         return {
           success: true,
           grant_exists: grantExists,
@@ -19184,6 +19192,20 @@ var StacksSDK = class _StacksSDK {
             vout: priorRecord.vout,
             amountSats: priorRecord.amountSats,
             stage: priorRecord.stage ?? "btc-broadcast"
+          } : {},
+          // A transfer Fireblocks already ACCEPTED but whose txid was never recorded must keep
+          // its id and its reached stage across this pre-funding save. Without this the save
+          // below drops fireblocksId and regresses the stage to "lock-fixed"; if the resume
+          // then dies in awaitBitcoinTransaction (30-minute deadline, transient read, crash),
+          // the only pointer to an in-flight funding is gone. Two guards silently disarm with
+          // it: nativeRecordOverwriteGuard only refuses at stage "funding-requested", and the
+          // amount-mismatch check keys off hasInFlightFireblocks — so a later retry could
+          // overwrite the slot or re-fund at a different amount.
+          // Mutually exclusive with canResumeFunding by construction (that requires a recorded
+          // btcTxid; this requires none), so the two spreads can never both apply.
+          ...hasInFlightFireblocks ? {
+            fireblocksId: priorRecord.fireblocksId,
+            stage: laterStage(priorRecord.stage, "funding-requested")
           } : {}
         };
         await this.lockRecordStore.saveRecord(this.address, bondIndex, lockRecord);
@@ -19198,6 +19220,9 @@ var StacksSDK = class _StacksSDK {
             btcTxid = await this.fireblocksService.awaitBitcoinTransaction(priorRecord.fireblocksId);
           } catch (awaitErr) {
             if (FireblocksService.isTerminalTransferFailure(awaitErr)) {
+              const abandoned = { ...lockRecord };
+              delete abandoned.fireblocksId;
+              await this.lockRecordStore.saveRecord(this.address, bondIndex, abandoned);
               return {
                 success: false,
                 error: `The prior Fireblocks funding transfer (id ${priorRecord.fireblocksId}) for bond ${bondIndex} terminally failed: ${formatErrorMessage(awaitErr)}. Its external id ${fundingExternalId} is consumed and cannot be reused, so this lock cannot be re-funded automatically \u2014 enroll under a different bond index, or resolve the transfer in Fireblocks and retry with opts.btcTxid.`
@@ -20255,6 +20280,37 @@ var StacksSDK = class _StacksSDK {
       }
     };
     /**
+     * Validates an address we will only ever COMMIT as a pox-addr tuple, never spend to from
+     * this SDK. Stricter rules are unnecessary here and actively block testing:
+     *
+     * A Bitcoin address encodes a witness program plus a human-readable prefix, and the
+     * program — `{version, hashbytes}` — does NOT depend on the network. `poxAddressToTuple`
+     * yields byte-identical output for the bcrt1/tb1/bc1 spellings of the same program, so the
+     * prefix never reaches the chain; the signer manager stores only the tuple.
+     *
+     * On private-devnet the Bitcoin chain is regtest (`bcrt`) while the Fireblocks BTC_TEST
+     * wallet issues `tb1` addresses, so the strict check rejected the very address the app
+     * offers and no reward destination could be enrolled there. We therefore also accept `tb`
+     * on that profile only.
+     *
+     * Mainnet stays strict deliberately: a test-prefixed address there would commit the same
+     * hash under mainnet interpretation — silently routing real rewards to a program the
+     * customer may not control on that chain.
+     *
+     * NOTE: this must NOT be used for recovery/spend destinations. Those are passed to
+     * `addOutputAddress` on the active network, which requires the chain's own encoding.
+     */
+    this.isValidRewardBtcAddress = (addr) => {
+      if (this.isValidBtcAddressForNetwork(addr)) return true;
+      if (this.networkProfile.name !== "private-devnet") return false;
+      try {
+        Address(TEST_NETWORK).decode(addr);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    /**
      * Resolves the destination for a native-BTC recovery spend. Under RAW signing the
      * destination is invisible to Fireblocks, so recovery DEFAULTS to the vault's own
      * derived BTC address; any other (external) destination must be explicitly approved
@@ -20602,17 +20658,32 @@ var StacksSDK = class _StacksSDK {
         if ((0, import_common2.bytesToHex)(nextMeta.outputScript) !== (0, import_common2.bytesToHex)(onchainNext)) {
           return { success: false, error: "Next bond lockup script mismatch \u2014 NOT proceeding" };
         }
-        const currentMembership = await (0, import_bitcoin_staking2.fetchBondMembership)({ address: this.address, network: this.pox5Network }).catch(() => null);
+        const needsPersistedReward = opts?.rewardBtcAddress === void 0;
+        let nextBondRewardRecord = null;
         let priorBondRecord = null;
-        if (currentMembership && opts?.rewardBtcAddress === void 0) {
+        if (needsPersistedReward) {
           try {
-            priorBondRecord = await this.lockRecordStore.loadRecord(this.address, currentMembership.bondIndex);
+            nextBondRewardRecord = await this.lockRecordStore.loadRecord(this.address, nextBondIndex);
           } catch (e) {
-            return { success: false, error: `Cannot renew bond: the reward-destination record for bond ${currentMembership.bondIndex} is unreadable (${formatErrorMessage(e)}). Refusing to re-lock BTC when a persisted reward address might be silently dropped \u2014 retry once the lock-record store is reachable, or pass rewardBtcAddress explicitly.` };
+            return { success: false, error: `Cannot renew bond: the lock record for bond ${nextBondIndex} is unreadable (${formatErrorMessage(e)}). Refusing to re-lock BTC when a persisted reward address might be silently dropped \u2014 retry once the lock-record store is reachable, or pass rewardBtcAddress explicitly.` };
+          }
+          let currentMembership = null;
+          try {
+            currentMembership = await (0, import_bitcoin_staking2.fetchBondMembership)({ address: this.address, network: this.pox5Network });
+          } catch (e) {
+            return { success: false, error: `Cannot renew bond: the current bond membership could not be read (${formatErrorMessage(e)}), so the reward destination to carry forward is UNKNOWN. Refusing to re-lock BTC when a persisted reward address might be silently dropped \u2014 retry, or pass rewardBtcAddress explicitly.` };
+          }
+          if (currentMembership) {
+            try {
+              priorBondRecord = await this.lockRecordStore.loadRecord(this.address, currentMembership.bondIndex);
+            } catch (e) {
+              return { success: false, error: `Cannot renew bond: the reward-destination record for bond ${currentMembership.bondIndex} is unreadable (${formatErrorMessage(e)}). Refusing to re-lock BTC when a persisted reward address might be silently dropped \u2014 retry once the lock-record store is reachable, or pass rewardBtcAddress explicitly.` };
+            }
           }
         }
-        const rewardBtcAddress = opts?.rewardBtcAddress ?? priorBondRecord?.rewardBtcAddress;
-        const rewardMaxFeeSats = opts?.rewardMaxFeeSats ?? priorBondRecord?.rewardMaxFeeSats;
+        const rewardSourceRecord = nextBondRewardRecord?.rewardBtcAddress !== void 0 ? nextBondRewardRecord : priorBondRecord;
+        const rewardBtcAddress = opts?.rewardBtcAddress ?? rewardSourceRecord?.rewardBtcAddress;
+        const rewardMaxFeeSats = opts?.rewardMaxFeeSats ?? rewardSourceRecord?.rewardMaxFeeSats;
         let signerCalldata;
         try {
           signerCalldata = this.resolveSignerCalldata({ signerCalldata: opts?.signerCalldata, rewardBtcAddress, rewardMaxFeeSats });

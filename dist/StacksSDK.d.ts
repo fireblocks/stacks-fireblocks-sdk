@@ -291,16 +291,31 @@ export declare class StacksSDK {
      */
     getStakerInfo: () => Promise<StakerInfoResponse>;
     /**
-     * Verifies the full signer-key grant state for a (signerManager, signerKey) pair.
+     * Reports whether a signer manager is currently accepting stakers.
      *
-     * Two distinct checks are performed:
-     * 1. grant_exists  — the on-chain grant exists and has NOT been consumed yet
-     *                    (fetchVerifySignerKeyGrant). A consumed or missing grant → false.
-     * 2. signer_registered — the signer-manager contract has a registered signer key
-     *                    (fetchSignerInfo). The grant alone does not mean the signer is
-     *                    active; registration is a separate step (register-self / admin path).
+     * A staker NEVER grants anything. The grant is between the signer manager and its own
+     * registered signer key: the manager's admin calls `register-self`, which runs pox-5
+     * `grant-signer-key` for that key and then `register-signer`. Every pox-5 stake path
+     * (`register-for-bond`, `update-bond-registration`, `stake`, `stake-update`) then reads
+     * the same pair — `get-signer-info` followed by `verify-signer-key-grant` on the
+     * REGISTERED key. This method reports exactly that pair, so it answers the question the
+     * chain actually asks. (It previously verified the grant against the calling vault's own
+     * public key, which no ordinary staker ever holds, so every enrollment was refused.)
      *
-     * ready_to_stake is true only when both checks pass.
+     * Grants are NOT consumed by staking: `signer-key-grants` is a permanent flag that only
+     * the signer key's principal can clear via `revoke-signer-grant`. A false result therefore
+     * means "not registered" or "revoked" — never "used up" — and only the manager's operator
+     * can remedy it.
+     *
+     * 1. signer_registered — `get-signer-info` returns a key for this manager.
+     * 2. grant_exists      — that registered key has an active (unrevoked) grant.
+     *
+     * ready_to_stake is true when both pass. `registered_key` is always reported, so a caller
+     * running its own manager can still compare it against a key it controls.
+     *
+     * Note this is only the signer-manager gate. Two unrelated conditions can still block a
+     * specific staker: the pox-5 bond allowlist (ERR_NOT_ALLOWLISTED) and the manager's
+     * `validate-stake!`, which only runs inside the transaction.
      *
      * If txid is supplied, the transaction is polled first and its status is included.
      * A non-success tx status causes ready_to_stake to be false regardless of on-chain state.
@@ -688,6 +703,28 @@ export declare class StacksSDK {
      */
     /** True if `addr` is a well-formed BTC address for the active Bitcoin network. */
     private isValidBtcAddressForNetwork;
+    /**
+     * Validates an address we will only ever COMMIT as a pox-addr tuple, never spend to from
+     * this SDK. Stricter rules are unnecessary here and actively block testing:
+     *
+     * A Bitcoin address encodes a witness program plus a human-readable prefix, and the
+     * program — `{version, hashbytes}` — does NOT depend on the network. `poxAddressToTuple`
+     * yields byte-identical output for the bcrt1/tb1/bc1 spellings of the same program, so the
+     * prefix never reaches the chain; the signer manager stores only the tuple.
+     *
+     * On private-devnet the Bitcoin chain is regtest (`bcrt`) while the Fireblocks BTC_TEST
+     * wallet issues `tb1` addresses, so the strict check rejected the very address the app
+     * offers and no reward destination could be enrolled there. We therefore also accept `tb`
+     * on that profile only.
+     *
+     * Mainnet stays strict deliberately: a test-prefixed address there would commit the same
+     * hash under mainnet interpretation — silently routing real rewards to a program the
+     * customer may not control on that chain.
+     *
+     * NOTE: this must NOT be used for recovery/spend destinations. Those are passed to
+     * `addOutputAddress` on the active network, which requires the chain's own encoding.
+     */
+    private isValidRewardBtcAddress;
     /**
      * Resolves the destination for a native-BTC recovery spend. Under RAW signing the
      * destination is invisible to Fireblocks, so recovery DEFAULTS to the vault's own
