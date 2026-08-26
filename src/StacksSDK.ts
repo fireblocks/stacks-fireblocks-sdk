@@ -1231,7 +1231,13 @@ export class StacksSDK {
    */
   private resolveSignerCalldata = (opts?: {
     signerCalldata?: Uint8Array | string;
-    rewardBtcAddress?: string;
+    /**
+     * A Bitcoin address routes rewards there. `null` means "register none" — the calldata
+     * is omitted, which makes the signer manager map-delete the pox-addr. Absent/undefined
+     * is NOT the same thing: it means "unchanged", and the bond paths then carry forward
+     * whatever is persisted. Callers reach here with the value already resolved.
+     */
+    rewardBtcAddress?: string | null;
     rewardMaxFeeSats?: bigint;
   }): Uint8Array | string | undefined => {
     if (opts?.signerCalldata !== undefined) {
@@ -1250,7 +1256,10 @@ export class StacksSDK {
       this.encodeSignerCalldata(opts.signerCalldata);
       return opts.signerCalldata;
     }
-    if (opts?.rewardBtcAddress === undefined) return undefined;
+    // Both "unchanged with nothing persisted" and an explicit `null` (clear) produce no
+    // calldata; the difference between them is decided upstream, where the persisted
+    // destination is either carried forward or deliberately dropped.
+    if (opts?.rewardBtcAddress === undefined || opts.rewardBtcAddress === null) return undefined;
     if (opts.rewardMaxFeeSats === undefined) {
       throw new Error(
         "rewardMaxFeeSats is required with rewardBtcAddress: it is the BTC-withdrawal fee budget (sats) reserved from each cycle's rewards, and a cycle whose earned rewards fall below it is unclaimable until re-staked — so the SDK will not guess it.",
@@ -2743,7 +2752,7 @@ export class StacksSDK {
   public updateBondRegistration = async (
     signerManager: string,
     oldSignerManager: string,
-    opts?: { note?: string; nonce?: bigint; externalId?: string; signerCalldata?: Uint8Array | string; rewardBtcAddress?: string; rewardMaxFeeSats?: bigint },
+    opts?: { note?: string; nonce?: bigint; externalId?: string; signerCalldata?: Uint8Array | string; rewardBtcAddress?: string | null; rewardMaxFeeSats?: bigint },
   ): Promise<CreateTransactionResponse> => {
     try {
       if (!this.address || !this.publicKey || !this.vaultAccountId) {
@@ -2782,8 +2791,14 @@ export class StacksSDK {
           return { success: false, error: `Cannot update bond registration: the reward-destination record for bond ${membershipBefore.bondIndex} is unreadable (${formatErrorMessage(e)}). Refusing to rotate the signer when a persisted reward address might be silently dropped — retry once the lock-record store is reachable, or pass rewardBtcAddress explicitly.` };
         }
       }
-      const rewardBtcAddress = opts?.rewardBtcAddress ?? rotateRecord?.rewardBtcAddress;
-      const rewardMaxFeeSats = opts?.rewardMaxFeeSats ?? rotateRecord?.rewardMaxFeeSats;
+      // `null` clears the destination outright, so it must not fall back to the record.
+      const clearRewardDestination = opts?.rewardBtcAddress === null;
+      const rewardBtcAddress = clearRewardDestination
+        ? undefined
+        : opts?.rewardBtcAddress ?? rotateRecord?.rewardBtcAddress;
+      const rewardMaxFeeSats = clearRewardDestination
+        ? undefined
+        : opts?.rewardMaxFeeSats ?? rotateRecord?.rewardMaxFeeSats;
       let rotateCalldata: Uint8Array | string | undefined;
       try {
         rotateCalldata = this.resolveSignerCalldata({ signerCalldata: opts?.signerCalldata, rewardBtcAddress, rewardMaxFeeSats });
@@ -2864,14 +2879,22 @@ export class StacksSDK {
       }
       // Record the rotated manager so reward discovery uses it for this bond
       // (pre-start rotation governs the whole bond period).
-      await this.lockRecordStore.saveRecord(this.address, derivedBondIndex, {
+      const rotatedRecord: BondLockRecord = {
         ...existing,
         signerManager,
         // Keep the persisted reward destination in step with what was just re-supplied
         // (a caller override changes it; otherwise it is unchanged).
         ...(rewardBtcAddress !== undefined ? { rewardBtcAddress } : {}),
         ...(rewardMaxFeeSats !== undefined ? { rewardMaxFeeSats } : {}),
-      });
+      };
+      // Spreading `existing` would otherwise preserve the very address the rotation just
+      // map-deleted on chain, leaving the record claiming routing the contract no longer
+      // has — and a later renewal would "carry forward" a destination that is already gone.
+      if (clearRewardDestination) {
+        delete rotatedRecord.rewardBtcAddress;
+        delete rotatedRecord.rewardMaxFeeSats;
+      }
+      await this.lockRecordStore.saveRecord(this.address, derivedBondIndex, rotatedRecord);
 
       return { success: true, txHash: result.txid };
     } catch (error) {
@@ -2894,7 +2917,7 @@ export class StacksSDK {
     bondIndex: number,
     btcAmountSats: bigint,
     signerManager: string,
-    opts?: { note?: string; nonce?: bigint; externalId?: string; confirmations?: number; btcTxid?: string; amountUstxOverride?: bigint; signerCalldata?: Uint8Array | string; rewardBtcAddress?: string; rewardMaxFeeSats?: bigint },
+    opts?: { note?: string; nonce?: bigint; externalId?: string; confirmations?: number; btcTxid?: string; amountUstxOverride?: bigint; signerCalldata?: Uint8Array | string; rewardBtcAddress?: string | null; rewardMaxFeeSats?: bigint },
   ): Promise<CreateBondResult> => {
     // Tracks the funding outpoint once BTC is committed, so even the catch-all error
     // return carries the pointer to the locked Bitcoin (the durable record persists it
@@ -3064,10 +3087,14 @@ export class StacksSDK {
       // opts.signerCalldata governs the chain outright, so it suppresses this fallback and
       // the reward fields are not persisted alongside it.
       const callerSuppliedRawCalldata = opts?.signerCalldata !== undefined;
-      const effectiveRewardBtcAddress = callerSuppliedRawCalldata
+      // `null` means "register none" — clear any persisted destination instead of carrying
+      // it forward. `??` alone would treat null as nullish and resurrect the old address,
+      // which is exactly the silent reuse this distinction exists to prevent.
+      const clearRewardDestination = opts?.rewardBtcAddress === null;
+      const effectiveRewardBtcAddress = callerSuppliedRawCalldata || clearRewardDestination
         ? undefined
         : opts?.rewardBtcAddress ?? priorRecord?.rewardBtcAddress;
-      const effectiveRewardMaxFeeSats = callerSuppliedRawCalldata
+      const effectiveRewardMaxFeeSats = callerSuppliedRawCalldata || clearRewardDestination
         ? undefined
         : opts?.rewardMaxFeeSats ?? priorRecord?.rewardMaxFeeSats;
       if (signerCalldata === undefined && effectiveRewardBtcAddress !== undefined) {
@@ -5029,7 +5056,7 @@ export class StacksSDK {
   public renewBond = async (
     nextBondIndex: number,
     signerManager: string,
-    opts?: { feeSats?: bigint; note?: string; nonce?: bigint; externalId?: string; confirmations?: number; signerCalldata?: Uint8Array | string; rewardBtcAddress?: string; rewardMaxFeeSats?: bigint },
+    opts?: { feeSats?: bigint; note?: string; nonce?: bigint; externalId?: string; confirmations?: number; signerCalldata?: Uint8Array | string; rewardBtcAddress?: string | null; rewardMaxFeeSats?: bigint },
   ): Promise<RenewBondResult> => {
     // Tracks the re-lock outpoint once BTC is committed, so even the catch-all error
     // return carries the pointer to the re-locked Bitcoin (a throw after the broadcast
@@ -5084,7 +5111,10 @@ export class StacksSDK {
       // re-supplying the destination: proceeding would re-lock BTC and register with `none`,
       // map-deleting a pox-addr we merely could not see. (With an explicit rewardBtcAddress
       // no record is consulted, so read errors are irrelevant and all of this is skipped.)
+      // An explicit `null` (clear) needs no record at all — it deliberately drops whatever
+      // is persisted — so only a genuinely absent value consults them.
       const needsPersistedReward = opts?.rewardBtcAddress === undefined;
+      const clearRewardDestination = opts?.rewardBtcAddress === null;
       let nextBondRewardRecord: BondLockRecord | null = null;
       let priorBondRecord: BondLockRecord | null = null;
       if (needsPersistedReward) {
@@ -5113,8 +5143,12 @@ export class StacksSDK {
       // with a budget from another would commit a pairing neither attempt intended.
       const rewardSourceRecord =
         nextBondRewardRecord?.rewardBtcAddress !== undefined ? nextBondRewardRecord : priorBondRecord;
-      const rewardBtcAddress = opts?.rewardBtcAddress ?? rewardSourceRecord?.rewardBtcAddress;
-      const rewardMaxFeeSats = opts?.rewardMaxFeeSats ?? rewardSourceRecord?.rewardMaxFeeSats;
+      const rewardBtcAddress = clearRewardDestination
+        ? undefined
+        : opts?.rewardBtcAddress ?? rewardSourceRecord?.rewardBtcAddress;
+      const rewardMaxFeeSats = clearRewardDestination
+        ? undefined
+        : opts?.rewardMaxFeeSats ?? rewardSourceRecord?.rewardMaxFeeSats;
       let signerCalldata: Uint8Array | string | undefined;
       try {
         signerCalldata = this.resolveSignerCalldata({ signerCalldata: opts?.signerCalldata, rewardBtcAddress, rewardMaxFeeSats });

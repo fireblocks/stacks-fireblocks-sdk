@@ -958,7 +958,15 @@ export const createBond: Handler = async (req, res, next) => {
     // The paired-STX amount override and the raw signerCalldata are expert, policy-gated
     // paths and are deliberately NOT exposed over REST — the amount is always derived here,
     // and reward routing goes through the validated rewardBtcAddress/rewardMaxFeeSats pair.
-    const rewardBtcAddress = req.body.rewardBtcAddress ? String(req.body.rewardBtcAddress).trim() : undefined;
+    // An explicit null means "register none" (clear the committed reward address) and must
+    // survive as null: a truthiness check alone would collapse it to undefined, which the
+    // SDK reads as "unchanged" and would silently carry the old destination forward.
+    const rewardBtcAddress =
+      req.body.rewardBtcAddress === null
+        ? null
+        : req.body.rewardBtcAddress
+          ? String(req.body.rewardBtcAddress).trim()
+          : undefined;
     if (req.body.rewardMaxFeeSats !== undefined && !/^[0-9]+$/.test(String(req.body.rewardMaxFeeSats))) {
       res.status(400).json({ error: "Bad Request: rewardMaxFeeSats must be a non-negative integer string" });
       return;
@@ -1289,7 +1297,15 @@ export const renewBond: Handler = async (req, res, next) => {
     const nonce = parseOptionalNonce(req.body.nonce);
     const externalId = req.body.externalId ? String(req.body.externalId) : undefined;
     const confirmations = req.body.confirmations !== undefined ? Number(req.body.confirmations) : undefined;
-    const rewardBtcAddress = req.body.rewardBtcAddress ? String(req.body.rewardBtcAddress).trim() : undefined;
+    // An explicit null means "register none" (clear the committed reward address) and must
+    // survive as null: a truthiness check alone would collapse it to undefined, which the
+    // SDK reads as "unchanged" and would silently carry the old destination forward.
+    const rewardBtcAddress =
+      req.body.rewardBtcAddress === null
+        ? null
+        : req.body.rewardBtcAddress
+          ? String(req.body.rewardBtcAddress).trim()
+          : undefined;
     if (req.body.rewardMaxFeeSats !== undefined && !/^[0-9]+$/.test(String(req.body.rewardMaxFeeSats))) {
       res.status(400).json({ error: "Bad Request: rewardMaxFeeSats must be a non-negative integer string" });
       return;
@@ -1317,7 +1333,15 @@ export const updateBondRegistration: Handler = async (req, res, next) => {
     const note = req.body.note ? String(req.body.note) : undefined;
     const nonce = parseOptionalNonce(req.body.nonce);
     const externalId = req.body.externalId ? String(req.body.externalId) : undefined;
-    const rewardBtcAddress = req.body.rewardBtcAddress ? String(req.body.rewardBtcAddress).trim() : undefined;
+    // An explicit null means "register none" (clear the committed reward address) and must
+    // survive as null: a truthiness check alone would collapse it to undefined, which the
+    // SDK reads as "unchanged" and would silently carry the old destination forward.
+    const rewardBtcAddress =
+      req.body.rewardBtcAddress === null
+        ? null
+        : req.body.rewardBtcAddress
+          ? String(req.body.rewardBtcAddress).trim()
+          : undefined;
     if (req.body.rewardMaxFeeSats !== undefined && !/^[0-9]+$/.test(String(req.body.rewardMaxFeeSats))) {
       res.status(400).json({ error: "Bad Request: rewardMaxFeeSats must be a non-negative integer string" });
       return;
