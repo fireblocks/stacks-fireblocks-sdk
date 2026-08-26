@@ -14,11 +14,24 @@ const { dependencies } = require('./package.json');
 // Left external, that call resolves to the consumer's hoisted @stacks/common@7.5.0, whose
 // hexToBigInt double-prefixes '0x' and throws on the /v2/accounts body used by the
 // pre-funding liquidity check (FBS-158/FBS-62).
+//
+// @noble/hashes and @noble/curves must be bundled WITH @scure/btc-signer. btc-signer 2.2.0
+// requires @noble/hashes ~2.2.0 (npm nests that copy under it), but this package declares
+// @noble/hashes 1.8.0 at the top level. Left external, the inlined btc-signer and
+// @noble/curves 2.x resolve `require('@noble/hashes/...')` to the CONSUMER's hoisted 1.8.0
+// at runtime, mixing two incompatible majors: every pubkey operation then fails
+// ("P2WPKH: invalid publicKey"), so getBtcVaultAddress throws and, because
+// resolveRecoveryDestination calls it first, BOTH BTC recovery paths
+// (spendEarlyExitUtxo / unlockMaturedBond) are unusable from the bundle.
+// (@noble/curves is not a declared dependency, so it is already inlined today; listing it
+// keeps that intentional and correct if it is ever added to package.json.)
 const BUNDLED = new Set([
   '@stacks/bitcoin-staking',
   '@stacks/common',
   '@scure/btc-signer',
   '@scure/base',
+  '@noble/hashes',
+  '@noble/curves',
 ]);
 
 // Everything else stays a runtime require so consumers dedupe/patch it normally.
