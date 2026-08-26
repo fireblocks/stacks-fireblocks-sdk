@@ -145,6 +145,37 @@ describe("reward-address validation vs spend-address validation", () => {
     expect(sdk.isValidRewardBtcAddress(P2WPKH_REGTEST)).toBe(false);
   });
 
+  describe("resolveSignerCalldata: null means 'register none', absent means 'unchanged'", () => {
+    it("produces no calldata for an explicit null, without demanding a max-fee", () => {
+      const sdk = makeSdk({ testnet: true });
+      // `none` calldata is what makes the signer manager map-delete the pox-addr. It must
+      // not require rewardMaxFeeSats — there is no destination left to budget for.
+      expect(sdk.resolveSignerCalldata({ rewardBtcAddress: null })).toBeUndefined();
+    });
+
+    it("produces no calldata when the field is absent (nothing to carry)", () => {
+      const sdk = makeSdk({ testnet: true });
+      expect(sdk.resolveSignerCalldata({})).toBeUndefined();
+      expect(sdk.resolveSignerCalldata(undefined)).toBeUndefined();
+    });
+
+    it("still encodes calldata for a real address", () => {
+      const sdk = makeSdk({ testnet: true });
+      const out = sdk.resolveSignerCalldata({
+        rewardBtcAddress: P2WPKH_TESTNET,
+        rewardMaxFeeSats: BigInt(5000),
+      });
+      expect(out).toBeInstanceOf(Uint8Array);
+      expect(out.length).toBeGreaterThan(0);
+    });
+
+    it("rejects null alongside a raw signerCalldata as ambiguous", () => {
+      const sdk = makeSdk({ testnet: true });
+      expect(() => sdk.resolveSignerCalldata({ signerCalldata: "00", rewardBtcAddress: null }))
+        .toThrow(/not both/i);
+    });
+  });
+
   it("does NOT relax the SPEND-path validator: recovery destinations stay chain-exact", () => {
     // The relaxation is safe only because a reward address is committed as a tuple. A
     // recovery destination is passed to addOutputAddress on the active network, so a tb1

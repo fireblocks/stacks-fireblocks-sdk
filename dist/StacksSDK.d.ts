@@ -479,7 +479,7 @@ export declare class StacksSDK {
         nonce?: bigint;
         externalId?: string;
         signerCalldata?: Uint8Array | string;
-        rewardBtcAddress?: string;
+        rewardBtcAddress?: string | null;
         rewardMaxFeeSats?: bigint;
     }) => Promise<CreateTransactionResponse>;
     /**
@@ -499,7 +499,7 @@ export declare class StacksSDK {
         btcTxid?: string;
         amountUstxOverride?: bigint;
         signerCalldata?: Uint8Array | string;
-        rewardBtcAddress?: string;
+        rewardBtcAddress?: string | null;
         rewardMaxFeeSats?: bigint;
     }) => Promise<CreateBondResult>;
     /**
@@ -827,7 +827,7 @@ export declare class StacksSDK {
         externalId?: string;
         confirmations?: number;
         signerCalldata?: Uint8Array | string;
-        rewardBtcAddress?: string;
+        rewardBtcAddress?: string | null;
         rewardMaxFeeSats?: bigint;
     }) => Promise<RenewBondResult>;
     /**

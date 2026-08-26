@@ -17744,7 +17744,7 @@ var StacksSDK = class _StacksSDK {
         this.encodeSignerCalldata(opts.signerCalldata);
         return opts.signerCalldata;
       }
-      if (opts?.rewardBtcAddress === void 0) return void 0;
+      if (opts?.rewardBtcAddress === void 0 || opts.rewardBtcAddress === null) return void 0;
       if (opts.rewardMaxFeeSats === void 0) {
         throw new Error(
           "rewardMaxFeeSats is required with rewardBtcAddress: it is the BTC-withdrawal fee budget (sats) reserved from each cycle's rewards, and a cycle whose earned rewards fall below it is unclaimable until re-staked \u2014 so the SDK will not guess it."
@@ -18919,8 +18919,9 @@ var StacksSDK = class _StacksSDK {
             return { success: false, error: `Cannot update bond registration: the reward-destination record for bond ${membershipBefore.bondIndex} is unreadable (${formatErrorMessage(e)}). Refusing to rotate the signer when a persisted reward address might be silently dropped \u2014 retry once the lock-record store is reachable, or pass rewardBtcAddress explicitly.` };
           }
         }
-        const rewardBtcAddress = opts?.rewardBtcAddress ?? rotateRecord?.rewardBtcAddress;
-        const rewardMaxFeeSats = opts?.rewardMaxFeeSats ?? rotateRecord?.rewardMaxFeeSats;
+        const clearRewardDestination = opts?.rewardBtcAddress === null;
+        const rewardBtcAddress = clearRewardDestination ? void 0 : opts?.rewardBtcAddress ?? rotateRecord?.rewardBtcAddress;
+        const rewardMaxFeeSats = clearRewardDestination ? void 0 : opts?.rewardMaxFeeSats ?? rotateRecord?.rewardMaxFeeSats;
         let rotateCalldata;
         try {
           rotateCalldata = this.resolveSignerCalldata({ signerCalldata: opts?.signerCalldata, rewardBtcAddress, rewardMaxFeeSats });
@@ -18986,14 +18987,19 @@ var StacksSDK = class _StacksSDK {
             warning: `Signer rotation confirmed for bond ${derivedBondIndex}, but no durable lock record exists to update \u2014 reward routing for this bond may be stale until a record is present.`
           };
         }
-        await this.lockRecordStore.saveRecord(this.address, derivedBondIndex, {
+        const rotatedRecord = {
           ...existing,
           signerManager,
           // Keep the persisted reward destination in step with what was just re-supplied
           // (a caller override changes it; otherwise it is unchanged).
           ...rewardBtcAddress !== void 0 ? { rewardBtcAddress } : {},
           ...rewardMaxFeeSats !== void 0 ? { rewardMaxFeeSats } : {}
-        });
+        };
+        if (clearRewardDestination) {
+          delete rotatedRecord.rewardBtcAddress;
+          delete rotatedRecord.rewardMaxFeeSats;
+        }
+        await this.lockRecordStore.saveRecord(this.address, derivedBondIndex, rotatedRecord);
         return { success: true, txHash: result.txid };
       } catch (error) {
         return { success: false, error: `Failed to update bond registration: ${formatErrorMessage(error)}` };
@@ -19118,8 +19124,9 @@ var StacksSDK = class _StacksSDK {
         }
         const priorAtThisLock = priorRecord?.lockAddress === metadata.lockAddress;
         const callerSuppliedRawCalldata = opts?.signerCalldata !== void 0;
-        const effectiveRewardBtcAddress = callerSuppliedRawCalldata ? void 0 : opts?.rewardBtcAddress ?? priorRecord?.rewardBtcAddress;
-        const effectiveRewardMaxFeeSats = callerSuppliedRawCalldata ? void 0 : opts?.rewardMaxFeeSats ?? priorRecord?.rewardMaxFeeSats;
+        const clearRewardDestination = opts?.rewardBtcAddress === null;
+        const effectiveRewardBtcAddress = callerSuppliedRawCalldata || clearRewardDestination ? void 0 : opts?.rewardBtcAddress ?? priorRecord?.rewardBtcAddress;
+        const effectiveRewardMaxFeeSats = callerSuppliedRawCalldata || clearRewardDestination ? void 0 : opts?.rewardMaxFeeSats ?? priorRecord?.rewardMaxFeeSats;
         if (signerCalldata === void 0 && effectiveRewardBtcAddress !== void 0) {
           try {
             signerCalldata = this.resolveSignerCalldata({
@@ -20659,6 +20666,7 @@ var StacksSDK = class _StacksSDK {
           return { success: false, error: "Next bond lockup script mismatch \u2014 NOT proceeding" };
         }
         const needsPersistedReward = opts?.rewardBtcAddress === void 0;
+        const clearRewardDestination = opts?.rewardBtcAddress === null;
         let nextBondRewardRecord = null;
         let priorBondRecord = null;
         if (needsPersistedReward) {
@@ -20682,8 +20690,8 @@ var StacksSDK = class _StacksSDK {
           }
         }
         const rewardSourceRecord = nextBondRewardRecord?.rewardBtcAddress !== void 0 ? nextBondRewardRecord : priorBondRecord;
-        const rewardBtcAddress = opts?.rewardBtcAddress ?? rewardSourceRecord?.rewardBtcAddress;
-        const rewardMaxFeeSats = opts?.rewardMaxFeeSats ?? rewardSourceRecord?.rewardMaxFeeSats;
+        const rewardBtcAddress = clearRewardDestination ? void 0 : opts?.rewardBtcAddress ?? rewardSourceRecord?.rewardBtcAddress;
+        const rewardMaxFeeSats = clearRewardDestination ? void 0 : opts?.rewardMaxFeeSats ?? rewardSourceRecord?.rewardMaxFeeSats;
         let signerCalldata;
         try {
           signerCalldata = this.resolveSignerCalldata({ signerCalldata: opts?.signerCalldata, rewardBtcAddress, rewardMaxFeeSats });
