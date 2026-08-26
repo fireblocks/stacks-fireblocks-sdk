@@ -294,6 +294,12 @@ export class ApiService {
         case ActionType.GET_COMMITTED_REWARD_ADDRESS:
           result = await sdk.getCommittedRewardAddress({ bondIndex: params.bondIndex, signerManager: params.signerManager });
           break;
+        case ActionType.GET_SIGNER_MANAGER_FEE_BIPS:
+          result = await sdk.getSignerManagerFeeBips(params.signerManager);
+          break;
+        case ActionType.GET_NATIVE_REWARD_THRESHOLD:
+          result = await sdk.getNativeRewardThreshold({ signerManager: params.signerManager, maxFeeSats: params.maxFeeSats });
+          break;
         case ActionType.CALCULATE_REWARDS:
           result = await sdk.calculateRewards({ note: params.note, nonce: params.nonce });
           break;

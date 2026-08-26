@@ -1,4 +1,4 @@
-import { encodeRewardAddressCalldata, REWARD_CALLDATA_MAX_BYTES, decodeCommittedRewardMapValue } from "../utils/rewardCalldata";
+import { encodeRewardAddressCalldata, REWARD_CALLDATA_MAX_BYTES, decodeCommittedRewardMapValue, nativeRewardThresholdSats } from "../utils/rewardCalldata";
 import { Cl, deserializeCV, serializeCV } from "@stacks/transactions";
 import { poxAddressToTuple } from "@stacks/stacking";
 
@@ -82,6 +82,50 @@ function committedMapValueHex(btcAddress: string, maxFee: bigint): string {
   const value = Cl.some(Cl.tuple({ "pox-addr": poxAddressToTuple(btcAddress), "max-fee": Cl.uint(maxFee) }));
   return serializeCV(value);
 }
+
+describe("nativeRewardThresholdSats (the required disclosure figure)", () => {
+  const t = (maxFeeSats: bigint, feesBips: number) => nativeRewardThresholdSats({ maxFeeSats, feesBips });
+
+  it("matches the published zero-fee figure exactly (5,000 budget -> 5,546)", () => {
+    // This is the anchor: Stacks Labs published 5,546 for a zero-fee manager at a 5,000-sat
+    // budget. Reproducing it exactly is what validates the whole derivation.
+    expect(t(BigInt(5000), 0)).toBe(BigInt(5546));
+  });
+
+  it("is exactly maxFee + 546 when the manager takes no fee", () => {
+    for (const fee of [0, 1, 1000, 5000, 250_000]) {
+      expect(t(BigInt(fee), 0)).toBe(BigInt(fee) + BigInt(546));
+    }
+  });
+
+  it("grosses up for a manager fee using the contract's floored arithmetic", () => {
+    // The continuous approximation (net / (1 - bips/10000)) gives ~5,837; the integer
+    // arithmetic the contract actually performs gives 5,834. Off-by-a-few matters here
+    // because this string is shown to the customer as a money disclosure.
+    const threshold = t(BigInt(5000), 495);
+    expect(threshold).toBe(BigInt(5834));
+    expect(threshold).toBeGreaterThan(BigInt(5546)); // a fee can only raise the bar
+  });
+
+  it("returns a threshold that is genuinely the boundary: +1 is payable, it is not", () => {
+    // Re-derive the contract's own test from the returned number, for several fee levels.
+    const netOf = (gross: bigint, bips: number) => gross - (gross * BigInt(bips)) / BigInt(10000);
+    for (const bips of [0, 100, 495, 1000, 9999]) {
+      const maxFee = BigInt(5000);
+      const threshold = t(maxFee, bips);
+      const payable = (gross: bigint) => netOf(gross, bips) >= maxFee + BigInt(547);
+      expect(payable(threshold)).toBe(false);
+      expect(payable(threshold + BigInt(1))).toBe(true);
+    }
+  });
+
+  it("rejects nonsense inputs rather than printing a wrong number", () => {
+    expect(() => t(BigInt(-1), 0)).toThrow(/non-negative/);
+    expect(() => t(BigInt(5000), -1)).toThrow(/feesBips/);
+    expect(() => t(BigInt(5000), 10000)).toThrow(/feesBips/);
+    expect(() => t(BigInt(5000), 4.5)).toThrow(/feesBips/);
+  });
+});
 
 describe("decodeCommittedRewardMapValue", () => {
   it("round-trips a committed testnet P2WPKH destination", () => {

@@ -13999,6 +13999,7 @@ __export(index_exports, {
   PUBLIC_TESTNET_POX5_API: () => PUBLIC_TESTNET_POX5_API,
   RBF_MIN_FEE_MULTIPLIER: () => RBF_MIN_FEE_MULTIPLIER,
   REWARD_CALLDATA_MAX_BYTES: () => REWARD_CALLDATA_MAX_BYTES,
+  SBTC_WITHDRAWAL_DUST_SATS: () => SBTC_WITHDRAWAL_DUST_SATS,
   SignerManagerRegistry: () => SignerManagerRegistry,
   StackingPools: () => StackingPools,
   StacksSDK: () => StacksSDK,
@@ -14016,6 +14017,7 @@ __export(index_exports, {
   ftInfo: () => ftInfo,
   helperConstants: () => helperConstants,
   laterStage: () => laterStage,
+  nativeRewardThresholdSats: () => nativeRewardThresholdSats,
   pagination_defaults: () => pagination_defaults,
   parseOptionalAmount: () => parseOptionalAmount,
   parseOptionalFee: () => parseOptionalFee,
@@ -16818,6 +16820,22 @@ function encodeRewardAddressCalldata(rewardBtcAddress, maxFeeSats) {
   }
   return bytes2;
 }
+var SBTC_WITHDRAWAL_DUST_SATS = BigInt(546);
+function nativeRewardThresholdSats(opts) {
+  const { maxFeeSats, feesBips } = opts;
+  if (maxFeeSats < BigInt(0)) throw new Error(`maxFeeSats must be non-negative, got ${maxFeeSats}`);
+  if (!Number.isInteger(feesBips) || feesBips < 0 || feesBips >= 1e4) {
+    throw new Error(`feesBips must be an integer in [0, 10000), got ${feesBips}`);
+  }
+  const BPS = BigInt(1e4);
+  const bips = BigInt(feesBips);
+  const netMinPayable = maxFeeSats + SBTC_WITHDRAWAL_DUST_SATS + BigInt(1);
+  const netOf = (gross2) => gross2 - gross2 * bips / BPS;
+  let gross = (netMinPayable * BPS + (BPS - bips) - BigInt(1)) / (BPS - bips);
+  while (netOf(gross) < netMinPayable) gross += BigInt(1);
+  while (gross > BigInt(0) && netOf(gross - BigInt(1)) >= netMinPayable) gross -= BigInt(1);
+  return gross - BigInt(1);
+}
 var stripHex = (h) => h.replace(/^0x/, "");
 function decodeCommittedRewardMapValue(dataHex, network) {
   const cv = (0, import_transactions3.deserializeCV)(dataHex);
@@ -17802,6 +17820,65 @@ var StacksSDK = class _StacksSDK {
       if (bondIndex === void 0) return null;
       const record = await this.lockRecordStore.loadRecord(this.address, bondIndex).catch(() => null);
       return record?.signerManager ?? null;
+    };
+    /**
+     * Reads a signer manager's `fees-bips` DATA VAR straight off the node.
+     *
+     * Deliberately the data var and not `get-fee-bips-for-cycle`, which returns u0 for any
+     * cycle that has not been snapshotted yet and would understate the fee — and therefore the
+     * disclosure threshold — for exactly the cycles a customer is about to enroll into.
+     */
+    this.fetchSignerManagerFeeBips = async (signerManager) => {
+      const dot = signerManager.indexOf(".");
+      if (dot < 0) {
+        throw new Error(`signerManager must be a fully-qualified contract id (address.name), got ${signerManager}`);
+      }
+      const contractAddress = signerManager.slice(0, dot);
+      const contractName = signerManager.slice(dot + 1);
+      const url = `${this.networkProfile.stacksApiUrl}/v2/data_var/${contractAddress}/${contractName}/fees-bips?proof=0`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        throw new Error(`data_var ${contractName}.fees-bips HTTP ${res.status}`);
+      }
+      const json = await res.json();
+      if (!json.data) throw new Error(`data_var ${contractName}.fees-bips returned no data`);
+      const cv = (0, import_transactions4.deserializeCV)(json.data);
+      if (typeof cv.value !== "bigint") {
+        throw new Error(`data_var ${contractName}.fees-bips is not a uint`);
+      }
+      const bips = Number(cv.value);
+      if (!Number.isInteger(bips) || bips < 0 || bips >= 1e4) {
+        throw new Error(`data_var ${contractName}.fees-bips out of range: ${cv.value}`);
+      }
+      return bips;
+    };
+    /**
+     * Public: the signer manager's fee in basis points, read from the chain.
+     */
+    this.getSignerManagerFeeBips = async (signerManager) => {
+      try {
+        return { success: true, data: { fees_bips: await this.fetchSignerManagerFeeBips(signerManager) } };
+      } catch (error) {
+        return { success: false, error: `Failed to read signer-manager fee: ${formatErrorMessage(error)}` };
+      }
+    };
+    /**
+     * Public: the largest per-cycle reward (GROSS, before the manager's fee) that cannot be paid
+     * out to Bitcoin for this manager and fee budget — the number the enrollment UI discloses as
+     * "cycles earning N sats or less cannot be paid to Bitcoin".
+     *
+     * The arithmetic lives here rather than in each caller so it cannot drift between them, and
+     * `fees_bips` is returned alongside so a caller can show or re-derive it. Returned as a
+     * string to keep the JSON/REST surface bigint-safe.
+     */
+    this.getNativeRewardThreshold = async (opts) => {
+      try {
+        const feesBips = await this.fetchSignerManagerFeeBips(opts.signerManager);
+        const threshold = nativeRewardThresholdSats({ maxFeeSats: opts.maxFeeSats, feesBips });
+        return { success: true, data: { threshold_sats: threshold.toString(), fees_bips: feesBips } };
+      } catch (error) {
+        return { success: false, error: `Failed to compute the native-reward threshold: ${formatErrorMessage(error)}` };
+      }
     };
     /**
      * Public: read the on-chain committed reward destination for this vault's staker under a
@@ -22351,6 +22428,8 @@ var ActionType = /* @__PURE__ */ ((ActionType2) => {
   ActionType2["REPLACE_BTC_RECOVERY_FEE"] = "replaceBtcRecoveryFee";
   ActionType2["RENEW_BOND"] = "renewBond";
   ActionType2["GET_COMMITTED_REWARD_ADDRESS"] = "getCommittedRewardAddress";
+  ActionType2["GET_SIGNER_MANAGER_FEE_BIPS"] = "getSignerManagerFeeBips";
+  ActionType2["GET_NATIVE_REWARD_THRESHOLD"] = "getNativeRewardThreshold";
   ActionType2["CALCULATE_REWARDS"] = "calculateRewards";
   ActionType2["CLAIM_REWARDS"] = "claimRewards";
   ActionType2["CLAIM_STX_ONLY_REWARDS"] = "claimStxOnlyRewards";
@@ -22839,6 +22918,12 @@ var ApiService = class {
           case "getCommittedRewardAddress" /* GET_COMMITTED_REWARD_ADDRESS */:
             result = await sdk.getCommittedRewardAddress({ bondIndex: params.bondIndex, signerManager: params.signerManager });
             break;
+          case "getSignerManagerFeeBips" /* GET_SIGNER_MANAGER_FEE_BIPS */:
+            result = await sdk.getSignerManagerFeeBips(params.signerManager);
+            break;
+          case "getNativeRewardThreshold" /* GET_NATIVE_REWARD_THRESHOLD */:
+            result = await sdk.getNativeRewardThreshold({ signerManager: params.signerManager, maxFeeSats: params.maxFeeSats });
+            break;
           case "calculateRewards" /* CALCULATE_REWARDS */:
             result = await sdk.calculateRewards({ note: params.note, nonce: params.nonce });
             break;
@@ -23210,6 +23295,7 @@ var FileLockRecordStore = class {
   PUBLIC_TESTNET_POX5_API,
   RBF_MIN_FEE_MULTIPLIER,
   REWARD_CALLDATA_MAX_BYTES,
+  SBTC_WITHDRAWAL_DUST_SATS,
   SignerManagerRegistry,
   StackingPools,
   StacksSDK,
@@ -23227,6 +23313,7 @@ var FileLockRecordStore = class {
   ftInfo,
   helperConstants,
   laterStage,
+  nativeRewardThresholdSats,
   pagination_defaults,
   parseOptionalAmount,
   parseOptionalFee,

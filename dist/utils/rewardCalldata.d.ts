@@ -24,6 +24,36 @@ export declare const REWARD_CALLDATA_MAX_BYTES = 500;
  * structurally invalid address (via poxAddressToTuple) and a negative fee.
  */
 export declare function encodeRewardAddressCalldata(rewardBtcAddress: string, maxFeeSats: bigint): Uint8Array;
+/**
+ * sBTC withdrawal dust floor: the withdrawn amount must EXCEED this, so a cycle is payable
+ * to Bitcoin only when the amount left after the fee budget is 547 sats or more.
+ */
+export declare const SBTC_WITHDRAWAL_DUST_SATS: bigint;
+/**
+ * The largest per-cycle reward (in sats, GROSS — before the signer manager's fee) that can
+ * NOT be paid out to Bitcoin. This is the number the enrollment UI must disclose:
+ * "cycles earning <threshold> sats or less cannot be paid to Bitcoin".
+ *
+ * Derivation, from the reference signer-manager and sBTC withdrawal rules:
+ *  - the manager takes `fees-bips` from the gross reward first, so
+ *    `net = gross − floor(gross × feesBips / 10000)`;
+ *  - the claim reverts when `net < maxFee`, and the remainder `net − maxFee` must EXCEED the
+ *    546-sat dust floor — so a cycle is payable iff `net >= maxFee + 547`;
+ *  - therefore the largest non-payable gross is one below the smallest gross whose net
+ *    reaches that bound.
+ *
+ * At `feesBips` 0 and a 5,000-sat budget this yields 5,546 — matching the figure Stacks Labs
+ * published for a zero-fee manager, which is what anchors this derivation. Note their
+ * "~5,837" for a 495-bip manager is a continuous approximation (`net / (1 − bips/10000)`);
+ * the exact integer arithmetic the contract performs gives 5,834, and this returns the exact
+ * value. Callers that would rather under-promise can round up — overstating the threshold
+ * only withholds a payout the customer was not promised, whereas understating it promises a
+ * Bitcoin payout that silently falls back to sBTC.
+ */
+export declare function nativeRewardThresholdSats(opts: {
+    maxFeeSats: bigint;
+    feesBips: number;
+}): bigint;
 /** The committed reward destination read back from the signer-manager `pox-addrs` map. */
 export interface CommittedRewardDestination {
     /** The Bitcoin address rewards are routed to (inverse of the on-chain pox-addr tuple). */

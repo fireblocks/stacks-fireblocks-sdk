@@ -72,7 +72,7 @@ import { createHash } from "crypto";
 import { parseOptionalFee, ValidationError } from "./utils/validation";
 import { formatErrorMessage } from "./utils/errorHandling";
 import { checkFeeReplacement, ParsedRecoveryTx } from "./utils/rbf";
-import { encodeRewardAddressCalldata, REWARD_CALLDATA_MAX_BYTES, decodeCommittedRewardMapValue, CommittedRewardDestination } from "./utils/rewardCalldata";
+import { encodeRewardAddressCalldata, REWARD_CALLDATA_MAX_BYTES, decodeCommittedRewardMapValue, CommittedRewardDestination, nativeRewardThresholdSats } from "./utils/rewardCalldata";
 import { validateBondScheduleAgainstChain, BondScheduleValidation } from "./utils/bondScheduleChain";
 import { planSbtcRollover } from "./staking/bonds/sbtc-rollover";
 import { validateApiCredentials } from "./utils/fireblocks.utils";
@@ -1354,6 +1354,73 @@ export class StacksSDK {
     if (bondIndex === undefined) return null;
     const record = await this.lockRecordStore.loadRecord(this.address!, bondIndex).catch(() => null);
     return record?.signerManager ?? null;
+  };
+
+  /**
+   * Reads a signer manager's `fees-bips` DATA VAR straight off the node.
+   *
+   * Deliberately the data var and not `get-fee-bips-for-cycle`, which returns u0 for any
+   * cycle that has not been snapshotted yet and would understate the fee — and therefore the
+   * disclosure threshold — for exactly the cycles a customer is about to enroll into.
+   */
+  private fetchSignerManagerFeeBips = async (signerManager: string): Promise<number> => {
+    const dot = signerManager.indexOf(".");
+    if (dot < 0) {
+      throw new Error(`signerManager must be a fully-qualified contract id (address.name), got ${signerManager}`);
+    }
+    const contractAddress = signerManager.slice(0, dot);
+    const contractName = signerManager.slice(dot + 1);
+    const url = `${this.networkProfile.stacksApiUrl}/v2/data_var/${contractAddress}/${contractName}/fees-bips?proof=0`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error(`data_var ${contractName}.fees-bips HTTP ${res.status}`);
+    }
+    const json = (await res.json()) as { data?: string };
+    if (!json.data) throw new Error(`data_var ${contractName}.fees-bips returned no data`);
+    const cv = deserializeCV(json.data) as { value?: unknown };
+    if (typeof cv.value !== "bigint") {
+      throw new Error(`data_var ${contractName}.fees-bips is not a uint`);
+    }
+    const bips = Number(cv.value);
+    if (!Number.isInteger(bips) || bips < 0 || bips >= 10000) {
+      throw new Error(`data_var ${contractName}.fees-bips out of range: ${cv.value}`);
+    }
+    return bips;
+  };
+
+  /**
+   * Public: the signer manager's fee in basis points, read from the chain.
+   */
+  public getSignerManagerFeeBips = async (
+    signerManager: string,
+  ): Promise<{ success: boolean; data?: { fees_bips: number }; error?: string }> => {
+    try {
+      return { success: true, data: { fees_bips: await this.fetchSignerManagerFeeBips(signerManager) } };
+    } catch (error) {
+      return { success: false, error: `Failed to read signer-manager fee: ${formatErrorMessage(error)}` };
+    }
+  };
+
+  /**
+   * Public: the largest per-cycle reward (GROSS, before the manager's fee) that cannot be paid
+   * out to Bitcoin for this manager and fee budget — the number the enrollment UI discloses as
+   * "cycles earning N sats or less cannot be paid to Bitcoin".
+   *
+   * The arithmetic lives here rather than in each caller so it cannot drift between them, and
+   * `fees_bips` is returned alongside so a caller can show or re-derive it. Returned as a
+   * string to keep the JSON/REST surface bigint-safe.
+   */
+  public getNativeRewardThreshold = async (opts: {
+    signerManager: string;
+    maxFeeSats: bigint;
+  }): Promise<{ success: boolean; data?: { threshold_sats: string; fees_bips: number }; error?: string }> => {
+    try {
+      const feesBips = await this.fetchSignerManagerFeeBips(opts.signerManager);
+      const threshold = nativeRewardThresholdSats({ maxFeeSats: opts.maxFeeSats, feesBips });
+      return { success: true, data: { threshold_sats: threshold.toString(), fees_bips: feesBips } };
+    } catch (error) {
+      return { success: false, error: `Failed to compute the native-reward threshold: ${formatErrorMessage(error)}` };
+    }
   };
 
   /**

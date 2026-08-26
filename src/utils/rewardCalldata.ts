@@ -42,6 +42,53 @@ export function encodeRewardAddressCalldata(rewardBtcAddress: string, maxFeeSats
   return bytes;
 }
 
+/**
+ * sBTC withdrawal dust floor: the withdrawn amount must EXCEED this, so a cycle is payable
+ * to Bitcoin only when the amount left after the fee budget is 547 sats or more.
+ */
+export const SBTC_WITHDRAWAL_DUST_SATS = BigInt(546);
+
+/**
+ * The largest per-cycle reward (in sats, GROSS — before the signer manager's fee) that can
+ * NOT be paid out to Bitcoin. This is the number the enrollment UI must disclose:
+ * "cycles earning <threshold> sats or less cannot be paid to Bitcoin".
+ *
+ * Derivation, from the reference signer-manager and sBTC withdrawal rules:
+ *  - the manager takes `fees-bips` from the gross reward first, so
+ *    `net = gross − floor(gross × feesBips / 10000)`;
+ *  - the claim reverts when `net < maxFee`, and the remainder `net − maxFee` must EXCEED the
+ *    546-sat dust floor — so a cycle is payable iff `net >= maxFee + 547`;
+ *  - therefore the largest non-payable gross is one below the smallest gross whose net
+ *    reaches that bound.
+ *
+ * At `feesBips` 0 and a 5,000-sat budget this yields 5,546 — matching the figure Stacks Labs
+ * published for a zero-fee manager, which is what anchors this derivation. Note their
+ * "~5,837" for a 495-bip manager is a continuous approximation (`net / (1 − bips/10000)`);
+ * the exact integer arithmetic the contract performs gives 5,834, and this returns the exact
+ * value. Callers that would rather under-promise can round up — overstating the threshold
+ * only withholds a payout the customer was not promised, whereas understating it promises a
+ * Bitcoin payout that silently falls back to sBTC.
+ */
+export function nativeRewardThresholdSats(opts: { maxFeeSats: bigint; feesBips: number }): bigint {
+  const { maxFeeSats, feesBips } = opts;
+  if (maxFeeSats < BigInt(0)) throw new Error(`maxFeeSats must be non-negative, got ${maxFeeSats}`);
+  if (!Number.isInteger(feesBips) || feesBips < 0 || feesBips >= 10000) {
+    throw new Error(`feesBips must be an integer in [0, 10000), got ${feesBips}`);
+  }
+  const BPS = BigInt(10000);
+  const bips = BigInt(feesBips);
+  const netMinPayable = maxFeeSats + SBTC_WITHDRAWAL_DUST_SATS + BigInt(1);
+  // BigInt division truncates toward zero, which matches the contract's floor for positives.
+  const netOf = (gross: bigint): bigint => gross - (gross * bips) / BPS;
+
+  // Start from the continuous estimate, then correct EXACTLY in both directions: the floored
+  // fee means the closed form can be off by one, and a money disclosure cannot be off by one.
+  let gross = (netMinPayable * BPS + (BPS - bips) - BigInt(1)) / (BPS - bips);
+  while (netOf(gross) < netMinPayable) gross += BigInt(1);
+  while (gross > BigInt(0) && netOf(gross - BigInt(1)) >= netMinPayable) gross -= BigInt(1);
+  return gross - BigInt(1);
+}
+
 /** The committed reward destination read back from the signer-manager `pox-addrs` map. */
 export interface CommittedRewardDestination {
   /** The Bitcoin address rewards are routed to (inverse of the on-chain pox-addr tuple). */

@@ -209,6 +209,44 @@ export declare class StacksSDK {
      */
     private resolveSignerManagerForRewardRead;
     /**
+     * Reads a signer manager's `fees-bips` DATA VAR straight off the node.
+     *
+     * Deliberately the data var and not `get-fee-bips-for-cycle`, which returns u0 for any
+     * cycle that has not been snapshotted yet and would understate the fee — and therefore the
+     * disclosure threshold — for exactly the cycles a customer is about to enroll into.
+     */
+    private fetchSignerManagerFeeBips;
+    /**
+     * Public: the signer manager's fee in basis points, read from the chain.
+     */
+    getSignerManagerFeeBips: (signerManager: string) => Promise<{
+        success: boolean;
+        data?: {
+            fees_bips: number;
+        };
+        error?: string;
+    }>;
+    /**
+     * Public: the largest per-cycle reward (GROSS, before the manager's fee) that cannot be paid
+     * out to Bitcoin for this manager and fee budget — the number the enrollment UI discloses as
+     * "cycles earning N sats or less cannot be paid to Bitcoin".
+     *
+     * The arithmetic lives here rather than in each caller so it cannot drift between them, and
+     * `fees_bips` is returned alongside so a caller can show or re-derive it. Returned as a
+     * string to keep the JSON/REST surface bigint-safe.
+     */
+    getNativeRewardThreshold: (opts: {
+        signerManager: string;
+        maxFeeSats: bigint;
+    }) => Promise<{
+        success: boolean;
+        data?: {
+            threshold_sats: string;
+            fees_bips: number;
+        };
+        error?: string;
+    }>;
+    /**
      * Public: read the on-chain committed reward destination for this vault's staker under a
      * given bond (or the active membership). Resolves the signer-manager from the bond's
      * durable record unless one is passed explicitly. `data` is null when no reward address
