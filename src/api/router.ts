@@ -1639,6 +1639,58 @@ router.get("/:vaultId/stacking/pox5/bond/reward-address", validateVaultId, contr
 
 /**
  * @openapi
+ * /{vaultId}/stacking/pox5/rewards/threshold:
+ *   get:
+ *     tags: [PoX-5 BTC Bonds]
+ *     summary: Largest per-cycle reward that cannot be paid to Bitcoin
+ *     description: >
+ *       Returns the disclosure threshold for a signer manager and fee budget - the largest
+ *       gross per-cycle reward that cannot be paid out to Bitcoin - together with the
+ *       manager's fees-bips read from chain. Show it as "cycles earning N sats or less
+ *       cannot be paid to Bitcoin".
+ *     parameters:
+ *       - in: path
+ *         name: vaultId
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: signerManager
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: maxFeeSats
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Threshold and fee basis points. }
+ *       400: { description: Missing or invalid parameters. }
+ */
+router.get("/:vaultId/stacking/pox5/rewards/threshold", validateVaultId, controller.getNativeRewardThreshold);
+
+/**
+ * @openapi
+ * /{vaultId}/stacking/pox5/signer-manager/fee-bips:
+ *   get:
+ *     tags: [PoX-5 BTC Bonds]
+ *     summary: Signer manager fee in basis points
+ *     description: Reads the manager's fees-bips data var from chain.
+ *     parameters:
+ *       - in: path
+ *         name: vaultId
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: signerManager
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Fee in basis points. }
+ *       400: { description: Missing signerManager. }
+ */
+router.get("/:vaultId/stacking/pox5/signer-manager/fee-bips", validateVaultId, controller.getSignerManagerFeeBips);
+
+/**
+ * @openapi
  * /{vaultId}/stacking/pox5/bond/renew:
  *   post:
  *     tags: [PoX-5 BTC Bonds]

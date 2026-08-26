@@ -89,6 +89,8 @@ export enum ActionType {
   REPLACE_BTC_RECOVERY_FEE = "replaceBtcRecoveryFee",
   RENEW_BOND = "renewBond",
   GET_COMMITTED_REWARD_ADDRESS = "getCommittedRewardAddress",
+  GET_SIGNER_MANAGER_FEE_BIPS = "getSignerManagerFeeBips",
+  GET_NATIVE_REWARD_THRESHOLD = "getNativeRewardThreshold",
   CALCULATE_REWARDS = "calculateRewards",
   CLAIM_REWARDS = "claimRewards",
   CLAIM_STX_ONLY_REWARDS = "claimStxOnlyRewards",

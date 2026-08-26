@@ -1197,6 +1197,46 @@ export const getCommittedRewardAddress: Handler = async (req, res, next) => {
   }
 };
 
+// GET /:vaultId/stacking/pox5/rewards/threshold
+export const getNativeRewardThreshold: Handler = async (req, res, next) => {
+  try {
+    const vaultId = getVaultId(req);
+    const signerManager = String(req.query.signerManager ?? req.body?.signerManager ?? "").trim();
+    if (!signerManager) {
+      res.status(400).json({ error: "Bad Request: signerManager is required" });
+      return;
+    }
+    const maxFeeStr = String(req.query.maxFeeSats ?? req.body?.maxFeeSats ?? "");
+    if (!/^[0-9]+$/.test(maxFeeStr)) {
+      res.status(400).json({ error: "Bad Request: maxFeeSats must be a non-negative integer string" });
+      return;
+    }
+    const result = await apiService.executeAction(vaultId, ActionType.GET_NATIVE_REWARD_THRESHOLD, {
+      signerManager,
+      maxFeeSats: BigInt(maxFeeStr),
+    });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// GET /:vaultId/stacking/pox5/signer-manager/fee-bips
+export const getSignerManagerFeeBips: Handler = async (req, res, next) => {
+  try {
+    const vaultId = getVaultId(req);
+    const signerManager = String(req.query.signerManager ?? req.body?.signerManager ?? "").trim();
+    if (!signerManager) {
+      res.status(400).json({ error: "Bad Request: signerManager is required" });
+      return;
+    }
+    const result = await apiService.executeAction(vaultId, ActionType.GET_SIGNER_MANAGER_FEE_BIPS, { signerManager });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
 // GET /:vaultId/stacking/pox5/bond/lock-address
 export const getBondLockAddress: Handler = async (req, res, next) => {
   try {
