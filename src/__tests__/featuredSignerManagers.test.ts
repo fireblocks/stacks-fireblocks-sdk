@@ -31,6 +31,13 @@ describe("FEATURED_SIGNER_MANAGERS", () => {
     for (const m of FEATURED_SIGNER_MANAGERS["private-devnet"]) expect(m.contract).toMatch(/^ST/);
   });
 
+  it("returns undefined for an unknown network instead of throwing", () => {
+    // A network name threaded through from config is a plain string at runtime, so this
+    // must degrade to a miss rather than a TypeError on indexing undefined.
+    expect(defaultSignerManagerFor("nope" as never)).toBeUndefined();
+    expect(defaultSignerManagerFor(undefined as never)).toBeUndefined();
+  });
+
   it("resolves the default, and returns undefined where none is featured", () => {
     expect(defaultSignerManagerFor("mainnet")?.contract)
       .toBe("SP3RX8RME63CY63G5WZ8XQWZNTYNETYJESQKE071E.stacks-labs");

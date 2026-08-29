@@ -321,11 +321,18 @@ export const FEATURED_SIGNER_MANAGERS: {
   "public-testnet": [],
 };
 
-/** The manager to pre-select for a network, or undefined when none is featured. */
+/**
+ * The manager to pre-select for a network, or undefined when none is featured.
+ *
+ * The optional chain is load-bearing: the parameter type stops a TypeScript caller passing
+ * an unknown key, but a network name threaded through from config at runtime is just a
+ * string. Indexing on a miss yields undefined, and `.find` on it would throw a TypeError —
+ * so the signature would promise a graceful miss the implementation did not deliver.
+ */
 export const defaultSignerManagerFor = (
   network: keyof typeof FEATURED_SIGNER_MANAGERS,
 ): FeaturedSignerManager | undefined =>
-  FEATURED_SIGNER_MANAGERS[network].find((m) => m.default);
+  FEATURED_SIGNER_MANAGERS[network]?.find((m) => m.default);
 
 export const POX5_BOND_ERRORS: Record<number, { name: string; message: string }> = {
   7:  { name: 'ERR_BOND_NOT_FOUND',                    message: 'Bond index not found — verify bondIndex.' },
