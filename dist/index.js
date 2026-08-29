@@ -14344,7 +14344,7 @@ var BTC_ESPLORA = {
 var PRIVATE1_HIRO_API_BASE = "https://api.private-1.hiro.so";
 var PUBLIC_TESTNET_POX5_API = "https://api.testnet-pox5.hiro.so";
 var EARLY_EXIT_SIGNER = {
-  mainnet: "",
+  mainnet: "https://tl5v426qz8.execute-api.eu-west-1.amazonaws.com/api/v1",
   testnet: "https://r25rniyw12.execute-api.eu-west-1.amazonaws.com/api/v1",
   public_testnet: ""
 };

@@ -270,10 +270,14 @@ export const PRIVATE1_HIRO_API_BASE = 'https://api.private-1.hiro.so';
 export const PUBLIC_TESTNET_POX5_API = 'https://api.testnet-pox5.hiro.so';
 
 // External KMS cosigner for the bond early-exit (OP_ELSE) spend path.
-// Auth-less public endpoints — no secrets involved. Mainnet and public testnet are
-// not provisioned yet; resolveCosignerUrl throws unless EARLY_EXIT_SIGNER_URL is set.
+// Auth-less public endpoints — no secrets involved. Public testnet is not provisioned;
+// resolveCosignerUrl throws for it unless EARLY_EXIT_SIGNER_URL is set.
+//
+// Mainnet and private-1 values supplied by Stacks Labs (2026-08-29). The mainnet service
+// advertises an xpub and private-1 a tpub, which is why the cosigner's extended-key parse
+// selects BIP-32 version bytes from the key's own prefix rather than assuming mainnet.
 export const EARLY_EXIT_SIGNER = {
-  mainnet: '',
+  mainnet: 'https://tl5v426qz8.execute-api.eu-west-1.amazonaws.com/api/v1',
   testnet: 'https://r25rniyw12.execute-api.eu-west-1.amazonaws.com/api/v1',
   public_testnet: '',
 };
