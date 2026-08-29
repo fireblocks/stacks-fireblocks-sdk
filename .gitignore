@@ -11,6 +11,8 @@ secrets
 .DS_Store
 CLAUDE.md
 *.md
+*.pdf
+*.docx
 !README.md
 .env*
 !.env.example

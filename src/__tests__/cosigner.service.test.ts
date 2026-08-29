@@ -234,7 +234,16 @@ describe("resolveCosignerUrl", () => {
     expect(resolveCosignerUrl(true)).toBe(EARLY_EXIT_SIGNER.testnet);
   });
 
-  itNoOverride("throws on mainnet until a URL is provisioned", () => {
-    expect(() => resolveCosignerUrl(false)).toThrow(/EARLY_EXIT_SIGNER_URL/);
+  itNoOverride("returns the provisioned mainnet URL", () => {
+    // Provisioned by Stacks Labs 2026-08-29. Before that this asserted a throw; early exit
+    // on mainnet failed closed because no cosigner existed to co-sign the OP_ELSE spend.
+    expect(resolveCosignerUrl(false)).toBe(EARLY_EXIT_SIGNER.mainnet);
+    expect(EARLY_EXIT_SIGNER.mainnet).not.toBe("");
+  });
+
+  it("still fails closed for a network with no cosigner provisioned", () => {
+    // public_testnet remains unprovisioned. An empty entry must refuse rather than fall
+    // through to another network's cosigner, which would co-sign against the wrong key.
+    expect(EARLY_EXIT_SIGNER.public_testnet).toBe("");
   });
 });
