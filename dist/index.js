@@ -14361,7 +14361,7 @@ var FEATURED_SIGNER_MANAGERS = {
   // Not provisioned — an empty list means "nothing to feature", never "allow nothing".
   "public-testnet": []
 };
-var defaultSignerManagerFor = (network) => FEATURED_SIGNER_MANAGERS[network].find((m) => m.default);
+var defaultSignerManagerFor = (network) => FEATURED_SIGNER_MANAGERS[network]?.find((m) => m.default);
 var POX5_BOND_ERRORS = {
   7: { name: "ERR_BOND_NOT_FOUND", message: "Bond index not found \u2014 verify bondIndex." },
   8: { name: "ERR_INSUFFICIENT_STX", message: "amountUstx below the required STX/BTC ratio minimum." },

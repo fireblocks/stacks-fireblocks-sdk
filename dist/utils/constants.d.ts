@@ -90,7 +90,14 @@ export declare const FEATURED_SIGNER_MANAGERS: {
     "private-devnet": FeaturedSignerManager[];
     "public-testnet": FeaturedSignerManager[];
 };
-/** The manager to pre-select for a network, or undefined when none is featured. */
+/**
+ * The manager to pre-select for a network, or undefined when none is featured.
+ *
+ * The optional chain is load-bearing: the parameter type stops a TypeScript caller passing
+ * an unknown key, but a network name threaded through from config at runtime is just a
+ * string. Indexing on a miss yields undefined, and `.find` on it would throw a TypeError —
+ * so the signature would promise a graceful miss the implementation did not deliver.
+ */
 export declare const defaultSignerManagerFor: (network: keyof typeof FEATURED_SIGNER_MANAGERS) => FeaturedSignerManager | undefined;
 export declare const POX5_BOND_ERRORS: Record<number, {
     name: string;
