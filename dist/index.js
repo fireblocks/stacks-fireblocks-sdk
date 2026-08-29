@@ -13990,6 +13990,7 @@ __export(index_exports, {
   DEFAULT_POX_FEE_USTX: () => DEFAULT_POX_FEE_USTX,
   DEFAULT_SCHEDULE_BOND_INDICES: () => DEFAULT_SCHEDULE_BOND_INDICES,
   EARLY_EXIT_SIGNER: () => EARLY_EXIT_SIGNER,
+  FEATURED_SIGNER_MANAGERS: () => FEATURED_SIGNER_MANAGERS,
   FileLockRecordStore: () => FileLockRecordStore,
   InMemoryLockRecordStore: () => InMemoryLockRecordStore,
   MAX_FEE_STX: () => MAX_FEE_STX,
@@ -14009,6 +14010,7 @@ __export(index_exports, {
   api_constants: () => api_constants,
   config: () => config,
   decodeCommittedRewardMapValue: () => decodeCommittedRewardMapValue,
+  defaultSignerManagerFor: () => defaultSignerManagerFor,
   derivationPath: () => derivationPath,
   diffBondSchedule: () => diffBondSchedule,
   encodeRewardAddressCalldata: () => encodeRewardAddressCalldata,
@@ -14348,6 +14350,18 @@ var EARLY_EXIT_SIGNER = {
   testnet: "https://r25rniyw12.execute-api.eu-west-1.amazonaws.com/api/v1",
   public_testnet: ""
 };
+var FEATURED_SIGNER_MANAGERS = {
+  mainnet: [
+    { contract: "SP3RX8RME63CY63G5WZ8XQWZNTYNETYJESQKE071E.stacks-labs", operator: "Stacks Labs", default: true },
+    { contract: "SP1N8F8BBBC60XF6HJBNJHKPRGJ7WZBRGNDJX4YDR.signer-manager", operator: "Stacks Labs", default: false }
+  ],
+  "private-devnet": [
+    { contract: "STM0NRFQG1Q4WNNTQ8YMSX4QGS16PSCTDHFTDMTA.signer-manager", operator: "Stacks Labs (test)", default: true }
+  ],
+  // Not provisioned — an empty list means "nothing to feature", never "allow nothing".
+  "public-testnet": []
+};
+var defaultSignerManagerFor = (network) => FEATURED_SIGNER_MANAGERS[network].find((m) => m.default);
 var POX5_BOND_ERRORS = {
   7: { name: "ERR_BOND_NOT_FOUND", message: "Bond index not found \u2014 verify bondIndex." },
   8: { name: "ERR_INSUFFICIENT_STX", message: "amountUstx below the required STX/BTC ratio minimum." },
@@ -23286,6 +23300,7 @@ var FileLockRecordStore = class {
   DEFAULT_POX_FEE_USTX,
   DEFAULT_SCHEDULE_BOND_INDICES,
   EARLY_EXIT_SIGNER,
+  FEATURED_SIGNER_MANAGERS,
   FileLockRecordStore,
   InMemoryLockRecordStore,
   MAX_FEE_STX,
@@ -23305,6 +23320,7 @@ var FileLockRecordStore = class {
   api_constants,
   config,
   decodeCommittedRewardMapValue,
+  defaultSignerManagerFor,
   derivationPath,
   diffBondSchedule,
   encodeRewardAddressCalldata,

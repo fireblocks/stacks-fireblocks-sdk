@@ -63,6 +63,35 @@ export declare const EARLY_EXIT_SIGNER: {
     testnet: string;
     public_testnet: string;
 };
+/**
+ * A signer manager the product FEATURES for a network, supplied by Stacks Labs
+ * (2026-08-29) alongside the connection values.
+ *
+ * PRESENTATION ONLY. This list does not gate anything, and must not be confused with the
+ * two enforcement concepts it sits beside:
+ *   - the signer-manager ALLOWLIST (`signerManagerAdapters`), which refuses managers when
+ *     configured, and is deliberately left unconfigured so a staker can enter their own;
+ *   - a manager's PAYOUT BOUND, required to claim rewards through it.
+ * Featuring a manager here grants neither. A staker may still enrol with any manager.
+ *
+ * Third-party managers were removed from the list at the client's request after several
+ * deployed ones turned out not to work; the entries below are the ones they support today.
+ */
+export interface FeaturedSignerManager {
+    /** Fully-qualified contract id (`address.name`). */
+    contract: string;
+    /** Human-readable operator, for display. */
+    operator: string;
+    /** Pre-select this one. Exactly one entry per network is the default. */
+    default: boolean;
+}
+export declare const FEATURED_SIGNER_MANAGERS: {
+    mainnet: FeaturedSignerManager[];
+    "private-devnet": FeaturedSignerManager[];
+    "public-testnet": FeaturedSignerManager[];
+};
+/** The manager to pre-select for a network, or undefined when none is featured. */
+export declare const defaultSignerManagerFor: (network: keyof typeof FEATURED_SIGNER_MANAGERS) => FeaturedSignerManager | undefined;
 export declare const POX5_BOND_ERRORS: Record<number, {
     name: string;
     message: string;
