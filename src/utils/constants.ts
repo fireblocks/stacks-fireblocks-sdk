@@ -282,6 +282,51 @@ export const EARLY_EXIT_SIGNER = {
   public_testnet: '',
 };
 
+/**
+ * A signer manager the product FEATURES for a network, supplied by Stacks Labs
+ * (2026-08-29) alongside the connection values.
+ *
+ * PRESENTATION ONLY. This list does not gate anything, and must not be confused with the
+ * two enforcement concepts it sits beside:
+ *   - the signer-manager ALLOWLIST (`signerManagerAdapters`), which refuses managers when
+ *     configured, and is deliberately left unconfigured so a staker can enter their own;
+ *   - a manager's PAYOUT BOUND, required to claim rewards through it.
+ * Featuring a manager here grants neither. A staker may still enrol with any manager.
+ *
+ * Third-party managers were removed from the list at the client's request after several
+ * deployed ones turned out not to work; the entries below are the ones they support today.
+ */
+export interface FeaturedSignerManager {
+  /** Fully-qualified contract id (`address.name`). */
+  contract: string;
+  /** Human-readable operator, for display. */
+  operator: string;
+  /** Pre-select this one. Exactly one entry per network is the default. */
+  default: boolean;
+}
+
+export const FEATURED_SIGNER_MANAGERS: {
+  mainnet: FeaturedSignerManager[];
+  "private-devnet": FeaturedSignerManager[];
+  "public-testnet": FeaturedSignerManager[];
+} = {
+  mainnet: [
+    { contract: "SP3RX8RME63CY63G5WZ8XQWZNTYNETYJESQKE071E.stacks-labs", operator: "Stacks Labs", default: true },
+    { contract: "SP1N8F8BBBC60XF6HJBNJHKPRGJ7WZBRGNDJX4YDR.signer-manager", operator: "Stacks Labs", default: false },
+  ],
+  "private-devnet": [
+    { contract: "STM0NRFQG1Q4WNNTQ8YMSX4QGS16PSCTDHFTDMTA.signer-manager", operator: "Stacks Labs (test)", default: true },
+  ],
+  // Not provisioned — an empty list means "nothing to feature", never "allow nothing".
+  "public-testnet": [],
+};
+
+/** The manager to pre-select for a network, or undefined when none is featured. */
+export const defaultSignerManagerFor = (
+  network: keyof typeof FEATURED_SIGNER_MANAGERS,
+): FeaturedSignerManager | undefined =>
+  FEATURED_SIGNER_MANAGERS[network].find((m) => m.default);
+
 export const POX5_BOND_ERRORS: Record<number, { name: string; message: string }> = {
   7:  { name: 'ERR_BOND_NOT_FOUND',                    message: 'Bond index not found — verify bondIndex.' },
   8:  { name: 'ERR_INSUFFICIENT_STX',                  message: 'amountUstx below the required STX/BTC ratio minimum.' },
