@@ -27,6 +27,7 @@ export const RBF_MIN_FEE_MULTIPLIER = 1.25;
 
 // Maximum fee accepted by the SDK in STX. Guards against typos (e.g. 100 instead of 0.001).
 export const MAX_FEE_STX = 10;
+export const DEFAULT_POX_FEE_USTX = BigInt(10000);
 
 export const api_constants = {
   stacks_mainnet_rpc: "https://api.hiro.so",
@@ -251,4 +252,105 @@ export const POX4_ERRORS: Record<number, { name: string; message: string }> = {
     name: "ERR_STACKING_UNREACHABLE",
     message: "An unreachable code path was hit (internal error).",
   },
+};
+
+export const BTC_ESPLORA = {
+  mainnet: 'https://mempool.space/api',
+  testnet: 'https://mempool.bitcoin.private-1.hiro.so/api',
+  // Public Bitcoin testnet3 Esplora (used by the public-testnet profile).
+  public_testnet: 'https://blockstream.info/testnet/api',
+};
+
+// PoX-5 private testnet Stacks API (chainId 256, private-1).
+export const PRIVATE1_HIRO_API_BASE = 'https://api.private-1.hiro.so';
+
+// Public PoX-5 testnet Stacks API. Currently still serves PoX-4, so the
+// public-testnet profile is gated and fails startup validation until this (or a
+// configured override) serves the PoX-5 boot contract.
+export const PUBLIC_TESTNET_POX5_API = 'https://api.testnet-pox5.hiro.so';
+
+// External KMS cosigner for the bond early-exit (OP_ELSE) spend path.
+// Auth-less public endpoints — no secrets involved. Public testnet is not provisioned;
+// resolveCosignerUrl throws for it unless EARLY_EXIT_SIGNER_URL is set.
+//
+// Mainnet and private-1 values supplied by Stacks Labs (2026-08-29). The mainnet service
+// advertises an xpub and private-1 a tpub, which is why the cosigner's extended-key parse
+// selects BIP-32 version bytes from the key's own prefix rather than assuming mainnet.
+export const EARLY_EXIT_SIGNER = {
+  mainnet: 'https://tl5v426qz8.execute-api.eu-west-1.amazonaws.com/api/v1',
+  testnet: 'https://r25rniyw12.execute-api.eu-west-1.amazonaws.com/api/v1',
+  public_testnet: '',
+};
+
+/**
+ * A signer manager the product FEATURES for a network, supplied by Stacks Labs
+ * (2026-08-29) alongside the connection values.
+ *
+ * PRESENTATION ONLY. This list does not gate anything, and must not be confused with the
+ * two enforcement concepts it sits beside:
+ *   - the signer-manager ALLOWLIST (`signerManagerAdapters`), which refuses managers when
+ *     configured, and is deliberately left unconfigured so a staker can enter their own;
+ *   - a manager's PAYOUT BOUND, required to claim rewards through it.
+ * Featuring a manager here grants neither. A staker may still enrol with any manager.
+ *
+ * Third-party managers were removed from the list at the client's request after several
+ * deployed ones turned out not to work; the entries below are the ones they support today.
+ */
+export interface FeaturedSignerManager {
+  /** Fully-qualified contract id (`address.name`). */
+  contract: string;
+  /** Human-readable operator, for display. */
+  operator: string;
+  /** Pre-select this one. Exactly one entry per network is the default. */
+  default: boolean;
+}
+
+export const FEATURED_SIGNER_MANAGERS: {
+  mainnet: FeaturedSignerManager[];
+  "private-devnet": FeaturedSignerManager[];
+  "public-testnet": FeaturedSignerManager[];
+} = {
+  mainnet: [
+    { contract: "SP3RX8RME63CY63G5WZ8XQWZNTYNETYJESQKE071E.stacks-labs", operator: "Stacks Labs", default: true },
+    { contract: "SP1N8F8BBBC60XF6HJBNJHKPRGJ7WZBRGNDJX4YDR.signer-manager", operator: "Stacks Labs", default: false },
+  ],
+  "private-devnet": [
+    { contract: "STM0NRFQG1Q4WNNTQ8YMSX4QGS16PSCTDHFTDMTA.signer-manager", operator: "Stacks Labs (test)", default: true },
+  ],
+  // Not provisioned — an empty list means "nothing to feature", never "allow nothing".
+  "public-testnet": [],
+};
+
+/**
+ * The manager to pre-select for a network, or undefined when none is featured.
+ *
+ * The optional chain is load-bearing: the parameter type stops a TypeScript caller passing
+ * an unknown key, but a network name threaded through from config at runtime is just a
+ * string. Indexing on a miss yields undefined, and `.find` on it would throw a TypeError —
+ * so the signature would promise a graceful miss the implementation did not deliver.
+ */
+export const defaultSignerManagerFor = (
+  network: keyof typeof FEATURED_SIGNER_MANAGERS,
+): FeaturedSignerManager | undefined =>
+  FEATURED_SIGNER_MANAGERS[network]?.find((m) => m.default);
+
+export const POX5_BOND_ERRORS: Record<number, { name: string; message: string }> = {
+  7:  { name: 'ERR_BOND_NOT_FOUND',                    message: 'Bond index not found — verify bondIndex.' },
+  8:  { name: 'ERR_INSUFFICIENT_STX',                  message: 'amountUstx below the required STX/BTC ratio minimum.' },
+  9:  { name: 'ERR_ALREADY_REGISTERED',                message: 'Overlapping bond membership already exists for this address.' },
+  10: { name: 'ERR_TOO_MUCH_SATS',                     message: 'BTC amount exceeds the allowlist cap for this address.' },
+  11: { name: 'ERR_NOT_ALLOWLISTED',                   message: 'Address has no allowance entry for this bond — contact the bond operator.' },
+  19: { name: 'ERR_ALREADY_STAKED',                    message: 'Address has an overlapping STX-only stake — unstake first.' },
+  23: { name: 'ERR_SIGNER_NOT_FOUND',                  message: 'Signer-manager not registered — run grantSignerKey first.' },
+  26: { name: 'ERR_UNAUTHORIZED_SIGNER_REGISTRATION',  message: 'Called pox-5 grant directly — use the signer-manager register-self path.' },
+  39: { name: 'ERR_READ_TX_OUT_OF_BOUNDS',             message: 'Raw BTC tx bytes malformed or truncated.' },
+  40: { name: 'ERR_INVALID_BTC_HEADER',                message: "Block header doesn't hash to the expected burn-chain header at that height." },
+  41: { name: 'ERR_INVALID_MERKLE_PROOF',              message: 'Merkle proof is wrong — check block hash and endianness.' },
+  42: { name: 'ERR_INVALID_LOCKUP_SCRIPT',             message: 'scriptPubKey ≠ expected P2WSH — script mismatch between SDK and contract.' },
+  43: { name: 'ERR_BOND_ALREADY_STARTED',              message: 'Registered after bond-start-height — no grace period.' },
+  45: { name: 'ERR_INVALID_LOCKUP_AMOUNT',             message: 'Proof amount ≠ decoded output value.' },
+  46: { name: 'ERR_DUPLICATE_LOCKUP_OUTPOINT',         message: 'Same (txid, vout) submitted twice.' },
+  47: { name: 'ERR_STAKE_IN_PREPARE_PHASE',            message: 'Landed in prepare phase — broadcast earlier in the cycle.' },
+  48: { name: 'ERR_ROLLOVER_TOO_EARLY',                message: 'Rollover attempted before prior bond L1 unlock window.' },
+  50: { name: 'ERR_L1_EARLY_EXIT_ALREADY_ANNOUNCED',  message: 'announceEarlyExit already called for this membership.' },
 };

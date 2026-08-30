@@ -1,5 +1,22 @@
 name: E2E Tests
 
+# FBS-32 — Release test matrix. Each of the following must be release-blocking before a
+# tagged release. Suites marked (infra) require a running PoX-5 node + deployed contracts;
+# suites marked (app) live in the desktop-app repo, not here.
+#   - unit + integration ......................... build.yml (every push/PR) ✓
+#   - type-check of all tracked suites ........... build.yml (every push/PR) ✓
+#   - STX stake / increase / extend / claim / unstake .. this workflow (against testnet)
+#   - native-BTC enrollment, idempotent retry, maturity, recovery .. (infra)
+#   - early exit through Bitcoin confirmation .... (infra)
+#   - sBTC first registration, all rollover deltas, renewal, withdrawal .. (infra, FBS-39/14)
+#   - signer rotation and calldata ............... (infra)
+#   - two-phase rewards with partial failure and restart .. (infra)
+#   - corrupt-store and interrupted-write recovery .. fileLockRecordStore.test.ts ✓ (unit)
+#   - network mismatch and unavailable-service failures .. network.test.ts ✓ (unit, partial)
+#   - desktop renderer .......................... (app)
+# The job records the exact tested node + PoX-5 contract commit into the run summary so a
+# release artifact captures what was actually exercised.
+
 on:
   workflow_dispatch: # Manual trigger
   schedule:
@@ -23,6 +40,22 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      # Record the exact node + contract commit the release was tested against. Populate
+      # the STACKS_NODE_COMMIT / POX5_CONTRACT_COMMIT repo variables per release.
+      - name: Record tested node & contract commits
+        env:
+          NODE_COMMIT: ${{ vars.STACKS_NODE_COMMIT }}
+          CONTRACT_COMMIT: ${{ vars.POX5_CONTRACT_COMMIT }}
+          STACKS_API_URL: ${{ vars.STACKS_API_URL }}
+        run: |
+          {
+            echo "## E2E release artifact"
+            echo "- SDK commit: \`$GITHUB_SHA\`"
+            echo "- Stacks node commit: \`${NODE_COMMIT:-UNRECORDED}\`"
+            echo "- PoX-5 contract commit: \`${CONTRACT_COMMIT:-UNRECORDED}\`"
+            echo "- Stacks API: \`${STACKS_API_URL:-default}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run E2E tests
         env:

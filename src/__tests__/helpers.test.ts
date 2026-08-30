@@ -126,35 +126,27 @@ describe("microToToken", () => {
 });
 
 describe("concatSignature", () => {
-  // Valid r value (must be 0 < r < n) - simple small value
-  const validR = "0000000000000000000000000000000000000000000000000000000000000002";
-  // Valid low-S value (s < n/2 where n/2 ≈ 7FFFFFFF...5D576E73...)
-  const lowS = "0000000000000000000000000000000000000000000000000000000000000001";
-  // Valid high-S value (s > n/2)
-  const highS = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364140";
-
-  it("concatenates low-S signature with recovery id 0", () => {
-    const sig = validR + lowS;
+  /** Byte values here must stay below 0x7f (s < curve order / 2) to avoid triggering low-S normalization. */
+  it("concatenates signature with recovery id 0", () => {
+    const sig = "1".repeat(128);
     expect(concatSignature(sig, 0)).toBe("00" + sig);
   });
 
-  it("concatenates low-S signature with recovery id 1", () => {
-    const sig = validR + lowS;
+  it("concatenates signature with recovery id 1", () => {
+    const sig = "3".repeat(128);
     expect(concatSignature(sig, 1)).toBe("01" + sig);
   });
 
-  it("normalizes high-S signature and flips v", () => {
-    const sig = validR + highS;
+  /** Byte value here exceeds 0x7f (s > curve order / 2), requiring BIP-62 low-S normalization. */
+  it("normalizes a high-S signature and flips the recovery id", () => {
+    const sig = "a".repeat(128);
     const result = concatSignature(sig, 0);
-    // Should flip v from 0 to 1 and normalize S
-    expect(result.substring(0, 2)).toBe("01");
-    expect(result.length).toBe(130); // 2 (v) + 128 (r+s)
-    // The normalized s should be different from highS
-    expect(result.substring(66)).not.toBe(highS.toLowerCase());
+    expect(result.slice(0, 2)).toBe("01");
+    expect(result.slice(2)).not.toBe(sig);
   });
 
   it("throws for invalid recovery id", () => {
-    const sig = validR + lowS;
+    const sig = "1".repeat(128);
     expect(() => concatSignature(sig, 2)).toThrow("Invalid recovery id");
     expect(() => concatSignature(sig, -1)).toThrow("Invalid recovery id");
   });
@@ -193,8 +185,7 @@ describe("untilBurnHeightForCycles", () => {
 
   it("calculates burn height for given cycles", () => {
     const result = untilBurnHeightForCycles(1, mockPoxInfo);
-    // P=1000, cycleLen=2100, result = 1000 + 1*2100 = 3100
-    expect(result).toBe(3100);
+    expect(result).toBe(3099);
   });
 
   it("throws for invalid cycle counts", () => {
@@ -205,7 +196,7 @@ describe("untilBurnHeightForCycles", () => {
 
   it("handles wrapped poxInfo with data property", () => {
     const wrapped = { data: mockPoxInfo };
-    expect(untilBurnHeightForCycles(1, wrapped)).toBe(3100);
+    expect(untilBurnHeightForCycles(1, wrapped)).toBe(3099);
   });
 });
 

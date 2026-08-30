@@ -6,6 +6,11 @@ import { PoolCapacityError, SdkInitializationError } from "./errors";
 
 export class SdkManager {
   private sdkPool: Map<string, SdkPoolItem> = new Map();
+  // In-flight constructions keyed the same way as sdkPool. Concurrent cold calls for
+  // one key share a single creation promise so exactly one instance is built — two
+  // instances for the same vault would have independent nonce queues and could
+  // collide on nonces.
+  private creating: Map<string, Promise<StacksSDK>> = new Map();
   private baseConfig: FireblocksConfig;
   private poolConfig: PoolConfig;
   private cleanupInterval: NodeJS.Timeout;
@@ -17,36 +22,65 @@ export class SdkManager {
       maxPoolSize: poolConfig?.maxPoolSize || 100,
       idleTimeoutMs: poolConfig?.idleTimeoutMs || 30 * 60 * 1000, // 30 minutes
       cleanupIntervalMs: poolConfig?.cleanupIntervalMs || 5 * 60 * 1000, // 5 minutes
+      lockRecordStore: poolConfig?.lockRecordStore,
     };
 
     // Start cleanup interval
     this.cleanupInterval = setInterval(
-      () => this.cleanupIdleSdks(),
+      () => {
+        this.cleanupIdleSdks().catch((error) => {
+          console.error("SDK pool cleanup failed:", formatErrorMessage(error));
+        });
+      },
       this.poolConfig.cleanupIntervalMs
     );
   }
 
   /**
-   * Get an SDK instance for a specific vault account ID
+   * Pool key for a vault. Network identity is part of the key so an instance built
+   * for one network is never handed out for another.
+   */
+  private poolKey = (vaultAccountId: string): string =>
+    `${this.baseConfig.testnet ? "testnet" : "mainnet"}:${vaultAccountId}`;
+
+  /**
+   * Get an SDK instance for a specific vault account ID. Instance acquisition is
+   * atomic: the decision path below runs synchronously (no await) up to the point a
+   * single construction promise is registered, so concurrent cold calls for the same
+   * vault share one construction rather than building duplicate instances.
    * @param vaultAccountId Fireblocks vault account ID
    * @returns StacksSDK instance
    */
   public getSdk = async (vaultAccountId: string): Promise<StacksSDK> => {
-    // Check if we already have an instance for this vault account
-    const poolItem = this.sdkPool.get(vaultAccountId);
+    const key = this.poolKey(vaultAccountId);
 
-    // If instance exists and is not in use, return it
-    if (poolItem && !poolItem.isInUse) {
-      console.log(`Reusing existing SDK instance for vault ${vaultAccountId}`);
+    // A constructed instance already exists — reuse it and count this caller.
+    const poolItem = this.sdkPool.get(key);
+    if (poolItem) {
+      poolItem.refCount++;
       poolItem.lastUsed = new Date();
-      poolItem.isInUse = true;
       return poolItem.sdk;
     }
 
-    // Check pool capacity
-    if (this.sdkPool.size >= this.poolConfig.maxPoolSize && !poolItem) {
-      // Try to find and remove an idle instance
-      const removed = await this.removeOldestIdleSdk();
+    // A construction is already in flight for this key — share it, and count THIS
+    // caller once the instance lands (the initiating caller is counted at creation).
+    const inFlight = this.creating.get(key);
+    if (inFlight) {
+      return inFlight.then((sdk) => {
+        const item = this.sdkPool.get(key);
+        if (item) {
+          item.refCount++;
+          item.lastUsed = new Date();
+        }
+        return sdk;
+      });
+    }
+
+    // Capacity check counts both constructed and in-flight instances. Evict an idle
+    // instance if at capacity; refuse if none can be evicted. removeOldestIdleSdk is
+    // synchronous, so no other call can interleave before the promise is registered.
+    if (this.sdkPool.size + this.creating.size >= this.poolConfig.maxPoolSize) {
+      const removed = this.removeOldestIdleSdk();
       if (!removed) {
         throw new PoolCapacityError(
           `SDK pool is at maximum capacity (${this.poolConfig.maxPoolSize}) with no idle connections`
@@ -54,21 +88,21 @@ export class SdkManager {
       }
     }
 
-    // Create a new SDK instance if needed
-    if (!poolItem) {
-      const sdk = await this.createSdkInstance(vaultAccountId);
-      this.sdkPool.set(vaultAccountId, {
-        sdk,
-        lastUsed: new Date(),
-        isInUse: true,
+    const creation = this.createSdkInstance(vaultAccountId)
+      .then((sdk) => {
+        // Created with refCount 1 for THIS initiating caller, so the instance is
+        // never idle/evictable in the window before the caller receives it.
+        this.sdkPool.set(key, { sdk, lastUsed: new Date(), refCount: 1 });
+        return sdk;
+      })
+      .finally(() => {
+        // Clear the in-flight marker on both success and failure, so a failed
+        // construction allows a clean retry and a successful one does not leak.
+        this.creating.delete(key);
       });
-      return sdk;
-    } else {
-      // Instance exists but is in use
-      poolItem.lastUsed = new Date();
-      poolItem.isInUse = true;
-      return poolItem.sdk;
-    }
+
+    this.creating.set(key, creation);
+    return creation;
   };
 
   /**
@@ -76,9 +110,10 @@ export class SdkManager {
    * @param vaultAccountId Vault account ID
    */
   public releaseSdk = (vaultAccountId: string): void => {
-    const poolItem = this.sdkPool.get(vaultAccountId);
+    const poolItem = this.sdkPool.get(this.poolKey(vaultAccountId));
     if (poolItem) {
-      poolItem.isInUse = false;
+      // Only the LAST concurrent holder returning it makes it idle/evictable.
+      poolItem.refCount = Math.max(0, poolItem.refCount - 1);
       poolItem.lastUsed = new Date();
     }
   };
@@ -98,6 +133,9 @@ export class SdkManager {
     try {
       console.log(`Creating new SDK instance for vault ${vaultAccountId}`);
       const sdk = await StacksSDK.create(vaultAccountId, config);
+      if (this.poolConfig.lockRecordStore) {
+        sdk.setLockRecordStore(this.poolConfig.lockRecordStore);
+      }
       return sdk;
     } catch (error) {
       console.error(`Failed to create SDK for vault ${vaultAccountId}:`, error);
@@ -112,13 +150,16 @@ export class SdkManager {
    * Find and remove the oldest idle SDK instance
    * @returns True if an instance was removed, false otherwise
    */
-  private removeOldestIdleSdk = async (): Promise<boolean> => {
+  private removeOldestIdleSdk = (): boolean => {
     let oldestKey: string | null = null;
-    let oldestDate: Date = new Date();
+    // Null sentinel (not `now`) so an instance whose lastUsed equals the current
+    // instant — e.g. released in the same millisecond as this eviction — still counts
+    // as idle and evictable.
+    let oldestDate: Date | null = null;
 
     // Find the oldest idle instance
     for (const [key, value] of this.sdkPool.entries()) {
-      if (!value.isInUse && value.lastUsed < oldestDate) {
+      if (value.refCount === 0 && (oldestDate === null || value.lastUsed < oldestDate)) {
         oldestDate = value.lastUsed;
         oldestKey = key;
       }
@@ -141,7 +182,7 @@ export class SdkManager {
     const keysToRemove: string[] = [];
 
     for (const [key, value] of this.sdkPool.entries()) {
-      if (!value.isInUse) {
+      if (value.refCount === 0) {
         const idleTime = now.getTime() - value.lastUsed.getTime();
         if (idleTime > this.poolConfig.idleTimeoutMs) {
           keysToRemove.push(key);
@@ -167,16 +208,14 @@ export class SdkManager {
       totalInstances: this.sdkPool.size,
       activeInstances: 0,
       idleInstances: 0,
-      instancesByVaultAccount: {},
     };
 
-    for (const [key, value] of this.sdkPool.entries()) {
-      if (value.isInUse) {
+    for (const [, value] of this.sdkPool.entries()) {
+      if (value.refCount > 0) {
         metrics.activeInstances++;
       } else {
         metrics.idleInstances++;
       }
-      metrics.instancesByVaultAccount[key] = value.isInUse;
     }
 
     return metrics;

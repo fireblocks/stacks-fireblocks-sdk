@@ -25,6 +25,7 @@ import {
   noneCV,
   Pc,
   PostConditionMode,
+  PostConditionWire,
   principalCV,
   publicKeyToAddress,
   serializePayload,
@@ -56,13 +57,33 @@ export class StacksService {
   private axiosClient: AxiosInstance;
   private stackBaseUrl: string;
   private network: StacksNetwork;
+  private testnet: boolean;
 
-  constructor(testnet: boolean = false) {
+  /**
+   * @param testnet - Whether this is a testnet-class network (address versioning).
+   * @param profile - Optional explicit network settings. When provided (by
+   *   StacksSDK, the single owner of network resolution), the base URL,
+   *   chain id, and magic bytes come from the resolved profile so this service and
+   *   the PoX-5 client always describe the same chain. When omitted, falls back to
+   *   env/default resolution for standalone use.
+   */
+  constructor(
+    testnet: boolean = false,
+    profile?: { baseUrl: string; chainId: number; magicBytes: string },
+  ) {
+    this.testnet = testnet;
     this.axiosClient = axios.create();
-    this.stackBaseUrl = testnet
-      ? api_constants.stacks_testnet_rpc
-      : api_constants.stacks_mainnet_rpc;
-    this.network = testnet ? STACKS_TESTNET : STACKS_MAINNET;
+    const baseUrl =
+      profile?.baseUrl
+      || process.env.STACKS_API_URL
+      || (testnet ? api_constants.stacks_testnet_rpc : api_constants.stacks_mainnet_rpc);
+    this.stackBaseUrl = baseUrl;
+    const defaultNetwork = testnet ? STACKS_TESTNET : STACKS_MAINNET;
+    this.network = {
+      ...defaultNetwork,
+      ...(profile ? { chainId: profile.chainId, magicBytes: profile.magicBytes } : {}),
+      client: { baseUrl },
+    };
   }
 
 
@@ -79,7 +100,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
   }
   
   // Fallback to static config
-  return this.network === STACKS_TESTNET ? poxInfo.testnet : poxInfo.mainnet;
+  return this.testnet ? poxInfo.testnet : poxInfo.mainnet;
 };
 
   /**
@@ -97,11 +118,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
         throw new Error("Invalid compressed secp256k1 public key hex format");
       }
 
-      const isTestnet = this.network === STACKS_TESTNET;
-      const address = publicKeyToAddress(
-        pubKey,
-        isTestnet ? "testnet" : "mainnet",
-      );
+      const address = publicKeyToAddress(pubKey, this.network);
       return address;
     } catch (error) {
       console.error(
@@ -125,33 +142,64 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
    *
    * @param address - The Stacks address to query.
    */
+  /**
+   * Returns only the confirmed on-chain nonce, skipping the mempool scan.
+   * @param address - The Stacks address to query.
+   */
+  public getConfirmedNonce = async (address: string): Promise<bigint> => {
+    try {
+      const response = await this.axiosClient.get(`${this.stackBaseUrl}/v2/accounts/${address}?proof=0`);
+      if (!response?.data || response.status !== 200) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      return BigInt(response.data.nonce);
+    } catch (error) {
+      console.error(`Error fetching confirmed nonce: ${formatErrorMessage(error)}`);
+      throw new Error(
+        `Failed to fetch confirmed nonce for address ${address}: ${formatErrorMessage(error)}`,
+      );
+    }
+  };
+
   public getAccountNonce = async (address: string): Promise<{
     confirmedNonce: bigint;
     pendingTxCount: number;
     nextAvailable: bigint;
   }> => {
     try {
-      const [nonceResponse, mempoolResponse] = await Promise.all([
-        this.axiosClient.get(`${this.stackBaseUrl}/v2/accounts/${address}?proof=0`),
-        this.axiosClient.get(
-          `${this.stackBaseUrl}/extended/v1/tx/mempool?sender_address=${address}&limit=50`,
-        ),
-      ]);
+      const pageSize = helperConstants.stacks_api_page_size;
+      const nonceRequest = this.axiosClient.get(`${this.stackBaseUrl}/v2/accounts/${address}?proof=0`);
 
+      const pendingNonces = new Set<bigint>();
+      let pendingTxCount = 0;
+      let offset = 0;
+      while (true) {
+        const mempoolResponse = await this.axiosClient.get(
+          `${this.stackBaseUrl}/extended/v1/tx/mempool`,
+          { params: { sender_address: address, limit: pageSize, offset } },
+        );
+        if (!mempoolResponse?.data || mempoolResponse.status !== 200) {
+          throw new Error(`HTTP ${mempoolResponse.status}`);
+        }
+        const pending: any[] = mempoolResponse.data?.results ?? [];
+        pendingTxCount += pending.length;
+        for (const tx of pending) pendingNonces.add(BigInt(tx.nonce));
+        if (pending.length < pageSize) break;
+        offset += pageSize;
+      }
+
+      const nonceResponse = await nonceRequest;
       if (!nonceResponse?.data || nonceResponse.status !== 200) {
         throw new Error(`HTTP ${nonceResponse.status}`);
       }
-
       const confirmedNonce = BigInt(nonceResponse.data.nonce);
-      const pending: any[] = mempoolResponse.data?.results ?? [];
-      const pendingNonces = new Set(pending.map((tx: any) => BigInt(tx.nonce)));
 
       let nextAvailable = confirmedNonce;
       while (pendingNonces.has(nextAvailable)) {
         nextAvailable++;
       }
 
-      return { confirmedNonce, pendingTxCount: pending.length, nextAvailable };
+      return { confirmedNonce, pendingTxCount, nextAvailable };
     } catch (error) {
       console.error(`Error fetching account nonce: ${formatErrorMessage(error)}`);
       throw new Error(
@@ -168,7 +216,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
   public makeBalanceCalls = async (address: string): Promise<any> => {
     try {
       const response = await this.axiosClient.get(
-        `${this.stackBaseUrl}/extended/v1/address/${address}/balances`,
+        `${this.stackBaseUrl}/extended/v2/addresses/${address}/balances/stx`,
       );
 
       if (!response || !response.data || response.status !== 200) {
@@ -197,7 +245,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
     try {
       const response = await this.makeBalanceCalls(address);
       const balance =
-        Number(response.data.stx.balance) / 10 ** stacks_info.stxDecimals;
+        Number(response.data.balance) / 10 ** stacks_info.stxDecimals;
       return balance;
     } catch (error) {
       console.error(
@@ -218,18 +266,38 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
    * @param address - The Stacks address to query balances for.
    * @returns - The fungible token balances.
    */
-  public getFTBalancesForAddress = async (address: string): Promise<any> => {
+  public getFTBalancesForAddress = async (address: string): Promise<Record<string, { balance: string }>> => {
     try {
-      const response = await this.makeBalanceCalls(address);
-      const ftObject = response.data.fungible_tokens;
-      return ftObject;
+      const result: Record<string, { balance: string }> = {};
+      let offset = 0;
+      const limit = 100;
+
+      while (true) {
+        const response = await this.axiosClient.get(
+          `${this.stackBaseUrl}/extended/v2/addresses/${address}/balances/ft`,
+          { params: { limit, offset } },
+        );
+
+        if (!response || !response.data || response.status !== 200) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        for (const item of response.data.results) {
+          result[item.token] = { balance: item.balance };
+        }
+
+        if (offset + limit >= response.data.total) break;
+        offset += limit;
+      }
+
+      return result;
     } catch (error) {
       console.error(
         "getFTBalancesForAddress : Error fetching fungible token balances:",
         formatErrorMessage(error),
       );
       throw new Error(
-        `Failed to fetch native balance for address ${address}: ${formatErrorMessage(
+        `Failed to fetch FT balances for address ${address}: ${formatErrorMessage(
           error,
         )}`,
       );
@@ -349,7 +417,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
 
   public checkDelegationStatus = async (address: string): Promise<any> => {
     try {
-      if (!validateAddress(address, this.network === STACKS_TESTNET)) {
+      if (!validateAddress(address, this.testnet)) {
         throw new Error("Invalid Stacks address");
       }
 
@@ -402,9 +470,10 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
     customTokenAssetName?: string,
     nonce?: bigint,
     fee?: bigint,
+    memo?: string,
   ): Promise<StacksTransactionWire> => {
     try {
-      if (!validateAddress(recipient, this.network === STACKS_TESTNET)) {
+      if (!validateAddress(recipient, this.testnet)) {
         throw new Error("Invalid recipient address");
       }
 
@@ -427,7 +496,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
         }
       }
 
-      const tokenInfo = getTokenInfo(token, this.network === STACKS_TESTNET ? "testnet" : "mainnet");
+      const tokenInfo = getTokenInfo(token, this.testnet ? "testnet" : "mainnet");
 
       if (type === TransactionType.FungibleToken && token !== TokenType.CUSTOM && !tokenInfo) {
         throw new Error(`Token ${token} is not supported on ${this.network}`);
@@ -480,6 +549,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
           network: this.network,
           ...(nonce !== undefined ? { nonce } : {}),
           ...(fee !== undefined ? { fee } : {}),
+          ...(memo !== undefined ? { memo } : {}),
         });
       }
 
@@ -511,9 +581,11 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
     functionName: string,
     functionArgs: ClarityValue[],
     nonce?: bigint,
+    postConditionMode?: PostConditionMode,
+    postConditions?: PostConditionWire[],
   ): Promise<StacksTransactionWire> => {
     try {
-      if (!validateAddress(contractAddress, this.network === STACKS_TESTNET)) {
+      if (!validateAddress(contractAddress, this.testnet)) {
         throw new Error("Invalid recipient address");
       }
 
@@ -532,8 +604,9 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
         functionArgs,
         publicKey: senderPublicKey,
         network: this.network,
-        postConditionMode: PostConditionMode.Deny,
+        postConditionMode: postConditionMode ?? PostConditionMode.Deny,
         ...(nonce !== undefined ? { nonce } : {}),
+        ...(postConditions !== undefined ? { postConditions } : {}),
       });
 
       return unsignedContractCall;
@@ -570,6 +643,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
     customTokenAssetName?: string,
     nonce?: bigint,
     fee?: bigint,
+    memo?: string,
   ): Promise<{
     unsignedTx: StacksTransactionWire;
     preSignSigHash: string;
@@ -601,6 +675,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
         customTokenAssetName,
         nonce,
         fee,
+        memo,
       );
       const sigHash = unsignedTx.signBegin();
 
@@ -640,6 +715,8 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
     functionArgs: ClarityValue[],
     nonce?: bigint,
     fee?: bigint,
+    postConditions?: PostConditionWire[],
+    postConditionMode?: PostConditionMode,
   ): Promise<{
     unsignedContractCall: StacksTransactionWire;
     preSignSigHash: string;
@@ -652,6 +729,8 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
         functionName,
         functionArgs,
         nonce,
+        postConditionMode,
+        postConditions,
       );
 
       if (fee !== undefined) {
@@ -686,10 +765,12 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
    */
   public broadcastTransaction = async (
     signedTransaction: StacksTransactionWire,
+    network?: StacksNetwork,
   ): Promise<any> => {
     try {
       const result = await broadcastTransaction({
         transaction: signedTransaction,
+        network: network ?? this.network,
       });
 
       return result;
@@ -738,6 +819,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
   private parseTransactionItems = async (
     items: any[],
     address: string,
+    isPending: boolean = false,
   ): Promise<Transaction[]> => {
     const txs: Transaction[] = [];
 
@@ -746,6 +828,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
         transaction_hash: tx.tx_id as string,
         timestamp: tx.block_time_iso,
         success: tx.tx_status === "success",
+        ...(isPending ? { pending: true } : {}),
       };
 
       // Native STX transfers
@@ -828,53 +911,73 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
   };
 
   /**
-   * Retrieves the transaction history for a given address.
-   * Automatically paginates through multiple Stacks API requests when limit > stacks_api_page_size.
-   * @param address - The Stacks address to retrieve the transaction history for.
-   * @param limit - The maximum number of transactions to retrieve.
-   * @param offset - The starting offset for pagination.
-   * @returns An array of transactions associated with the address.
+   * Fetches one page of confirmed transactions for a given address.
+   * Pagination is handled by the caller.
+   * @param address - The Stacks address.
+   * @param limit - Page size (max 50).
+   * @param offset - Page offset.
+   * @returns An array of parsed transactions for this page.
    */
   public getTransactionHistory = async (
     address: string,
-    limit: number = pagination_defaults.limit,
+    limit: number = helperConstants.stacks_api_page_size,
     offset: number = pagination_defaults.page,
   ): Promise<Transaction[]> => {
-    if (!validateAddress(address, this.network === STACKS_TESTNET)) {
+    if (!validateAddress(address, this.testnet)) {
       throw new Error("Invalid Stacks address");
     }
 
     try {
-      const allTxs: Transaction[] = [];
-      let currentOffset = offset;
-      let remaining = limit;
+      const pageSize = Math.min(limit, helperConstants.stacks_api_page_size);
+      const response = await this.axiosClient.get(
+        `${this.stackBaseUrl}/extended/v1/address/${address}/transactions?limit=${pageSize}&offset=${offset}`,
+      );
 
-      while (remaining > 0) {
-        const pageSize = Math.min(remaining, helperConstants.stacks_api_page_size);
-        const response = await this.axiosClient.get(
-          `${this.stackBaseUrl}/extended/v1/address/${address}/transactions?limit=${pageSize}&offset=${currentOffset}`,
-        );
-
-        if (!response || !response.data || response.status !== 200) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-
-        const items = (response.data.results || []) as any[];
-        if (items.length === 0) break;
-
-        const txs = await this.parseTransactionItems(items, address);
-        allTxs.push(...txs);
-
-        if (items.length < pageSize) break; // no more data on the chain
-
-        currentOffset += pageSize;
-        remaining -= pageSize;
+      if (!response || !response.data || response.status !== 200) {
+        throw new Error(`HTTP ${response.status}`);
       }
 
-      return allTxs;
+      const items = (response.data.results || []) as any[];
+      return await this.parseTransactionItems(items, address);
     } catch (error) {
       throw new Error(
         `Failed to fetch transaction history: ${formatErrorMessage(error)}`,
+      );
+    }
+  };
+
+  /**
+   * Fetches one page of pending (mempool) transactions for a given address.
+   * Pagination is handled by the caller.
+   * @param address - The Stacks address.
+   * @param limit - Page size (max 50).
+   * @param offset - Page offset.
+   * @returns An array of parsed pending transactions for this page.
+   */
+  public getMempoolTransactions = async (
+    address: string,
+    limit: number = helperConstants.stacks_api_page_size,
+    offset: number = pagination_defaults.page,
+  ): Promise<Transaction[]> => {
+    if (!validateAddress(address, this.testnet)) {
+      throw new Error("Invalid Stacks address");
+    }
+
+    try {
+      const pageSize = Math.min(limit, helperConstants.stacks_api_page_size);
+      const response = await this.axiosClient.get(
+        `${this.stackBaseUrl}/extended/v1/tx/mempool?sender_address=${address}&limit=${pageSize}&offset=${offset}`,
+      );
+
+      if (!response || !response.data || response.status !== 200) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const items = (response.data.results || []) as any[];
+      return await this.parseTransactionItems(items, address, true);
+    } catch (error) {
+      throw new Error(
+        `Failed to fetch mempool transactions: ${formatErrorMessage(error)}`,
       );
     }
   };
@@ -914,12 +1017,13 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
     amount: bigint,
     lockPeriod: number,
     nonce?: bigint,
+    poolContractName?: string,
   ): Promise<{
     unsignedContractCall: StacksTransactionWire;
     preSignSigHash: string;
   }> => {
     try {
-      if (!validateAddress(delegateTo, this.network === STACKS_TESTNET)) {
+      if (!validateAddress(delegateTo, this.testnet)) {
         throw new Error("Invalid delegateTo address");
       }
 
@@ -947,7 +1051,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
         "delegate-stx",
         [
           uintCV(amount),
-          standardPrincipalCV(delegateTo),
+          poolContractName ? contractPrincipalCV(delegateTo, poolContractName) : standardPrincipalCV(delegateTo),
           someCV(uintCV(until_burn_ht)),
           noneCV(),
         ],
@@ -1024,7 +1128,7 @@ private getPoxContractInfo = async (): Promise<{ contractAddress: string; contra
     preSignSigHash: string;
   }> => {
     try {
-      if (!validateAddress(poolAddress, this.network === STACKS_TESTNET)) {
+      if (!validateAddress(poolAddress, this.testnet)) {
         throw new Error("Invalid pool address");
       }
 

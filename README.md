@@ -36,11 +36,12 @@ It's designed to simplify integration with Fireblocks for secure Stacks transact
 - **Fungible token transfers**: Support for SIP-010 token transfers (sBTC, USDC, etc.)
 - **Nonce management**: Optional nonce override on every transaction method; query confirmed on-chain nonce via `getAccountNonce()`
 - **Replace-by-fee**: Replace a stuck pending STX transaction with a higher-fee one using the same nonce
-- **Stacking functionality**:
-  - Solo stacking 
-  - Pool delegation and stacking
-  - Delegation management (delegate, revoke, allow contract caller)
-  - Account status and eligibility checking
+- **PoX-5 / BTC Bonding**:
+  - STX staking and unstaking via signer-manager
+  - BTC bond lifecycle: create, renew, unlock matured bonds
+  - Early-exit announcement and spend (cosigner-assisted)
+  - Reward calculation, claiming (BTC + STX-only paths), and earned rewards query
+  - Signer key grant and verification
 - **Transaction monitoring**: Real-time transaction status polling with error code mapping
 - **REST API mode**: Easily integrate through HTTP requests.
 - **Vault pooling**: Efficient per-vault instance management.
@@ -117,6 +118,7 @@ Environment variables (via `.env`) control SDK behavior:
 | FIREBLOCKS_BASE_PATH       | No       | BasePath.US from "@fireblocks/ts-sdk" | Base URL of the Fireblocks API          |
 | NETWORK                    | No       | MAINNET                               | Stacks mainnet or testnet               |
 | PORT                       | No       | 3000                                  | Port to run the REST API server         |
+| EARLY_EXIT_SIGNER_URL      | No       | Built-in testnet URL (none on mainnet) | Base URL of the external KMS cosigner service for bond early-exit spends |
 
 ### Sample `.env`:
 
@@ -124,11 +126,11 @@ Environment variables (via `.env`) control SDK behavior:
 FIREBLOCKS_BASE_PATH=https://api.fireblocks.io/v1
 FIREBLOCKS_API_KEY=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 FIREBLOCKS_SECRET_KEY_PATH=./secrets/fireblocks_secret.key
-STACKS_NETWORK=TESTNET
+NETWORK=TESTNET
 PORT=3000
 ```
 
-Note: Setting STACKS_NETWORK to anything other than TESTNET (or testnet) will set the network as mainnet.
+Note: Setting NETWORK to anything other than TESTNET (or testnet) will set the network as mainnet.
 
 > 🔒 Never commit your `.env` file or secret key to source control.
 
@@ -289,60 +291,6 @@ if (status.success) {
 }
 ```
 
-### **Solo Stacking**
-
-Solo stacking requires you to provide a signer key and signature. You can use any valid `secp256k1` key pair for your signer.
-
-**Generate signer signature:**
-Use the [Stacks Signature Generation Tool](https://signature.stacking.tools/) to generate your signer signature with the following parameters:
-- **Function**: "stack-stx"
-- **Max Amount**: Maximum STX amount to authorize, equal or more to what you'll stack
-- **Lock period**: Number of cycles (1-12)
-- **Auth ID**: Random integer for replay protection, must be the same one used to generate the signature
-- **Reward cycle**: Current reward cycle
-- **PoX address**: Your BTC rewards address
-- If you plan to run your own signer to earn full rewards, use your signer's public key here
-- If using a hosted signer service, use their public key and signature
-
-```typescript
-// Stack 150,000 STX for 6 cycles
-const stackResponse = await sdk.stackSolo(
-  "02778d476704afa...", // Signer public key
-  "1997445c32fc172f...", // Signer signature
-  150000, // amount in STX
-  6, // lock period in cycles (1-12)
-  "1772114443795", // authId (same as used to generate signature)
-);
-
-if (stackResponse.success) {
-  console.log("Stacking Transaction Hash:", stackResponse.txHash);
-  console.log("BTC rewards will be sent to:", sdk.getBtcRewardsAddress());
-} else {
-  console.error("Stacking failed:", stackResponse.error);
-}
-```
-
-### **Pool Stacking**
-
-```typescript
-// Delegate to a stacking pool
-const delegateResponse = await sdk.delegateToPool(
-  "SP21YTSM60CAY6D011EZVEVNKXVW8FVZE198XEFFP", // pool address
-  "stacking-pool-v1", // pool contract name
-  50000, // amount to delegate
-  12, // lock period in cycles
-);
-
-// Allow a pool to lock your STX
-const allowCallerResponse = await sdk.allowContractCaller(
-  "SP21YTSM60CAY6D011EZVEVNKXVW8FVZE198XEFFP",
-  "stacking-pool-v1",
-);
-
-// Revoke delegation
-const revokeResponse = await sdk.revokeDelegation();
-```
-
 ### **Nonce Management**
 
 ```typescript
@@ -367,14 +315,14 @@ If a transaction is stuck in the mempool due to a low fee, you can replace it by
 // Replace any pending transaction visible to the Hiro indexer.
 // The original tx is looked up automatically — same nonce, same args, higher fee.
 const replacement = await sdk.replaceTransaction(
-  "0xabc123...", // original tx ID
   0.01,          // new fee in STX (must be ≥ RBF_MIN_FEE_MULTIPLIER × original fee)
+  "0xabc123...", // original tx ID
 );
 
 // For token_transfer only: optionally change recipient or amount
 const replacement = await sdk.replaceTransaction(
-  "0xabc123...",
   0.01,
+  "0xabc123...",
   "ST2CY5V39NHDPWSXMW9QDT3HC3GD6Q6XX4CFRK9AG", // newRecipient
   10.5,  // newAmount in STX
 );
@@ -383,8 +331,8 @@ const replacement = await sdk.replaceTransaction(
 // nonceOverride bypasses the indexer lookup. Only STX transfers are supported
 // on this path since contract call args cannot be inferred.
 const replacement = await sdk.replaceTransaction(
-  "0xabc123...",
   0.01,
+  undefined, // originalTxId is unused on the nonceOverride path
   "ST2CY5V39NHDPWSXMW9QDT3HC3GD6Q6XX4CFRK9AG", // newRecipient (required)
   10.5,  // newAmount in STX (required)
   7,     // nonceOverride
@@ -466,79 +414,81 @@ history.forEach((tx) => {
 
 | Field           | Type    | Required | Description                                                                  |
 | --------------- | ------- | -------- | ---------------------------------------------------------------------------- |
-| `originalTxId`  | string  | Yes      | Transaction ID of the pending transaction to replace                         |
-| `newFee`        | number  | Yes      | New fee in STX — must be higher than the original                            |
+| `originalTxId`  | string  | No       | Transaction ID of the pending transaction to replace. Required unless `nonceOverride` is provided. |
+| `newFee`        | number  | Yes      | New fee in STX — must be at least `RBF_MIN_FEE_MULTIPLIER` × the original fee |
 | `newRecipient`  | string  | No       | New recipient address. Defaults to the original recipient                    |
 | `newAmount`     | number  | No       | New transfer amount in STX. Defaults to the original amount                  |
 | `nonceOverride` | integer | No       | Nonce to use directly, bypassing the Hiro indexer lookup. Required when the original tx is a future-nonce tx not visible in the explorer. When set, `newRecipient` and `newAmount` are also required. |
 
-### **Stacking Endpoints**
+### **Account Status & Protocol Info**
+
+| Method | Route                         | Description                                        |
+| ------ | ----------------------------- | --------------------------------------------------- |
+| GET    | `/api/:vaultId/check-status`  | Check account stacking status and delegation info  |
+| GET    | `/api/poxInfo`                | Fetch current PoX-4 info from blockchain           |
+
+### **PoX-4 Stacking Endpoints**
+
+PoX-4 is the protocol currently live on Stacks mainnet. The PoX-5 endpoints below target the private-1 test network.
 
 | Method | Route                                               | Description                                          |
 | ------ | --------------------------------------------------- | ---------------------------------------------------- |
-| GET    | `/api/:vaultId/check-status`                        | Check account stacking status and delegation info    |
-| GET    | `/api/poxInfo`                                      | Fetch current PoX info from blockchain               |
 | POST   | `/api/:vaultId/stacking/solo`                       | Solo stack STX                                       |
 | POST   | `/api/:vaultId/stacking/solo/increase`              | Increase the STX amount of an existing solo position |
 | POST   | `/api/:vaultId/stacking/solo/extend`                | Extend the lock period of an existing solo position  |
-| POST   | `/api/:vaultId/stacking/pool/delegate`              | Delegate amount of STX to a stacking pool            |
-| POST   | `/api/:vaultId/stacking/pool/allow-contract-caller` | Allow a pool contract to lock your STX               |
-| POST   | `/api/:vaultId/revoke-delegation`                   | Revoke any active STX delegation                     |
+| POST   | `/api/:vaultId/stacking/pool/delegate`              | Delegate STX to a stacking pool (mainnet only)       |
+| POST   | `/api/:vaultId/stacking/pool/allow-contract-caller` | Allow a pool contract to lock your STX (mainnet only) |
+| POST   | `/api/:vaultId/revoke-delegation`                   | Revoke any active STX delegation (mainnet only)      |
+
+### **PoX-5 Staking Endpoints**
+
+| Method | Route                                              | Description                                               |
+| ------ | -------------------------------------------------- | --------------------------------------------------------- |
+| GET    | `/api/stacking/pox5/info`                          | Fetch current PoX-5 protocol info                         |
+| GET    | `/api/:vaultId/stacking/pox5/requirements`         | Get minimum STX amount and cycle requirements             |
+| GET    | `/api/:vaultId/stacking/pox5/staker-info`          | Get current staker position and status                    |
+| POST   | `/api/:vaultId/stacking/pox5/stake`                | Stake STX via signer-manager (replaces PoX-4 solo stack)  |
+| POST   | `/api/:vaultId/stacking/pox5/update`               | Update (increase) an existing PoX-5 stake                 |
+| POST   | `/api/:vaultId/stacking/pox5/unstake`              | Unstake STX from PoX-5                                    |
+| POST   | `/api/:vaultId/stacking/pox5/grant-signer-key`     | Grant signer key via signer-manager                       |
+| GET    | `/api/:vaultId/stacking/pox5/verify-signer-grant`  | Verify that the signer grant is active                    |
+| POST   | `/api/:vaultId/stacking/pox5/revoke-signer-grant`  | Revoke an existing signer key grant                        |
+
+### **PoX-5 BTC Bond Endpoints**
+
+| Method | Route                                                       | Description                                                  |
+| ------ | ----------------------------------------------------------- | ------------------------------------------------------------ |
+| POST   | `/api/:vaultId/stacking/pox5/bond/create`                   | Create a BTC bond (locks BTC, registers on Stacks L2)        |
+| GET    | `/api/:vaultId/stacking/pox5/bond/position`                 | Get current bond position for the vault                      |
+| GET    | `/api/:vaultId/stacking/pox5/bond/lock-address`             | Get the BTC lock address for a bond                          |
+| POST   | `/api/:vaultId/stacking/pox5/bond/fund-lock`                | Fund the BTC lock address (alternative to in-band funding)   |
+| POST   | `/api/:vaultId/stacking/pox5/bond/unlock`                   | Unlock a matured bond and reclaim BTC                        |
+| POST   | `/api/:vaultId/stacking/pox5/bond/renew`                    | Renew an existing bond for additional cycles                 |
+| POST   | `/api/:vaultId/stacking/pox5/bond/announce-early-exit`      | Announce intent to early-exit a bond (starts cosigner flow)  |
+| POST   | `/api/:vaultId/stacking/pox5/bond/early-exit`               | Spend the early-exit UTXO after cosigner approval            |
+| GET    | `/api/:vaultId/stacking/pox5/bond/early-exit/public-key`    | Get the cosigner public key for the early-exit path          |
+
+### **PoX-5 Rewards Endpoints**
+
+| Method | Route                                              | Description                                          |
+| ------ | -------------------------------------------------- | ---------------------------------------------------- |
+| POST   | `/api/:vaultId/stacking/pox5/rewards/calculate`    | Calculate expected rewards for a staking position    |
+| POST   | `/api/:vaultId/stacking/pox5/rewards/claim`        | Claim BTC + STX rewards                              |
+| POST   | `/api/:vaultId/stacking/pox5/rewards/claim-stx`    | Claim STX-only rewards                               |
+| GET    | `/api/:vaultId/stacking/pox5/rewards/earned`       | Query earned rewards for the vault                   |
 
 ### **Utility Endpoints**
 
-| Method | Route          | Description                           |
-| ------ | -------------- | ------------------------------------- |
-| GET    | `/api/metrics` | Prometheus-compatible service metrics |
+| Method | Route                 | Description                                             |
+| ------ | ---------------------- | -------------------------------------------------------- |
+| GET    | `/api/metrics`         | Pool metrics (instance counts)                          |
+| POST   | `/api/:vaultId/faucet` | Fund vault address via STX faucet (testnet only)        |
 
 ---
 
 - **\* IMPORTANT NOTE \*\***: Transactions could sometimes pass at blockchain level but fail at smart contract level,
   in this case a {success: true, txid: <VALID-TX-ID>} 200 response will be returned to user, please double check
   the success of the transaction by polling the txid status with the `/api/:vaultId/transactions/:txId` endpoint.
-
-## 🎯 Stacking Guide
-
-### **Solo Stacking Requirements**
-
-1. **Minimum Amount**: Must meet the dynamic minimum threshold (request will fail otherwise)
-2. **Lock Period**: 1-12 reward cycles (each cycle ≈ 2 weeks)
-3. **No Active Delegation**: Account must not be delegated to an address
-4. **Timing**: Submit during reward phase (with more than 10 blocks away from prepare phase)
-
-### **Reward Cycle Timeline**
-
-- Each cycle is approximately 2,100 Bitcoin blocks (~2 weeks)
-- **Reward Phase**: ~2,000 blocks - safe to submit stacking requests
-- **Prepare Phase**: ~100 blocks - risky window before next cycle
-- SDK automatically checks timing safety before stacking
-
-### **Bitcoin Rewards**
-
-- Rewards are paid directly to your BTC address each cycle
-- Amount: `Expected ≈(Your STX / Total Stacked) × Total BTC from Miners`
-
-### **Pool Stacking vs Solo Stacking**
-
-**Pool Stacking:**
-
-- ✅ Lower minimum (pool operators set their own minimum)
-- ✅ No signer infrastructure required
-- ✅ Pool handles all technical operations
-- ❌ Pool takes a commission
-- ❌ Less control over reward address
-
-- Note: For pool stacking, delegate the amount you want to stack to the pool and allow the pool contract as contract-caller to lock your STX,
-  the pool will handle the rest and lock STX when ready and distirbute rewards at the end of locking period.
-
-**Solo Stacking:**
-
-- ✅ Keep all rewards (no commission)
-- ✅ Full control over reward address
-- ✅ Higher rewards for large holders
-- ❌ Must meet higher minimum threshold (typically 90,000+ STX)
-
----
 
 ## 📊 REST API Examples (cURL)
 
@@ -644,26 +594,11 @@ curl -X POST http://localhost:3000/api/123/replace-transaction \
   }'
 ```
 
-### **Solo Stack STX**
-```bash
-curl -X 'POST' \
-  'http://localhost:3000/api/123/stacking/solo' \
-  -H 'accept: application/json' \
-  -H 'Content-Type: application/json' \
-  -d '{
-  "signerKey": "02778d476704afa540ac01438f62c371dc387",
-  "signerSig65Hex": "1997445c32fc1720b202995f656396b50c355",
-  "amount": 6520000,
-  "lockPeriod": 1,
-  "authId": "1"
-}'
-```
-
 ### **Check Stacking Status**
 
 ```bash
 curl -X 'GET' \
-  'http://localhost:3000/api/123/status' \
+  'http://localhost:3000/api/123/check-status' \
   -H 'accept: application/json'
 ```
 
@@ -671,7 +606,7 @@ curl -X 'GET' \
 
 ```bash
 curl -X 'GET' \
-  'http://localhost:3000/api/123/tx/0xabcd1234...' \
+  'http://localhost:3000/api/transactions/0xabcd1234...' \
   -H 'accept: application/json'
 ```
 
@@ -720,13 +655,20 @@ Swagger UI API Documentation will be available at http://localhost:3000/api-docs
 
 - **Network**: Stacks Mainnet
 - **API**: `https://api.hiro.so`
-- **PoX Contract**: `SP000000000000000000002Q6VF78.pox-4`
+- **PoX-4 Contract**: `SP000000000000000000002Q6VF78.pox-4`
 
-### Testnet
+### Testnet (PoX-4)
 
 - **Network**: Stacks Testnet
 - **API**: `https://api.testnet.hiro.so`
-- **PoX Contract**: `ST000000000000000000002AMW42H.pox-4`
+- **PoX-4 Contract**: `ST000000000000000000002AMW42H.pox-4`
+
+### PoX-5 / BTC Bonding Testnet
+
+PoX-5 operates on a private testnet. Set `NETWORK=testnet` — the SDK automatically routes PoX-5 calls to the private-1 node.
+
+- **API**: `https://api.private-1.hiro.so`
+- **Chain ID**: `256`
 
 ---
 

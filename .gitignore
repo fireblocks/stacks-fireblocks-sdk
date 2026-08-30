@@ -1,7 +1,6 @@
 release
 scripts
 node_modules
-.env
 *.log
 package-lock.json
 dist
@@ -12,6 +11,10 @@ secrets
 .DS_Store
 CLAUDE.md
 *.md
+*.pdf
+*.docx
 !README.md
 .env*
-
+!.env.example
+.claude
+src/.DS_Store
