@@ -81,6 +81,14 @@ export interface BondLockRecord {
    */
   fundingExternalId?: string;
   /**
+   * Number of funding attempts abandoned after a TERMINAL Fireblocks failure. Mixed into
+   * the derived external id so a dead attempt's consumed id can be superseded. Advances
+   * only on a typed terminal status, and only in the write that clears `fireblocksId` —
+   * an advance while a transfer may still land would escape Fireblocks' de-duplication
+   * and fund the same lock twice. Absent means 0, which derives the pre-generation id.
+   */
+  fundingGeneration?: number;
+  /**
    * The Fireblocks transaction id of the BTC funding transfer, persisted as soon as
    * Fireblocks accepts the request — BEFORE the (long, throwable) confirmation poll. A
    * retry after a poll timeout / crash uses it to await or resolve the SAME transfer

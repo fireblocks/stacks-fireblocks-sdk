@@ -238,8 +238,15 @@ export class StacksSDK {
    * transfer — a second funding transaction is never created for the same lock, even
    * across a process crash. A genuine replacement (e.g. fee bump) must use a new id.
    */
-  private deriveFundingExternalId = (bondIndex: number, lockAddress: string): string => {
-    const material = `${this.vaultAccountId}:${this.networkProfile.name}:bond:${bondIndex}:${lockAddress}`;
+  private deriveFundingExternalId = (
+    bondIndex: number,
+    lockAddress: string,
+    generation: number = 0,
+  ): string => {
+    const base = `${this.vaultAccountId}:${this.networkProfile.name}:bond:${bondIndex}:${lockAddress}`;
+    // Generation 0 derives the pre-generation material verbatim, so a bond funded by an
+    // older build keeps the external id Fireblocks already holds for it.
+    const material = generation > 0 ? `${base}:gen:${generation}` : base;
     const digest = createHash("sha256").update(material).digest("hex").slice(0, 40);
     return `bond-fund-${digest}`;
   };
@@ -261,9 +268,15 @@ export class StacksSDK {
     let stripFailure = "";
     try {
       const stored = await this.lockRecordStore.loadRecord(this.address!, bondIndex);
-      if (stored?.fireblocksId !== undefined) {
+      if (stored) {
         fireblocksId = stored.fireblocksId;
-        const abandoned: BondLockRecord = { ...stored };
+        // Single write: the generation advance and the id clear are the same durable
+        // update. Split across two writes, a crash between them leaves a record that
+        // derives a fresh external id while the dead transfer still reads as in flight.
+        const abandoned: BondLockRecord = {
+          ...stored,
+          fundingGeneration: (stored.fundingGeneration ?? 0) + 1,
+        };
         delete abandoned.fireblocksId;
         await this.lockRecordStore.saveRecord(this.address!, bondIndex, abandoned);
       }
@@ -3170,7 +3183,6 @@ export class StacksSDK {
       // Deterministic funding id + idempotent resume. Load any prior attempt for this
       // (address, bondIndex) first: if the exact same lock was already funded, we must
       // NOT send a second Bitcoin transaction — resume from the recorded txid instead.
-      const fundingExternalId = this.deriveFundingExternalId(bondIndex, metadata.lockAddress);
       // Fail CLOSED on a store read failure: resume detection decides whether Bitcoin
       // gets funded again, so proceeding on an unreadable store (as if no prior attempt
       // existed) is exactly the wrong default on a money-moving path.
@@ -3180,6 +3192,10 @@ export class StacksSDK {
       } catch (e) {
         return { success: false, error: `Lock-record store unreadable for bond ${bondIndex} (UNKNOWN, not "no prior attempt") — refusing to fund: ${formatErrorMessage(e)}` };
       }
+      // Derived from the record's generation, so an attempt abandoned after a terminal
+      // failure supersedes its consumed id instead of re-deriving it forever.
+      const fundingGeneration = priorRecord?.fundingGeneration ?? 0;
+      const fundingExternalId = this.deriveFundingExternalId(bondIndex, metadata.lockAddress, fundingGeneration);
       const priorAtThisLock = priorRecord?.lockAddress === metadata.lockAddress;
 
       // Resume-safe reward destination: a crash between funding and register-for-bond leaves
@@ -3300,6 +3316,7 @@ export class StacksSDK {
         signerManager,
         firstRewardCycle: bondPeriodToRewardCycle({ bondIndex, poxInfo: pox }),
         fundingExternalId,
+        fundingGeneration,
         // Persist the reward destination so renewBond / updateBondRegistration re-supply
         // the pox-addr calldata rather than dropping it (a `none` map-deletes it).
         ...(effectiveRewardBtcAddress !== undefined ? { rewardBtcAddress: effectiveRewardBtcAddress } : {}),
