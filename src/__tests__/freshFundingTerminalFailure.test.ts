@@ -207,6 +207,30 @@ describe("createBond — terminal failure on the FRESH funding path", () => {
     );
   });
 
+  it("handles a terminal transfer surfaced by duplicate-external-id resolution", async () => {
+    const sdk = makeSdk();
+    // A prior submit consumed the id before onSubmitted persisted it; resolving that
+    // transfer reveals it terminally failed. Same dead-end, reached by a third path.
+    const dupErr = Object.assign(
+      new Error("code 1438: duplicate externalTxId"),
+      {
+        code: 1438,
+      },
+    );
+    sdk.fireblocksService.createBitcoinTransaction = jest
+      .fn()
+      .mockRejectedValue(dupErr);
+    sdk.fireblocksService.resolveBitcoinTransactionByExternalId = jest
+      .fn()
+      .mockRejectedValue(terminalError(TransactionStateEnum.Rejected));
+
+    const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/terminally failed/i);
+    expect(res.error).toMatch(/opts\.btcTxid/);
+  });
+
   it("still rethrows a NON-terminal failure so a later retry can resume the transfer", async () => {
     const sdk = makeSdk();
     sdk.fireblocksService.createBitcoinTransaction = acceptThenFail(

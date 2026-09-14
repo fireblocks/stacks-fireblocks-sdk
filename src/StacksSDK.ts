@@ -3430,7 +3430,18 @@ export class StacksSDK {
           // A prior submit already consumed the external id (a crash before onSubmitted
           // persisted it): resolve the existing transfer instead of failing.
           if (FireblocksService.isDuplicateExternalIdError(fundErr)) {
-            const resolved = await this.fireblocksService.resolveBitcoinTransactionByExternalId(fundingExternalId);
+            let resolved;
+            try {
+              resolved = await this.fireblocksService.resolveBitcoinTransactionByExternalId(fundingExternalId);
+            } catch (resolveErr) {
+              // Resolution awaits the existing transfer, so it surfaces that transfer's
+              // terminal state. Same dead-end as the other two paths: without this the
+              // generation never advances and the consumed id stays unusable forever.
+              if (FireblocksService.isTerminalTransferFailure(resolveErr)) {
+                return this.abandonTerminalFunding(bondIndex, fundingExternalId, resolveErr);
+              }
+              throw resolveErr;
+            }
             if (!resolved) throw fundErr;
             result = resolved;
             await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, fireblocksId: resolved.fireblocksId, stage: laterStage(lockRecord.stage, "funding-requested") });
