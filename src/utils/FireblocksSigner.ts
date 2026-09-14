@@ -16,6 +16,45 @@ const POLL_INITIAL_MS = 3_000;
 const POLL_CEILING_MS = 30_000;
 const POLL_TIMEOUT_MS = 30 * 60 * 1_000;
 
+/**
+ * Vendor-reported outcome of a Fireblocks transaction. `status` is the authoritative
+ * classification input — terminal-vs-retryable decides whether a bond's funding
+ * external id may be renewed, so it is never inferred from message text.
+ */
+export interface FireblocksTransferFailure {
+  /** The Fireblocks `TransactionOperation` — RAW for signing, TRANSFER for a BTC send. */
+  operation: string;
+  status: TransactionStateEnum;
+  subStatus?: string;
+  errorDescription?: string;
+  /** The Fireblocks transaction id. */
+  vendorId: string;
+}
+
+export class FireblocksTransferError extends Error {
+  constructor(
+    message: string,
+    readonly details: FireblocksTransferFailure,
+  ) {
+    super(message);
+    this.name = "FireblocksTransferError";
+  }
+}
+
+/**
+ * States from which a transaction can never reach Completed. Typed as strings because
+ * the vendor SDK declares `TransactionResponse.status` as `string`.
+ */
+export const TERMINAL_TRANSACTION_STATES: ReadonlySet<string> = new Set([
+  TransactionStateEnum.Blocked,
+  TransactionStateEnum.Cancelled,
+  TransactionStateEnum.Failed,
+  TransactionStateEnum.Rejected,
+]);
+
+const describeOperation = (operation?: string): string =>
+  operation === TransactionOperation.Raw ? "Signing request" : "Transfer";
+
 export class FireblocksSigner {
   constructor(public fireblocks: Fireblocks) {}
 
@@ -44,19 +83,24 @@ export class FireblocksSigner {
     let delay = POLL_INITIAL_MS;
 
     while (tx.status !== TransactionStateEnum.Completed) {
-      switch (tx.status) {
-        case TransactionStateEnum.Blocked:
-        case TransactionStateEnum.Cancelled:
-        case TransactionStateEnum.Failed:
-        case TransactionStateEnum.Rejected:
-          throw new Error(
-            `Signing request failed/blocked/cancelled: Transaction: ${tx.id} status is ${tx.status}`,
-          );
+      const label = describeOperation(tx.operation);
+
+      if (TERMINAL_TRANSACTION_STATES.has(tx.status)) {
+        throw new FireblocksTransferError(
+          `${label} ${tx.id} reached terminal status ${tx.status}${tx.subStatus ? ` (${tx.subStatus})` : ""}`,
+          {
+            operation: tx.operation ?? "",
+            status: tx.status as TransactionStateEnum,
+            subStatus: tx.subStatus,
+            errorDescription: (tx as { errorDescription?: string }).errorDescription,
+            vendorId: tx.id ?? txId,
+          },
+        );
       }
 
       if (Date.now() + delay > deadline) {
         throw new Error(
-          `Signing request timed out after 30 minutes: Transaction ${tx.id} is still ${tx.status}`,
+          `${label} ${tx.id} timed out after 30 minutes: still ${tx.status}${tx.subStatus ? ` (${tx.subStatus})` : ""}`,
         );
       }
 

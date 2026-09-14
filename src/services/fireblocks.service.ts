@@ -21,7 +21,11 @@ import {
 } from "../utils/fireblocks.utils";
 import { FireblocksConfig } from "./types";
 import { formatErrorMessage } from "../utils/errorHandling";
-import { FireblocksSigner } from "../utils/FireblocksSigner";
+import {
+  FireblocksSigner,
+  FireblocksTransferError,
+  TERMINAL_TRANSACTION_STATES,
+} from "../utils/FireblocksSigner";
 
 const secretKeyPath = process.env.FIREBLOCKS_SECRET_KEY_PATH || "";
 const basePath = process.env.FIREBLOCKS_BASE_PATH || BasePath.US;
@@ -288,11 +292,9 @@ export class FireblocksService {
    * failure state (Blocked/Cancelled/Failed/Rejected) — as opposed to a timeout or a
    * transient read error. Matches the message raised by FireblocksSigner.getTxStatus.
    */
-  public static isTerminalTransferFailure = (error: unknown): boolean => {
-    const msg = typeof (error as { message?: string })?.message === 'string' ? (error as { message: string }).message : '';
-    return /status is (BLOCKED|CANCELLED|FAILED|REJECTED)/i.test(msg)
-      || msg.includes('failed/blocked/cancelled');
-  };
+  public static isTerminalTransferFailure = (error: unknown): boolean =>
+    error instanceof FireblocksTransferError &&
+    TERMINAL_TRANSACTION_STATES.has(error.details.status);
 
   public signTransaction = async (
     content: string,
