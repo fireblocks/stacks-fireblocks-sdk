@@ -249,6 +249,40 @@ export class StacksSDK {
     return `bond-fund-${digest}`;
   };
 
+  /**
+   * Common outcome for a funding transfer that reached a terminal Fireblocks state, on
+   * either the fresh or the resume path. The Fireblocks id must not stay in the record:
+   * a terminally failed transfer can never yield a txid, and while the id is present
+   * `hasInFlightFireblocks` stays true, so the caller-btcTxid guard would refuse exactly
+   * the recovery this error prescribes. The lock parameters and the (consumed) external
+   * id are kept for diagnostics.
+   */
+  private abandonTerminalFunding = async (
+    bondIndex: number,
+    fundingExternalId: string,
+    error: unknown,
+  ): Promise<{ success: false; error: string }> => {
+    let fireblocksId: string | undefined;
+    let stripFailure = "";
+    try {
+      const stored = await this.lockRecordStore.loadRecord(this.address!, bondIndex);
+      if (stored?.fireblocksId !== undefined) {
+        fireblocksId = stored.fireblocksId;
+        const abandoned: BondLockRecord = { ...stored };
+        delete abandoned.fireblocksId;
+        await this.lockRecordStore.saveRecord(this.address!, bondIndex, abandoned);
+      }
+    } catch (e) {
+      stripFailure = ` The Fireblocks id could NOT be cleared from the lock record (${formatErrorMessage(e)}); clear it before retrying with opts.btcTxid, which will otherwise be refused as an in-flight transfer.`;
+    }
+    return {
+      success: false,
+      error:
+        `The Fireblocks funding transfer${fireblocksId ? ` (id ${fireblocksId})` : ""} for bond ${bondIndex} terminally failed: ${formatErrorMessage(error)}. ` +
+        `Its external id ${fundingExternalId} is consumed and cannot be reused, so this lock cannot be re-funded automatically — enroll under a different bond index, or resolve the transfer in Fireblocks and retry with opts.btcTxid.${stripFailure}`,
+    };
+  };
+
   private constructor(
     vaultAccountId: string | number,
     fireblocksConfig?: FireblocksConfig,
@@ -3353,19 +3387,7 @@ export class StacksSDK {
           // that repeats on every retry. A timeout/transient error rethrows so a later
           // retry can await again.
           if (FireblocksService.isTerminalTransferFailure(awaitErr)) {
-            // A terminally failed transfer can never yield a txid, so its id must NOT stay
-            // in the record. Now that the id survives the pre-funding save (above),
-            // hasInFlightFireblocks would remain true on the next attempt and the
-            // caller-btcTxid guard would refuse exactly the `opts.btcTxid` recovery this
-            // error tells the operator to use. Drop only the id — the lock parameters and
-            // the (consumed) external id stay for diagnostics.
-            const abandoned: BondLockRecord = { ...lockRecord };
-            delete abandoned.fireblocksId;
-            await this.lockRecordStore.saveRecord(this.address, bondIndex, abandoned);
-            return {
-              success: false,
-              error: `The prior Fireblocks funding transfer (id ${priorRecord!.fireblocksId}) for bond ${bondIndex} terminally failed: ${formatErrorMessage(awaitErr)}. Its external id ${fundingExternalId} is consumed and cannot be reused, so this lock cannot be re-funded automatically — enroll under a different bond index, or resolve the transfer in Fireblocks and retry with opts.btcTxid.`,
-            };
+            return this.abandonTerminalFunding(bondIndex, fundingExternalId, awaitErr);
           }
           throw awaitErr;
         }
@@ -3395,6 +3417,11 @@ export class StacksSDK {
             if (!resolved) throw fundErr;
             result = resolved;
             await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, fireblocksId: resolved.fireblocksId, stage: laterStage(lockRecord.stage, "funding-requested") });
+          } else if (FireblocksService.isTerminalTransferFailure(fundErr)) {
+            // Fireblocks accepted the transfer (onSubmitted persisted its id) and it then
+            // reached a terminal state. Identical dead-end to the resume path: the external
+            // id is spent, so this lock cannot be re-funded under it.
+            return this.abandonTerminalFunding(bondIndex, fundingExternalId, fundErr);
           } else {
             throw fundErr;
           }
