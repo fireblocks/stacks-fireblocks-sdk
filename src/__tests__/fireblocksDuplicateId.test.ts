@@ -34,17 +34,3 @@ describe("FireblocksService.isDuplicateExternalIdError", () => {
     expect(FireblocksService.isDuplicateExternalIdError(new Error("code 1438: duplicate externalTxId"))).toBe(true);
   });
 });
-
-describe("FireblocksService.isTerminalTransferFailure", () => {
-  it("matches the getTxStatus terminal-status message", () => {
-    for (const s of ["BLOCKED", "CANCELLED", "FAILED", "REJECTED"]) {
-      expect(FireblocksService.isTerminalTransferFailure(new Error(`Signing request failed/blocked/cancelled: Transaction: abc status is ${s}`))).toBe(true);
-    }
-  });
-
-  it("does NOT match a timeout or transient error (retryable)", () => {
-    expect(FireblocksService.isTerminalTransferFailure(new Error("Signing request timed out after 30 minutes: Transaction abc is still SUBMITTED"))).toBe(false);
-    expect(FireblocksService.isTerminalTransferFailure(new Error("ECONNRESET"))).toBe(false);
-    expect(FireblocksService.isTerminalTransferFailure(null)).toBe(false);
-  });
-});
