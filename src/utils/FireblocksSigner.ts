@@ -15,7 +15,21 @@ import { formatErrorMessage } from "./errorHandling";
 const POLL_INITIAL_MS = 3_000;
 const POLL_CEILING_MS = 30_000;
 const POLL_TIMEOUT_MS = 30 * 60 * 1_000;
-const APPROVAL_POLL_TIMEOUT_MS = 24 * 60 * 60 * 1_000;
+/**
+ * Equal to the machine budget by default — extending is opt-in per call site.
+ *
+ * This deadline also bounds how stale a preflight can be when the transaction finally
+ * broadcasts. FBS-19: three lifecycle calls (`unstakeSbtc`, `updateBondRegistration`,
+ * `renewBond`) re-validate nothing before broadcast, and the re-checks that do exist
+ * carry no safety margin. A longer wait therefore lets an approval straddle the
+ * prepare-phase boundary — ~17 hours of every two-week mainnet cycle — and the contract
+ * rejects the transaction after the fee and nonce are spent.
+ *
+ * Raise this only for a caller that re-validates with a margin immediately before
+ * broadcast. The typed timeout error already lets a caller distinguish an outstanding
+ * approval from a stall without waiting longer.
+ */
+const APPROVAL_POLL_TIMEOUT_MS = POLL_TIMEOUT_MS;
 
 /**
  * Vendor-reported outcome of a Fireblocks transaction. `status` is the authoritative
