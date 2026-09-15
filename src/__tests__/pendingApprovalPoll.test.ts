@@ -44,6 +44,18 @@ describe("FireblocksSigner.getTxStatus — approval-pending deadlines", () => {
     });
   };
 
+  it("does NOT extend the approval budget by default", () => {
+    // FBS-19: the 30-minute POLL_TIMEOUT_MS also bounded how stale a preflight could be
+    // before broadcast, and three lifecycle calls still re-validate nothing. Until that
+    // is fixed, a longer default would let an approval straddle the prepare-phase
+    // boundary and burn a fee and a nonce on a transaction the contract rejects.
+    // Extending is therefore opt-in, per call site, not a default.
+    const signer = signerFor([TransactionStateEnum.Completed]);
+    const poll = (signer as unknown as { poll: Record<string, number> }).poll;
+
+    expect(poll.approvalTimeoutMs).toBe(poll.timeoutMs);
+  });
+
   it("keeps waiting on a human approval past the machine-paced deadline", async () => {
     const signer = signerFor(
       [
