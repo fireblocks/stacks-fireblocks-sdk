@@ -15,6 +15,7 @@ import { formatErrorMessage } from "./errorHandling";
 const POLL_INITIAL_MS = 3_000;
 const POLL_CEILING_MS = 30_000;
 const POLL_TIMEOUT_MS = 30 * 60 * 1_000;
+const APPROVAL_POLL_TIMEOUT_MS = 24 * 60 * 60 * 1_000;
 
 /**
  * Vendor-reported outcome of a Fireblocks transaction. `status` is the authoritative
@@ -52,11 +53,51 @@ export const TERMINAL_TRANSACTION_STATES: ReadonlySet<string> = new Set([
   TransactionStateEnum.Rejected,
 ]);
 
+/**
+ * Non-terminal states that wait on a person rather than on the platform. A deadline
+ * sized for machine-paced work reports these as failures while the approval is still
+ * legitimately outstanding.
+ *
+ * `PENDING_SIGNATURE` is deliberately excluded — that is MPC signing, not a human.
+ * `PENDING_AML_SCREENING` and `PENDING_3RD_PARTY` are also excluded: whether either
+ * blocks on a person is a Fireblocks semantic this codebase has not confirmed.
+ */
+export const APPROVAL_PENDING_STATES: ReadonlySet<string> = new Set([
+  TransactionStateEnum.PendingAuthorization,
+  TransactionStateEnum.Pending3RdPartyManualApproval,
+]);
+
 const describeOperation = (operation?: string): string =>
   operation === TransactionOperation.Raw ? "Signing request" : "Transfer";
 
+const describeBudget = (ms: number): string =>
+  ms >= 60 * 60 * 1_000
+    ? `${Math.round(ms / (60 * 60 * 1_000))}h`
+    : `${Math.round(ms / 60_000)}m`;
+
+export interface PollConfig {
+  initialMs?: number;
+  ceilingMs?: number;
+  /** Budget for machine-paced states. */
+  timeoutMs?: number;
+  /** Budget for states awaiting a person — see `APPROVAL_PENDING_STATES`. */
+  approvalTimeoutMs?: number;
+}
+
 export class FireblocksSigner {
-  constructor(public fireblocks: Fireblocks) {}
+  private readonly poll: Required<PollConfig>;
+
+  constructor(
+    public fireblocks: Fireblocks,
+    poll: PollConfig = {},
+  ) {
+    this.poll = {
+      initialMs: poll.initialMs ?? POLL_INITIAL_MS,
+      ceilingMs: poll.ceilingMs ?? POLL_CEILING_MS,
+      timeoutMs: poll.timeoutMs ?? POLL_TIMEOUT_MS,
+      approvalTimeoutMs: poll.approvalTimeoutMs ?? APPROVAL_POLL_TIMEOUT_MS,
+    };
+  }
 
   createTransactionPayload = (externalTxId: string): TransactionRequest => {
     return {
@@ -79,34 +120,44 @@ export class FireblocksSigner {
     let response: FireblocksResponse<TransactionResponse> =
       await this.fireblocks.transactions.getTransaction({ txId });
     let tx: TransactionResponse = response.data;
-    const deadline = Date.now() + POLL_TIMEOUT_MS;
-    let delay = POLL_INITIAL_MS;
+    const startedAt = Date.now();
+    let delay = this.poll.initialMs;
 
     while (tx.status !== TransactionStateEnum.Completed) {
       const label = describeOperation(tx.operation);
+      const details = (): FireblocksTransferFailure => ({
+        operation: tx.operation ?? "",
+        status: tx.status as TransactionStateEnum,
+        subStatus: tx.subStatus,
+        errorDescription: (tx as { errorDescription?: string }).errorDescription,
+        vendorId: tx.id ?? txId,
+      });
 
       if (TERMINAL_TRANSACTION_STATES.has(tx.status)) {
         throw new FireblocksTransferError(
           `${label} ${tx.id} reached terminal status ${tx.status}${tx.subStatus ? ` (${tx.subStatus})` : ""}`,
-          {
-            operation: tx.operation ?? "",
-            status: tx.status as TransactionStateEnum,
-            subStatus: tx.subStatus,
-            errorDescription: (tx as { errorDescription?: string }).errorDescription,
-            vendorId: tx.id ?? txId,
-          },
+          details(),
         );
       }
 
-      if (Date.now() + delay > deadline) {
-        throw new Error(
-          `${label} ${tx.id} timed out after 30 minutes: still ${tx.status}${tx.subStatus ? ` (${tx.subStatus})` : ""}`,
+      // The budget is re-read each pass: a transaction can move in and out of an
+      // approval wait, and the two waits are paced by different things.
+      const budget = APPROVAL_PENDING_STATES.has(tx.status)
+        ? this.poll.approvalTimeoutMs
+        : this.poll.timeoutMs;
+
+      if (Date.now() + delay > startedAt + budget) {
+        // Typed, so a caller can tell an outstanding approval from a genuine stall.
+        // Not a terminal status, so this never advances a funding generation.
+        throw new FireblocksTransferError(
+          `${label} ${tx.id} timed out after ${describeBudget(budget)}: still ${tx.status}${tx.subStatus ? ` (${tx.subStatus})` : ""}`,
+          details(),
         );
       }
 
       console.log(`Transaction ${tx.id} is currently at status - ${tx.status}`);
       await new Promise((resolve) => setTimeout(resolve, delay));
-      delay = Math.min(delay * 2, POLL_CEILING_MS);
+      delay = Math.min(delay * 2, this.poll.ceilingMs);
 
       try {
         response = await this.fireblocks.transactions.getTransaction({ txId });
