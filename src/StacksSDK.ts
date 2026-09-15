@@ -69,7 +69,7 @@ import { BondLockRecord, InMemoryLockRecordStore, LockRecordStore, laterStage } 
 import { SignerManagerRegistry } from "./staking/signer-manager-adapter";
 import { createHash } from "crypto";
 import { parseOptionalFee, ValidationError } from "./utils/validation";
-import { formatErrorMessage } from "./utils/errorHandling";
+import { formatErrorMessage, unsettledTransactionError } from "./utils/errorHandling";
 import { checkFeeReplacement, ParsedRecoveryTx } from "./utils/rbf";
 import { encodeRewardAddressCalldata, REWARD_CALLDATA_MAX_BYTES, decodeCommittedRewardMapValue, CommittedRewardDestination, nativeRewardThresholdSats } from "./utils/rewardCalldata";
 import { validateBondScheduleAgainstChain, BondScheduleValidation } from "./utils/bondScheduleChain";
@@ -3000,7 +3000,9 @@ export class StacksSDK {
 
       const settled = await this.waitForTxSettlement(result.txid);
       if (!settled.success || settled.data?.tx_status !== "success") {
-        return { success: false, unsettled: !settled.success, error: settled.data?.tx_error ?? "update-bond-registration failed on-chain", txHash: result.txid };
+        return { success: false, unsettled: !settled.success, error: !settled.success
+            ? unsettledTransactionError('update-bond-registration', result.txid, settled.error)
+            : (settled.data?.tx_error ?? "update-bond-registration failed on-chain"), txHash: result.txid };
       }
 
       // Re-read membership after settlement. If the affected bond changed during the
@@ -3564,7 +3566,9 @@ export class StacksSDK {
       console.log('register-for-bond settlement:', JSON.stringify({ tx_status: settled.data?.tx_status, tx_result: settled.data?.tx_result }));
       if (!settled.success || settled.data?.tx_status !== 'success') {
         const txRepr: string = (settled.data?.tx_result as any)?.repr ?? settled.data?.tx_error ?? '';
-        return { success: false, unsettled: !settled.success, error: `[${settled.data?.tx_status}] ${txRepr}`.trim(), stacksTxid: result.txid, btcTxid, vout: lockupProof.outputIndex };
+        return { success: false, unsettled: !settled.success, error: !settled.success
+            ? unsettledTransactionError('register-for-bond', result.txid, settled.error)
+            : `[${settled.data?.tx_status}] ${txRepr}`.trim(), stacksTxid: result.txid, btcTxid, vout: lockupProof.outputIndex };
       }
 
       await this.lockRecordStore.saveRecord(this.address, bondIndex, {
@@ -3858,7 +3862,9 @@ export class StacksSDK {
       const settled = await this.waitForTxSettlement(result.txid);
       if (!settled.success || settled.data?.tx_status !== 'success') {
         const repr: string = (settled.data?.tx_result as any)?.repr ?? settled.data?.tx_error ?? '';
-        return { success: false, unsettled: !settled.success, error: `[${settled.data?.tx_status}] ${repr}`.trim(), txHash: result.txid };
+        return { success: false, unsettled: !settled.success, error: !settled.success
+            ? unsettledTransactionError('pox-5 call', result.txid, settled.error)
+            : `[${settled.data?.tx_status}] ${repr}`.trim(), txHash: result.txid };
       }
 
       return { success: true, txHash: result.txid };
@@ -4008,7 +4014,9 @@ export class StacksSDK {
       const settled = await this.waitForTxSettlement(result.txid);
       if (!settled.success || settled.data?.tx_status !== 'success') {
         const repr: string = (settled.data?.tx_result as any)?.repr ?? settled.data?.tx_error ?? '';
-        return { success: false, unsettled: !settled.success, error: `[${settled.data?.tx_status}] ${repr}`.trim(), txHash: result.txid };
+        return { success: false, unsettled: !settled.success, error: !settled.success
+            ? unsettledTransactionError('pox-5 call', result.txid, settled.error)
+            : `[${settled.data?.tx_status}] ${repr}`.trim(), txHash: result.txid };
       }
 
       return { success: true, txHash: result.txid };
@@ -4084,7 +4092,9 @@ export class StacksSDK {
       }
       const settled = await this.waitForTxSettlement(result.txid);
       if (!settled.success || settled.data?.tx_status !== 'success') {
-        return { success: false, unsettled: !settled.success, error: settled.data?.tx_error ?? 'unstake-sbtc failed on-chain', txHash: result.txid };
+        return { success: false, unsettled: !settled.success, error: !settled.success
+            ? unsettledTransactionError('unstake-sbtc', result.txid, settled.error)
+            : (settled.data?.tx_error ?? 'unstake-sbtc failed on-chain'), txHash: result.txid };
       }
       return { success: true, txHash: result.txid };
     } catch (error) {
@@ -4327,7 +4337,9 @@ export class StacksSDK {
 
       const settled = await this.waitForTxSettlement(result.txid);
       if (!settled.success || settled.data?.tx_status !== 'success') {
-        return { success: false, unsettled: !settled.success, error: settled.data?.tx_error ?? 'announce-l1-early-exit failed on-chain', txHash: result.txid };
+        return { success: false, unsettled: !settled.success, error: !settled.success
+            ? unsettledTransactionError('announce-l1-early-exit', result.txid, settled.error)
+            : (settled.data?.tx_error ?? 'announce-l1-early-exit failed on-chain'), txHash: result.txid };
       }
 
       return { success: true, txHash: result.txid };
@@ -5582,7 +5594,9 @@ export class StacksSDK {
       const settled = await this.waitForTxSettlement(result.txid);
       if (!settled.success || settled.data?.tx_status !== 'success') {
         const txRepr: string = (settled.data?.tx_result as any)?.repr ?? settled.data?.tx_error ?? '';
-        return { success: false, unsettled: !settled.success, error: `[${settled.data?.tx_status}] ${txRepr}`.trim(), stacksTxid: result.txid, btcTxid, vout: lockupProof.outputIndex };
+        return { success: false, unsettled: !settled.success, error: !settled.success
+            ? unsettledTransactionError('register-for-bond', result.txid, settled.error)
+            : `[${settled.data?.tx_status}] ${txRepr}`.trim(), stacksTxid: result.txid, btcTxid, vout: lockupProof.outputIndex };
       }
 
       return {
@@ -5723,7 +5737,9 @@ export class StacksSDK {
       }
       const settled = await this.waitForTxSettlement(result.txid);
       if (!settled.success || settled.data?.tx_status !== 'success') {
-        return { success: false, unsettled: !settled.success, error: settled.data?.tx_error ?? 'calculate-rewards failed on-chain', txHash: result.txid };
+        return { success: false, unsettled: !settled.success, error: !settled.success
+            ? unsettledTransactionError('calculate-rewards', result.txid, settled.error)
+            : (settled.data?.tx_error ?? 'calculate-rewards failed on-chain'), txHash: result.txid };
       }
       return { success: true, txHash: result.txid };
     } catch (error) {

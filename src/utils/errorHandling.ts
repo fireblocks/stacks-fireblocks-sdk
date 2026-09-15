@@ -61,3 +61,25 @@ function extractResponseDetail(error: unknown): string | null {
   }
   return null;
 }
+
+/**
+ * Error text for a transaction that was broadcast but whose outcome could not be
+ * observed — `waitForTxSettlement` reports `success: false` only on timeout.
+ *
+ * The distinction is operational, not cosmetic: "it failed" and "it may still be in
+ * flight" call for opposite actions. Where Bitcoin has already moved, the standing
+ * advice is not to create a second transaction, which is unfollowable if a slow
+ * transaction is indistinguishable from an aborted one.
+ */
+export function unsettledTransactionError(
+  operation: string,
+  txId: string,
+  reason?: string,
+): string {
+  return (
+    `${operation} was broadcast (txid ${txId}) but its outcome is NOT known: ` +
+    `${reason ?? "the settlement wait timed out before the transaction was observed on-chain"}. ` +
+    `Check this transaction's status before acting — do not send a replacement on the ` +
+    `assumption it did not land.`
+  );
+}
