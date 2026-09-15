@@ -346,6 +346,16 @@ export class FileLockRecordStore implements LockRecordStore {
     return s ? deserializeRecord(s) : null;
   }
 
+  async listRecords(stxAddress: string): Promise<BondLockRecord[]> {
+    const records = await this.loadAll();
+    // Keys are `${stxAddress}:${bondIndex}` and a Stacks address contains no colon,
+    // so the prefix cannot match a different staker.
+    const prefix = `${stxAddress}:`;
+    return Object.entries(records)
+      .filter(([k]) => k.startsWith(prefix))
+      .map(([, s]) => deserializeRecord(s));
+  }
+
   /**
    * Startup health check used to gate native-BTC funding. Verifies the directory is
    * writable (temp write + fsync + rename + delete) and that the existing store, if

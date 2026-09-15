@@ -125,6 +125,16 @@ export interface LockRecordStore {
    * as non-durable.
    */
   checkHealth?(): Promise<void>;
+  /**
+   * Every record held for one staker, in unspecified order. Recovery needs discovery
+   * by address alone: a caller that has lost the bond index (or never had it) has no
+   * other way to learn what Bitcoin a lock address holds.
+   *
+   * Optional so a third-party store is not broken by its addition, but a store without
+   * it cannot support recovery discovery — callers refuse rather than treating an
+   * absent implementation as "no records".
+   */
+  listRecords?(stxAddress: string): Promise<BondLockRecord[]>;
 }
 
 export class InMemoryLockRecordStore implements LockRecordStore {
@@ -147,5 +157,12 @@ export class InMemoryLockRecordStore implements LockRecordStore {
     bondIndex: number,
   ): Promise<BondLockRecord | null> {
     return this.store.get(this.key(stxAddress, bondIndex)) ?? null;
+  }
+
+  async listRecords(stxAddress: string): Promise<BondLockRecord[]> {
+    const prefix = `${stxAddress}:`;
+    return [...this.store.entries()]
+      .filter(([k]) => k.startsWith(prefix))
+      .map(([, record]) => record);
   }
 }
