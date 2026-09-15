@@ -249,30 +249,28 @@ export class FireblocksService {
   };
 
   /**
-   * Looks up a prior BTC transfer by its external id (the deterministic funding id) and
-   * awaits its Bitcoin txid. Used when a retry's re-submit is rejected as a duplicate
-   * external id (Fireblocks error 1438): the transfer already exists, so resolve it
-   * rather than failing. Returns null when Fireblocks has no transaction for the id.
+   * Lookup ONLY — returns the Fireblocks id for an external id without polling it.
+   *
+   * Deliberately does not poll: a combined lookup-and-await loses the id when the
+   * transfer is already terminal, because the await throws before the caller can persist
+   * what the lookup just found. The record then keeps no pointer to the dead transfer and
+   * every retry repeats the same generic error. Callers persist between the two steps.
    */
-  public resolveBitcoinTransactionByExternalId = async (
+  public findBitcoinTransactionByExternalId = async (
     externalId: string,
-  ): Promise<{ fireblocksId: string; btcTxid: string } | null> => {
+  ): Promise<string | null> => {
     let existing;
     try {
       existing = await this.fireblocksSDK.transactions.getTransactionByExternalId({ externalTxId: externalId });
     } catch (e) {
-      // ONLY a genuine 404 means "no transfer under this id". A transient 5xx/network
-      // error must NOT masquerade as not-found — that would turn a recoverable resume
-      // into a hard failure — so it rethrows and the caller surfaces a retryable error.
+      // Only a genuine 404 means "no transfer under this id"; a transient 5xx must not
+      // masquerade as not-found and turn a recoverable resume into a hard failure.
       const status = (e as { response?: { status?: number }; status?: number })?.response?.status
         ?? (e as { status?: number })?.status;
       if (status === 404) return null;
       throw e;
     }
-    const fireblocksId = existing?.data?.id;
-    if (!fireblocksId) return null;
-    const btcTxid = await this.awaitBitcoinTransaction(fireblocksId);
-    return { fireblocksId, btcTxid };
+    return existing?.data?.id ?? null;
   };
 
   /**

@@ -304,12 +304,21 @@ export class StacksSDK {
       const stored = await this.lockRecordStore.loadRecord(this.address!, bondIndex);
       if (stored) {
         fireblocksId = stored.fireblocksId;
-        // Single write: the generation advance and the id clear are the same durable
-        // update. Split across two writes, a crash between them leaves a record that
-        // derives a fresh external id while the dead transfer still reads as in flight.
+        // Single write: the generation advance, the id clear, and moving the dead id into
+        // the abandoned list are the same durable update. Split across two writes, a crash
+        // between them leaves a record that derives a fresh external id while the dead
+        // transfer still reads as in flight.
         const abandoned: BondLockRecord = {
           ...stored,
           fundingGeneration: (stored.fundingGeneration ?? 0) + 1,
+          ...(fireblocksId !== undefined
+            ? {
+                abandonedFireblocksIds: [
+                  ...(stored.abandonedFireblocksIds ?? []),
+                  fireblocksId,
+                ],
+              }
+            : {}),
         };
         delete abandoned.fireblocksId;
         await this.lockRecordStore.saveRecord(this.address!, bondIndex, abandoned);
@@ -3364,6 +3373,11 @@ export class StacksSDK {
         firstRewardCycle: bondPeriodToRewardCycle({ bondIndex, poxInfo: pox }),
         fundingExternalId,
         fundingGeneration,
+        // Carried forward explicitly: this literal replaces the stored record, so an
+        // omitted field erases the history of abandoned transfers on the next attempt.
+        ...(priorRecord?.abandonedFireblocksIds !== undefined
+          ? { abandonedFireblocksIds: priorRecord.abandonedFireblocksIds }
+          : {}),
         // Persist the reward destination so renewBond / updateBondRegistration re-supply
         // the pox-addr calldata rather than dropping it (a `none` map-deletes it).
         ...(effectiveRewardBtcAddress !== undefined ? { rewardBtcAddress: effectiveRewardBtcAddress } : {}),
@@ -3449,21 +3463,25 @@ export class StacksSDK {
           // A prior submit already consumed the external id (a crash before onSubmitted
           // persisted it): resolve the existing transfer instead of failing.
           if (FireblocksService.isDuplicateExternalIdError(fundErr)) {
-            let resolved;
+            // Lookup, persistence and polling are deliberately three steps. Awaiting
+            // before persisting loses the id on a transfer that is already terminal —
+            // leaving no durable pointer to the dead transfer.
+            const priorFireblocksId =
+              await this.fireblocksService.findBitcoinTransactionByExternalId(fundingExternalId);
+            if (!priorFireblocksId) throw fundErr;
+            await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, fireblocksId: priorFireblocksId, stage: laterStage(lockRecord.stage, "funding-requested") });
+            let priorBtcTxid: string;
             try {
-              resolved = await this.fireblocksService.resolveBitcoinTransactionByExternalId(fundingExternalId);
+              priorBtcTxid = await this.fireblocksService.awaitBitcoinTransaction(priorFireblocksId);
             } catch (resolveErr) {
-              // Resolution awaits the existing transfer, so it surfaces that transfer's
-              // terminal state. Same dead-end as the other two paths: without this the
-              // generation never advances and the consumed id stays unusable forever.
+              // Same dead-end as the other two paths: without this the generation never
+              // advances and the consumed id stays unusable forever.
               if (FireblocksService.isTerminalTransferFailure(resolveErr)) {
                 return this.abandonTerminalFunding(bondIndex, fundingExternalId, resolveErr);
               }
               throw resolveErr;
             }
-            if (!resolved) throw fundErr;
-            result = resolved;
-            await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, fireblocksId: resolved.fireblocksId, stage: laterStage(lockRecord.stage, "funding-requested") });
+            result = { fireblocksId: priorFireblocksId, btcTxid: priorBtcTxid };
           } else if (FireblocksService.isTerminalTransferFailure(fundErr)) {
             // Fireblocks accepted the transfer (onSubmitted persisted its id) and it then
             // reached a terminal state. Identical dead-end to the resume path: the external

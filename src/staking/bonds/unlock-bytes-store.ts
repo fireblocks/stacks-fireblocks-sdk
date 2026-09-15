@@ -89,6 +89,14 @@ export interface BondLockRecord {
    */
   fundingGeneration?: number;
   /**
+   * Fireblocks ids of funding transfers abandoned after a TERMINAL vendor status, kept
+   * separately from the active `fireblocksId` slot. The slot must be cleared so the
+   * caller-btcTxid recovery is not refused as in-flight, but the ids themselves stay
+   * durable: they are the operator's only handle for looking the dead transfers up in
+   * Fireblocks. Append-only, oldest first.
+   */
+  abandonedFireblocksIds?: string[];
+  /**
    * The Fireblocks transaction id of the BTC funding transfer, persisted as soon as
    * Fireblocks accepts the request — BEFORE the (long, throwable) confirmation poll. A
    * retry after a poll timeout / crash uses it to await or resolve the SAME transfer
