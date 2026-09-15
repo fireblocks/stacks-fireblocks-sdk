@@ -120,7 +120,6 @@ function makeSdk(): any {
   sdk.fireblocksService = {
     createBitcoinTransaction: jest.fn(),
     awaitBitcoinTransaction: jest.fn(),
-    resolveBitcoinTransactionByExternalId: jest.fn(),
   };
   sdk.setLockRecordStore(new InMemoryLockRecordStore());
   return sdk;

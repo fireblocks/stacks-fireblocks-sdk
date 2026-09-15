@@ -116,7 +116,7 @@ function makeSdk(): any {
   sdk.fireblocksService = {
     createBitcoinTransaction: jest.fn(),
     awaitBitcoinTransaction: jest.fn(),
-    resolveBitcoinTransactionByExternalId: jest.fn(),
+    findBitcoinTransactionByExternalId: jest.fn(),
   };
   sdk.setLockRecordStore(new InMemoryLockRecordStore());
   return sdk;
@@ -220,7 +220,10 @@ describe("createBond — terminal failure on the FRESH funding path", () => {
     sdk.fireblocksService.createBitcoinTransaction = jest
       .fn()
       .mockRejectedValue(dupErr);
-    sdk.fireblocksService.resolveBitcoinTransactionByExternalId = jest
+    sdk.fireblocksService.findBitcoinTransactionByExternalId = jest
+      .fn()
+      .mockResolvedValue(FB_ID);
+    sdk.fireblocksService.awaitBitcoinTransaction = jest
       .fn()
       .mockRejectedValue(terminalError(TransactionStateEnum.Rejected));
 
@@ -229,6 +232,71 @@ describe("createBond — terminal failure on the FRESH funding path", () => {
     expect(res.success).toBe(false);
     expect(res.error).toMatch(/terminally failed/i);
     expect(res.error).toMatch(/opts\.btcTxid/);
+  });
+
+  it("persists the terminal vendor id separately from the in-flight slot", async () => {
+    const sdk = makeSdk();
+    sdk.fireblocksService.createBitcoinTransaction = acceptThenFail(
+      terminalError(TransactionStateEnum.Rejected),
+    );
+
+    await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    const after = await readRecord(sdk);
+    // The in-flight slot must be clear — a terminal transfer can never yield a txid.
+    expect(after.fireblocksId).toBeUndefined();
+    // ...but the id itself must survive durably, not only inside an error string, or the
+    // operator has nothing to look up in Fireblocks.
+    expect(after.abandonedFireblocksIds).toContain(FB_ID);
+  });
+
+  it("records each abandoned id, not just the most recent", async () => {
+    const sdk = makeSdk();
+    sdk.fireblocksService.createBitcoinTransaction = acceptThenFail(
+      terminalError(TransactionStateEnum.Rejected),
+    );
+
+    await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+    // Second attempt derives a new external id (generation advanced) and also dies.
+    sdk.fireblocksService.createBitcoinTransaction = jest
+      .fn()
+      .mockImplementation(async (..._args: any[]) => {
+        await _args[5]?.("fireblocks-tx-id-second");
+        throw terminalError(TransactionStateEnum.Failed);
+      });
+    await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    const after = await readRecord(sdk);
+    expect(after.abandonedFireblocksIds).toEqual([
+      FB_ID,
+      "fireblocks-tx-id-second",
+    ]);
+  });
+
+  it("persists the resolved id BEFORE polling it, so a timeout still leaves a pointer", async () => {
+    const sdk = makeSdk();
+    const dupErr = Object.assign(
+      new Error("code 1438: duplicate externalTxId"),
+      {
+        code: 1438,
+      },
+    );
+    sdk.fireblocksService.createBitcoinTransaction = jest
+      .fn()
+      .mockRejectedValue(dupErr);
+    // Lookup succeeds; the poll then fails NON-terminally (the transfer may still land).
+    sdk.fireblocksService.findBitcoinTransactionByExternalId = jest
+      .fn()
+      .mockResolvedValue(FB_ID);
+    sdk.fireblocksService.awaitBitcoinTransaction = jest
+      .fn()
+      .mockRejectedValue(new Error("ECONNRESET"));
+
+    await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    const after = await readRecord(sdk);
+    // Without splitting lookup from polling, the id was discovered and then thrown away.
+    expect(after.fireblocksId).toBe(FB_ID);
   });
 
   it("still rethrows a NON-terminal failure so a later retry can resume the transfer", async () => {
