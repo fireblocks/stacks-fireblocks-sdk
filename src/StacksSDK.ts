@@ -195,6 +195,8 @@ export class StacksSDK {
   private readonly BTC_DUST_LIMIT_SATS = BigInt(330);
   private networkProfile!: NetworkProfile;
   private _pox5Network!: StacksNetwork;
+  /** Hiro API key applied to every chain read, PoX-5 and StacksService alike. */
+  private chainApiKey?: string;
   private lockRecordStore: LockRecordStore = new InMemoryLockRecordStore();
   private lockRecordStoreIsDurable = false;
 
@@ -366,7 +368,11 @@ export class StacksSDK {
       // Both testnet-family profiles (public-testnet, private-devnet) use testnet
       // address formats, BTC networks, and faucet gating.
       this.testnet = this.networkProfile.name !== "mainnet";
-      this._pox5Network = stacksNetworkFromProfile(this.networkProfile);
+      this.chainApiKey = fireblocksConfig?.chainApiKey;
+      this._pox5Network = stacksNetworkFromProfile(
+        this.networkProfile,
+        this.chainApiKey,
+      );
       this.chainService = new StacksService(
         this.testnet,
         {
@@ -374,7 +380,7 @@ export class StacksSDK {
           chainId: this.networkProfile.chainId,
           magicBytes: this.networkProfile.magicBytes,
         },
-        fireblocksConfig?.chainApiKey,
+        this.chainApiKey,
       );
     } catch (error) {
       throw new Error(
@@ -408,7 +414,10 @@ export class StacksSDK {
     try {
       const instance = new StacksSDK(vaultAccountId, fireblocksConfig);
       // Fail construction on a definite chain-id / PoX-contract mismatch.
-      await validateNetworkProfile(instance.networkProfile);
+      await validateNetworkProfile(
+        instance.networkProfile,
+        instance.chainApiKey,
+      );
       instance.publicKey =
         await instance.fireblocksService.getPublicKeyByVaultID(vaultAccountId);
       instance.address = instance.chainService.formatAddress(

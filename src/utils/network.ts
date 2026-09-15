@@ -10,6 +10,7 @@ import {
   api_constants,
   BTC_ESPLORA,
   EARLY_EXIT_SIGNER,
+  HIRO_API_KEY_HEADER,
   PRIVATE1_HIRO_API_BASE,
   PUBLIC_TESTNET_POX5_API,
 } from "./constants";
@@ -39,14 +40,26 @@ export interface NetworkProfile {
   requirePox5Active?: boolean;
 }
 
+/**
+ * Adds the Hiro API key to a request's headers. Omitted entirely when no key is
+ * configured — an empty header value is rejected rather than treated as absent.
+ */
+export function withChainApiKey(init: RequestInit | undefined, apiKey?: string): RequestInit | undefined {
+  if (!apiKey) return init;
+  const headers = new Headers(init?.headers ?? {});
+  headers.set(HIRO_API_KEY_HEADER, apiKey);
+  return { ...(init ?? {}), headers };
+}
+
 export function accountBalanceNormalizingFetch(
   baseFetch: typeof fetch = fetch,
+  apiKey?: string,
 ): typeof fetch {
   const stripHexPrefix = (v: unknown): unknown =>
     typeof v === "string" && /^0x/i.test(v) ? v.slice(2) : v;
 
   return (async (input: any, init?: any): Promise<Response> => {
-    const res = await baseFetch(input, init);
+    const res = await baseFetch(input, withChainApiKey(init, apiKey));
     const url =
       typeof input === "string" ? input : (input?.url ?? String(input));
     if (!res.ok || !/\/v2\/accounts\//.test(url)) return res;
@@ -135,7 +148,11 @@ export function resolveNetworkProfile(opts: {
  * `StacksService.broadcastTransaction`, deriving chain id / magic bytes / base URL
  * from the resolved profile and installing the account-balance fetch adapter.
  */
-export function stacksNetworkFromProfile(profile: NetworkProfile): StacksNetwork {
+export function stacksNetworkFromProfile(
+  profile: NetworkProfile,
+  apiKey?: string,
+  baseFetch: typeof fetch = fetch,
+): StacksNetwork {
   const base = profile.name === "mainnet" ? STACKS_MAINNET : STACKS_TESTNET;
   return {
     ...base,
@@ -143,7 +160,9 @@ export function stacksNetworkFromProfile(profile: NetworkProfile): StacksNetwork
     magicBytes: profile.magicBytes,
     client: {
       baseUrl: profile.stacksApiUrl,
-      fetch: accountBalanceNormalizingFetch(),
+      // Every PoX-5 read `@stacks/bitcoin-staking` performs goes through this fetch,
+      // so the key has to be applied here rather than at individual call sites.
+      fetch: accountBalanceNormalizingFetch(baseFetch, apiKey),
     },
   } as StacksNetwork;
 }
@@ -156,10 +175,15 @@ export function stacksNetworkFromProfile(profile: NetworkProfile): StacksNetwork
  */
 export async function validateNetworkProfile(
   profile: NetworkProfile,
+  apiKey?: string,
+  baseFetch: typeof fetch = fetch,
 ): Promise<void> {
   let info: any;
   try {
-    const res = await fetch(`${profile.stacksApiUrl}/v2/info`);
+    const res = await baseFetch(
+      `${profile.stacksApiUrl}/v2/info`,
+      withChainApiKey(undefined, apiKey),
+    );
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     info = await res.json();
   } catch (error) {
@@ -186,7 +210,10 @@ export async function validateNetworkProfile(
   // A profile with `requirePox5Active` (e.g. public-testnet) instead fails closed:
   // it is only "supported" once the node actually serves the PoX-5 boot contract.
   try {
-    const poxRes = await fetch(`${profile.stacksApiUrl}/v2/pox`);
+    const poxRes = await baseFetch(
+      `${profile.stacksApiUrl}/v2/pox`,
+      withChainApiKey(undefined, apiKey),
+    );
     if (poxRes.ok) {
       const pox = await poxRes.json();
       const contractId: string | undefined = pox?.contract_id;
