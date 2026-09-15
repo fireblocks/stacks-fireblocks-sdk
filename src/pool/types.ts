@@ -40,6 +40,11 @@ export interface ApiServiceConfig {
    * pool boundary and the funding-time check could never be enabled through the pool.
    */
   verifyEarlyExitCosignerAtFunding?: boolean;
+  /**
+   * Hiro API key forwarded to every pooled SDK instance. Must be added to the
+   * `FireblocksConfig` that `ApiService` hand-builds, or it never reaches the SDK.
+   */
+  chainApiKey?: string;
 }
 
 export enum ActionType {

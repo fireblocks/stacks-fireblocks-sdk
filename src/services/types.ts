@@ -67,6 +67,11 @@ export type FireblocksConfig = {
    * enabling this trades that fallback's availability for a guaranteed early-exit path.
    */
   verifyEarlyExitCosignerAtFunding?: boolean;
+  /**
+   * Hiro API key applied to Stacks chain reads. Anonymous requests get Hiro's lowest
+   * rate-limit tier, so an unkeyed deployment sees 429s under load.
+   */
+  chainApiKey?: string;
 };
 
 export type CreateTransactionResponse = {

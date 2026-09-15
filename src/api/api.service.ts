@@ -1,6 +1,7 @@
 import { BasePath, TransactionResponse } from "@fireblocks/ts-sdk";
 import { SdkManager } from "../pool/SdkManager";
 import { ActionType, ApiServiceConfig } from "../pool/types";
+import { toFireblocksConfig } from "../pool/config";
 import { PoolError } from "../pool/errors";
 import { StacksSDK } from "../StacksSDK";
 import { formatErrorMessage } from "../utils/errorHandling";
@@ -38,16 +39,10 @@ export class ApiService {
   private sdkManager: SdkManager;
 
   constructor(config: ApiServiceConfig) {
-    const baseConfig = {
-      apiKey: config.apiKey,
-      apiSecret: config.apiSecret,
-      basePath: (config.basePath as BasePath) || BasePath.US,
-      vaultAccountId: "", // Will be overridden per request
-      testnet: !!config.testnet,
-      verifyEarlyExitCosignerAtFunding: !!config.verifyEarlyExitCosignerAtFunding,
-    };
-
-    this.sdkManager = new SdkManager(baseConfig, config.poolConfig);
+    this.sdkManager = new SdkManager(
+      toFireblocksConfig(config),
+      config.poolConfig,
+    );
   }
 
   /**
