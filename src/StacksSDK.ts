@@ -341,7 +341,6 @@ export class StacksSDK {
   private constructor(
     vaultAccountId: string | number,
     fireblocksConfig?: FireblocksConfig,
-    hiroApiKey?: string,
   ) {
     try {
       // Validate Fireblocks API credentials before initializing services
@@ -375,7 +374,7 @@ export class StacksSDK {
           chainId: this.networkProfile.chainId,
           magicBytes: this.networkProfile.magicBytes,
         },
-        hiroApiKey,
+        fireblocksConfig?.chainApiKey,
       );
     } catch (error) {
       throw new Error(
@@ -405,10 +404,9 @@ export class StacksSDK {
   public static create = async (
     vaultAccountId: string | number,
     fireblocksConfig?: FireblocksConfig,
-    hiroApiKey?: string,
   ): Promise<StacksSDK> => {
     try {
-      const instance = new StacksSDK(vaultAccountId, fireblocksConfig, hiroApiKey);
+      const instance = new StacksSDK(vaultAccountId, fireblocksConfig);
       // Fail construction on a definite chain-id / PoX-contract mismatch.
       await validateNetworkProfile(instance.networkProfile);
       instance.publicKey =

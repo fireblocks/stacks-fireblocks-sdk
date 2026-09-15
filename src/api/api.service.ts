@@ -4,22 +4,25 @@ import { ActionType, ApiServiceConfig } from "../pool/types";
 import { PoolError } from "../pool/errors";
 import { StacksSDK } from "../StacksSDK";
 import { formatErrorMessage } from "../utils/errorHandling";
-import { SDKResponse } from "../services/types";
+import { SDKResponse, FireblocksConfig } from "../services/types";
 
 export class ApiService {
   private sdkManager: SdkManager;
 
   constructor(config: ApiServiceConfig) {
-    const baseConfig = {
+    const baseConfig: FireblocksConfig = {
       apiKey: config.apiKey,
       apiSecret: config.apiSecret,
       basePath: (config.basePath as BasePath) || BasePath.US,
-      vaultAccountId: "", // Will be overridden per request
       testnet: !!config.testnet,
       verifyEarlyExitCosignerAtFunding: !!config.verifyEarlyExitCosignerAtFunding,
+      // Every option belongs on the config object, not a positional parameter: a
+      // positional must be re-passed at each hop, which is the failure mode this fix
+      // exists to remove.
+      chainApiKey: config.chainApiKey,
     };
 
-    this.sdkManager = new SdkManager(baseConfig, config.chainApiKey, config.poolConfig);
+    this.sdkManager = new SdkManager(baseConfig, config.poolConfig);
   }
 
   /**

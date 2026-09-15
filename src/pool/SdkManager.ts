@@ -14,12 +14,8 @@ export class SdkManager {
   private baseConfig: FireblocksConfig;
   private poolConfig: PoolConfig;
   private cleanupInterval: NodeJS.Timeout;
-  /** Optional Hiro API key, forwarded to every pooled StacksSDK instance. */
-  private chainApiKey?: string;
-
-  constructor(baseConfig: FireblocksConfig, chainApiKey?: string, poolConfig?: Partial<PoolConfig>) {
+  constructor(baseConfig: FireblocksConfig, poolConfig?: Partial<PoolConfig>) {
     this.baseConfig = baseConfig;
-    this.chainApiKey = chainApiKey;
     // Set default pool config values
     this.poolConfig = {
       maxPoolSize: poolConfig?.maxPoolSize || 100,
@@ -139,7 +135,7 @@ export class SdkManager {
 
     try {
       console.log(`Creating new SDK instance for vault ${vaultAccountId}`);
-      const sdk = await StacksSDK.create(vaultAccountId, config, this.chainApiKey);
+      const sdk = await StacksSDK.create(vaultAccountId, config);
       if (this.poolConfig.lockRecordStore) {
         sdk.setLockRecordStore(this.poolConfig.lockRecordStore);
       }

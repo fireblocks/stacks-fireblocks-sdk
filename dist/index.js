@@ -557,21 +557,21 @@ var require_utils = __commonJS({
     function without0x(value) {
       return /^0x/i.test(value) ? value.slice(2) : value;
     }
-    function hexToBigInt(hex4) {
-      if (typeof hex4 !== "string")
-        throw new TypeError(`hexToBigInt: expected string, got ${typeof hex4}`);
-      return BigInt(`0x${hex4}`);
+    function hexToBigInt(hex3) {
+      if (typeof hex3 !== "string")
+        throw new TypeError(`hexToBigInt: expected string, got ${typeof hex3}`);
+      return BigInt(`0x${hex3}`);
     }
     function intToHex(integer, byteLength = 8) {
       const value = typeof integer === "bigint" ? integer : intToBigInt(integer);
       return value.toString(16).padStart(byteLength * 2, "0");
     }
-    function hexToInt(hex4) {
-      return parseInt(hex4, 16);
+    function hexToInt(hex3) {
+      return parseInt(hex3, 16);
     }
     function bigIntToBytes(value, length = 16) {
-      const hex4 = intToHex(value, length);
-      return hexToBytes5(hex4);
+      const hex3 = intToHex(value, length);
+      return hexToBytes5(hex3);
     }
     function toTwos(value, width) {
       if (value < -(BigInt(1) << width - BigInt(1)) || (BigInt(1) << width - BigInt(1)) - BigInt(1) < value) {
@@ -598,22 +598,22 @@ var require_utils = __commonJS({
     function bytesToHex5(uint8a) {
       if (!(uint8a instanceof Uint8Array))
         throw new Error("Uint8Array expected");
-      let hex4 = "";
+      let hex3 = "";
       for (const u of uint8a) {
-        hex4 += hexes2[u];
+        hex3 += hexes2[u];
       }
-      return hex4;
+      return hex3;
     }
-    function hexToBytes5(hex4) {
-      if (typeof hex4 !== "string") {
-        throw new TypeError(`hexToBytes: expected string, got ${typeof hex4}`);
+    function hexToBytes5(hex3) {
+      if (typeof hex3 !== "string") {
+        throw new TypeError(`hexToBytes: expected string, got ${typeof hex3}`);
       }
-      hex4 = without0x(hex4);
-      hex4 = hex4.length % 2 ? `0${hex4}` : hex4;
-      const array2 = new Uint8Array(hex4.length / 2);
+      hex3 = without0x(hex3);
+      hex3 = hex3.length % 2 ? `0${hex3}` : hex3;
+      const array2 = new Uint8Array(hex3.length / 2);
       for (let i = 0; i < array2.length; i++) {
         const j = i * 2;
-        const hexByte = hex4.slice(j, j + 2);
+        const hexByte = hex3.slice(j, j + 2);
         const byte = Number.parseInt(hexByte, 16);
         if (Number.isNaN(byte) || byte < 0)
           throw new Error("Invalid byte sequence");
@@ -671,11 +671,11 @@ var require_utils = __commonJS({
     function isInstance(object, clazz) {
       return object instanceof clazz || object?.constructor?.name?.toLowerCase() === clazz.name;
     }
-    function validateHash256(hex4) {
-      hex4 = without0x(hex4);
-      if (hex4.length !== 64)
+    function validateHash256(hex3) {
+      hex3 = without0x(hex3);
+      if (hex3.length !== 64)
         return false;
-      return /^[0-9a-fA-F]+$/.test(hex4);
+      return /^[0-9a-fA-F]+$/.test(hex3);
     }
   }
 });
@@ -1100,11 +1100,11 @@ function bytesToHex2(bytes2) {
   abytes2(bytes2);
   if (hasHexBuiltin)
     return bytes2.toHex();
-  let hex4 = "";
+  let hex3 = "";
   for (let i = 0; i < bytes2.length; i++) {
-    hex4 += hexes[bytes2[i]];
+    hex3 += hexes[bytes2[i]];
   }
-  return hex4;
+  return hex3;
 }
 function asciiToBase16(ch) {
   if (ch >= asciis._0 && ch <= asciis._9)
@@ -1115,28 +1115,28 @@ function asciiToBase16(ch) {
     return ch - (asciis.a - 10);
   return;
 }
-function hexToBytes2(hex4) {
-  if (typeof hex4 !== "string")
-    throw new TypeError("hex string expected, got " + typeof hex4);
+function hexToBytes2(hex3) {
+  if (typeof hex3 !== "string")
+    throw new TypeError("hex string expected, got " + typeof hex3);
   if (hasHexBuiltin) {
     try {
-      return Uint8Array.fromHex(hex4);
+      return Uint8Array.fromHex(hex3);
     } catch (error) {
       if (error instanceof SyntaxError)
         throw new RangeError(error.message);
       throw error;
     }
   }
-  const hl = hex4.length;
+  const hl = hex3.length;
   const al = hl / 2;
   if (hl % 2)
     throw new RangeError("hex string expected, got unpadded hex of length " + hl);
   const array2 = new Uint8Array(al);
   for (let ai = 0, hi = 0; ai < al; ai++, hi += 2) {
-    const n1 = asciiToBase16(hex4.charCodeAt(hi));
-    const n2 = asciiToBase16(hex4.charCodeAt(hi + 1));
+    const n1 = asciiToBase16(hex3.charCodeAt(hi));
+    const n2 = asciiToBase16(hex3.charCodeAt(hi + 1));
     if (n1 === void 0 || n2 === void 0) {
-      const char = hex4[hi] + hex4[hi + 1];
+      const char = hex3[hi] + hex3[hi + 1];
       throw new RangeError('hex string expected, got non-hex character "' + char + '" at index ' + hi);
     }
     array2[ai] = n1 * 16 + n2;
@@ -1499,13 +1499,13 @@ function asafenumber(value, title = "") {
   }
 }
 function numberToHexUnpadded(num2) {
-  const hex4 = abignumber(num2).toString(16);
-  return hex4.length & 1 ? "0" + hex4 : hex4;
+  const hex3 = abignumber(num2).toString(16);
+  return hex3.length & 1 ? "0" + hex3 : hex3;
 }
-function hexToNumber(hex4) {
-  if (typeof hex4 !== "string")
-    throw new TypeError("hex string expected, got " + typeof hex4);
-  return hex4 === "" ? _0n : BigInt("0x" + hex4);
+function hexToNumber(hex3) {
+  if (typeof hex3 !== "string")
+    throw new TypeError("hex string expected, got " + typeof hex3);
+  return hex3 === "" ? _0n : BigInt("0x" + hex3);
 }
 function bytesToNumberBE(bytes2) {
   return hexToNumber(bytesToHex2(bytes2));
@@ -1518,10 +1518,10 @@ function numberToBytesBE(n, len) {
   if (len === 0)
     throw new RangeError("zero length");
   n = abignumber(n);
-  const hex4 = n.toString(16);
-  if (hex4.length > len * 2)
+  const hex3 = n.toString(16);
+  if (hex3.length > len * 2)
     throw new RangeError("number too large");
-  return hexToBytes2(hex4.padStart(len * 2, "0"));
+  return hexToBytes2(hex3.padStart(len * 2, "0"));
 }
 function numberToBytesLE(n, len) {
   return numberToBytesBE(n, len).reverse();
@@ -1631,7 +1631,7 @@ var init_utils2 = __esm({
     anumber2 = anumber;
     bytesToHex3 = bytesToHex2;
     concatBytes2 = (...arrays) => concatBytes(...arrays);
-    hexToBytes3 = (hex4) => hexToBytes2(hex4);
+    hexToBytes3 = (hex3) => hexToBytes2(hex3);
     isBytes3 = isBytes2;
     randomBytes2 = (bytesLength) => randomBytes(bytesLength);
     _0n = /* @__PURE__ */ BigInt(0);
@@ -1673,8 +1673,8 @@ function invert(number, modulo) {
     const n = y - v * q;
     b = a, a = r, x = u, y = v, u = m, v = n;
   }
-  const gcd4 = b;
-  if (gcd4 !== _1n2)
+  const gcd3 = b;
+  if (gcd3 !== _1n2)
     throw new Error("invert: does not exist");
   return mod(x, modulo);
 }
@@ -2574,8 +2574,8 @@ function weierstrass(params, extraOpts = {}) {
       P.assertValidity();
       return P;
     }
-    static fromHex(hex4) {
-      return Point2.fromBytes(hexToBytes3(hex4));
+    static fromHex(hex3) {
+      return Point2.fromBytes(hexToBytes3(hex3));
     }
     get x() {
       return this.toAffine().x;
@@ -3007,8 +3007,8 @@ function ecdsa(Point2, hash, ecdsaOpts = {}) {
       const s = bytes2.subarray(L, L * 2);
       return new Signature(Fn2.fromBytes(r), Fn2.fromBytes(s), recid);
     }
-    static fromHex(hex4, format) {
-      return this.fromBytes(hexToBytes3(hex4), format);
+    static fromHex(hex3, format) {
+      return this.fromBytes(hexToBytes3(hex3), format);
     }
     assertRecovery() {
       const { recovery } = this;
@@ -3253,12 +3253,12 @@ var init_weierstrass = __esm({
           abignumber(num2);
           if (num2 < _0n4)
             throw new E("integer: negative integers are not allowed");
-          let hex4 = numberToHexUnpadded(num2);
-          if (Number.parseInt(hex4[0], 16) & 8)
-            hex4 = "00" + hex4;
-          if (hex4.length & 1)
+          let hex3 = numberToHexUnpadded(num2);
+          if (Number.parseInt(hex3[0], 16) & 8)
+            hex3 = "00" + hex3;
+          if (hex3.length & 1)
             throw new E("unexpected DER parsing assertion: unpadded hex");
-          return hex4;
+          return hex3;
         },
         decode(data) {
           const { Err: E } = DER;
@@ -3952,7 +3952,7 @@ var init_sha22 = __esm({
   }
 });
 
-// node_modules/micro-packed/node_modules/@scure/base/index.js
+// node_modules/@scure/base/index.js
 function isBytes5(a) {
   return a instanceof Uint8Array || ArrayBuffer.isView(a) && a.constructor.name === "Uint8Array" && "BYTES_PER_ELEMENT" in a && a.BYTES_PER_ELEMENT === 1;
 }
@@ -4053,6 +4053,54 @@ function normalize(fn) {
   afn(fn);
   return { encode: (from) => from, decode: (to) => fn(to) };
 }
+function convertRadix(data, from, to) {
+  if (from < 2)
+    throw new RangeError(`convertRadix: invalid from=${from}, base cannot be less than 2`);
+  if (to < 2)
+    throw new RangeError(`convertRadix: invalid to=${to}, base cannot be less than 2`);
+  aArr(data);
+  if (!data.length)
+    return [];
+  let pos = 0;
+  const res = [];
+  const digits = Array.from(data, (d) => {
+    anumber4(d);
+    if (d < 0 || d >= from)
+      throw new Error(`invalid integer: ${d}`);
+    return d;
+  });
+  const dlen = digits.length;
+  while (true) {
+    let carry = 0;
+    let done = true;
+    for (let i = pos; i < dlen; i++) {
+      const digit = digits[i];
+      const fromCarry = from * carry;
+      const digitBase = fromCarry + digit;
+      if (!Number.isSafeInteger(digitBase) || fromCarry / from !== carry || digitBase - digit !== fromCarry) {
+        throw new Error("convertRadix: carry overflow");
+      }
+      const div = digitBase / to;
+      carry = digitBase % to;
+      const rounded = Math.floor(div);
+      digits[i] = rounded;
+      if (!Number.isSafeInteger(rounded) || rounded * to + carry !== digitBase)
+        throw new Error("convertRadix: carry overflow");
+      if (!done)
+        continue;
+      else if (!rounded)
+        pos = i;
+      else
+        done = false;
+    }
+    res.push(carry);
+    if (done)
+      break;
+  }
+  for (let i = 0; i < data.length - 1 && data[i] === 0; i++)
+    res.push(0);
+  return res.reverse();
+}
 function convertRadix2(data, from, to, padding2) {
   aArr(data);
   if (from <= 0 || from > 32)
@@ -4092,6 +4140,22 @@ function convertRadix2(data, from, to, padding2) {
   return res;
 }
 // @__NO_SIDE_EFFECTS__
+function radix(num2) {
+  anumber4(num2);
+  const _256 = 2 ** 8;
+  return {
+    encode: (bytes2) => {
+      if (!isBytes5(bytes2))
+        throw new TypeError("radix.encode input should be Uint8Array");
+      return convertRadix(Array.from(bytes2), _256, num2);
+    },
+    decode: (digits) => {
+      anumArr("radix.decode", digits);
+      return Uint8Array.from(convertRadix(digits, num2, _256));
+    }
+  };
+}
+// @__NO_SIDE_EFFECTS__
 function radix2(bits, revPadding = false) {
   anumber4(bits);
   if (bits <= 0 || bits > 32)
@@ -4110,9 +4174,141 @@ function radix2(bits, revPadding = false) {
     }
   };
 }
-var gcd, radix2carry, powers, _isWellFormedShim, _isWellFormed, utf8Fallback, utf8, hasHexBuiltin2, hexBuiltin, hex;
+function unsafeWrapper(fn) {
+  afn(fn);
+  return function(...args) {
+    try {
+      return fn.apply(null, args);
+    } catch (e) {
+    }
+  };
+}
+function checksum(len, fn) {
+  anumber4(len);
+  if (len <= 0)
+    throw new RangeError(`checksum length must be positive: ${len}`);
+  afn(fn);
+  const _fn = fn;
+  return {
+    encode(data) {
+      if (!isBytes5(data))
+        throw new TypeError("checksum.encode: input should be Uint8Array");
+      const sum = _fn(data).slice(0, len);
+      const res = new Uint8Array(data.length + len);
+      res.set(data);
+      res.set(sum, data.length);
+      return res;
+    },
+    decode(data) {
+      if (!isBytes5(data))
+        throw new TypeError("checksum.decode: input should be Uint8Array");
+      const payload = data.slice(0, -len);
+      const oldChecksum = data.slice(-len);
+      const newChecksum = _fn(payload).slice(0, len);
+      for (let i = 0; i < len; i++)
+        if (newChecksum[i] !== oldChecksum[i])
+          throw new Error("Invalid checksum");
+      return payload;
+    }
+  };
+}
+function bech32Polymod(pre) {
+  const b = pre >> 25;
+  let chk = (pre & 33554431) << 5;
+  for (let i = 0; i < POLYMOD_GENERATORS.length; i++) {
+    if ((b >> i & 1) === 1)
+      chk ^= POLYMOD_GENERATORS[i];
+  }
+  return chk;
+}
+function bechChecksum(prefix2, words, encodingConst = 1) {
+  const len = prefix2.length;
+  let chk = 1;
+  for (let i = 0; i < len; i++) {
+    const c = prefix2.charCodeAt(i);
+    if (c < 33 || c > 126)
+      throw new Error(`Invalid prefix (${prefix2})`);
+    chk = bech32Polymod(chk) ^ c >> 5;
+  }
+  chk = bech32Polymod(chk);
+  for (let i = 0; i < len; i++)
+    chk = bech32Polymod(chk) ^ prefix2.charCodeAt(i) & 31;
+  for (let v of words)
+    chk = bech32Polymod(chk) ^ v;
+  for (let i = 0; i < 6; i++)
+    chk = bech32Polymod(chk);
+  chk ^= encodingConst;
+  return BECH_ALPHABET.encode(convertRadix2([chk % powers[30]], 30, 5, false));
+}
+// @__NO_SIDE_EFFECTS__
+function genBech32(encoding) {
+  const ENCODING_CONST = encoding === "bech32" ? 1 : 734539939;
+  const _words = /* @__PURE__ */ radix2(5);
+  const fromWords = _words.decode;
+  const toWords = _words.encode;
+  const fromWordsUnsafe = unsafeWrapper(fromWords);
+  function encode(prefix2, words, limit = 90) {
+    astr("bech32.encode prefix", prefix2);
+    if (isBytes5(words))
+      words = Array.from(words);
+    anumArr("bech32.encode", words);
+    const plen = prefix2.length;
+    if (plen === 0)
+      throw new TypeError(`Invalid prefix length ${plen}`);
+    const actualLength = plen + 7 + words.length;
+    if (limit !== false && actualLength > limit)
+      throw new TypeError(`Length ${actualLength} exceeds limit ${limit}`);
+    const lowered = prefix2.toLowerCase();
+    const sum = bechChecksum(lowered, words, ENCODING_CONST);
+    return `${lowered}1${BECH_ALPHABET.encode(words)}${sum}`;
+  }
+  function decode(str2, limit = 90) {
+    astr("bech32.decode input", str2);
+    const slen = str2.length;
+    if (slen < 8 || limit !== false && slen > limit)
+      throw new TypeError(`invalid string length: ${slen} (${str2}). Expected (8..${limit})`);
+    const lowered = str2.toLowerCase();
+    if (str2 !== lowered && str2 !== str2.toUpperCase())
+      throw new Error(`String must be lowercase or uppercase`);
+    const sepIndex = lowered.lastIndexOf("1");
+    if (sepIndex === 0 || sepIndex === -1)
+      throw new Error(`Letter "1" must be present between prefix and data only`);
+    const prefix2 = lowered.slice(0, sepIndex);
+    const data = lowered.slice(sepIndex + 1);
+    if (data.length < 6)
+      throw new Error("Data must be at least 6 characters long");
+    const words = BECH_ALPHABET.decode(data).slice(0, -6);
+    const sum = bechChecksum(prefix2, words, ENCODING_CONST);
+    if (!data.endsWith(sum))
+      throw new Error(`Invalid checksum in ${str2}: expected "${sum}"`);
+    return { prefix: prefix2, words };
+  }
+  const decodeUnsafe = unsafeWrapper(decode);
+  function decodeToBytes(str2) {
+    const { prefix: prefix2, words } = decode(str2, false);
+    return {
+      prefix: prefix2,
+      words,
+      bytes: fromWords(words)
+    };
+  }
+  function encodeFromBytes(prefix2, bytes2) {
+    return encode(prefix2, toWords(bytes2));
+  }
+  return {
+    encode,
+    decode,
+    encodeFromBytes,
+    decodeToBytes,
+    decodeUnsafe,
+    fromWords,
+    fromWordsUnsafe,
+    toWords
+  };
+}
+var gcd, radix2carry, powers, genBase58, base58, createBase58check, BECH_ALPHABET, POLYMOD_GENERATORS, bech32, bech32m, _isWellFormedShim, _isWellFormed, utf8Fallback, utf8, hasHexBuiltin2, hexBuiltin, hex;
 var init_base = __esm({
-  "node_modules/micro-packed/node_modules/@scure/base/index.js"() {
+  "node_modules/@scure/base/index.js"() {
     gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
     radix2carry = /* @__NO_SIDE_EFFECTS__ */ (from, to) => from + (to - gcd(from, to));
     powers = /* @__PURE__ */ (() => {
@@ -4121,6 +4317,17 @@ var init_base = __esm({
         res.push(2 ** i);
       return res;
     })();
+    genBase58 = /* @__NO_SIDE_EFFECTS__ */ (abc) => /* @__PURE__ */ chain(/* @__PURE__ */ radix(58), /* @__PURE__ */ alphabet(abc), /* @__PURE__ */ join(""));
+    base58 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ genBase58("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"));
+    createBase58check = (sha2566) => {
+      afn(sha2566);
+      const _sha256 = sha2566;
+      return /* @__PURE__ */ chain(checksum(4, (data) => _sha256(_sha256(data))), base58);
+    };
+    BECH_ALPHABET = /* @__PURE__ */ chain(/* @__PURE__ */ alphabet("qpzry9x8gf2tvdw0s3jn54khce6mua7l"), /* @__PURE__ */ join(""));
+    POLYMOD_GENERATORS = [996825010, 642813549, 513874426, 1027748829, 705979059];
+    bech32 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ genBech32("bech32"));
+    bech32m = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ genBech32("bech32m"));
     _isWellFormedShim = (str2) => {
       try {
         return encodeURI(str2) !== null;
@@ -5685,407 +5892,6 @@ var init_utils4 = __esm({
   }
 });
 
-// node_modules/@scure/btc-signer/node_modules/@scure/base/index.js
-function isBytes8(a) {
-  return a instanceof Uint8Array || ArrayBuffer.isView(a) && a.constructor.name === "Uint8Array" && "BYTES_PER_ELEMENT" in a && a.BYTES_PER_ELEMENT === 1;
-}
-function abytes6(b) {
-  if (!isBytes8(b))
-    throw new TypeError("Uint8Array expected");
-}
-function isArrayOf2(isString, arr) {
-  if (!Array.isArray(arr))
-    return false;
-  if (arr.length === 0)
-    return true;
-  if (isString) {
-    return arr.every((item) => typeof item === "string");
-  } else {
-    return arr.every((item) => Number.isSafeInteger(item));
-  }
-}
-function afn2(input) {
-  if (typeof input !== "function")
-    throw new TypeError("function expected");
-  return true;
-}
-function astr2(label, input) {
-  if (typeof input !== "string")
-    throw new TypeError(`${label}: string expected`);
-  return true;
-}
-function anumber5(n) {
-  if (typeof n !== "number")
-    throw new TypeError(`number expected, got ${typeof n}`);
-  if (!Number.isSafeInteger(n))
-    throw new RangeError(`invalid integer: ${n}`);
-}
-function aArr2(input) {
-  if (!Array.isArray(input))
-    throw new TypeError("array expected");
-}
-function astrArr2(label, input) {
-  if (!isArrayOf2(true, input))
-    throw new TypeError(`${label}: array of strings expected`);
-}
-function anumArr2(label, input) {
-  if (!isArrayOf2(false, input))
-    throw new TypeError(`${label}: array of numbers expected`);
-}
-// @__NO_SIDE_EFFECTS__
-function chain2(...args) {
-  const id = (a) => a;
-  const wrap2 = (a, b) => (c) => a(b(c));
-  const encode = args.map((x) => x.encode).reduceRight(wrap2, id);
-  const decode = args.map((x) => x.decode).reduce(wrap2, id);
-  return { encode, decode };
-}
-// @__NO_SIDE_EFFECTS__
-function alphabet2(letters) {
-  const lettersA = typeof letters === "string" ? letters.split("") : letters;
-  const len = lettersA.length;
-  astrArr2("alphabet", lettersA);
-  const indexes = new Map(lettersA.map((l, i) => [l, i]));
-  return {
-    encode: (digits) => {
-      aArr2(digits);
-      return digits.map((i) => {
-        if (!Number.isSafeInteger(i) || i < 0 || i >= len)
-          throw new Error(`alphabet.encode: digit index outside alphabet "${i}". Allowed: ${letters}`);
-        return lettersA[i];
-      });
-    },
-    decode: (input) => {
-      aArr2(input);
-      return input.map((letter) => {
-        astr2("alphabet.decode", letter);
-        const i = indexes.get(letter);
-        if (i === void 0)
-          throw new Error(`Unknown letter: "${letter}". Allowed: ${letters}`);
-        return i;
-      });
-    }
-  };
-}
-// @__NO_SIDE_EFFECTS__
-function join2(separator = "") {
-  astr2("join", separator);
-  return {
-    encode: (from) => {
-      astrArr2("join.decode", from);
-      return from.join(separator);
-    },
-    decode: (to) => {
-      astr2("join.decode", to);
-      return to.split(separator);
-    }
-  };
-}
-// @__NO_SIDE_EFFECTS__
-function normalize2(fn) {
-  afn2(fn);
-  return { encode: (from) => from, decode: (to) => fn(to) };
-}
-function convertRadix(data, from, to) {
-  if (from < 2)
-    throw new RangeError(`convertRadix: invalid from=${from}, base cannot be less than 2`);
-  if (to < 2)
-    throw new RangeError(`convertRadix: invalid to=${to}, base cannot be less than 2`);
-  aArr2(data);
-  if (!data.length)
-    return [];
-  let pos = 0;
-  const res = [];
-  const digits = Array.from(data, (d) => {
-    anumber5(d);
-    if (d < 0 || d >= from)
-      throw new Error(`invalid integer: ${d}`);
-    return d;
-  });
-  const dlen = digits.length;
-  while (true) {
-    let carry = 0;
-    let done = true;
-    for (let i = pos; i < dlen; i++) {
-      const digit = digits[i];
-      const fromCarry = from * carry;
-      const digitBase = fromCarry + digit;
-      if (!Number.isSafeInteger(digitBase) || fromCarry / from !== carry || digitBase - digit !== fromCarry) {
-        throw new Error("convertRadix: carry overflow");
-      }
-      const div = digitBase / to;
-      carry = digitBase % to;
-      const rounded = Math.floor(div);
-      digits[i] = rounded;
-      if (!Number.isSafeInteger(rounded) || rounded * to + carry !== digitBase)
-        throw new Error("convertRadix: carry overflow");
-      if (!done)
-        continue;
-      else if (!rounded)
-        pos = i;
-      else
-        done = false;
-    }
-    res.push(carry);
-    if (done)
-      break;
-  }
-  for (let i = 0; i < data.length - 1 && data[i] === 0; i++)
-    res.push(0);
-  return res.reverse();
-}
-function convertRadix22(data, from, to, padding2) {
-  aArr2(data);
-  if (from <= 0 || from > 32)
-    throw new RangeError(`convertRadix2: wrong from=${from}`);
-  if (to <= 0 || to > 32)
-    throw new RangeError(`convertRadix2: wrong to=${to}`);
-  if (/* @__PURE__ */ radix2carry2(from, to) > 32) {
-    throw new Error(`convertRadix2: carry overflow from=${from} to=${to} carryBits=${/* @__PURE__ */ radix2carry2(from, to)}`);
-  }
-  let carry = 0;
-  let pos = 0;
-  const max = powers2[from];
-  const mask = powers2[to] - 1;
-  const res = [];
-  for (const n of data) {
-    anumber5(n);
-    if (n >= max)
-      throw new Error(`convertRadix2: invalid data word=${n} from=${from}`);
-    carry = carry << from | n;
-    if (pos + from > 32)
-      throw new Error(`convertRadix2: carry overflow pos=${pos} from=${from}`);
-    pos += from;
-    for (; pos >= to; pos -= to)
-      res.push((carry >> pos - to & mask) >>> 0);
-    const pow = powers2[pos];
-    if (pow === void 0)
-      throw new Error("invalid carry");
-    carry &= pow - 1;
-  }
-  carry = carry << to - pos & mask;
-  if (!padding2 && pos >= from)
-    throw new Error("Excess padding");
-  if (!padding2 && carry > 0)
-    throw new Error(`Non-zero padding: ${carry}`);
-  if (padding2 && pos > 0)
-    res.push(carry >>> 0);
-  return res;
-}
-// @__NO_SIDE_EFFECTS__
-function radix(num2) {
-  anumber5(num2);
-  const _256 = 2 ** 8;
-  return {
-    encode: (bytes2) => {
-      if (!isBytes8(bytes2))
-        throw new TypeError("radix.encode input should be Uint8Array");
-      return convertRadix(Array.from(bytes2), _256, num2);
-    },
-    decode: (digits) => {
-      anumArr2("radix.decode", digits);
-      return Uint8Array.from(convertRadix(digits, num2, _256));
-    }
-  };
-}
-// @__NO_SIDE_EFFECTS__
-function radix22(bits, revPadding = false) {
-  anumber5(bits);
-  if (bits <= 0 || bits > 32)
-    throw new RangeError("radix2: bits should be in (0..32]");
-  if (/* @__PURE__ */ radix2carry2(8, bits) > 32 || /* @__PURE__ */ radix2carry2(bits, 8) > 32)
-    throw new RangeError("radix2: carry overflow");
-  return {
-    encode: (bytes2) => {
-      if (!isBytes8(bytes2))
-        throw new TypeError("radix2.encode input should be Uint8Array");
-      return convertRadix22(Array.from(bytes2), 8, bits, !revPadding);
-    },
-    decode: (digits) => {
-      anumArr2("radix2.decode", digits);
-      return Uint8Array.from(convertRadix22(digits, bits, 8, revPadding));
-    }
-  };
-}
-function unsafeWrapper(fn) {
-  afn2(fn);
-  return function(...args) {
-    try {
-      return fn.apply(null, args);
-    } catch (e) {
-    }
-  };
-}
-function checksum(len, fn) {
-  anumber5(len);
-  if (len <= 0)
-    throw new RangeError(`checksum length must be positive: ${len}`);
-  afn2(fn);
-  const _fn = fn;
-  return {
-    encode(data) {
-      if (!isBytes8(data))
-        throw new TypeError("checksum.encode: input should be Uint8Array");
-      const sum = _fn(data).slice(0, len);
-      const res = new Uint8Array(data.length + len);
-      res.set(data);
-      res.set(sum, data.length);
-      return res;
-    },
-    decode(data) {
-      if (!isBytes8(data))
-        throw new TypeError("checksum.decode: input should be Uint8Array");
-      const payload = data.slice(0, -len);
-      const oldChecksum = data.slice(-len);
-      const newChecksum = _fn(payload).slice(0, len);
-      for (let i = 0; i < len; i++)
-        if (newChecksum[i] !== oldChecksum[i])
-          throw new Error("Invalid checksum");
-      return payload;
-    }
-  };
-}
-function bech32Polymod(pre) {
-  const b = pre >> 25;
-  let chk = (pre & 33554431) << 5;
-  for (let i = 0; i < POLYMOD_GENERATORS.length; i++) {
-    if ((b >> i & 1) === 1)
-      chk ^= POLYMOD_GENERATORS[i];
-  }
-  return chk;
-}
-function bechChecksum(prefix2, words, encodingConst = 1) {
-  const len = prefix2.length;
-  let chk = 1;
-  for (let i = 0; i < len; i++) {
-    const c = prefix2.charCodeAt(i);
-    if (c < 33 || c > 126)
-      throw new Error(`Invalid prefix (${prefix2})`);
-    chk = bech32Polymod(chk) ^ c >> 5;
-  }
-  chk = bech32Polymod(chk);
-  for (let i = 0; i < len; i++)
-    chk = bech32Polymod(chk) ^ prefix2.charCodeAt(i) & 31;
-  for (let v of words)
-    chk = bech32Polymod(chk) ^ v;
-  for (let i = 0; i < 6; i++)
-    chk = bech32Polymod(chk);
-  chk ^= encodingConst;
-  return BECH_ALPHABET.encode(convertRadix22([chk % powers2[30]], 30, 5, false));
-}
-// @__NO_SIDE_EFFECTS__
-function genBech32(encoding) {
-  const ENCODING_CONST = encoding === "bech32" ? 1 : 734539939;
-  const _words = /* @__PURE__ */ radix22(5);
-  const fromWords = _words.decode;
-  const toWords = _words.encode;
-  const fromWordsUnsafe = unsafeWrapper(fromWords);
-  function encode(prefix2, words, limit = 90) {
-    astr2("bech32.encode prefix", prefix2);
-    if (isBytes8(words))
-      words = Array.from(words);
-    anumArr2("bech32.encode", words);
-    const plen = prefix2.length;
-    if (plen === 0)
-      throw new TypeError(`Invalid prefix length ${plen}`);
-    const actualLength = plen + 7 + words.length;
-    if (limit !== false && actualLength > limit)
-      throw new TypeError(`Length ${actualLength} exceeds limit ${limit}`);
-    const lowered = prefix2.toLowerCase();
-    const sum = bechChecksum(lowered, words, ENCODING_CONST);
-    return `${lowered}1${BECH_ALPHABET.encode(words)}${sum}`;
-  }
-  function decode(str2, limit = 90) {
-    astr2("bech32.decode input", str2);
-    const slen = str2.length;
-    if (slen < 8 || limit !== false && slen > limit)
-      throw new TypeError(`invalid string length: ${slen} (${str2}). Expected (8..${limit})`);
-    const lowered = str2.toLowerCase();
-    if (str2 !== lowered && str2 !== str2.toUpperCase())
-      throw new Error(`String must be lowercase or uppercase`);
-    const sepIndex = lowered.lastIndexOf("1");
-    if (sepIndex === 0 || sepIndex === -1)
-      throw new Error(`Letter "1" must be present between prefix and data only`);
-    const prefix2 = lowered.slice(0, sepIndex);
-    const data = lowered.slice(sepIndex + 1);
-    if (data.length < 6)
-      throw new Error("Data must be at least 6 characters long");
-    const words = BECH_ALPHABET.decode(data).slice(0, -6);
-    const sum = bechChecksum(prefix2, words, ENCODING_CONST);
-    if (!data.endsWith(sum))
-      throw new Error(`Invalid checksum in ${str2}: expected "${sum}"`);
-    return { prefix: prefix2, words };
-  }
-  const decodeUnsafe = unsafeWrapper(decode);
-  function decodeToBytes(str2) {
-    const { prefix: prefix2, words } = decode(str2, false);
-    return {
-      prefix: prefix2,
-      words,
-      bytes: fromWords(words)
-    };
-  }
-  function encodeFromBytes(prefix2, bytes2) {
-    return encode(prefix2, toWords(bytes2));
-  }
-  return {
-    encode,
-    decode,
-    encodeFromBytes,
-    decodeToBytes,
-    decodeUnsafe,
-    fromWords,
-    fromWordsUnsafe,
-    toWords
-  };
-}
-var gcd2, radix2carry2, powers2, genBase58, base58, createBase58check, BECH_ALPHABET, POLYMOD_GENERATORS, bech32, bech32m, hasHexBuiltin3, hexBuiltin2, hex2;
-var init_base2 = __esm({
-  "node_modules/@scure/btc-signer/node_modules/@scure/base/index.js"() {
-    gcd2 = (a, b) => b === 0 ? a : gcd2(b, a % b);
-    radix2carry2 = /* @__NO_SIDE_EFFECTS__ */ (from, to) => from + (to - gcd2(from, to));
-    powers2 = /* @__PURE__ */ (() => {
-      let res = [];
-      for (let i = 0; i < 40; i++)
-        res.push(2 ** i);
-      return res;
-    })();
-    genBase58 = /* @__NO_SIDE_EFFECTS__ */ (abc) => /* @__PURE__ */ chain2(/* @__PURE__ */ radix(58), /* @__PURE__ */ alphabet2(abc), /* @__PURE__ */ join2(""));
-    base58 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ genBase58("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"));
-    createBase58check = (sha2566) => {
-      afn2(sha2566);
-      const _sha256 = sha2566;
-      return /* @__PURE__ */ chain2(checksum(4, (data) => _sha256(_sha256(data))), base58);
-    };
-    BECH_ALPHABET = /* @__PURE__ */ chain2(/* @__PURE__ */ alphabet2("qpzry9x8gf2tvdw0s3jn54khce6mua7l"), /* @__PURE__ */ join2(""));
-    POLYMOD_GENERATORS = [996825010, 642813549, 513874426, 1027748829, 705979059];
-    bech32 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ genBech32("bech32"));
-    bech32m = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ genBech32("bech32m"));
-    hasHexBuiltin3 = /* @__PURE__ */ (() => (
-      // Require both directions before enabling the native hex path so encode/decode stay symmetric.
-      typeof Uint8Array.from([]).toHex === "function" && typeof Uint8Array.fromHex === "function"
-    ))();
-    hexBuiltin2 = {
-      // Keep local type guards so the native path preserves library-level input errors.
-      // Native toHex emits lowercase hex, matching the fallback alphabet and Node's hex strings.
-      encode(data) {
-        abytes6(data);
-        return data.toHex();
-      },
-      // Native fromHex accepts either hex case and rejects odd-length / non-hex syntax.
-      decode(s) {
-        astr2("hex", s);
-        return Uint8Array.fromHex(s);
-      }
-    };
-    hex2 = /* @__PURE__ */ Object.freeze(hasHexBuiltin3 ? hexBuiltin2 : /* @__PURE__ */ chain2(/* @__PURE__ */ radix22(4), /* @__PURE__ */ alphabet2("0123456789abcdef"), /* @__PURE__ */ join2(""), /* @__PURE__ */ normalize2((s) => {
-      if (typeof s !== "string" || s.length % 2 !== 0)
-        throw new TypeError(`hex.decode: expected string, got ${typeof s} with length ${s.length}`);
-      return s.toLowerCase();
-    })));
-  }
-});
-
 // node_modules/@scure/btc-signer/script.js
 function ScriptNum(bytesLimit = 6, forceMinimal = false) {
   return wrap({
@@ -6453,7 +6259,7 @@ function PSBTKeyMap(psbtEnum) {
       const seen = {};
       const add2 = (key, value2) => {
         const _value2 = value2;
-        const kStr = hex2.encode(PSBTUnknownKey.encode(key));
+        const kStr = hex.encode(PSBTUnknownKey.encode(key));
         if (seen[kStr])
           throw new Error(`PSBT: duplicate key=${kStr}`);
         seen[kStr] = true;
@@ -6489,7 +6295,7 @@ function PSBTKeyMap(psbtEnum) {
       const noKey = {};
       const seen = {};
       for (const elm of raw) {
-        const kStr = hex2.encode(PSBTUnknownKey.encode(elm.key));
+        const kStr = hex.encode(PSBTUnknownKey.encode(elm.key));
         if (seen[kStr])
           throw new Error(`PSBT: duplicate key=${kStr}`);
         seen[kStr] = true;
@@ -6500,7 +6306,7 @@ function PSBTKeyMap(psbtEnum) {
           const [_name, kc, vc] = byType[elm.key.type];
           name = _name;
           if (!kc && key.length) {
-            throw new Error(`PSBT: Non-empty key for ${name} (key=${hex2.encode(key)} value=${hex2.encode(value)}`);
+            throw new Error(`PSBT: Non-empty key for ${name} (key=${hex.encode(key)} value=${hex.encode(value)}`);
           }
           key = kc ? kc.decode(key) : void 0;
           value = vc.decode(value);
@@ -6604,8 +6410,8 @@ function mergeKeyMap(psbtEnum, val, cur, allowedFields, allowUnknown) {
           if (val2.length !== 2)
             throw new Error(`keyMap(${k}): KV pairs should be [k, v][]`);
           return [
-            typeof val2[0] === "string" ? kC.decode(hex2.decode(val2[0])) : val2[0],
-            typeof val2[1] === "string" ? vC.decode(hex2.decode(val2[1])) : val2[1]
+            typeof val2[0] === "string" ? kC.decode(hex.decode(val2[0])) : val2[0],
+            typeof val2[1] === "string" ? vC.decode(hex.decode(val2[1])) : val2[1]
           ];
         });
         const map = {};
@@ -6614,17 +6420,17 @@ function mergeKeyMap(psbtEnum, val, cur, allowedFields, allowUnknown) {
             map[kStr] = [k2, v];
             return;
           }
-          const oldVal = hex2.encode(vC.encode(map[kStr][1]));
-          const newVal = hex2.encode(vC.encode(v));
+          const oldVal = hex.encode(vC.encode(map[kStr][1]));
+          const newVal = hex.encode(vC.encode(v));
           if (oldVal !== newVal)
             throw new Error(`keyMap(${key}): same key=${kStr} oldVal=${oldVal} newVal=${newVal}`);
         };
         for (const [k2, v] of oldKV) {
-          const kStr = hex2.encode(kC.encode(k2));
+          const kStr = hex.encode(kC.encode(k2));
           add2(kStr, k2, v);
         }
         for (const [k2, v] of newKV) {
-          const kStr = hex2.encode(kC.encode(k2));
+          const kStr = hex.encode(kC.encode(k2));
           if (v === void 0) {
             if (cannotChange)
               throw new Error(`Cannot remove signed field=${key}/${k2}`);
@@ -6635,7 +6441,7 @@ function mergeKeyMap(psbtEnum, val, cur, allowedFields, allowUnknown) {
         res[key] = Object.values(map);
       }
     } else if (typeof res[k] === "string") {
-      res[k] = vC.decode(hex2.decode(res[k]));
+      res[k] = vC.decode(hex.decode(res[k]));
     } else if (cannotChange && k in _val && _cur && _cur[k] !== void 0) {
       if (!equalBytes2(vC.encode(_val[k]), vC.encode(_cur[k])))
         throw new Error(`Cannot change signed field=${k}`);
@@ -6644,15 +6450,15 @@ function mergeKeyMap(psbtEnum, val, cur, allowedFields, allowUnknown) {
   if (allowUnknown && _val.unknown) {
     const map = {};
     for (const [k, v] of _cur?.unknown || [])
-      map[hex2.encode(PSBTUnknownKey.encode(k))] = [k, v];
+      map[hex.encode(PSBTUnknownKey.encode(k))] = [k, v];
     for (const [k, v] of _val.unknown) {
-      const kStr = hex2.encode(PSBTUnknownKey.encode(k));
+      const kStr = hex.encode(PSBTUnknownKey.encode(k));
       if (map[kStr] === void 0) {
         map[kStr] = [k, v];
         continue;
       }
-      const oldVal = hex2.encode(BytesInf.encode(map[kStr][1]));
-      const newVal = hex2.encode(BytesInf.encode(v));
+      const oldVal = hex.encode(BytesInf.encode(map[kStr][1]));
+      const newVal = hex.encode(BytesInf.encode(v));
       if (oldVal !== newVal)
         throw new Error(`keyMap(unknown): same key=${kStr} oldVal=${oldVal} newVal=${newVal}`);
     }
@@ -6670,7 +6476,7 @@ function mergeKeyMap(psbtEnum, val, cur, allowedFields, allowUnknown) {
 var PubKeyECDSA, PubKeyECDSACompressed, PubKeySchnorr, SignatureSchnorr, RawWitnessWire, BIP32Der, TaprootBIP32Der, GlobalXPUB, tapScriptSigKey, _TaprootControlBlock, TaprootControlBlock, tapTree, BytesInf, Bytes20, Bytes32, PSBTInfo, PSBTGlobal, PSBTInput, PSBTInputFinalKeys, PSBTInputUnsignedKeys, PSBTOutput, PSBTOutputUnsignedKeys, PSBTKeyPair, PSBTUnknownKey, PSBTInputCoder, PSBTOutputCoder, PSBTGlobalCoder, _RawPSBTV0, _RawPSBTV2, _DebugPSBT, RawPSBTV0, RawPSBTV2;
 var init_psbt = __esm({
   "node_modules/@scure/btc-signer/psbt.js"() {
-    init_base2();
+    init_base();
     init_micro_packed();
     init_script();
     init_utils4();
@@ -6992,9 +6798,9 @@ function checkScript(script, redeemScript, witnessScript) {
 function uniqPubkey(pubkeys) {
   const map = {};
   for (const pub of pubkeys) {
-    const key = hex2.encode(pub);
+    const key = hex.encode(pub);
     if (map[key])
-      throw new Error(`Multisig: non-uniq pubkey: ${pubkeys.map(hex2.encode)}`);
+      throw new Error(`Multisig: non-uniq pubkey: ${pubkeys.map(hex.encode)}`);
     map[key] = true;
   }
 }
@@ -7080,7 +6886,7 @@ function taprootHashTree(tree, internalPubKey, allowUnknownOutputs = false, cust
     const { script: leafScript } = tree;
     if (tree.tapLeafScript || tree.tapMerkleRoot && !equalBytes2(tree.tapMerkleRoot, EMPTY))
       throw new Error("P2TR: tapRoot leafScript cannot have tree");
-    const script = typeof leafScript === "string" ? hex2.decode(leafScript) : leafScript;
+    const script = typeof leafScript === "string" ? hex.decode(leafScript) : leafScript;
     if (!isBytes7(script))
       throw new Error(`checkScript: wrong script type=${script}`);
     checkTaprootScript(script, internalPubKey, allowUnknownOutputs, customScripts);
@@ -7110,7 +6916,7 @@ function taprootHashTree(tree, internalPubKey, allowUnknownOutputs = false, cust
 function p2tr(internalPubKey, tree, network = NETWORK, allowUnknownOutputs = false, customScripts) {
   if (!internalPubKey && !tree)
     throw new Error("p2tr: should have pubKey or scriptTree (or both)");
-  const pubKey = typeof internalPubKey === "string" ? hex2.decode(internalPubKey) : internalPubKey || TAPROOT_UNSPENDABLE_KEY;
+  const pubKey = typeof internalPubKey === "string" ? hex.decode(internalPubKey) : internalPubKey || TAPROOT_UNSPENDABLE_KEY;
   if (!isValidPubkey(pubKey, PubT.schnorr))
     throw new Error("p2tr: non-schnorr pubkey");
   if (tree) {
@@ -7307,7 +7113,7 @@ function Address(network = NETWORK) {
 var OutP2A, OutPK, OutPKH, OutSH, OutWSH, OutWPKH, OutMS, OutTR, OutTRNS, OutTRMS, OutUnknown, OutScripts, _OutScript, OutScript, p2pk, p2pkh, p2sh, p2wsh, p2wpkh, p2ms, TAP_LEAF_VERSION, tapLeafVersion, tapLeafHash, p2tr_ns, p2tr_pk, _sortPubkeys, base58check;
 var init_payment = __esm({
   "node_modules/@scure/btc-signer/payment.js"() {
-    init_base2();
+    init_base();
     init_utils3();
     init_utils2();
     init_micro_packed();
@@ -7317,14 +7123,14 @@ var init_payment = __esm({
     init_utils4();
     OutP2A = {
       encode(from) {
-        if (from.length !== 2 || from[0] !== 1 || !isBytes7(from[1]) || hex2.encode(from[1]) !== "4e73")
+        if (from.length !== 2 || from[0] !== 1 || !isBytes7(from[1]) || hex.encode(from[1]) !== "4e73")
           return;
         return { type: "p2a", script: Script.encode(from) };
       },
       decode: (to) => {
         if (to.type !== "p2a")
           return;
-        return [1, hex2.decode("4e73")];
+        return [1, hex.decode("4e73")];
       }
     };
     OutPK = {
@@ -7784,7 +7590,7 @@ function validateInput(i) {
         disableScriptCheck: true,
         allowUnknownInputs: true
       });
-      const txid = hex2.encode(_i.txid);
+      const txid = hex.encode(_i.txid);
       if (tx.id !== txid)
         throw new Error(`nonWitnessUtxo: wrong txid, exp=${txid} got=${tx.id}`);
     }
@@ -7810,13 +7616,13 @@ function normalizeInput(i, cur, allowedFields, disableScriptCheck = false, allow
   const _allowedFields = allowedFields;
   let { nonWitnessUtxo, txid } = _i;
   if (typeof nonWitnessUtxo === "string")
-    nonWitnessUtxo = hex2.decode(nonWitnessUtxo);
+    nonWitnessUtxo = hex.decode(nonWitnessUtxo);
   if (isBytes7(nonWitnessUtxo))
     nonWitnessUtxo = RawTx.decode(nonWitnessUtxo);
   if (!("nonWitnessUtxo" in _i) && nonWitnessUtxo === void 0)
     nonWitnessUtxo = _cur?.nonWitnessUtxo;
   if (typeof txid === "string")
-    txid = hex2.decode(txid);
+    txid = hex.decode(txid);
   if (txid === void 0)
     txid = _cur?.txid;
   let res = { ..._cur, ..._i, nonWitnessUtxo, txid };
@@ -7930,7 +7736,7 @@ function bip32Path(path2) {
 var EMPTY32, EMPTY_OUTPUT, toVsize, stripCodeSeparator, PRECISION, DEFAULT_VERSION, DEFAULT_LOCKTIME, DEFAULT_SEQUENCE, Decimal, def, SignatureHash, SigHash, SigHashNames, TxHashIdx, Transaction2, HARDENED_OFFSET;
 var init_transaction = __esm({
   "node_modules/@scure/btc-signer/transaction.js"() {
-    init_base2();
+    init_base();
     init_micro_packed();
     init_payment();
     init_psbt();
@@ -8247,13 +8053,13 @@ var init_transaction = __esm({
         return this.toBytes(false, false);
       }
       get hex() {
-        return hex2.encode(this.toBytes(true, this.hasWitnesses));
+        return hex.encode(this.toBytes(true, this.hasWitnesses));
       }
       get hash() {
-        return hex2.encode(sha256x2(this.toBytes(true)));
+        return hex.encode(sha256x2(this.toBytes(true)));
       }
       get id() {
-        return hex2.encode(sha256x2(this.toBytes(true)).reverse());
+        return hex.encode(sha256x2(this.toBytes(true)).reverse());
       }
       // Input stuff
       checkInputIdx(idx) {
@@ -8309,7 +8115,7 @@ var init_transaction = __esm({
         if (typeof amount !== "bigint")
           throw new Error(`Wrong amount type, should be of type bigint in sats, but got ${amount} of type ${typeof amount}`);
         if (typeof script === "string")
-          script = hex2.decode(script);
+          script = hex.decode(script);
         if (script === void 0)
           script = cur?.script;
         let res = { ...cur, ...o, amount, script };
@@ -8970,7 +8776,7 @@ function selectUTXO(inputs, outputs, strategy, opts) {
 var encodeTapBlock, _cmpBig, _Estimator;
 var init_utxo = __esm({
   "node_modules/@scure/btc-signer/utxo.js"() {
-    init_base2();
+    init_base();
     init_micro_packed();
     init_payment();
     init_psbt();
@@ -9046,7 +8852,7 @@ var init_utxo = __esm({
         this.normalizedInputs = allInputs.map((i) => {
           const normalized = normalizeInput(i, void 0, void 0, opts.disableScriptCheck, opts.allowUnknown);
           inputBeforeSign(normalized);
-          const key = `${hex2.encode(normalized.txid)}:${normalized.index}`;
+          const key = `${hex.encode(normalized.txid)}:${normalized.index}`;
           if (!opts.allowSameUtxo && inputKeys.has(key))
             throw new Error(`Estimator: same input passed multiple times: ${key}`);
           inputKeys.add(key);
@@ -9335,11 +9141,11 @@ var init_btc_signer = __esm({
 });
 
 // node_modules/@stacks/bitcoin-staking/node_modules/@noble/hashes/utils.js
-function isBytes9(a) {
+function isBytes8(a) {
   return a instanceof Uint8Array || ArrayBuffer.isView(a) && a.constructor.name === "Uint8Array";
 }
-function abytes7(value, length, title = "") {
-  const bytes2 = isBytes9(value);
+function abytes6(value, length, title = "") {
+  const bytes2 = isBytes8(value);
   const len = value?.length;
   const needsLen = length !== void 0;
   if (!bytes2 || needsLen && len !== length) {
@@ -9357,7 +9163,7 @@ function aexists4(instance, checkFinished = true) {
     throw new Error("Hash#digest() has already been called");
 }
 function aoutput4(out, instance) {
-  abytes7(out, void 0, "digestInto() output");
+  abytes6(out, void 0, "digestInto() output");
   const min = instance.outputLen;
   if (out.length < min) {
     throw new Error('"digestInto() output" expected to be of length >=' + min);
@@ -9425,7 +9231,7 @@ var init_md3 = __esm({
       }
       update(data) {
         aexists4(this);
-        abytes7(data);
+        abytes6(data);
         const { view: view2, buffer, blockLen } = this;
         const len = data.length;
         for (let pos = 0; pos < len; ) {
@@ -10620,21 +10426,21 @@ var require_utils2 = __commonJS({
     function without0x(value) {
       return /^0x/i.test(value) ? value.slice(2) : value;
     }
-    function hexToBigInt(hex4) {
-      if (typeof hex4 !== "string")
-        throw new TypeError(`hexToBigInt: expected string, got ${typeof hex4}`);
-      return BigInt(with0x(hex4));
+    function hexToBigInt(hex3) {
+      if (typeof hex3 !== "string")
+        throw new TypeError(`hexToBigInt: expected string, got ${typeof hex3}`);
+      return BigInt(with0x(hex3));
     }
     function intToHex(integer, byteLength = 8) {
       const value = typeof integer === "bigint" ? integer : intToBigInt(integer);
       return value.toString(16).padStart(byteLength * 2, "0");
     }
-    function hexToInt(hex4) {
-      return parseInt(hex4, 16);
+    function hexToInt(hex3) {
+      return parseInt(hex3, 16);
     }
     function bigIntToBytes(value, length = 16) {
-      const hex4 = intToHex(value, length);
-      return hexToBytes5(hex4);
+      const hex3 = intToHex(value, length);
+      return hexToBytes5(hex3);
     }
     function toTwos(value, width) {
       if (value < -(BigInt(1) << width - BigInt(1)) || (BigInt(1) << width - BigInt(1)) - BigInt(1) < value) {
@@ -10661,22 +10467,22 @@ var require_utils2 = __commonJS({
     function bytesToHex5(uint8a) {
       if (!(uint8a instanceof Uint8Array))
         throw new Error("Uint8Array expected");
-      let hex4 = "";
+      let hex3 = "";
       for (const u of uint8a) {
-        hex4 += hexes2[u];
+        hex3 += hexes2[u];
       }
-      return hex4;
+      return hex3;
     }
-    function hexToBytes5(hex4) {
-      if (typeof hex4 !== "string") {
-        throw new TypeError(`hexToBytes: expected string, got ${typeof hex4}`);
+    function hexToBytes5(hex3) {
+      if (typeof hex3 !== "string") {
+        throw new TypeError(`hexToBytes: expected string, got ${typeof hex3}`);
       }
-      hex4 = without0x(hex4);
-      hex4 = hex4.length % 2 ? `0${hex4}` : hex4;
-      const array2 = new Uint8Array(hex4.length / 2);
+      hex3 = without0x(hex3);
+      hex3 = hex3.length % 2 ? `0${hex3}` : hex3;
+      const array2 = new Uint8Array(hex3.length / 2);
       for (let i = 0; i < array2.length; i++) {
         const j = i * 2;
-        const hexByte = hex4.slice(j, j + 2);
+        const hexByte = hex3.slice(j, j + 2);
         const byte = Number.parseInt(hexByte, 16);
         if (Number.isNaN(byte) || byte < 0)
           throw new Error("Invalid byte sequence");
@@ -10734,11 +10540,11 @@ var require_utils2 = __commonJS({
     function isInstance(object, clazz) {
       return object instanceof clazz || object?.constructor?.name?.toLowerCase() === clazz.name;
     }
-    function validateHash256(hex4) {
-      hex4 = without0x(hex4);
-      if (hex4.length !== 64)
+    function validateHash256(hex3) {
+      hex3 = without0x(hex3);
+      if (hex3.length !== 64)
         return false;
-      return /^[0-9a-fA-F]+$/.test(hex4);
+      return /^[0-9a-fA-F]+$/.test(hex3);
     }
   }
 });
@@ -11642,7 +11448,8 @@ var require_build = __commonJS({
           "leaf-hashes": transactions_1.Cl.list(o.leafHashes.map((h) => clBufferFrom(h))),
           "tx-count": transactions_1.Cl.uint(o.txCount),
           "tx-index": transactions_1.Cl.uint(o.txIndex),
-          amount: transactions_1.Cl.uint(o.amount)
+          amount: transactions_1.Cl.uint(o.amount),
+          "unlock-burn-height": transactions_1.Cl.uint(o.unlockBurnHeight)
         }))),
         "staker-unlock-bytes": clBufferFrom(lockup.unlockBytes)
       }));
@@ -12790,20 +12597,20 @@ __export(base_exports, {
   bytes: () => bytes,
   bytesToString: () => bytesToString,
   createBase58check: () => createBase58check2,
-  hex: () => hex3,
+  hex: () => hex2,
   str: () => str,
   stringToBytes: () => stringToBytes,
   utf8: () => utf82,
   utils: () => utils3
 });
-function isBytes10(a) {
+function isBytes9(a) {
   return a instanceof Uint8Array || ArrayBuffer.isView(a) && a.constructor.name === "Uint8Array";
 }
-function abytes8(b) {
-  if (!isBytes10(b))
+function abytes7(b) {
+  if (!isBytes9(b))
     throw new Error("Uint8Array expected");
 }
-function isArrayOf3(isString, arr) {
+function isArrayOf2(isString, arr) {
   if (!Array.isArray(arr))
     return false;
   if (arr.length === 0)
@@ -12814,34 +12621,34 @@ function isArrayOf3(isString, arr) {
     return arr.every((item) => Number.isSafeInteger(item));
   }
 }
-function afn3(input) {
+function afn2(input) {
   if (typeof input !== "function")
     throw new Error("function expected");
   return true;
 }
-function astr3(label, input) {
+function astr2(label, input) {
   if (typeof input !== "string")
     throw new Error(`${label}: string expected`);
   return true;
 }
-function anumber6(n) {
+function anumber5(n) {
   if (!Number.isSafeInteger(n))
     throw new Error(`invalid integer: ${n}`);
 }
-function aArr3(input) {
+function aArr2(input) {
   if (!Array.isArray(input))
     throw new Error("array expected");
 }
-function astrArr3(label, input) {
-  if (!isArrayOf3(true, input))
+function astrArr2(label, input) {
+  if (!isArrayOf2(true, input))
     throw new Error(`${label}: array of strings expected`);
 }
-function anumArr3(label, input) {
-  if (!isArrayOf3(false, input))
+function anumArr2(label, input) {
+  if (!isArrayOf2(false, input))
     throw new Error(`${label}: array of numbers expected`);
 }
 // @__NO_SIDE_EFFECTS__
-function chain3(...args) {
+function chain2(...args) {
   const id = (a) => a;
   const wrap2 = (a, b) => (c) => a(b(c));
   const encode = args.map((x) => x.encode).reduceRight(wrap2, id);
@@ -12849,14 +12656,14 @@ function chain3(...args) {
   return { encode, decode };
 }
 // @__NO_SIDE_EFFECTS__
-function alphabet3(letters) {
+function alphabet2(letters) {
   const lettersA = typeof letters === "string" ? letters.split("") : letters;
   const len = lettersA.length;
-  astrArr3("alphabet", lettersA);
+  astrArr2("alphabet", lettersA);
   const indexes = new Map(lettersA.map((l, i) => [l, i]));
   return {
     encode: (digits) => {
-      aArr3(digits);
+      aArr2(digits);
       return digits.map((i) => {
         if (!Number.isSafeInteger(i) || i < 0 || i >= len)
           throw new Error(`alphabet.encode: digit index outside alphabet "${i}". Allowed: ${letters}`);
@@ -12864,9 +12671,9 @@ function alphabet3(letters) {
       });
     },
     decode: (input) => {
-      aArr3(input);
+      aArr2(input);
       return input.map((letter) => {
-        astr3("alphabet.decode", letter);
+        astr2("alphabet.decode", letter);
         const i = indexes.get(letter);
         if (i === void 0)
           throw new Error(`Unknown letter: "${letter}". Allowed: ${letters}`);
@@ -12876,32 +12683,32 @@ function alphabet3(letters) {
   };
 }
 // @__NO_SIDE_EFFECTS__
-function join3(separator = "") {
-  astr3("join", separator);
+function join2(separator = "") {
+  astr2("join", separator);
   return {
     encode: (from) => {
-      astrArr3("join.decode", from);
+      astrArr2("join.decode", from);
       return from.join(separator);
     },
     decode: (to) => {
-      astr3("join.decode", to);
+      astr2("join.decode", to);
       return to.split(separator);
     }
   };
 }
 // @__NO_SIDE_EFFECTS__
 function padding(bits, chr = "=") {
-  anumber6(bits);
-  astr3("padding", chr);
+  anumber5(bits);
+  astr2("padding", chr);
   return {
     encode(data) {
-      astrArr3("padding.encode", data);
+      astrArr2("padding.encode", data);
       while (data.length * bits % 8)
         data.push(chr);
       return data;
     },
     decode(input) {
-      astrArr3("padding.decode", input);
+      astrArr2("padding.decode", input);
       let end = input.length;
       if (end * bits % 8)
         throw new Error("padding: invalid, string should have whole number of bytes");
@@ -12916,8 +12723,8 @@ function padding(bits, chr = "=") {
   };
 }
 // @__NO_SIDE_EFFECTS__
-function normalize3(fn) {
-  afn3(fn);
+function normalize2(fn) {
+  afn2(fn);
   return { encode: (from) => from, decode: (to) => fn(to) };
 }
 function convertRadix3(data, from, to) {
@@ -12925,13 +12732,13 @@ function convertRadix3(data, from, to) {
     throw new Error(`convertRadix: invalid from=${from}, base cannot be less than 2`);
   if (to < 2)
     throw new Error(`convertRadix: invalid to=${to}, base cannot be less than 2`);
-  aArr3(data);
+  aArr2(data);
   if (!data.length)
     return [];
   let pos = 0;
   const res = [];
   const digits = Array.from(data, (d) => {
-    anumber6(d);
+    anumber5(d);
     if (d < 0 || d >= from)
       throw new Error(`invalid integer: ${d}`);
     return d;
@@ -12968,22 +12775,22 @@ function convertRadix3(data, from, to) {
     res.push(0);
   return res.reverse();
 }
-function convertRadix23(data, from, to, padding2) {
-  aArr3(data);
+function convertRadix22(data, from, to, padding2) {
+  aArr2(data);
   if (from <= 0 || from > 32)
     throw new Error(`convertRadix2: wrong from=${from}`);
   if (to <= 0 || to > 32)
     throw new Error(`convertRadix2: wrong to=${to}`);
-  if (/* @__PURE__ */ radix2carry3(from, to) > 32) {
-    throw new Error(`convertRadix2: carry overflow from=${from} to=${to} carryBits=${/* @__PURE__ */ radix2carry3(from, to)}`);
+  if (/* @__PURE__ */ radix2carry2(from, to) > 32) {
+    throw new Error(`convertRadix2: carry overflow from=${from} to=${to} carryBits=${/* @__PURE__ */ radix2carry2(from, to)}`);
   }
   let carry = 0;
   let pos = 0;
-  const max = powers3[from];
-  const mask = powers3[to] - 1;
+  const max = powers2[from];
+  const mask = powers2[to] - 1;
   const res = [];
   for (const n of data) {
-    anumber6(n);
+    anumber5(n);
     if (n >= max)
       throw new Error(`convertRadix2: invalid data word=${n} from=${from}`);
     carry = carry << from | n;
@@ -12992,7 +12799,7 @@ function convertRadix23(data, from, to, padding2) {
     pos += from;
     for (; pos >= to; pos -= to)
       res.push((carry >> pos - to & mask) >>> 0);
-    const pow = powers3[pos];
+    const pow = powers2[pos];
     if (pow === void 0)
       throw new Error("invalid carry");
     carry &= pow - 1;
@@ -13008,41 +12815,41 @@ function convertRadix23(data, from, to, padding2) {
 }
 // @__NO_SIDE_EFFECTS__
 function radix3(num2) {
-  anumber6(num2);
+  anumber5(num2);
   const _256 = 2 ** 8;
   return {
     encode: (bytes2) => {
-      if (!isBytes10(bytes2))
+      if (!isBytes9(bytes2))
         throw new Error("radix.encode input should be Uint8Array");
       return convertRadix3(Array.from(bytes2), _256, num2);
     },
     decode: (digits) => {
-      anumArr3("radix.decode", digits);
+      anumArr2("radix.decode", digits);
       return Uint8Array.from(convertRadix3(digits, num2, _256));
     }
   };
 }
 // @__NO_SIDE_EFFECTS__
-function radix23(bits, revPadding = false) {
-  anumber6(bits);
+function radix22(bits, revPadding = false) {
+  anumber5(bits);
   if (bits <= 0 || bits > 32)
     throw new Error("radix2: bits should be in (0..32]");
-  if (/* @__PURE__ */ radix2carry3(8, bits) > 32 || /* @__PURE__ */ radix2carry3(bits, 8) > 32)
+  if (/* @__PURE__ */ radix2carry2(8, bits) > 32 || /* @__PURE__ */ radix2carry2(bits, 8) > 32)
     throw new Error("radix2: carry overflow");
   return {
     encode: (bytes2) => {
-      if (!isBytes10(bytes2))
+      if (!isBytes9(bytes2))
         throw new Error("radix2.encode input should be Uint8Array");
-      return convertRadix23(Array.from(bytes2), 8, bits, !revPadding);
+      return convertRadix22(Array.from(bytes2), 8, bits, !revPadding);
     },
     decode: (digits) => {
-      anumArr3("radix2.decode", digits);
-      return Uint8Array.from(convertRadix23(digits, bits, 8, revPadding));
+      anumArr2("radix2.decode", digits);
+      return Uint8Array.from(convertRadix22(digits, bits, 8, revPadding));
     }
   };
 }
 function unsafeWrapper2(fn) {
-  afn3(fn);
+  afn2(fn);
   return function(...args) {
     try {
       return fn.apply(null, args);
@@ -13051,11 +12858,11 @@ function unsafeWrapper2(fn) {
   };
 }
 function checksum2(len, fn) {
-  anumber6(len);
-  afn3(fn);
+  anumber5(len);
+  afn2(fn);
   return {
     encode(data) {
-      if (!isBytes10(data))
+      if (!isBytes9(data))
         throw new Error("checksum.encode: input should be Uint8Array");
       const sum = fn(data).slice(0, len);
       const res = new Uint8Array(data.length + len);
@@ -13064,7 +12871,7 @@ function checksum2(len, fn) {
       return res;
     },
     decode(data) {
-      if (!isBytes10(data))
+      if (!isBytes9(data))
         throw new Error("checksum.decode: input should be Uint8Array");
       const payload = data.slice(0, -len);
       const oldChecksum = data.slice(-len);
@@ -13102,20 +12909,20 @@ function bechChecksum2(prefix2, words, encodingConst = 1) {
   for (let i = 0; i < 6; i++)
     chk = bech32Polymod2(chk);
   chk ^= encodingConst;
-  return BECH_ALPHABET2.encode(convertRadix23([chk % powers3[30]], 30, 5, false));
+  return BECH_ALPHABET2.encode(convertRadix22([chk % powers2[30]], 30, 5, false));
 }
 // @__NO_SIDE_EFFECTS__
 function genBech322(encoding) {
   const ENCODING_CONST = encoding === "bech32" ? 1 : 734539939;
-  const _words = /* @__PURE__ */ radix23(5);
+  const _words = /* @__PURE__ */ radix22(5);
   const fromWords = _words.decode;
   const toWords = _words.encode;
   const fromWordsUnsafe = unsafeWrapper2(fromWords);
   function encode(prefix2, words, limit = 90) {
-    astr3("bech32.encode prefix", prefix2);
-    if (isBytes10(words))
+    astr2("bech32.encode prefix", prefix2);
+    if (isBytes9(words))
       words = Array.from(words);
-    anumArr3("bech32.encode", words);
+    anumArr2("bech32.encode", words);
     const plen = prefix2.length;
     if (plen === 0)
       throw new TypeError(`Invalid prefix length ${plen}`);
@@ -13127,7 +12934,7 @@ function genBech322(encoding) {
     return `${lowered}1${BECH_ALPHABET2.encode(words)}${sum}`;
   }
   function decode(str2, limit = 90) {
-    astr3("bech32.decode input", str2);
+    astr2("bech32.decode input", str2);
     const slen = str2.length;
     if (slen < 8 || limit !== false && slen > limit)
       throw new TypeError(`invalid string length: ${slen} (${str2}). Expected (8..${limit})`);
@@ -13166,64 +12973,64 @@ function genBech322(encoding) {
     toWords
   };
 }
-var gcd3, radix2carry3, powers3, utils3, base16, base32, base32nopad, base32hex, base32hexnopad, base32crockford, hasBase64Builtin, decodeBase64Builtin, base64, base64nopad, base64url, base64urlnopad, genBase582, base582, base58flickr, base58xrp, XMR_BLOCK_LEN, base58xmr, createBase58check2, base58check2, BECH_ALPHABET2, POLYMOD_GENERATORS2, bech322, bech32m2, utf82, hasHexBuiltin4, hexBuiltin3, hex3, CODERS, coderTypeError, bytesToString, str, stringToBytes, bytes;
-var init_base3 = __esm({
+var gcd2, radix2carry2, powers2, utils3, base16, base32, base32nopad, base32hex, base32hexnopad, base32crockford, hasBase64Builtin, decodeBase64Builtin, base64, base64nopad, base64url, base64urlnopad, genBase582, base582, base58flickr, base58xrp, XMR_BLOCK_LEN, base58xmr, createBase58check2, base58check2, BECH_ALPHABET2, POLYMOD_GENERATORS2, bech322, bech32m2, utf82, hasHexBuiltin3, hexBuiltin2, hex2, CODERS, coderTypeError, bytesToString, str, stringToBytes, bytes;
+var init_base2 = __esm({
   "node_modules/@stacks/bitcoin-staking/node_modules/@scure/base/index.js"() {
-    gcd3 = (a, b) => b === 0 ? a : gcd3(b, a % b);
-    radix2carry3 = /* @__NO_SIDE_EFFECTS__ */ (from, to) => from + (to - gcd3(from, to));
-    powers3 = /* @__PURE__ */ (() => {
+    gcd2 = (a, b) => b === 0 ? a : gcd2(b, a % b);
+    radix2carry2 = /* @__NO_SIDE_EFFECTS__ */ (from, to) => from + (to - gcd2(from, to));
+    powers2 = /* @__PURE__ */ (() => {
       let res = [];
       for (let i = 0; i < 40; i++)
         res.push(2 ** i);
       return res;
     })();
     utils3 = {
-      alphabet: alphabet3,
-      chain: chain3,
+      alphabet: alphabet2,
+      chain: chain2,
       checksum: checksum2,
       convertRadix: convertRadix3,
-      convertRadix2: convertRadix23,
+      convertRadix2: convertRadix22,
       radix: radix3,
-      radix2: radix23,
-      join: join3,
+      radix2: radix22,
+      join: join2,
       padding
     };
-    base16 = /* @__PURE__ */ chain3(/* @__PURE__ */ radix23(4), /* @__PURE__ */ alphabet3("0123456789ABCDEF"), /* @__PURE__ */ join3(""));
-    base32 = /* @__PURE__ */ chain3(/* @__PURE__ */ radix23(5), /* @__PURE__ */ alphabet3("ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"), /* @__PURE__ */ padding(5), /* @__PURE__ */ join3(""));
-    base32nopad = /* @__PURE__ */ chain3(/* @__PURE__ */ radix23(5), /* @__PURE__ */ alphabet3("ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"), /* @__PURE__ */ join3(""));
-    base32hex = /* @__PURE__ */ chain3(/* @__PURE__ */ radix23(5), /* @__PURE__ */ alphabet3("0123456789ABCDEFGHIJKLMNOPQRSTUV"), /* @__PURE__ */ padding(5), /* @__PURE__ */ join3(""));
-    base32hexnopad = /* @__PURE__ */ chain3(/* @__PURE__ */ radix23(5), /* @__PURE__ */ alphabet3("0123456789ABCDEFGHIJKLMNOPQRSTUV"), /* @__PURE__ */ join3(""));
-    base32crockford = /* @__PURE__ */ chain3(/* @__PURE__ */ radix23(5), /* @__PURE__ */ alphabet3("0123456789ABCDEFGHJKMNPQRSTVWXYZ"), /* @__PURE__ */ join3(""), /* @__PURE__ */ normalize3((s) => s.toUpperCase().replace(/O/g, "0").replace(/[IL]/g, "1")));
+    base16 = /* @__PURE__ */ chain2(/* @__PURE__ */ radix22(4), /* @__PURE__ */ alphabet2("0123456789ABCDEF"), /* @__PURE__ */ join2(""));
+    base32 = /* @__PURE__ */ chain2(/* @__PURE__ */ radix22(5), /* @__PURE__ */ alphabet2("ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"), /* @__PURE__ */ padding(5), /* @__PURE__ */ join2(""));
+    base32nopad = /* @__PURE__ */ chain2(/* @__PURE__ */ radix22(5), /* @__PURE__ */ alphabet2("ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"), /* @__PURE__ */ join2(""));
+    base32hex = /* @__PURE__ */ chain2(/* @__PURE__ */ radix22(5), /* @__PURE__ */ alphabet2("0123456789ABCDEFGHIJKLMNOPQRSTUV"), /* @__PURE__ */ padding(5), /* @__PURE__ */ join2(""));
+    base32hexnopad = /* @__PURE__ */ chain2(/* @__PURE__ */ radix22(5), /* @__PURE__ */ alphabet2("0123456789ABCDEFGHIJKLMNOPQRSTUV"), /* @__PURE__ */ join2(""));
+    base32crockford = /* @__PURE__ */ chain2(/* @__PURE__ */ radix22(5), /* @__PURE__ */ alphabet2("0123456789ABCDEFGHJKMNPQRSTVWXYZ"), /* @__PURE__ */ join2(""), /* @__PURE__ */ normalize2((s) => s.toUpperCase().replace(/O/g, "0").replace(/[IL]/g, "1")));
     hasBase64Builtin = /* @__PURE__ */ (() => typeof Uint8Array.from([]).toBase64 === "function" && typeof Uint8Array.fromBase64 === "function")();
     decodeBase64Builtin = (s, isUrl) => {
-      astr3("base64", s);
+      astr2("base64", s);
       const re = isUrl ? /^[A-Za-z0-9=_-]+$/ : /^[A-Za-z0-9=+/]+$/;
-      const alphabet4 = isUrl ? "base64url" : "base64";
+      const alphabet3 = isUrl ? "base64url" : "base64";
       if (s.length > 0 && !re.test(s))
         throw new Error("invalid base64");
-      return Uint8Array.fromBase64(s, { alphabet: alphabet4, lastChunkHandling: "strict" });
+      return Uint8Array.fromBase64(s, { alphabet: alphabet3, lastChunkHandling: "strict" });
     };
     base64 = hasBase64Builtin ? {
       encode(b) {
-        abytes8(b);
+        abytes7(b);
         return b.toBase64();
       },
       decode(s) {
         return decodeBase64Builtin(s, false);
       }
-    } : /* @__PURE__ */ chain3(/* @__PURE__ */ radix23(6), /* @__PURE__ */ alphabet3("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"), /* @__PURE__ */ padding(6), /* @__PURE__ */ join3(""));
-    base64nopad = /* @__PURE__ */ chain3(/* @__PURE__ */ radix23(6), /* @__PURE__ */ alphabet3("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"), /* @__PURE__ */ join3(""));
+    } : /* @__PURE__ */ chain2(/* @__PURE__ */ radix22(6), /* @__PURE__ */ alphabet2("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"), /* @__PURE__ */ padding(6), /* @__PURE__ */ join2(""));
+    base64nopad = /* @__PURE__ */ chain2(/* @__PURE__ */ radix22(6), /* @__PURE__ */ alphabet2("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"), /* @__PURE__ */ join2(""));
     base64url = hasBase64Builtin ? {
       encode(b) {
-        abytes8(b);
+        abytes7(b);
         return b.toBase64({ alphabet: "base64url" });
       },
       decode(s) {
         return decodeBase64Builtin(s, true);
       }
-    } : /* @__PURE__ */ chain3(/* @__PURE__ */ radix23(6), /* @__PURE__ */ alphabet3("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"), /* @__PURE__ */ padding(6), /* @__PURE__ */ join3(""));
-    base64urlnopad = /* @__PURE__ */ chain3(/* @__PURE__ */ radix23(6), /* @__PURE__ */ alphabet3("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"), /* @__PURE__ */ join3(""));
-    genBase582 = /* @__NO_SIDE_EFFECTS__ */ (abc) => /* @__PURE__ */ chain3(/* @__PURE__ */ radix3(58), /* @__PURE__ */ alphabet3(abc), /* @__PURE__ */ join3(""));
+    } : /* @__PURE__ */ chain2(/* @__PURE__ */ radix22(6), /* @__PURE__ */ alphabet2("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"), /* @__PURE__ */ padding(6), /* @__PURE__ */ join2(""));
+    base64urlnopad = /* @__PURE__ */ chain2(/* @__PURE__ */ radix22(6), /* @__PURE__ */ alphabet2("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"), /* @__PURE__ */ join2(""));
+    genBase582 = /* @__NO_SIDE_EFFECTS__ */ (abc) => /* @__PURE__ */ chain2(/* @__PURE__ */ radix3(58), /* @__PURE__ */ alphabet2(abc), /* @__PURE__ */ join2(""));
     base582 = /* @__PURE__ */ genBase582("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz");
     base58flickr = /* @__PURE__ */ genBase582("123456789abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ");
     base58xrp = /* @__PURE__ */ genBase582("rpshnaf39wBUDNEGHJKLM4PQRST7VWXYZ2bcdeCg65jkm8oFqi1tuvAxyz");
@@ -13252,9 +13059,9 @@ var init_base3 = __esm({
         return Uint8Array.from(res);
       }
     };
-    createBase58check2 = (sha2566) => /* @__PURE__ */ chain3(checksum2(4, (data) => sha2566(sha2566(data))), base582);
+    createBase58check2 = (sha2566) => /* @__PURE__ */ chain2(checksum2(4, (data) => sha2566(sha2566(data))), base582);
     base58check2 = createBase58check2;
-    BECH_ALPHABET2 = /* @__PURE__ */ chain3(/* @__PURE__ */ alphabet3("qpzry9x8gf2tvdw0s3jn54khce6mua7l"), /* @__PURE__ */ join3(""));
+    BECH_ALPHABET2 = /* @__PURE__ */ chain2(/* @__PURE__ */ alphabet2("qpzry9x8gf2tvdw0s3jn54khce6mua7l"), /* @__PURE__ */ join2(""));
     POLYMOD_GENERATORS2 = [996825010, 642813549, 513874426, 1027748829, 705979059];
     bech322 = /* @__PURE__ */ genBech322("bech32");
     bech32m2 = /* @__PURE__ */ genBech322("bech32m");
@@ -13262,25 +13069,25 @@ var init_base3 = __esm({
       encode: (data) => new TextDecoder().decode(data),
       decode: (str2) => new TextEncoder().encode(str2)
     };
-    hasHexBuiltin4 = /* @__PURE__ */ (() => typeof Uint8Array.from([]).toHex === "function" && typeof Uint8Array.fromHex === "function")();
-    hexBuiltin3 = {
+    hasHexBuiltin3 = /* @__PURE__ */ (() => typeof Uint8Array.from([]).toHex === "function" && typeof Uint8Array.fromHex === "function")();
+    hexBuiltin2 = {
       encode(data) {
-        abytes8(data);
+        abytes7(data);
         return data.toHex();
       },
       decode(s) {
-        astr3("hex", s);
+        astr2("hex", s);
         return Uint8Array.fromHex(s);
       }
     };
-    hex3 = hasHexBuiltin4 ? hexBuiltin3 : /* @__PURE__ */ chain3(/* @__PURE__ */ radix23(4), /* @__PURE__ */ alphabet3("0123456789abcdef"), /* @__PURE__ */ join3(""), /* @__PURE__ */ normalize3((s) => {
+    hex2 = hasHexBuiltin3 ? hexBuiltin2 : /* @__PURE__ */ chain2(/* @__PURE__ */ radix22(4), /* @__PURE__ */ alphabet2("0123456789abcdef"), /* @__PURE__ */ join2(""), /* @__PURE__ */ normalize2((s) => {
       if (typeof s !== "string" || s.length % 2 !== 0)
         throw new TypeError(`hex.decode: expected string, got ${typeof s} with length ${s.length}`);
       return s.toLowerCase();
     }));
     CODERS = {
       utf8: utf82,
-      hex: hex3,
+      hex: hex2,
       base16,
       base32,
       base64,
@@ -13292,7 +13099,7 @@ var init_base3 = __esm({
     bytesToString = (type, bytes2) => {
       if (typeof type !== "string" || !CODERS.hasOwnProperty(type))
         throw new TypeError(coderTypeError);
-      if (!isBytes10(bytes2))
+      if (!isBytes9(bytes2))
         throw new TypeError("bytesToString() expects Uint8Array");
       return CODERS[type].encode(bytes2);
     };
@@ -13315,7 +13122,7 @@ var require_btc_address = __commonJS({
     Object.defineProperty(exports2, "__esModule", { value: true });
     exports2.parse = parse;
     exports2.stringify = stringify;
-    var base_1 = (init_base3(), __toCommonJS(base_exports));
+    var base_1 = (init_base2(), __toCommonJS(base_exports));
     var common_1 = require_dist2();
     var encryption_1 = require("@stacks/encryption");
     var transactions_1 = require("@stacks/transactions");
@@ -14740,8 +14547,8 @@ function validateAddress(addr, testnet) {
     return false;
   }
 }
-function isCompressedSecp256k1PubKeyHex(hex4) {
-  return /^(02|03)[0-9a-fA-F]{64}$/.test(hex4);
+function isCompressedSecp256k1PubKeyHex(hex3) {
+  return /^(02|03)[0-9a-fA-F]{64}$/.test(hex3);
 }
 function stxToMicro(amountStx) {
   if (!validateAmount(amountStx)) {
@@ -23349,7 +23156,6 @@ var FileLockRecordStore = class {
 @noble/curves/secp256k1.js:
   (*! noble-curves - MIT License (c) 2022 Paul Miller (paulmillr.com) *)
 
-@scure/base/index.js:
 @scure/base/index.js:
 @scure/base/index.js:
   (*! scure-base - MIT License (c) 2022 Paul Miller (paulmillr.com) *)
