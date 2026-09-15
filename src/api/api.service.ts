@@ -287,6 +287,9 @@ export class ApiService {
         case ActionType.GET_BOND_POSITION:
           result = await sdk.getBondPosition();
           break;
+        case ActionType.LIST_BOND_LOCK_RECORDS:
+          result = await sdk.listBondLockRecords();
+          break;
         case ActionType.GET_HISTORICAL_BOND_POSITION:
           result = await sdk.getHistoricalBondPosition(params.bondIndex);
           break;

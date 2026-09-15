@@ -208,6 +208,38 @@ export class StacksSDK {
   };
 
   /**
+   * Every bond lock record held for this vault's staker address.
+   *
+   * Discovery by address alone: a caller that has lost the bond index has no other way
+   * to learn which lock addresses hold committed Bitcoin. A store that cannot enumerate
+   * is refused rather than reported as empty — "no records" and "the store cannot
+   * answer" lead to opposite operator decisions about whether BTC is at stake.
+   */
+  public listBondLockRecords = async (): Promise<{
+    success: boolean;
+    data?: BondLockRecord[];
+    error?: string;
+  }> => {
+    try {
+      if (!this.address) throw new Error("Address is not set");
+      if (typeof this.lockRecordStore.listRecords !== "function") {
+        return {
+          success: false,
+          error:
+            "The configured lock-record store does not support enumeration, so funded bonds cannot be discovered by address. Supply a store implementing listRecords (both built-in stores do).",
+        };
+      }
+      const records = await this.lockRecordStore.listRecords(this.address);
+      return { success: true, data: records };
+    } catch (error) {
+      return {
+        success: false,
+        error: `Failed to list bond lock records: ${formatErrorMessage(error)}`,
+      };
+    }
+  };
+
+  /**
    * Native-BTC funding is refused unless a durable, healthy lock-record store is
    * configured. Losing a record for an unspent BTC lock can strand funds, so the
    * default in-memory store (not durable across restarts / pool eviction) is not
