@@ -51,6 +51,7 @@ import {
   pagination_defaults,
   poxInfo,
   stacks_info,
+  HIRO_API_KEY_HEADER,
 } from "../utils/constants";
 
 export class StacksService {
@@ -70,9 +71,15 @@ export class StacksService {
   constructor(
     testnet: boolean = false,
     profile?: { baseUrl: string; chainId: number; magicBytes: string },
+    chainApiKey?: string,
   ) {
     this.testnet = testnet;
     this.axiosClient = axios.create();
+    // Set only when present: an empty header value is rejected by Hiro rather than
+    // treated as an anonymous request.
+    if (chainApiKey) {
+      this.axiosClient.defaults.headers[HIRO_API_KEY_HEADER] = chainApiKey;
+    }
     const baseUrl =
       profile?.baseUrl
       || process.env.STACKS_API_URL

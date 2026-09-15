@@ -269,6 +269,9 @@ export const PRIVATE1_HIRO_API_BASE = 'https://api.private-1.hiro.so';
 // configured override) serves the PoX-5 boot contract.
 export const PUBLIC_TESTNET_POX5_API = 'https://api.testnet-pox5.hiro.so';
 
+// Hiro's API-key header. Requests without it are served on the lowest rate-limit tier.
+export const HIRO_API_KEY_HEADER = 'x-hiro-api-key';
+
 // External KMS cosigner for the bond early-exit (OP_ELSE) spend path.
 // Auth-less public endpoints — no secrets involved. Public testnet is not provisioned;
 // resolveCosignerUrl throws for it unless EARLY_EXIT_SIGNER_URL is set.
