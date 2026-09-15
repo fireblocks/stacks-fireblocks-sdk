@@ -350,7 +350,10 @@ export const POX5_BOND_ERRORS: Record<number, { name: string; message: string }>
   43: { name: 'ERR_BOND_ALREADY_STARTED',              message: 'Registered after bond-start-height — no grace period.' },
   45: { name: 'ERR_INVALID_LOCKUP_AMOUNT',             message: 'Proof amount ≠ decoded output value.' },
   46: { name: 'ERR_DUPLICATE_LOCKUP_OUTPOINT',         message: 'Same (txid, vout) submitted twice.' },
-  47: { name: 'ERR_STAKE_IN_PREPARE_PHASE',            message: 'Landed in prepare phase — broadcast earlier in the cycle.' },
+  // Temporary by construction: the prepare phase is ~17 hours of every two-week mainnet
+  // cycle, so this is a routine timing outcome rather than a fault. The wording says so,
+  // and says nothing was spent, because the operator reaches it only after authenticating.
+  47: { name: 'ERR_STAKE_IN_PREPARE_PHASE',            message: 'Temporary timing condition, not a failure: the reward cycle is in its prepare phase, during which staking is not accepted. Nothing was sent and no fee was charged. Retry once the prepare phase ends and the next cycle begins.' },
   48: { name: 'ERR_ROLLOVER_TOO_EARLY',                message: 'Rollover attempted before prior bond L1 unlock window.' },
   50: { name: 'ERR_L1_EARLY_EXIT_ALREADY_ANNOUNCED',  message: 'announceEarlyExit already called for this membership.' },
 };
