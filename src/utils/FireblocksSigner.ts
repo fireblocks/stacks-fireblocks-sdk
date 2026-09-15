@@ -99,12 +99,19 @@ export class FireblocksSigner {
     };
   }
 
-  createTransactionPayload = (externalTxId: string): TransactionRequest => {
+  createTransactionPayload = (
+    externalTxId: string,
+    vaultAccountId: string,
+  ): TransactionRequest => {
     return {
       note: "raw signing for stacks-fireblocks-sdk",
       externalTxId,
       source: {
         type: TransferPeerPathType.VaultAccount,
+        // A Raw policy rule scoped to a vault account matches on this id. Without it the
+        // vault is present only inside the derivation path, no vault-scoped rule can
+        // match, and Fireblocks refuses the request outright.
+        id: vaultAccountId,
       },
       operation: TransactionOperation.Raw,
       extraParameters: {
@@ -184,7 +191,10 @@ export class FireblocksSigner {
 
       const hexContent = content.startsWith("0x") ? content.slice(2) : content;
 
-      const transactionPayload = this.createTransactionPayload(externalId ?? randomUUID());
+      const transactionPayload = this.createTransactionPayload(
+        externalId ?? randomUUID(),
+        String(vaultAccountId),
+      );
 
       if (txNote) {
         transactionPayload.note = txNote;
