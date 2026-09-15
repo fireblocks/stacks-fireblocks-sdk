@@ -37,6 +37,10 @@ export class SdkManager {
       },
       this.poolConfig.cleanupIntervalMs
     );
+    // The pool is not a reason for the process to stay alive — a server is kept up by
+    // its listener, not by this timer. Without unref, merely importing a module that
+    // constructs a pool holds the event loop open for the pool's lifetime.
+    this.cleanupInterval.unref();
   }
 
   /**
