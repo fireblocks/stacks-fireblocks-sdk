@@ -54,12 +54,26 @@ describe("chainApiKey reaches the chain reads", () => {
     expect(HEADER in calls[0].headers).toBe(false);
   });
 
+  it("never attaches the key to a different origin", async () => {
+    const { calls, fn } = recordingFetch();
+    const profile = resolveNetworkProfile({ network: "private-devnet" });
+    const network = stacksNetworkFromProfile(profile, KEY, fn);
+
+    // Esplora and the early-exit cosigner are third parties. The adapter must refuse to
+    // carry the Hiro credential off the Stacks API origin even if a caller points it
+    // there — the issue asks for a *same-origin* adapter, not a header-adding one.
+    await network.client.fetch!("https://blockstream.info/api/tx/abc");
+
+    expect(HEADER in calls[0].headers).toBe(false);
+  });
+
   it("carries the key on the network object the PoX-5 client reads through", async () => {
     const { calls, fn } = recordingFetch();
     const profile = resolveNetworkProfile({ network: "private-devnet" });
 
     const network = stacksNetworkFromProfile(profile, KEY, fn);
-    await network.client.fetch!("https://example.invalid/v2/accounts/ST000");
+    // A real PoX-5 read targets the configured Stacks API, so this is the same origin.
+    await network.client.fetch!(`${profile.stacksApiUrl}/v2/accounts/ST000`);
 
     expect(calls[0].headers[HEADER]).toBe(KEY);
   });

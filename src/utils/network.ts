@@ -40,12 +40,39 @@ export interface NetworkProfile {
   requirePox5Active?: boolean;
 }
 
+/** The origin of a URL, or undefined when it cannot be parsed. */
+const originOf = (url: unknown): string | undefined => {
+  try {
+    return new URL(String(url)).origin;
+  } catch {
+    return undefined;
+  }
+};
+
 /**
- * Adds the Hiro API key to a request's headers. Omitted entirely when no key is
- * configured — an empty header value is rejected rather than treated as absent.
+ * Adds the Hiro API key to a request's headers, but ONLY for the Stacks API origin.
+ *
+ * The credential must never reach a third party. Esplora and the early-exit cosigner are
+ * separate services reached over plain `fetch`, so today nothing carries the key to them
+ * — but an adapter that attaches a header regardless of destination makes that a matter
+ * of call-site discipline rather than construction. `allowedOrigin` makes it structural:
+ * point this adapter at Esplora and it sends no key.
+ *
+ * Omitted entirely when no key is configured — an empty header value is rejected by Hiro
+ * rather than treated as an anonymous request. Also omitted when either origin cannot be
+ * parsed, since an unverifiable destination is not a match.
  */
-export function withChainApiKey(init: RequestInit | undefined, apiKey?: string): RequestInit | undefined {
+export function withChainApiKey(
+  init: RequestInit | undefined,
+  apiKey?: string,
+  requestUrl?: unknown,
+  allowedOrigin?: string,
+): RequestInit | undefined {
   if (!apiKey) return init;
+  if (allowedOrigin !== undefined) {
+    const target = originOf(requestUrl);
+    if (target === undefined || target !== originOf(allowedOrigin)) return init;
+  }
   const headers = new Headers(init?.headers ?? {});
   headers.set(HIRO_API_KEY_HEADER, apiKey);
   return { ...(init ?? {}), headers };
@@ -54,12 +81,13 @@ export function withChainApiKey(init: RequestInit | undefined, apiKey?: string):
 export function accountBalanceNormalizingFetch(
   baseFetch: typeof fetch = fetch,
   apiKey?: string,
+  allowedOrigin?: string,
 ): typeof fetch {
   const stripHexPrefix = (v: unknown): unknown =>
     typeof v === "string" && /^0x/i.test(v) ? v.slice(2) : v;
 
   return (async (input: any, init?: any): Promise<Response> => {
-    const res = await baseFetch(input, withChainApiKey(init, apiKey));
+    const res = await baseFetch(input, withChainApiKey(init, apiKey, input, allowedOrigin));
     const url =
       typeof input === "string" ? input : (input?.url ?? String(input));
     if (!res.ok || !/\/v2\/accounts\//.test(url)) return res;
@@ -162,7 +190,7 @@ export function stacksNetworkFromProfile(
       baseUrl: profile.stacksApiUrl,
       // Every PoX-5 read `@stacks/bitcoin-staking` performs goes through this fetch,
       // so the key has to be applied here rather than at individual call sites.
-      fetch: accountBalanceNormalizingFetch(baseFetch, apiKey),
+      fetch: accountBalanceNormalizingFetch(baseFetch, apiKey, profile.stacksApiUrl),
     },
   } as StacksNetwork;
 }
@@ -182,7 +210,7 @@ export async function validateNetworkProfile(
   try {
     const res = await baseFetch(
       `${profile.stacksApiUrl}/v2/info`,
-      withChainApiKey(undefined, apiKey),
+      withChainApiKey(undefined, apiKey, `${profile.stacksApiUrl}/v2/info`, profile.stacksApiUrl),
     );
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     info = await res.json();
@@ -212,7 +240,7 @@ export async function validateNetworkProfile(
   try {
     const poxRes = await baseFetch(
       `${profile.stacksApiUrl}/v2/pox`,
-      withChainApiKey(undefined, apiKey),
+      withChainApiKey(undefined, apiKey, `${profile.stacksApiUrl}/v2/pox`, profile.stacksApiUrl),
     );
     if (poxRes.ok) {
       const pox = await poxRes.json();

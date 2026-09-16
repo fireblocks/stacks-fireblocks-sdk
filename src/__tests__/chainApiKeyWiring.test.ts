@@ -63,9 +63,10 @@ describe("chainApiKey — config reaches the PoX-5 read path", () => {
   it("sends the configured key on a read through the PoX-5 network object", async () => {
     const sdk = makeSdk(KEY);
 
-    // The fetch every @stacks/bitcoin-staking PoX-5 read goes through.
+    // The fetch every @stacks/bitcoin-staking PoX-5 read goes through, targeting the
+    // configured Stacks API — the only origin the key is allowed to reach.
     await sdk._pox5Network.client.fetch(
-      "https://example.invalid/v2/accounts/ST000",
+      `${sdk._pox5Network.client.baseUrl}/v2/accounts/ST000`,
     );
 
     expect(seen[0].headers[HIRO_API_KEY_HEADER]).toBe(KEY);
@@ -75,7 +76,7 @@ describe("chainApiKey — config reaches the PoX-5 read path", () => {
     const sdk = makeSdk();
 
     await sdk._pox5Network.client.fetch(
-      "https://example.invalid/v2/accounts/ST000",
+      `${sdk._pox5Network.client.baseUrl}/v2/accounts/ST000`,
     );
 
     expect(HIRO_API_KEY_HEADER in seen[0].headers).toBe(false);
