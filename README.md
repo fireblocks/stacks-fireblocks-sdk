@@ -119,6 +119,7 @@ Environment variables (via `.env`) control SDK behavior:
 | NETWORK                    | No       | MAINNET                               | Stacks mainnet or testnet               |
 | PORT                       | No       | 3000                                  | Port to run the REST API server         |
 | EARLY_EXIT_SIGNER_URL      | No       | Built-in testnet URL (none on mainnet) | Base URL of the external KMS cosigner service for bond early-exit spends |
+| CHAIN_API_KEY              | No       | — (requests are anonymous)            | Hiro API key, sent as `x-hiro-api-key` on Stacks API reads only. Anonymous requests are served on Hiro's lowest rate-limit tier |
 
 ### Sample `.env`:
 

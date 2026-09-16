@@ -64,6 +64,7 @@ import {
   resolveNetworkProfile,
   stacksNetworkFromProfile,
   validateNetworkProfile,
+  withChainApiKey,
 } from "./utils/network";
 import { BondLockRecord, InMemoryLockRecordStore, LockRecordStore, laterStage } from "./staking/bonds/unlock-bytes-store";
 import { SignerManagerRegistry } from "./staking/signer-manager-adapter";
@@ -1395,11 +1396,19 @@ export class StacksSDK {
     const keyHex = serializeCV(principalCV(staker));
     const body = JSON.stringify(keyHex.startsWith("0x") ? keyHex : `0x${keyHex}`);
     const url = `${this.networkProfile.stacksApiUrl}/v2/map_entry/${contractAddress}/${contractName}/pox-addrs?proof=0`;
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body,
-    });
+    const res = await fetch(
+      url,
+      withChainApiKey(
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body,
+        },
+        this.chainApiKey,
+        url,
+        this.networkProfile.stacksApiUrl,
+      ),
+    );
     if (!res.ok) {
       throw new Error(`map_entry ${contractName}.pox-addrs HTTP ${res.status}`);
     }
@@ -1444,7 +1453,15 @@ export class StacksSDK {
     const contractAddress = signerManager.slice(0, dot);
     const contractName = signerManager.slice(dot + 1);
     const url = `${this.networkProfile.stacksApiUrl}/v2/data_var/${contractAddress}/${contractName}/fees-bips?proof=0`;
-    const res = await fetch(url);
+    const res = await fetch(
+      url,
+      withChainApiKey(
+        undefined,
+        this.chainApiKey,
+        url,
+        this.networkProfile.stacksApiUrl,
+      ),
+    );
     if (!res.ok) {
       throw new Error(`data_var ${contractName}.fees-bips HTTP ${res.status}`);
     }
@@ -2164,7 +2181,11 @@ export class StacksSDK {
   public validateBondSchedule = async (
     opts?: { bondIndices?: number[] },
   ): Promise<{ success: boolean; data?: BondScheduleValidation; error?: string }> => {
-    const result = await validateBondScheduleAgainstChain({ profile: this.networkProfile, bondIndices: opts?.bondIndices });
+    const result = await validateBondScheduleAgainstChain({
+      profile: this.networkProfile,
+      bondIndices: opts?.bondIndices,
+      chainApiKey: this.chainApiKey,
+    });
     return result.ok
       ? { success: true, data: result }
       : { success: false, data: result, error: result.error };
@@ -2828,7 +2849,16 @@ export class StacksSDK {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 15_000);
         try {
-          const res = await fetch(`${this.networkProfile.stacksApiUrl}/v2/pox`, { signal: controller.signal });
+          const poxUrl = `${this.networkProfile.stacksApiUrl}/v2/pox`;
+          const res = await fetch(
+            poxUrl,
+            withChainApiKey(
+              { signal: controller.signal },
+              this.chainApiKey,
+              poxUrl,
+              this.networkProfile.stacksApiUrl,
+            ),
+          );
           if (!res.ok) return undefined;
           const body = (await res.json()) as { pox_5_sbtc_contract?: unknown };
           if (typeof body.pox_5_sbtc_contract === "string") {
