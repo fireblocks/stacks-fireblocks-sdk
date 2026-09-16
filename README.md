@@ -104,6 +104,10 @@ Environment variables (via `.env`) control SDK behavior:
 | NETWORK                    | No       | MAINNET                               | Stacks mainnet or testnet               |
 | EARLY_EXIT_SIGNER_URL      | No       | Built-in testnet URL (none on mainnet) | Base URL of the external KMS cosigner service for bond early-exit spends |
 
+**Hiro API key.** This branch reads no environment for it — set `chainApiKey` on the
+`ApiServiceConfig` you construct. It is sent as `x-hiro-api-key` on Stacks API reads only;
+anonymous requests are served on Hiro's lowest rate-limit tier.
+
 ### Sample `.env`:
 
 See `.env.example` for a placeholder-only template.
