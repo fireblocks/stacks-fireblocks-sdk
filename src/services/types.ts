@@ -340,6 +340,13 @@ export type AnnounceEarlyExitResponse = {
   error?: string;
   /** Settlement timed out — state unknown, may still succeed (not a confirmed failure). */
   unsettled?: boolean;
+  /**
+   * Bond index as read from chain AFTER settlement, which is what the contract recorded
+   * the announcement against — it derives the index from membership at execution time,
+   * not from anything the caller passes. Absent when the post-settlement read failed:
+   * the announce still landed, but no index is asserted rather than reporting a stale one.
+   */
+  bondIndex?: number;
 };
 
 export type RequirementsResponse = {

@@ -4375,7 +4375,21 @@ export class StacksSDK {
             : (settled.data?.tx_error ?? 'announce-l1-early-exit failed on-chain'), txHash: result.txid };
       }
 
-      return { success: true, txHash: result.txid };
+      // The contract derives bond-index from membership at execution time, so the index
+      // captured during preflight can differ from the one the announcement was recorded
+      // against — a membership that rolled over under the same signer manager passes the
+      // post-signing revalidate, which keys on staker and manager only. Re-read after
+      // settlement so the caller keys state by what the chain holds. A failed read
+      // reports no index rather than the stale one; the announce itself still landed.
+      let settledBondIndex: number | undefined;
+      try {
+        const after = await fetchBondMembership({ address: this.address, network: this.pox5Network });
+        settledBondIndex = after?.bondIndex;
+      } catch {
+        settledBondIndex = undefined;
+      }
+
+      return { success: true, txHash: result.txid, ...(settledBondIndex !== undefined ? { bondIndex: settledBondIndex } : {}) };
     } catch (error) {
       return { success: false, error: `Failed to announce early exit: ${formatErrorMessage(error)}` };
     }
