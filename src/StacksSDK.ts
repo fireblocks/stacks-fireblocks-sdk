@@ -4178,8 +4178,11 @@ export class StacksSDK {
         return { success: true, data: { bond: null, stx_only: stxOnlyData } };
       }
 
-      // Sum earned sats across all past cycles for a stable, accurate total
+      // Sum earned sats across all past cycles for a stable, accurate total. A single
+      // unreadable cycle makes the TOTAL unknown, not smaller: an understated sum is
+      // indistinguishable from a genuine zero, so the total is reported as null.
       const firstEarningCycle = bondPeriodToRewardCycle({ bondIndex: membership.bondIndex, poxInfo: pox });
+      let earnedReadFailed = false;
       const earnedSats = await this.sumOverCycles(
         this.cycleRange(firstEarningCycle, pox.rewardCycleId),
         cycle => fetchEarned({
@@ -4187,7 +4190,10 @@ export class StacksSDK {
           rewardCycle: cycle,
           bondIndex: membership.bondIndex,
           network: this.pox5Network,
-        }).catch(() => BigInt(0)),
+        }).catch(() => {
+          earnedReadFailed = true;
+          return BigInt(0);
+        }),
       );
 
       // L1 lock state (BTC-locked positions only)
@@ -4244,7 +4250,7 @@ export class StacksSDK {
       // funded amount rather than reporting a 0-sat bond.
       const amountSatsBn = this.effectiveL1AmountSats(membership, record);
       const amountBtc = (Number(amountSatsBn) / 1e8).toFixed(8);
-      const earnedBtc = (Number(earnedSats) / 1e8).toFixed(8);
+      const earnedBtc = earnedReadFailed ? null : (Number(earnedSats) / 1e8).toFixed(8);
 
       const firstRewardCycle = bondPeriodToRewardCycle({ bondIndex: membership.bondIndex, poxInfo: pox });
       const cyclesUntilRewards = Math.max(0, firstRewardCycle - pox.rewardCycleId);
@@ -4278,7 +4284,7 @@ export class StacksSDK {
             blocks_until_unlock,
             stx_unlock_burn_height: accountUnlock,
             projected_stx_unlock_burn_height: projectedStxUnlock,
-            earned_sats: earnedSats.toString(),
+            earned_sats: earnedReadFailed ? null : earnedSats.toString(),
             earned_btc: earnedBtc,
           },
           stx_only: stxOnlyData,
@@ -4522,19 +4528,22 @@ export class StacksSDK {
         const [bond, status, allowance] = await Promise.all([
           fetchBond({ bondIndex: idx, network: this.pox5Network }),
           fetchBondStatus({ bondIndex: idx, poxInfo: pox, network: this.pox5Network }),
+          // null = UNREADABLE. open_and_allowlisted consumes this value, so a
+          // substituted zero reports a bond the caller IS allowlisted for as closed.
           this.address
-            ? fetchBondAllowance({ bondIndex: idx, address: this.address, network: this.pox5Network }).catch(() => BigInt(0))
+            ? fetchBondAllowance({ bondIndex: idx, address: this.address, network: this.pox5Network }).catch(() => null)
             : Promise.resolve(BigInt(0)),
         ]);
         if (!bond) return null;
         return {
           bond_index: idx,
           bond_phase: status,
-          open_and_allowlisted: allowance > BigInt(0) && (status === 'open' || status === 'eligible'),
+          open_and_allowlisted: allowance !== null && allowance > BigInt(0) && (status === 'open' || status === 'eligible'),
+          allowance_lookup_failed: allowance === null,
           stx_value_ratio: bond.stxValueRatio.toString(),
           target_rate_bps: bond.targetRateBps,
           min_ustx_ratio_bps: bond.minUstxRatioBps,
-          your_allowance_sats: allowance.toString(),
+          your_allowance_sats: allowance === null ? null : allowance.toString(),
           projected_stx_unlock_burn_height: this.projectedStxUnlockBurnHeight(idx, pox),
           _bond: bond,
         };
@@ -4555,6 +4564,7 @@ export class StacksSDK {
           bond_index: currentDetails.bond_index,
           bond_phase: currentDetails.bond_phase,
           open_and_allowlisted: currentDetails.open_and_allowlisted,
+          allowance_lookup_failed: currentDetails.allowance_lookup_failed,
           stx_value_ratio: currentDetails.stx_value_ratio,
           target_rate_bps: currentDetails.target_rate_bps,
           min_ustx_ratio_bps: currentDetails.min_ustx_ratio_bps,
@@ -4565,6 +4575,7 @@ export class StacksSDK {
           bond_index: nextOpenDetails.bond_index,
           bond_phase: nextOpenDetails.bond_phase,
           open_and_allowlisted: nextOpenDetails.open_and_allowlisted,
+          allowance_lookup_failed: nextOpenDetails.allowance_lookup_failed,
           stx_value_ratio: nextOpenDetails.stx_value_ratio,
           target_rate_bps: nextOpenDetails.target_rate_bps,
           min_ustx_ratio_bps: nextOpenDetails.min_ustx_ratio_bps,
@@ -4592,6 +4603,7 @@ export class StacksSDK {
             bond_index: reqDetails.bond_index,
             bond_phase: reqDetails.bond_phase,
             open_and_allowlisted: reqDetails.open_and_allowlisted,
+            allowance_lookup_failed: reqDetails.allowance_lookup_failed,
             stx_value_ratio: reqDetails.stx_value_ratio,
             target_rate_bps: reqDetails.target_rate_bps,
             min_ustx_ratio_bps: reqDetails.min_ustx_ratio_bps,
@@ -5747,7 +5759,15 @@ export class StacksSDK {
     const candidates = this.activeBondWindow(pox, calcHeight);
     const results = await Promise.all(
       candidates.map(async i => {
-        const bond = await fetchBond({ bondIndex: i, network: this.pox5Network }).catch(() => null);
+        // calculate-rewards requires the COMPLETE active set in ratio order, so an
+        // unreadable candidate makes the whole set unknown — a genuine absence (null
+        // bond) is a skip, a throwing read is not.
+        let bond: Awaited<ReturnType<typeof fetchBond>>;
+        try {
+          bond = await fetchBond({ bondIndex: i, network: this.pox5Network });
+        } catch (e) {
+          throw new Error(`Bond ${i} is unreadable, so the active-bond set is UNKNOWN (not "bond absent") — refusing to submit a possibly short set: ${formatErrorMessage(e)}`);
+        }
         if (!bond) return null;
         const active = isBondActiveAtHeight({ bondIndex: i, burnHeight: calcHeight, poxInfo: pox });
         if (!active) return null;
@@ -6242,7 +6262,14 @@ export class StacksSDK {
       // otherwise the active stake's first reward cycle bounds the scan.
       let startCycle = opts?.fromCycle;
       if (startCycle === undefined) {
-        const stakerInfo = await fetchStakerInfo({ address: staker, network: this.pox5Network }).catch(() => null);
+        // A substituted null here reported "no active stake" for a read that never
+        // resolved, which also blocks a legitimate historical claim.
+        let stakerInfo;
+        try {
+          stakerInfo = await fetchStakerInfo({ address: staker, network: this.pox5Network });
+        } catch (error) {
+          return { success: false, error: `Could not read staker info to anchor the claim scan (unknown, not "no stake"): ${formatErrorMessage(error)}` };
+        }
         if (!stakerInfo?.staked) {
           return { success: false, error: 'No active STX-only stake found; supply fromCycle (and optionally toCycle) to claim historical cycles after expiry.' };
         }
@@ -6427,8 +6454,14 @@ export class StacksSDK {
               .catch(() => ({ value: null, failed: true }))
           : Promise.resolve({ value: null as any, failed: false }),
         this.chainService.makeBalanceCalls(this.address),
-        fetchStakerInfo({ address: this.address, network: this.pox5Network }).catch(() => null),
-        fetchBondMembership({ address: this.address, network: this.pox5Network }).catch(() => null),
+        // Same {value, failed} shape as the delegation read above: a substituted null
+        // would report "not staking" / "no bond" for a read that never resolved.
+        fetchStakerInfo({ address: this.address, network: this.pox5Network })
+          .then((value) => ({ value, failed: false }))
+          .catch(() => ({ value: null, failed: true })),
+        fetchBondMembership({ address: this.address, network: this.pox5Network })
+          .then((value) => ({ value, failed: false }))
+          .catch(() => ({ value: null, failed: true })),
       ]);
 
       if (!balanceResponse) {
@@ -6464,8 +6497,10 @@ export class StacksSDK {
         ? (delegationData.value["pox-addr"]?.value ?? null) // null if none
         : null;
 
-      const pox5IsStaked = !!stakerInfo?.staked;
-      const pox5Details = pox5IsStaked && stakerInfo?.staked ? stakerInfo.details : null;
+      const stakerInfoValue = stakerInfo.value;
+      const bondMembershipValue = bondMembership.value;
+      const pox5IsStaked = !!stakerInfoValue?.staked;
+      const pox5Details = pox5IsStaked && stakerInfoValue?.staked ? stakerInfoValue.details : null;
       const unlockBurnHeight = pox5Details && pox5Info
         ? pox5Info.firstBurnchainBlockHeight
           + (pox5Details.firstRewardCycle + pox5Details.numCycles) * pox5Info.rewardCycleLength
@@ -6500,6 +6535,7 @@ export class StacksSDK {
         },
         stx_only: {
           is_staked: pox5IsStaked,
+          staker_lookup_failed: stakerInfo.failed,
           amount_stx: pox5Details ? microToStx(pox5Details.amountUstx) : null,
           signer_manager: pox5Details?.signer ?? null,
           first_reward_cycle: pox5Details?.firstRewardCycle ?? null,
@@ -6512,21 +6548,22 @@ export class StacksSDK {
           // above are UNKNOWN (defaulted to 0/false), not authoritative zeros.
           pox_lookup_failed: pox5Info === null,
         },
-        bond: bondMembership ? {
-          bond_index: bondMembership.bondIndex,
-          amount_stx: microToStx(bondMembership.amountUstx),
+        bond_lookup_failed: bondMembership.failed,
+        bond: bondMembershipValue ? {
+          bond_index: bondMembershipValue.bondIndex,
+          amount_stx: microToStx(bondMembershipValue.amountUstx),
           // Same zeroed-amount fallback as getBondPosition (single helper): early exit
           // zeroes the membership amount while the BTC stays locked. Best-effort record
           // read here — checkStatus is an aggregate status view, and a store failure
           // leaves the membership value rather than failing the whole status call.
           amount_sats: this.effectiveL1AmountSats(
-            bondMembership,
-            bondMembership.isL1Lock
-              ? await this.lockRecordStore.loadRecord(this.address, bondMembership.bondIndex).catch(() => null)
+            bondMembershipValue,
+            bondMembershipValue.isL1Lock
+              ? await this.lockRecordStore.loadRecord(this.address, bondMembershipValue.bondIndex).catch(() => null)
               : null,
           ).toString(),
-          signer_manager: bondMembership.signer,
-          is_l1_lock: bondMembership.isL1Lock,
+          signer_manager: bondMembershipValue.signer,
+          is_l1_lock: bondMembershipValue.isL1Lock,
         } : null,
       };
 
