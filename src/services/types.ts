@@ -273,6 +273,12 @@ export type VerifySignerGrantResponse = {
   ready_to_stake?: boolean;
   tx_status?: string | null;
   notes?: string[];
+  /**
+   * Settlement polling for the supplied txid timed out, so the grant transaction's
+   * outcome is UNKNOWN. The grant/registration fields are absent rather than false:
+   * this path never reaches the chain reads that would populate them.
+   */
+  unsettled?: boolean;
   error?: string;
 };
 
@@ -512,6 +518,13 @@ export type ClaimResultItem = {
   /** `claim-staker-rewards` transaction id for this bond. */
   stakerClaimTxid: string | null;
   status: "claimed" | "failed";
+  /**
+   * Settlement polling timed out for this leg: it was broadcast but its on-chain state
+   * is UNKNOWN and may still succeed, so `status: "failed"` here is not a confirmed
+   * failure. Both claim legs are contract-idempotent, so re-claiming the cycle is the
+   * correct response; recording the cycle as failed is not.
+   */
+  unsettled?: boolean;
   error?: string;
 };
 

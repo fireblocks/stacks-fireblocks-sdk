@@ -2118,6 +2118,19 @@ export class StacksSDK {
 
       if (txid) {
         const poll = await this.waitForTxSettlement(txid);
+        // A timed-out poll leaves the grant transaction's outcome UNKNOWN. The fields
+        // below (signer_registered / grant_exists / ready_to_stake) are only meaningful
+        // as chain readings, and this path never reaches those reads — so returning
+        // them as false would state "this manager is not accepting enrollments" on the
+        // strength of a read that never happened.
+        if (!poll.success) {
+          return {
+            success: false,
+            unsettled: true,
+            tx_status: null,
+            error: unsettledTransactionError('signer grant', txid, poll.error),
+          };
+        }
         txStatus = poll.data?.tx_status ?? null;
         if (txStatus !== 'success') {
           notes.push(`Transaction ${txid} did not succeed (status: ${txStatus ?? 'unknown'}). A broadcast txid does not guarantee contract success — Stacks mines aborted transactions.`);
@@ -5930,7 +5943,7 @@ export class StacksSDK {
     // Records a per-bond FAILED result for this cycle when the SHARED claim-rewards leg
     // fails before the per-bond staker loop runs, so the structured results still show
     // the cycle rather than silently omitting it.
-    const recordCycleFailure = (error: string, signerClaimTxid: string | null) => {
+    const recordCycleFailure = (error: string, signerClaimTxid: string | null, unsettled = false) => {
       for (const b of stakerBondIndices) {
         results.push({
           bondIndex: b ?? null,
@@ -5941,6 +5954,7 @@ export class StacksSDK {
           signerClaimTxid,
           stakerClaimTxid: null,
           status: 'failed',
+          ...(unsettled ? { unsettled: true } : {}),
           error,
         });
       }
@@ -5998,9 +6012,12 @@ export class StacksSDK {
       // u30 (ERR_DISTRIBUTION_ALREADY_COMPUTED) / u32 are benign — rewards already collected.
       const smClaimRepr: string = (smClaim.settled.data?.tx_result as any)?.repr ?? smClaim.settled.data?.tx_error ?? '';
       if (smClaim.settled.data?.tx_status !== 'success' && !smClaimRepr.includes('u30') && !smClaimRepr.includes('u32')) {
-        const msg = `signer-manager.claim-rewards failed at cycle ${cycle}: ${smClaimRepr}`;
-        recordCycleFailure(msg, smClaim.txid);
-        return { unsettled: !smClaim.settled.success, error: msg };
+        const unsettled = !smClaim.settled.success;
+        const msg = unsettled
+          ? unsettledTransactionError(`signer-manager.claim-rewards at cycle ${cycle}`, smClaim.txid, smClaim.settled.error)
+          : `signer-manager.claim-rewards failed at cycle ${cycle}: ${smClaimRepr}`;
+        recordCycleFailure(msg, smClaim.txid, unsettled);
+        return { unsettled, error: msg };
       }
       signerClaimTxid = smClaim.txid;
       // Leg 1 is a real broadcast fund-moving transaction — surface it in txHashes so
@@ -6018,18 +6035,25 @@ export class StacksSDK {
         signerManager, rewardCycle: cycle, bondIndex, staker: this.address!, network: this.pox5Network,
       }).catch(() => null);
 
-      const recordResult = (status: 'claimed' | 'failed', stakerClaimTxid: string | null, error?: string) =>
+      const recordResult = (
+        status: 'claimed' | 'failed',
+        stakerClaimTxid: string | null,
+        error?: string,
+        unsettled = false,
+      ) =>
         results.push({
           bondIndex: bondIndex ?? null,
           rewardCycle: cycle,
           signerManager,
           signerAccruedSats: signerAccruedSats.toString(),
           // Only report a paid amount when the payout actually settled; a failed leg
-          // paid nothing, so it must not carry the pre-claim entitlement.
+          // paid nothing, so it must not carry the pre-claim entitlement. An unsettled
+          // leg has paid an UNKNOWN amount, which is likewise not the entitlement.
           stakerPaidSats: status === 'claimed' && stakerPaidSats !== null ? stakerPaidSats.toString() : null,
           signerClaimTxid,
           stakerClaimTxid,
           status,
+          ...(unsettled ? { unsettled: true } : {}),
           ...(error ? { error } : {}),
         });
 
@@ -6068,9 +6092,13 @@ export class StacksSDK {
         return { error: `Failed at cycle ${cycle}${bondSuffix}: ${smStaker.broadcastError}` };
       }
       if (!smStaker.settled.success || smStaker.settled.data?.tx_status !== 'success') {
+        const unsettled = !smStaker.settled.success;
         const stakerRepr: string = (smStaker.settled.data?.tx_result as any)?.repr ?? smStaker.settled.data?.tx_error ?? '';
-        recordResult('failed', smStaker.txid, stakerRepr);
-        return { unsettled: !smStaker.settled.success, error: `Claim failed on-chain at cycle ${cycle}${bondSuffix}: ${stakerRepr}` };
+        const msg = unsettled
+          ? unsettledTransactionError(`claim-staker-rewards at cycle ${cycle}${bondSuffix}`, smStaker.txid, smStaker.settled.error)
+          : `Claim failed on-chain at cycle ${cycle}${bondSuffix}: ${stakerRepr}`;
+        recordResult('failed', smStaker.txid, msg, unsettled);
+        return { unsettled, error: msg };
       }
       recordResult('claimed', smStaker.txid);
       txHashes.push(smStaker.txid);
