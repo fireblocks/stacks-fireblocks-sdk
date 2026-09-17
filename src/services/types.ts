@@ -520,6 +520,12 @@ export type EarnedRewardsResponse = {
     staker_earned_sats?: string;
   };
   error?: string;
+  /**
+   * A chain read failed, so the amount is UNKNOWN rather than zero. Set instead of
+   * substituting 0, which a caller cannot distinguish from a genuine zero — retrying is
+   * the right response here, and recording a zero is not.
+   */
+  readFailed?: boolean;
 };
 
 export type BondLockAddressResponse = {
