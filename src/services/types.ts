@@ -1,7 +1,6 @@
 import { BasePath } from "@fireblocks/ts-sdk";
 import { SignerManagerAdapter } from "../staking/signer-manager-adapter";
 
-
 export type Network = "mainnet" | "testnet";
 
 export type GetNativeBalanceResponse = {
@@ -100,7 +99,7 @@ export type GetPoxInfoResponse = {
   success: boolean;
   data?: any;
   error?: string;
-}
+};
 
 export type TransactionDetails = {
   tx_id: string;
@@ -113,7 +112,7 @@ export type TransactionDetails = {
 export type GetTransactionStatusResponse = {
   success: boolean;
   /** The chain this status was read from — always Stacks for this endpoint. */
-  chain?: 'stacks';
+  chain?: "stacks";
   data?: TransactionDetails;
   error?: string;
 };
@@ -125,7 +124,7 @@ export type GetTransactionStatusResponse = {
  */
 export type BtcTxStatusResponse = {
   success: boolean;
-  chain: 'bitcoin';
+  chain: "bitcoin";
   data?: {
     txid: string;
     found: boolean;
@@ -192,6 +191,11 @@ export type CheckStatusData = {
     is_prepare_phase: boolean;
     /** True when the PoX read failed: the height/cycle/prepare fields are unknown, not authoritative. */
     pox_lookup_failed: boolean;
+    /**
+     * True when the staker-info read failed, meaning `is_staked: false` reflects an
+     * unknown state rather than a confirmed absence of a stake.
+     */
+    staker_lookup_failed: boolean;
   };
   bond: {
     bond_index: number;
@@ -200,6 +204,11 @@ export type CheckStatusData = {
     signer_manager: string;
     is_l1_lock: boolean;
   } | null;
+  /**
+   * True when the bond-membership read failed, meaning `bond: null` reflects an unknown
+   * state rather than a confirmed absence of a bond.
+   */
+  bond_lookup_failed: boolean;
 };
 
 export type CheckStatusResponse = {
@@ -298,8 +307,9 @@ export type BondPositionData = {
   stx_unlock_burn_height: number | null;
   /** Projected paired-STX unlock from the bond phase schedule (display aid). */
   projected_stx_unlock_burn_height: number | null;
-  earned_sats: string;
-  earned_btc: string;
+  /** Summed earned rewards; null when any cycle read failed (unknown, not zero). */
+  earned_sats: string | null;
+  earned_btc: string | null;
 } | null;
 
 export type BondPositionResponse = {
@@ -370,20 +380,27 @@ export type RequirementsResponse = {
         // full eligibility decision — do not fund BTC on this alone (see
         // requested_bond.eligible for the authoritative check).
         open_and_allowlisted: boolean;
+        /**
+         * The allowance read failed, so open_and_allowlisted is false because nothing
+         * is known — not because the caller was refused.
+         */
+        allowance_lookup_failed: boolean;
         stx_value_ratio: string;
         target_rate_bps: number;
         min_ustx_ratio_bps: number;
-        your_allowance_sats: string;
+        /** null when the allowance read failed (unknown, not zero). */
+        your_allowance_sats: string | null;
         projected_stx_unlock_burn_height?: number | null;
       } | null;
       next_open_bond: {
         bond_index: number;
         bond_phase: string;
         open_and_allowlisted: boolean;
+        allowance_lookup_failed: boolean;
         stx_value_ratio: string;
         target_rate_bps: number;
         min_ustx_ratio_bps: number;
-        your_allowance_sats: string;
+        your_allowance_sats: string | null;
         projected_stx_unlock_burn_height?: number | null;
         min_stx_for_sats?: number;
         min_ustx_for_sats?: string;
@@ -392,10 +409,11 @@ export type RequirementsResponse = {
         bond_index: number;
         bond_phase: string;
         open_and_allowlisted: boolean;
+        allowance_lookup_failed: boolean;
         stx_value_ratio: string;
         target_rate_bps: number;
         min_ustx_ratio_bps: number;
-        your_allowance_sats: string;
+        your_allowance_sats: string | null;
         projected_stx_unlock_burn_height?: number | null;
         min_stx_for_sats?: number;
         min_ustx_for_sats?: string;
@@ -454,7 +472,7 @@ export type BtcFeeReplacementResponse = {
     feeRateOldSatVb: string;
     feeRateNewSatVb: string;
     destination: string;
-    branch: 'matured' | 'early-exit';
+    branch: "matured" | "early-exit";
   };
 };
 
