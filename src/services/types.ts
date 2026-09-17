@@ -331,25 +331,40 @@ export type BondPositionResponse = {
       num_cycles: number;
       signer_manager: string;
     } | null;
+    /**
+     * Native-BTC bonds with no live on-chain membership whose Bitcoin is not confirmed
+     * recovered — populated only when `bond` is null. Membership is mutable (maturity
+     * drops it, early exit zeroes it, a later registration overwrites it) while the
+     * durable lock record is not, so `bond: null` alone does not mean no committed BTC.
+     * Entries with `recovered: null` are included: unknown is not recovered.
+     */
+    historical_bonds?: HistoricalBondPositionData[];
+    /**
+     * The lock-record store could not be enumerated, so prior bonds are UNKNOWN rather
+     * than absent. `historical_bonds` is omitted in that case rather than empty.
+     */
+    historical_lookup_failed?: boolean;
   };
   error?: string;
 };
 
+export type HistoricalBondPositionData = {
+  bond_index: number;
+  amount_sats: string;
+  amount_btc: string;
+  lock_address: string;
+  unlock_height: number;
+  btc_txid: string | null;
+  vout: number | null;
+  /** Live UTXO state; null when the Bitcoin lookup failed (unknown, not spent). */
+  still_locked: boolean | null;
+  recovered: boolean | null;
+  matured: boolean | null;
+};
+
 export type HistoricalBondPositionResponse = {
   success: boolean;
-  data?: {
-    bond_index: number;
-    amount_sats: string;
-    amount_btc: string;
-    lock_address: string;
-    unlock_height: number;
-    btc_txid: string | null;
-    vout: number | null;
-    /** Live UTXO state; null when the Bitcoin lookup failed (unknown, not spent). */
-    still_locked: boolean | null;
-    recovered: boolean | null;
-    matured: boolean | null;
-  };
+  data?: HistoricalBondPositionData;
   error?: string;
 };
 
