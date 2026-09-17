@@ -6317,25 +6317,38 @@ export class StacksSDK {
         : undefined;
 
       // Without a bondIndex the range is anchored to the staker's own first reward cycle;
-      // cycle 0 would scan the whole chain history.
+      // cycle 0 would scan the whole chain history. A failed read here would anchor to
+      // the CURRENT cycle, silently under-scanning the range rather than merely failing.
       let startCycle = bondFirstRewardCycle;
       if (startCycle === undefined) {
-        const stakerInfo = this.address
-          ? await fetchStakerInfo({ address: this.address, network: this.pox5Network }).catch(() => null)
-          : null;
+        let stakerInfo;
+        try {
+          stakerInfo = this.address
+            ? await fetchStakerInfo({ address: this.address, network: this.pox5Network })
+            : null;
+        } catch (error) {
+          return {
+            success: false,
+            readFailed: true,
+            error: `Could not read staker info to anchor the reward scan (unknown, not zero): ${formatErrorMessage(error)}`,
+          };
+        }
         startCycle = stakerInfo?.staked ? stakerInfo.details.firstRewardCycle : pox.rewardCycleId;
       }
 
       const pastCycles = this.cycleRange(startCycle, pox.rewardCycleId);
       const stakerAddress = this.address;
 
+      // Sentinel -1 on a failed read, matching the claim paths: summing a substituted 0
+      // would report an outage as "no rewards", which a caller cannot tell from a real
+      // zero and would record rather than retry.
       const [earned, stakerEarned] = await Promise.all([
         this.sumOverCycles(pastCycles, cycle => fetchEarned({
           signerManager,
           rewardCycle: cycle,
           bondIndex,
           network: this.pox5Network,
-        }).catch(() => BigInt(0))),
+        }).catch(() => BigInt(-1))),
         stakerAddress
           ? this.sumOverCycles(pastCycles, cycle => fetchEarnedStakerRewards({
               signerManager,
@@ -6343,9 +6356,17 @@ export class StacksSDK {
               bondIndex,
               staker: stakerAddress,
               network: this.pox5Network,
-            }).catch(() => BigInt(0)))
+            }).catch(() => BigInt(-1)))
           : Promise.resolve(BigInt(0)),
       ]);
+
+      if (earned < BigInt(0) || stakerEarned < BigInt(0)) {
+        return {
+          success: false,
+          readFailed: true,
+          error: `Could not read earned rewards for signer manager ${signerManager}${bondIndex !== undefined ? ` bond ${bondIndex}` : ""} (unknown, not zero) — retry rather than treating this as no rewards`,
+        };
+      }
 
       const cyclesUntilRewards = bondFirstRewardCycle !== undefined
         ? Math.max(0, bondFirstRewardCycle - pox.rewardCycleId)
