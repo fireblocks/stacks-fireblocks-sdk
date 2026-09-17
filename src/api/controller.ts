@@ -1317,6 +1317,48 @@ export const replaceBtcRecoveryFee: Handler = async (req, res, next) => {
   }
 };
 
+// POST /:vaultId/stacking/pox5/bond/:bondIndex/resume
+export const resumeBondRegistration: Handler = async (req, res, next) => {
+  try {
+    const vaultId = getVaultId(req);
+    const bondIndex = Number(req.params.bondIndex);
+    if (!Number.isInteger(bondIndex) || bondIndex < 0) {
+      res.status(400).json({ error: "Bad Request: bondIndex must be a non-negative integer" });
+      return;
+    }
+    // The funded amount and signer manager are deliberately NOT accepted here: they come
+    // from the durable record, so a resume cannot restate them.
+    let nonce: bigint | undefined;
+    if (req.body.nonce !== undefined) {
+      try {
+        nonce = BigInt(String(req.body.nonce));
+      } catch {
+        res.status(400).json({ error: "Bad Request: nonce must be an integer" });
+        return;
+      }
+    }
+    let confirmations: number | undefined;
+    if (req.body.confirmations !== undefined) {
+      confirmations = Number(req.body.confirmations);
+      if (!Number.isInteger(confirmations) || confirmations < 1) {
+        res.status(400).json({ error: "Bad Request: confirmations must be a positive integer" });
+        return;
+      }
+    }
+    const btcTxid = req.body.btcTxid !== undefined ? String(req.body.btcTxid).trim() : undefined;
+    if (btcTxid !== undefined && !/^[0-9a-fA-F]{64}$/.test(btcTxid)) {
+      res.status(400).json({ error: "Bad Request: btcTxid must be 64 hex characters" });
+      return;
+    }
+    const note = req.body.note !== undefined ? String(req.body.note) : undefined;
+
+    const result = await apiService.executeAction(vaultId, ActionType.RESUME_BOND_REGISTRATION, { bondIndex, note, nonce, confirmations, btcTxid });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
 // POST /:vaultId/stacking/pox5/bond/renew
 export const renewBond: Handler = async (req, res, next) => {
   try {

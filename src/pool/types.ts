@@ -93,6 +93,7 @@ export enum ActionType {
   UNLOCK_MATURED_BOND = "unlockMaturedBond",
   REPLACE_BTC_RECOVERY_FEE = "replaceBtcRecoveryFee",
   RENEW_BOND = "renewBond",
+  RESUME_BOND_REGISTRATION = "resumeBondRegistration",
   GET_COMMITTED_REWARD_ADDRESS = "getCommittedRewardAddress",
   GET_SIGNER_MANAGER_FEE_BIPS = "getSignerManagerFeeBips",
   GET_NATIVE_REWARD_THRESHOLD = "getNativeRewardThreshold",
