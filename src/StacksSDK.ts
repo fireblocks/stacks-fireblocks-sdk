@@ -3142,6 +3142,50 @@ export class StacksSDK {
   // --- PoX-5 BTC Bond methods ---
 
   /**
+   * Continues an enrollment whose Bitcoin is already locked but whose L2
+   * `register-for-bond` outcome is unknown — the `unsettled` result of `createBond` or
+   * `renewBond`. The funded amount and signer manager come from the durable record, not
+   * from the caller: the lock address is amount-independent, so a resume at a different
+   * amount would reuse the funded UTXO while every preflight ran against the new one.
+   *
+   * Delegates to `createBond`, which owns the resume branch (recorded-txid verification,
+   * funding skip, SPV rebuild, and the duplicate-outpoint preflight that catches a
+   * registration which did land). No Bitcoin is sent on this path: a record with no
+   * committed funding is refused rather than funded.
+   */
+  public resumeBondRegistration = async (
+    bondIndex: number,
+    opts?: { note?: string; nonce?: bigint; confirmations?: number; btcTxid?: string },
+  ): Promise<CreateBondResult> => {
+    try {
+      if (!this.address) throw new Error('Address is not set');
+
+      let record: BondLockRecord | null;
+      try {
+        record = await this.lockRecordStore.loadRecord(this.address, bondIndex);
+      } catch (e) {
+        return { success: false, error: `Lock-record store unreadable for bond ${bondIndex} (UNKNOWN, not "no record") — refusing to resume: ${formatErrorMessage(e)}` };
+      }
+      if (!record) {
+        return { success: false, error: `No lock record for bond ${bondIndex}, so there is no funded enrollment to resume. If the record was lost, recover the funding outpoint first (listBondLockRecords / getHistoricalBondPosition); a fresh createBond would send new Bitcoin.` };
+      }
+      if (!record.isL1Lock) {
+        return { success: false, error: `Bond ${bondIndex} is sBTC-backed, which commits no Bitcoin before registering — nothing to resume. Use createSbtcBond.` };
+      }
+      if (!record.btcTxid && !opts?.btcTxid) {
+        return { success: false, error: `Lock record for bond ${bondIndex} records no funding transaction, so no Bitcoin is committed and there is nothing to resume. Use createBond to fund the enrollment.` };
+      }
+      if (!record.signerManager) {
+        return { success: false, error: `Lock record for bond ${bondIndex} captured no signer manager, so the registration cannot be rebuilt from it. Re-run createBond with the original signer manager.` };
+      }
+
+      return this.createBond(bondIndex, record.amountSats, record.signerManager, opts);
+    } catch (error) {
+      return { success: false, error: `Failed to resume bond registration: ${formatErrorMessage(error)}` };
+    }
+  };
+
+  /**
    * Creates a native-BTC PoX-5 bond: locks BTC on L1 via Fireblocks and registers
    * the paired STX position on L2 with a full SPV proof.
    *
@@ -3149,6 +3193,9 @@ export class StacksSDK {
    * Fireblocks → wait for confirmations → assemble SPV proof → register-for-bond.
    *
    * NOTE: This call blocks until Bitcoin confirmations are received (~30 min typical).
+   *
+   * On an `unsettled` result the Bitcoin is locked and the registration outcome is
+   * unknown — `resumeBondRegistration` continues it without re-funding.
    */
   public createBond = async (
     bondIndex: number,
@@ -3651,7 +3698,7 @@ export class StacksSDK {
       if (!settled.success || settled.data?.tx_status !== 'success') {
         const txRepr: string = (settled.data?.tx_result as any)?.repr ?? settled.data?.tx_error ?? '';
         return { success: false, unsettled: !settled.success, error: !settled.success
-            ? unsettledTransactionError('register-for-bond', result.txid, settled.error)
+            ? unsettledTransactionError('register-for-bond', result.txid, settled.error, `resumeBondRegistration(${bondIndex})`)
             : `[${settled.data?.tx_status}] ${txRepr}`.trim(), stacksTxid: result.txid, btcTxid, vout: lockupProof.outputIndex };
       }
 
@@ -5748,7 +5795,7 @@ export class StacksSDK {
       if (!settled.success || settled.data?.tx_status !== 'success') {
         const txRepr: string = (settled.data?.tx_result as any)?.repr ?? settled.data?.tx_error ?? '';
         return { success: false, unsettled: !settled.success, error: !settled.success
-            ? unsettledTransactionError('register-for-bond', result.txid, settled.error)
+            ? unsettledTransactionError('register-for-bond', result.txid, settled.error, `resumeBondRegistration(${nextBondIndex})`)
             : `[${settled.data?.tx_status}] ${txRepr}`.trim(), stacksTxid: result.txid, btcTxid, vout: lockupProof.outputIndex };
       }
 

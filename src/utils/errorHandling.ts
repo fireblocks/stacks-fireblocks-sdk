@@ -75,11 +75,13 @@ export function unsettledTransactionError(
   operation: string,
   txId: string,
   reason?: string,
+  resumeHint?: string,
 ): string {
   return (
     `${operation} was broadcast (txid ${txId}) but its outcome is NOT known: ` +
     `${reason ?? "the settlement wait timed out before the transaction was observed on-chain"}. ` +
     `Check this transaction's status before acting — do not send a replacement on the ` +
-    `assumption it did not land.`
+    `assumption it did not land.` +
+    (resumeHint ? ` To continue this operation, call ${resumeHint}.` : "")
   );
 }
