@@ -26,6 +26,7 @@ import {
   AnnounceEarlyExitResponse,
   BondPositionResponse,
   HistoricalBondPositionResponse,
+  HistoricalBondPositionData,
   RequirementsResponse,
   CheckStatusData,
   CheckStatusResponse,
@@ -4149,8 +4150,48 @@ export class StacksSDK {
   };
 
   /**
+   * Native-BTC bonds recorded for this address whose Bitcoin is not confirmed recovered.
+   * Read from the durable records rather than from membership, which maturity, early exit
+   * and a later registration all destroy while the BTC stays in a live UTXO.
+   *
+   * A store that cannot enumerate, or one that throws, yields `historical_lookup_failed`
+   * instead of an empty list — an empty list would read as "no committed BTC anywhere".
+   */
+  private unrecoveredHistoricalBonds = async (): Promise<{
+    historical_bonds?: HistoricalBondPositionData[];
+    historical_lookup_failed?: boolean;
+  }> => {
+    if (typeof this.lockRecordStore.listRecords !== 'function') {
+      return { historical_lookup_failed: true };
+    }
+    try {
+      const records = await this.lockRecordStore.listRecords(this.address!);
+      const positions = await Promise.all(
+        records
+          .filter((r) => r.isL1Lock)
+          .map((r) => this.getHistoricalBondPosition(r.bondIndex)),
+      );
+      // One unresolvable record makes the SET incomplete. Report what resolved AND the
+      // flag: silently dropping it under-reports committed BTC on the call a staker uses
+      // to find exactly that.
+      return {
+        historical_bonds: positions
+          .map((p) => p.data)
+          .filter((d): d is HistoricalBondPositionData => d !== undefined && d.recovered !== true),
+        ...(positions.some((p) => p.data === undefined) ? { historical_lookup_failed: true } : {}),
+      };
+    } catch {
+      return { historical_lookup_failed: true };
+    }
+  };
+
+  /**
    * Returns the current PoX-5 bond position for this vault's address, enriched
    * with live L1 lock state (if BTC-locked) and accrued sats rewards.
+   *
+   * With no live membership, any durable record still holding unrecovered Bitcoin is
+   * reported under `historical_bonds` — `bond: null` on its own does not mean the
+   * address has no committed BTC.
    */
   public getBondPosition = async (): Promise<BondPositionResponse> => {
     try {
@@ -4173,7 +4214,10 @@ export class StacksSDK {
       } : null;
 
       if (!membership) {
-        return { success: true, data: { bond: null, stx_only: stxOnlyData } };
+        return {
+          success: true,
+          data: { bond: null, stx_only: stxOnlyData, ...(await this.unrecoveredHistoricalBonds()) },
+        };
       }
 
       // Sum earned sats across all past cycles for a stable, accurate total. A single
