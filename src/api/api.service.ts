@@ -295,6 +295,9 @@ export class ApiService {
         case ActionType.RENEW_BOND:
           result = await sdk.renewBond(params.nextBondIndex, params.signerManager, { feeSats: params.feeSats, note: params.note, nonce: params.nonce, externalId: params.externalId, confirmations: params.confirmations, signerCalldata: params.signerCalldata, rewardBtcAddress: params.rewardBtcAddress, rewardMaxFeeSats: params.rewardMaxFeeSats });
           break;
+        case ActionType.HAS_ANNOUNCED_EARLY_EXIT:
+          result = await sdk.hasAnnouncedEarlyExit(params.bondIndex);
+          break;
         case ActionType.RESUME_BOND_REGISTRATION:
           result = await sdk.resumeBondRegistration(params.bondIndex, { note: params.note, nonce: params.nonce, confirmations: params.confirmations, btcTxid: params.btcTxid });
           break;

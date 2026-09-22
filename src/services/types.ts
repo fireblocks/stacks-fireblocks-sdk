@@ -370,6 +370,20 @@ export type HistoricalBondPositionResponse = {
   error?: string;
 };
 
+export type HasAnnouncedEarlyExitResponse = {
+  success: boolean;
+  data?: {
+    bond_index: number;
+    /**
+     * Chain-authoritative. The contract's announcement map is written irreversibly and
+     * has no delete, so this is only ever present on a read that resolved — a failed
+     * read sets `success: false` rather than reporting `false`.
+     */
+    announced: boolean;
+  };
+  error?: string;
+};
+
 export type AnnounceEarlyExitResponse = {
   success: boolean;
   txHash?: string;
@@ -607,7 +621,7 @@ export type GetTransactionHistoryParams = {
   getCachedTransactions?: boolean;
   limit?: number;
   offset?: number;
-}
+};
 export type ContractCallTransaction = {
   transaction_hash: string;
   timestamp: any;
@@ -624,4 +638,3 @@ export type GetContractCallHistoryResponse = {
   data?: ContractCallTransaction[];
   error?: string;
 };
-

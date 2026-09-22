@@ -26,6 +26,7 @@ import {
   AnnounceEarlyExitResponse,
   BondPositionResponse,
   HistoricalBondPositionResponse,
+  HasAnnouncedEarlyExitResponse,
   HistoricalBondPositionData,
   RequirementsResponse,
   CheckStatusData,
@@ -4433,6 +4434,45 @@ export class StacksSDK {
       : bond.earlyUnlockBytes;
     const cosigner = new CosignerService(resolveCosignerUrl(this.testnet));
     await cosigner.verifyCommittedKey(earlyUnlockBytes);
+  };
+
+  /**
+   * Whether `announce-l1-early-exit` has been recorded on chain for this staker's bond.
+   *
+   * The contract is the authority: the announcement map is written irreversibly and has
+   * no delete, so a local record of it can only ever be a display hint. A read that does
+   * not resolve returns `success: false` — reporting `announced: false` on an unknown
+   * state would invite a second, equally irreversible announce.
+   *
+   * @param bondIndex - Explicit bond. Omitted, it resolves from current membership.
+   */
+  public hasAnnouncedEarlyExit = async (
+    bondIndex?: number,
+  ): Promise<HasAnnouncedEarlyExitResponse> => {
+    try {
+      if (!this.address) throw new Error('Address is not set');
+
+      let index = bondIndex;
+      if (index === undefined) {
+        let membership;
+        try {
+          membership = await fetchBondMembership({ address: this.address, network: this.pox5Network });
+        } catch (e) {
+          return { success: false, error: `Could not read bond membership to resolve the bond index (UNKNOWN, not "no bond") — refusing to report early-exit state: ${formatErrorMessage(e)}` };
+        }
+        if (!membership) return { success: false, error: 'No active bond membership found; pass an explicit bondIndex to query a historical bond.' };
+        index = membership.bondIndex;
+      }
+
+      const announced = await fetchHasAnnouncedL1EarlyExit({
+        bondIndex: index,
+        staker: this.address,
+        network: this.pox5Network,
+      });
+      return { success: true, data: { bond_index: index, announced } };
+    } catch (error) {
+      return { success: false, error: `Early-exit announcement state for bond ${bondIndex ?? '(from membership)'} is UNKNOWN (not "not announced") — refusing to report it: ${formatErrorMessage(error)}` };
+    }
   };
 
   /**

@@ -115,6 +115,7 @@ export enum ActionType {
   FUND_BOND_LOCK_ADDRESS = "fundBondLockAddress",
   FUND_VAULT = "fundVault",
   LIST_BOND_LOCK_RECORDS = "listBondLockRecords",
+  HAS_ANNOUNCED_EARLY_EXIT = "hasAnnouncedEarlyExit",
   // App-surface actions (Electron consumption; not present on the server branch)
   ESTIMATE_FEE = "estimateFee",
   GET_CONTRACT_CALL_HISTORY = "getContractCallHistory",
