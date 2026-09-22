@@ -81,7 +81,6 @@ const makeSdk = (): any => {
       MANAGER,
       {
         payoutPolicy: {
-          maxPayoutSats: BigInt(10_000_000),
           asset: {
             contractAddress: BOOT_ADDR,
             contractName: "sbtc-token",

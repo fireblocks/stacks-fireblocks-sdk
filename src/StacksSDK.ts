@@ -6004,21 +6004,18 @@ export class StacksSDK {
       }
     };
 
-    // The staker payout (leg 2) is performed by the signer manager from its OWN balance,
-    // so the bound is manager-specific and comes from the registered adapter. With no
-    // registered payout policy the WHOLE claim is refused BEFORE leg 1 broadcasts —
-    // otherwise the fund-moving claim-rewards leg would settle (crystallizing sBTC into
-    // the manager and burning a fee and a RAW signature) only for the claim to fail here
-    // on every retry with nothing recorded for the caller.
-    const stakerPayoutPolicy = this.signerManagerRegistry.get(signerManager)?.payoutPolicy;
-    if (stakerBondIndices.length > 0 && !stakerPayoutPolicy) {
-      return {
-        error: `No registered payout policy for signer manager ${signerManager} — refusing the reward claim at cycle ${cycle} before any leg broadcasts. Register a signerManagerAdapters entry with a payout policy for this manager.`,
-      };
-    }
-    const stakerPayoutAssetId: `${string}.${string}` | undefined = stakerPayoutPolicy
-      ? `${stakerPayoutPolicy.asset.contractAddress}.${stakerPayoutPolicy.asset.contractName}`
-      : undefined;
+    // The staker payout (leg 2) AMOUNT is bounded per bond by the staker's own on-chain
+    // entitlement, read below after leg 1 settles: pox-5's settle-staker-rewards computes
+    // get-earned-staker-rewards(manager, cycle, bond, staker) and the manager may pay
+    // that or less, so the contract already supplies the tightest correct bound. A
+    // manager the deployment has never heard of is therefore bounded exactly as tightly
+    // as a registered one.
+    //
+    // Only the payout ASSET is configurable, defaulting to the chain-resolved sBTC asset
+    // that pox-5 settles in. A wrong asset aborts the call under Deny mode rather than
+    // permitting an over-payment.
+    const payoutAsset = this.signerManagerRegistry.get(signerManager)?.payoutPolicy?.asset ?? sbtcAsset;
+    const stakerPayoutAssetId: `${string}.${string}` = `${payoutAsset.contractAddress}.${payoutAsset.contractName}`;
 
     // ── Leg 1: signer-manager claim-rewards (PoX-5 sends total-rewards sBTC to the manager) ──
     // Skip the broadcast entirely when there is no unclaimed signer accrual for this cycle
@@ -6073,11 +6070,10 @@ export class StacksSDK {
       const signerAccruedSats = bondIndex !== undefined
         ? (accruedByBond.get(bondIndex) ?? BigInt(0))
         : noneAccrued;
-      // Best-effort read of THIS staker's own entitlement (distinct from the signer
-      // cohort's accrual). A reporting read only — a failure does not abort the claim.
-      const stakerPaidSats = await fetchEarnedStakerRewards({
-        signerManager, rewardCycle: cycle, bondIndex, staker: this.address!, network: this.pox5Network,
-      }).catch(() => null);
+      const defaultNote = bondIndex !== undefined
+        ? `sm-claim-staker-rewards-cycle-${cycle}-bond-${bondIndex}`
+        : `sm-claim-staker-stx-rewards-cycle-${cycle}`;
+      const bondSuffix = bondIndex !== undefined ? ` bond ${bondIndex}` : '';
 
       const recordResult = (
         status: 'claimed' | 'failed',
@@ -6093,7 +6089,8 @@ export class StacksSDK {
           // Only report a paid amount when the payout actually settled; a failed leg
           // paid nothing, so it must not carry the pre-claim entitlement. An unsettled
           // leg has paid an UNKNOWN amount, which is likewise not the entitlement.
-          stakerPaidSats: status === 'claimed' && stakerPaidSats !== null ? stakerPaidSats.toString() : null,
+          // The value is the entitlement the leg was bounded AT — the manager may pay less.
+          stakerPaidSats: status === 'claimed' ? stakerEntitlementSats?.toString() ?? null : null,
           signerClaimTxid,
           stakerClaimTxid,
           status,
@@ -6101,10 +6098,20 @@ export class StacksSDK {
           ...(error ? { error } : {}),
         });
 
-      const defaultNote = bondIndex !== undefined
-        ? `sm-claim-staker-rewards-cycle-${cycle}-bond-${bondIndex}`
-        : `sm-claim-staker-stx-rewards-cycle-${cycle}`;
-      const bondSuffix = bondIndex !== undefined ? ` bond ${bondIndex}` : '';
+      // THIS staker's own entitlement, distinct from the signer cohort's accrual. It is
+      // the post-condition bound, so an unreadable value means there is no bound — under
+      // RAW signing Fireblocks cannot see the payload, so broadcasting anyway would be an
+      // unbounded sBTC payout. Refuse instead (leg 1 is idempotent; re-run to resume).
+      let stakerEntitlementSats: bigint;
+      try {
+        stakerEntitlementSats = await fetchEarnedStakerRewards({
+          signerManager, rewardCycle: cycle, bondIndex, staker: this.address!, network: this.pox5Network,
+        });
+      } catch (e) {
+        const msg = `Could not read the staker entitlement (get-earned-staker-rewards) at cycle ${cycle}${bondSuffix} — UNKNOWN, so claim-staker-rewards cannot be bounded; refusing to broadcast an unbounded payout: ${formatErrorMessage(e)}`;
+        recordResult('failed', null, msg);
+        return { error: msg };
+      }
 
       const smStaker = await broadcastLeg(
         (n) => makeUnsignedContractCall({
@@ -6120,13 +6127,13 @@ export class StacksSDK {
           fee: DEFAULT_POX_FEE_USTX,
           nonce: n,
           network: this.pox5Network,
-          // Deny mode: the manager sends the staker at most maxPayoutSats of the
-          // policy asset (a deliberate upper bound, per answers §3a).
+          // Deny mode: the manager sends the staker at most its pox-5-computed
+          // entitlement for this (cycle, bond) — the contract's own ceiling.
           postConditionMode: 'deny',
           postConditions: [
             Pc.principal(signerManager)
-              .willSendLte(stakerPayoutPolicy!.maxPayoutSats)
-              .ft(stakerPayoutAssetId!, stakerPayoutPolicy!.asset.assetName),
+              .willSendLte(stakerEntitlementSats)
+              .ft(stakerPayoutAssetId, payoutAsset.assetName),
           ],
         }),
         note ?? defaultNote,
