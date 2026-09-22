@@ -120,6 +120,7 @@ Environment variables (via `.env`) control SDK behavior:
 | PORT                       | No       | 3000                                  | Port to run the REST API server         |
 | EARLY_EXIT_SIGNER_URL      | No       | Built-in testnet URL (none on mainnet) | Base URL of the external KMS cosigner service for bond early-exit spends |
 | CHAIN_API_KEY              | No       | — (requests are anonymous)            | Hiro API key, sent as `x-hiro-api-key` on Stacks API reads only. Anonymous requests are served on Hiro's lowest rate-limit tier |
+| SIGNER_MANAGER_ALLOWLIST   | No       | — (any signer manager allowed)        | Comma-separated signer-manager contract principals, each `<address>.<contract-name>`. Empty = no allowlist. When set, a manager not on the list is refused before anything is signed; a malformed entry fails startup rather than booting with the allowlist silently off. Example: `SP1234567890ABCDEFGHJKMNPQRSTVWXYZ12345.pool-alpha,ST1234567890ABCDEFGHJKMNPQRSTVWXYZ12345.pool-beta` |
 
 ### Sample `.env`:
 

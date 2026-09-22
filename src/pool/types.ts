@@ -1,6 +1,7 @@
 import { BasePath } from "@fireblocks/ts-sdk";
 import { StacksSDK } from "../StacksSDK";
 import { LockRecordStore } from "../staking/bonds/unlock-bytes-store";
+import { SignerManagerAdapter } from "../staking/signer-manager-adapter";
 
 export interface PoolConfig {
   maxPoolSize: number;
@@ -45,6 +46,15 @@ export interface ApiServiceConfig {
    * `FireblocksConfig` that `ApiService` hand-builds, or it never reaches the SDK.
    */
   chainApiKey?: string;
+  /**
+   * Signer-manager adapters forwarded to every pooled SDK. A non-empty list is an
+   * ALLOWLIST: managers absent from it are refused. An empty or absent list imposes no
+   * allowlist, so this must not be defaulted to `[]`.
+   *
+   * Payout amounts are not configured here — pox-5 computes the staker's entitlement and
+   * the claim leg is bounded by that value read from chain.
+   */
+  signerManagerAdapters?: SignerManagerAdapter[];
 }
 
 export enum ActionType {

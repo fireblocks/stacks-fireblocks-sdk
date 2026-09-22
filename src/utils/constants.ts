@@ -290,11 +290,12 @@ export const EARLY_EXIT_SIGNER = {
  * (2026-08-29) alongside the connection values.
  *
  * PRESENTATION ONLY. This list does not gate anything, and must not be confused with the
- * two enforcement concepts it sits beside:
- *   - the signer-manager ALLOWLIST (`signerManagerAdapters`), which refuses managers when
- *     configured, and is deliberately left unconfigured so a staker can enter their own;
- *   - a manager's PAYOUT BOUND, required to claim rewards through it.
- * Featuring a manager here grants neither. A staker may still enrol with any manager.
+ * signer-manager ALLOWLIST (`signerManagerAdapters` / `SIGNER_MANAGER_ALLOWLIST`), which
+ * refuses managers when configured and is deliberately left unconfigured so a staker can
+ * enter their own. Featuring a manager here grants nothing.
+ *
+ * Reward claims need no per-manager configuration: pox-5 computes the staker's
+ * entitlement and the claim leg is bounded by that value read from chain.
  *
  * Third-party managers were removed from the list at the client's request after several
  * deployed ones turned out not to work; the entries below are the ones they support today.
