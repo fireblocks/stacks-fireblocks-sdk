@@ -58,6 +58,22 @@ export interface BondLockRecord {
      */
     fundingExternalId?: string;
     /**
+     * Number of funding attempts abandoned after a TERMINAL Fireblocks failure. Mixed into
+     * the derived external id so a dead attempt's consumed id can be superseded. Advances
+     * only on a typed terminal status, and only in the write that clears `fireblocksId` —
+     * an advance while a transfer may still land would escape Fireblocks' de-duplication
+     * and fund the same lock twice. Absent means 0, which derives the pre-generation id.
+     */
+    fundingGeneration?: number;
+    /**
+     * Fireblocks ids of funding transfers abandoned after a TERMINAL vendor status, kept
+     * separately from the active `fireblocksId` slot. The slot must be cleared so the
+     * caller-btcTxid recovery is not refused as in-flight, but the ids themselves stay
+     * durable: they are the operator's only handle for looking the dead transfers up in
+     * Fireblocks. Append-only, oldest first.
+     */
+    abandonedFireblocksIds?: string[];
+    /**
      * The Fireblocks transaction id of the BTC funding transfer, persisted as soon as
      * Fireblocks accepts the request — BEFORE the (long, throwable) confirmation poll. A
      * retry after a poll timeout / crash uses it to await or resolve the SAME transfer
@@ -86,10 +102,21 @@ export interface LockRecordStore {
      * as non-durable.
      */
     checkHealth?(): Promise<void>;
+    /**
+     * Every record held for one staker, in unspecified order. Recovery needs discovery
+     * by address alone: a caller that has lost the bond index (or never had it) has no
+     * other way to learn what Bitcoin a lock address holds.
+     *
+     * Optional so a third-party store is not broken by its addition, but a store without
+     * it cannot support recovery discovery — callers refuse rather than treating an
+     * absent implementation as "no records".
+     */
+    listRecords?(stxAddress: string): Promise<BondLockRecord[]>;
 }
 export declare class InMemoryLockRecordStore implements LockRecordStore {
     private store;
     private key;
     saveRecord(stxAddress: string, bondIndex: number, record: BondLockRecord): Promise<void>;
     loadRecord(stxAddress: string, bondIndex: number): Promise<BondLockRecord | null>;
+    listRecords(stxAddress: string): Promise<BondLockRecord[]>;
 }

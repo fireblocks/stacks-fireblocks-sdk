@@ -1,5 +1,5 @@
-import { AnnounceEarlyExitResponse, BondPositionResponse, HistoricalBondPositionResponse, RequirementsResponse, CheckStatusResponse, CreateBondResult, GetContractCallHistoryResponse, CreateTransactionResponse, UnlockBtcResponse, SpendEarlyExitResponse, BtcFeeReplacementResponse, RenewBondResult, CalculateRewardsResponse, ClaimRewardsResponse, EarnedRewardsResponse, BondLockAddressResponse, FundBondLockResponse, FundVaultResponse, FireblocksConfig, GetAccountNonceResponse, GetFtBalancesResponse, GetNativeBalanceResponse, GetPoxInfoResponse, GetTransactionHistoryResponse, GetTransactionStatusResponse, BtcTxStatusResponse, StakerInfoResponse, VerifySignerGrantResponse, TokenType, TransactionType } from "./services/types";
-import { LockRecordStore } from "./staking/bonds/unlock-bytes-store";
+import { AnnounceEarlyExitResponse, BondPositionResponse, HistoricalBondPositionResponse, HasAnnouncedEarlyExitResponse, RequirementsResponse, CheckStatusResponse, CreateBondResult, GetContractCallHistoryResponse, CreateTransactionResponse, UnlockBtcResponse, SpendEarlyExitResponse, BtcFeeReplacementResponse, RenewBondResult, CalculateRewardsResponse, ClaimRewardsResponse, EarnedRewardsResponse, BondLockAddressResponse, FundBondLockResponse, FundVaultResponse, FireblocksConfig, GetAccountNonceResponse, GetFtBalancesResponse, GetNativeBalanceResponse, GetPoxInfoResponse, GetTransactionHistoryResponse, GetTransactionStatusResponse, BtcTxStatusResponse, StakerInfoResponse, VerifySignerGrantResponse, TokenType, TransactionType } from "./services/types";
+import { BondLockRecord, LockRecordStore } from "./staking/bonds/unlock-bytes-store";
 import { BondScheduleValidation } from "./utils/bondScheduleChain";
 import { type PoxInfo } from "./utils/helpers";
 import { ClarityValue, PostConditionMode, PostConditionWire } from "@stacks/transactions";
@@ -22,6 +22,8 @@ export declare class StacksSDK {
     private readonly BTC_DUST_LIMIT_SATS;
     private networkProfile;
     private _pox5Network;
+    /** Hiro API key applied to every chain read, PoX-5 and StacksService alike. */
+    private chainApiKey?;
     private lockRecordStore;
     private lockRecordStoreIsDurable;
     /**
@@ -33,6 +35,19 @@ export declare class StacksSDK {
      * BTC bonds — losing a record for an unspent lock can strand BTC.
      */
     setLockRecordStore: (store: LockRecordStore) => void;
+    /**
+     * Every bond lock record held for this vault's staker address.
+     *
+     * Discovery by address alone: a caller that has lost the bond index has no other way
+     * to learn which lock addresses hold committed Bitcoin. A store that cannot enumerate
+     * is refused rather than reported as empty — "no records" and "the store cannot
+     * answer" lead to opposite operator decisions about whether BTC is at stake.
+     */
+    listBondLockRecords: () => Promise<{
+        success: boolean;
+        data?: BondLockRecord[];
+        error?: string;
+    }>;
     /**
      * Native-BTC funding is refused unless a durable, healthy lock-record store is
      * configured. Losing a record for an unspent BTC lock can strand funds, so the
@@ -50,6 +65,15 @@ export declare class StacksSDK {
      * across a process crash. A genuine replacement (e.g. fee bump) must use a new id.
      */
     private deriveFundingExternalId;
+    /**
+     * Common outcome for a funding transfer that reached a terminal Fireblocks state, on
+     * either the fresh or the resume path. The Fireblocks id must not stay in the record:
+     * a terminally failed transfer can never yield a txid, and while the id is present
+     * `hasInFlightFireblocks` stays true, so the caller-btcTxid guard would refuse exactly
+     * the recovery this error prescribes. The lock parameters and the (consumed) external
+     * id are kept for diagnostics.
+     */
+    private abandonTerminalFunding;
     private constructor();
     /**
      * Creates an instance of StacksSDK.
@@ -58,7 +82,7 @@ export declare class StacksSDK {
      * @returns A Promise that resolves to an instance of StacksSDK.
      * @throws Will throw an error if the instance creation fails.
      */
-    static create: (vaultAccountId: string | number, fireblocksConfig?: FireblocksConfig, hiroApiKey?: string) => Promise<StacksSDK>;
+    static create: (vaultAccountId: string | number, fireblocksConfig?: FireblocksConfig) => Promise<StacksSDK>;
     /**
      * Retrieves the Stacks account public key associated with the Fireblocks vault account.
      * @returns The Stacks account public key or empty string if not set.
@@ -521,6 +545,24 @@ export declare class StacksSDK {
         rewardMaxFeeSats?: bigint;
     }) => Promise<CreateTransactionResponse>;
     /**
+     * Continues an enrollment whose Bitcoin is already locked but whose L2
+     * `register-for-bond` outcome is unknown — the `unsettled` result of `createBond` or
+     * `renewBond`. The funded amount and signer manager come from the durable record, not
+     * from the caller: the lock address is amount-independent, so a resume at a different
+     * amount would reuse the funded UTXO while every preflight ran against the new one.
+     *
+     * Delegates to `createBond`, which owns the resume branch (recorded-txid verification,
+     * funding skip, SPV rebuild, and the duplicate-outpoint preflight that catches a
+     * registration which did land). No Bitcoin is sent on this path: a record with no
+     * committed funding is refused rather than funded.
+     */
+    resumeBondRegistration: (bondIndex: number, opts?: {
+        note?: string;
+        nonce?: bigint;
+        confirmations?: number;
+        btcTxid?: string;
+    }) => Promise<CreateBondResult>;
+    /**
      * Creates a native-BTC PoX-5 bond: locks BTC on L1 via Fireblocks and registers
      * the paired STX position on L2 with a full SPV proof.
      *
@@ -528,6 +570,9 @@ export declare class StacksSDK {
      * Fireblocks → wait for confirmations → assemble SPV proof → register-for-bond.
      *
      * NOTE: This call blocks until Bitcoin confirmations are received (~30 min typical).
+     *
+     * On an `unsettled` result the Bitcoin is locked and the registration outcome is
+     * unknown — `resumeBondRegistration` continues it without re-funding.
      */
     createBond: (bondIndex: number, btcAmountSats: bigint, signerManager: string, opts?: {
         note?: string;
@@ -673,8 +718,21 @@ export declare class StacksSDK {
         externalId?: string;
     }) => Promise<CreateTransactionResponse>;
     /**
+     * Native-BTC bonds recorded for this address whose Bitcoin is not confirmed recovered.
+     * Read from the durable records rather than from membership, which maturity, early exit
+     * and a later registration all destroy while the BTC stays in a live UTXO.
+     *
+     * A store that cannot enumerate, or one that throws, yields `historical_lookup_failed`
+     * instead of an empty list — an empty list would read as "no committed BTC anywhere".
+     */
+    private unrecoveredHistoricalBonds;
+    /**
      * Returns the current PoX-5 bond position for this vault's address, enriched
      * with live L1 lock state (if BTC-locked) and accrued sats rewards.
+     *
+     * With no live membership, any durable record still holding unrecovered Bitcoin is
+     * reported under `historical_bonds` — `bond: null` on its own does not mean the
+     * address has no committed BTC.
      */
     getBondPosition: () => Promise<BondPositionResponse>;
     /**
@@ -684,6 +742,17 @@ export declare class StacksSDK {
      * and the irreversible announce gate so both apply the identical check.
      */
     private verifyCommittedCosignerKey;
+    /**
+     * Whether `announce-l1-early-exit` has been recorded on chain for this staker's bond.
+     *
+     * The contract is the authority: the announcement map is written irreversibly and has
+     * no delete, so a local record of it can only ever be a display hint. A read that does
+     * not resolve returns `success: false` — reporting `announced: false` on an unknown
+     * state would invite a second, equally irreversible announce.
+     *
+     * @param bondIndex - Explicit bond. Omitted, it resolves from current membership.
+     */
+    hasAnnouncedEarlyExit: (bondIndex?: number) => Promise<HasAnnouncedEarlyExitResponse>;
     /**
      * Announces an L1 early exit for an active BTC-locked bond (L2 leg only).
      * Zeroes the L2 amountSats; paired STX remains locked through the bond's normal

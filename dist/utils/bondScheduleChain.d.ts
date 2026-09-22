@@ -23,4 +23,5 @@ export interface BondScheduleValidation {
 export declare function validateBondScheduleAgainstChain(opts: {
     profile: NetworkProfile;
     bondIndices?: number[];
+    chainApiKey?: string;
 }): Promise<BondScheduleValidation>;

@@ -26,7 +26,7 @@ export declare class StacksService {
         baseUrl: string;
         chainId: number;
         magicBytes: string;
-    }, hiroApiKey?: string);
+    }, chainApiKey?: string);
     /**
      * Fetches the current PoX contract address and name.
      * @returns An object containing the PoX contract address and name

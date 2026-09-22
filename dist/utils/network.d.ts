@@ -28,7 +28,21 @@ export interface NetworkProfile {
      */
     requirePox5Active?: boolean;
 }
-export declare function accountBalanceNormalizingFetch(baseFetch?: typeof fetch): typeof fetch;
+/**
+ * Adds the Hiro API key to a request's headers, but ONLY for the Stacks API origin.
+ *
+ * The credential must never reach a third party. Esplora and the early-exit cosigner are
+ * separate services reached over plain `fetch`, so today nothing carries the key to them
+ * — but an adapter that attaches a header regardless of destination makes that a matter
+ * of call-site discipline rather than construction. `allowedOrigin` makes it structural:
+ * point this adapter at Esplora and it sends no key.
+ *
+ * Omitted entirely when no key is configured — an empty header value is rejected by Hiro
+ * rather than treated as an anonymous request. Also omitted when either origin cannot be
+ * parsed, since an unverifiable destination is not a match.
+ */
+export declare function withChainApiKey(init: RequestInit | undefined, apiKey?: string, requestUrl?: unknown, allowedOrigin?: string): RequestInit | undefined;
+export declare function accountBalanceNormalizingFetch(baseFetch?: typeof fetch, apiKey?: string, allowedOrigin?: string): typeof fetch;
 /**
  * Resolves the single network profile for this SDK instance. An explicit
  * `stacksApiUrl` (from config) takes precedence over the `STACKS_API_URL`
@@ -44,11 +58,11 @@ export declare function resolveNetworkProfile(opts: {
  * `StacksService.broadcastTransaction`, deriving chain id / magic bytes / base URL
  * from the resolved profile and installing the account-balance fetch adapter.
  */
-export declare function stacksNetworkFromProfile(profile: NetworkProfile): StacksNetwork;
+export declare function stacksNetworkFromProfile(profile: NetworkProfile, apiKey?: string, baseFetch?: typeof fetch): StacksNetwork;
 /**
  * Validates that the resolved profile actually describes the chain the node is
  * serving. Reads `/v2/info` (chain id) and `/v2/pox` (active PoX contract) and
  * throws on a definite mismatch. A transport failure is surfaced as a warning
  * rather than a hard failure, since it is not proof of a mismatch.
  */
-export declare function validateNetworkProfile(profile: NetworkProfile): Promise<void>;
+export declare function validateNetworkProfile(profile: NetworkProfile, apiKey?: string, baseFetch?: typeof fetch): Promise<void>;
