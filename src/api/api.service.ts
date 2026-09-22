@@ -20,6 +20,7 @@ export class ApiService {
       // positional must be re-passed at each hop, which is the failure mode this fix
       // exists to remove.
       chainApiKey: config.chainApiKey,
+      signerManagerAdapters: config.signerManagerAdapters,
     };
 
     this.sdkManager = new SdkManager(baseConfig, config.poolConfig);
