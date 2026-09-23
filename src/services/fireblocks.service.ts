@@ -25,6 +25,7 @@ import {
   FireblocksSigner,
   FireblocksTransferError,
   TERMINAL_TRANSACTION_STATES,
+  isDuplicateExternalId,
 } from "../utils/FireblocksSigner";
 
 const secretKeyPath = process.env.FIREBLOCKS_SECRET_KEY_PATH || "";
@@ -278,12 +279,7 @@ export class FireblocksService {
    * message match requires 1438 as a standalone token AND a duplicate/external cue, so an
    * unrelated error that merely contains "1438" in an amount/id/timestamp is not misread.
    */
-  public static isDuplicateExternalIdError = (error: unknown): boolean => {
-    const anyErr = error as { response?: { data?: { code?: number } }; code?: number; message?: string };
-    if (anyErr?.response?.data?.code === 1438 || anyErr?.code === 1438) return true;
-    const msg = typeof anyErr?.message === 'string' ? anyErr.message : '';
-    return /\b1438\b/.test(msg) && /duplicat|external/i.test(msg);
-  };
+  public static isDuplicateExternalIdError = isDuplicateExternalId;
 
   /**
    * True when a transfer error means the Fireblocks transaction reached a TERMINAL
