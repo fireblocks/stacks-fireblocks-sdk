@@ -116,5 +116,23 @@ describe("announceEarlyExit — chain-derived bond index", () => {
     expect(res.success).toBe(true);
     expect(res.txHash).toBe(TXID);
     expect(res.bondIndex).toBeUndefined();
+    // Absent for two opposite reasons; the caller needs to know which applies here.
+    expect(res.bondIndexLookupFailed).toBe(true);
+  });
+
+  it("distinguishes a chain that holds no membership from a read that failed", async () => {
+    const sdk = makeSdk();
+    (fetchBondMembership as jest.Mock)
+      .mockReset()
+      .mockResolvedValueOnce({ bondIndex: 4, signer: MANAGER, isL1Lock: true })
+      .mockResolvedValue(null);
+
+    const res = await sdk.announceEarlyExit();
+
+    // The read SUCCEEDED and the chain holds no membership — a settled state the caller
+    // may act on, unlike an unreadable one it should retry.
+    expect(res.success).toBe(true);
+    expect(res.bondIndex).toBeUndefined();
+    expect(res.bondIndexLookupFailed).toBeUndefined();
   });
 });
