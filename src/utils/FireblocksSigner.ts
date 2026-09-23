@@ -57,6 +57,22 @@ export class FireblocksTransferError extends Error {
 }
 
 /**
+ * A raw-signing request already exists under the external id, but its signature is not
+ * provably over the sighash now being signed. A signature covers exact bytes, so reusing
+ * one whose content differs — or cannot be read back — would broadcast a transaction the
+ * signature does not authorize.
+ */
+export class StaleRawSignError extends Error {
+  constructor(
+    message: string,
+    readonly vendorId: string,
+  ) {
+    super(message);
+    this.name = "StaleRawSignError";
+  }
+}
+
+/**
  * States from which a transaction can never reach Completed. Typed as strings because
  * the vendor SDK declares `TransactionResponse.status` as `string`.
  */
@@ -83,6 +99,37 @@ export const APPROVAL_PENDING_STATES: ReadonlySet<string> = new Set([
 
 const describeOperation = (operation?: string): string =>
   operation === TransactionOperation.Raw ? "Signing request" : "Transfer";
+
+/**
+ * True when an error is Fireblocks' duplicate-external-id rejection (code 1438). The
+ * message match requires 1438 as a standalone token AND a duplicate/external cue, so an
+ * unrelated error that merely contains "1438" in an amount/id/timestamp is not misread.
+ */
+export const isDuplicateExternalId = (error: unknown): boolean => {
+  const anyErr = error as { response?: { data?: { code?: number } }; code?: number; message?: string };
+  if (anyErr?.response?.data?.code === 1438 || anyErr?.code === 1438) return true;
+  const msg = typeof anyErr?.message === "string" ? anyErr.message : "";
+  return /\b1438\b/.test(msg) && /duplicat|external/i.test(msg);
+};
+
+const normalizeHex = (h: unknown): string | undefined =>
+  typeof h === "string" ? h.replace(/^0x/, "").toLowerCase() : undefined;
+
+/**
+ * The message content an existing RAW request was opened over, read from the request
+ * echo when present and from the signed result otherwise. Returns undefined when neither
+ * is readable — which is treated as a mismatch, never as a match.
+ */
+const rawRequestContent = (tx: unknown): string | undefined => {
+  const t = tx as {
+    extraParameters?: { rawMessageData?: { messages?: Array<{ content?: unknown }> } };
+    signedMessages?: Array<{ content?: unknown }>;
+  };
+  return (
+    normalizeHex(t?.extraParameters?.rawMessageData?.messages?.[0]?.content)
+    ?? normalizeHex(t?.signedMessages?.[0]?.content)
+  );
+};
 
 const describeBudget = (ms: number): string =>
   ms >= 60 * 60 * 1_000
@@ -191,6 +238,62 @@ export class FireblocksSigner {
     return tx;
   };
 
+  /**
+   * Resolves the raw-signing request already holding `externalId` to a transaction id
+   * that may be polled for `hexContent`'s signature.
+   *
+   * A signature authorizes exact bytes. The existing request was opened over the sighash
+   * of an earlier attempt, and the two differ whenever the nonce moved between them (a
+   * concurrent vault operation consuming it), so the content is compared before the
+   * request is adopted. An unreadable content is a mismatch: without it the signature is
+   * not provably over the right bytes.
+   *
+   * A genuine 404 means the id is free and the duplicate rejection came from elsewhere —
+   * the original error is rethrown rather than masked.
+   */
+  private resolveDuplicateRawSign = async (
+    externalId: string,
+    hexContent: string,
+    createError: unknown,
+  ): Promise<string> => {
+    let existing;
+    try {
+      existing = await this.fireblocks.transactions.getTransactionByExternalId({
+        externalTxId: externalId,
+      });
+    } catch (e) {
+      const status = (e as { response?: { status?: number }; status?: number })?.response?.status
+        ?? (e as { status?: number })?.status;
+      if (status === 404) throw createError;
+      throw e;
+    }
+    const tx = existing?.data as { id?: string; operation?: string } | undefined;
+    const vendorId = tx?.id;
+    if (!vendorId) throw createError;
+
+    if (tx.operation !== undefined && tx.operation !== TransactionOperation.Raw) {
+      throw new StaleRawSignError(
+        `External id ${externalId} belongs to a ${tx.operation} transaction (${vendorId}), not a signing request; refusing to read a signature from it.`,
+        vendorId,
+      );
+    }
+
+    const existingContent = rawRequestContent(tx);
+    if (existingContent === undefined) {
+      throw new StaleRawSignError(
+        `Signing request ${vendorId} already holds external id ${externalId}, but the message it was opened over could not be read back, so its signature cannot be shown to cover the current transaction. Resolve that request in Fireblocks before retrying.`,
+        vendorId,
+      );
+    }
+    if (existingContent !== normalizeHex(hexContent)) {
+      throw new StaleRawSignError(
+        `Signing request ${vendorId} already holds external id ${externalId}, but it was opened over a different message — the transaction changed between attempts (typically a nonce consumed by another operation). Its signature would not authorize this transaction. Resolve that request in Fireblocks before retrying.`,
+        vendorId,
+      );
+    }
+    return vendorId;
+  };
+
   rawSign = async (
     content: string,
     vaultAccountId: string,
@@ -232,22 +335,39 @@ export class FireblocksSigner {
         algorithm: SignedMessageAlgorithmEnum.EcdsaSecp256K1,
       };
 
-      const transactionResponse =
-        await this.fireblocks.transactions.createTransaction({
-          transactionRequest: transactionPayload,
-        });
-
-      const txId = transactionResponse.data.id;
+      let txId: string | undefined;
+      try {
+        const transactionResponse =
+          await this.fireblocks.transactions.createTransaction({
+            transactionRequest: transactionPayload,
+          });
+        txId = transactionResponse.data.id;
+      } catch (createError) {
+        // A deterministic external id makes a retry collide with its own outstanding
+        // request. Resolving it re-polls that request rather than opening a second one
+        // for the same signature — under a 1-of-N approval rule the duplicate is another
+        // item for a human to act on, and only one of them can ever be used.
+        if (!isDuplicateExternalId(createError)) throw createError;
+        txId = await this.resolveDuplicateRawSign(
+          transactionPayload.externalTxId!,
+          hexContent,
+          createError,
+        );
+      }
       if (!txId) {
         throw new Error("Transaction ID is undefined.");
       }
       const txInfo = (await this.getTxStatus(txId)) as any;
 
-      const signature = txInfo.signedMessages[0].signature;
-
-      return signature;
+      return txInfo.signedMessages[0].signature;
     } catch (error) {
       console.log(`Caught error in rawSign: ${error}`);
+      // Typed failures carry the classification callers switch on — an outstanding
+      // approval, a terminal status, a stale signing request. Wrapping them in a plain
+      // Error would reduce all three to message text.
+      if (error instanceof FireblocksTransferError || error instanceof StaleRawSignError) {
+        throw error;
+      }
       throw new Error(`Error in rawSign: ${formatErrorMessage(error)}`);
     }
   };
