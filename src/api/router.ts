@@ -1658,6 +1658,30 @@ router.get("/:vaultId/stacking/pox5/bond/historical", validateVaultId, controlle
 
 /**
  * @openapi
+ * /{vaultId}/stacking/pox5/bond/lock-records:
+ *   get:
+ *     tags: [PoX-5 BTC Bonds]
+ *     summary: List every durable bond lock record held for this vault
+ *     description: >
+ *       Discovery by staker address alone, for a caller that has LOST the bond index and
+ *       therefore cannot use bond/historical. Each record carries the lock address, the
+ *       funding outpoint and the immutable funded amount, so committed Bitcoin can be
+ *       located and recovered. A store that cannot enumerate is refused rather than
+ *       reported as empty — "no records" and "the store cannot answer" lead to opposite
+ *       operator decisions about whether BTC is at stake. Satoshi amounts are decimal
+ *       strings and unlockBytes is hex.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *     responses:
+ *       200:
+ *         description: Lock records for this vault's staker address; inspect `success`.
+ *       500:
+ *         description: Internal server error
+ */
+router.get("/:vaultId/stacking/pox5/bond/lock-records", validateVaultId, controller.listBondLockRecords);
+
+/**
+ * @openapi
  * /{vaultId}/stacking/pox5/bond/reward-address:
  *   get:
  *     tags: [PoX-5 BTC Bonds]

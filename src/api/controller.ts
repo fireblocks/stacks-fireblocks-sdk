@@ -1174,6 +1174,42 @@ export const getHistoricalBondPosition: Handler = async (req, res, next) => {
   }
 };
 
+/**
+ * JSON-safe form of a BondLockRecord. `res.json` calls JSON.stringify, which THROWS on a
+ * bigint and renders a Uint8Array as an index map, so the two must be converted before
+ * the record crosses the HTTP boundary. Bigints become decimal strings and unlock bytes
+ * hex, matching the durable store's own on-disk encoding. Absent optional fields are
+ * omitted rather than emitted as null — the SDK distinguishes the two.
+ */
+const serializeLockRecord = (r: Record<string, unknown>): Record<string, unknown> => {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(r)) {
+    if (v === undefined) continue;
+    if (typeof v === "bigint") out[k] = v.toString();
+    else if (v instanceof Uint8Array) out[k] = Buffer.from(v).toString("hex");
+    else out[k] = v;
+  }
+  return out;
+};
+
+// GET /:vaultId/stacking/pox5/bond/lock-records
+export const listBondLockRecords: Handler = async (req, res, next) => {
+  try {
+    const vaultId = getVaultId(req);
+    const result = await apiService.executeAction(vaultId, ActionType.LIST_BOND_LOCK_RECORDS, {}) as {
+      success: boolean;
+      data?: Record<string, unknown>[];
+      error?: string;
+    };
+    res.json({
+      ...result,
+      ...(result.data !== undefined ? { data: result.data.map(serializeLockRecord) } : {}),
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 // GET /:vaultId/stacking/pox5/bond/reward-address
 export const getCommittedRewardAddress: Handler = async (req, res, next) => {
   try {
