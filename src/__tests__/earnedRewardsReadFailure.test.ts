@@ -94,6 +94,38 @@ describe("getEarnedRewards — a failed read is not zero", () => {
     expect(res.data).toBeUndefined();
   });
 
+  it("refuses when only SOME cycles fail, rather than under-reporting the total", async () => {
+    // Cycles 10–12. The -1 sentinel is summed with real values, so a single failed cycle
+    // is worth -1 sat against the total instead of making it unknown.
+    const sdk = makeSdk();
+    (fetchEarned as jest.Mock).mockImplementation(
+      async ({ rewardCycle }: any) =>
+        rewardCycle === 11
+          ? Promise.reject(new Error("hiro 503"))
+          : BigInt(5_000),
+    );
+
+    const res = await sdk.getEarnedRewards(MANAGER, 4);
+
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/unknown, not zero/i);
+  });
+
+  it("refuses when failed cycles cancel the real ones to exactly zero", async () => {
+    // Two failures (-2) against two 1-sat cycles sums to 0 — indistinguishable from a
+    // genuine zero, and reported as "no rewards" in the middle of an outage.
+    const sdk = makeSdk();
+    (fetchEarned as jest.Mock).mockImplementation(
+      async ({ rewardCycle }: any) =>
+        rewardCycle === 10 ? BigInt(2) : Promise.reject(new Error("hiro 503")),
+    );
+
+    const res = await sdk.getEarnedRewards(MANAGER, 4);
+
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/unknown, not zero/i);
+  });
+
   it("refuses when the staker earned read fails", async () => {
     const sdk = makeSdk();
     (fetchEarnedStakerRewards as jest.Mock).mockRejectedValue(

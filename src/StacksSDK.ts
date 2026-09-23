@@ -6046,11 +6046,20 @@ export class StacksSDK {
     return values;
   };
 
+  /**
+   * Sums per-cycle reads, propagating a negative read-failure sentinel instead of adding
+   * it in. Summed, `-1` is worth one satoshi against the total rather than making it
+   * unknown: a failed cycle alongside a 5,000-sat one yields 4,999, which passes a
+   * `< 0` check and is reported as authoritative — and enough failures against small
+   * cycles land on exactly 0, reporting "no rewards" during an outage. A total is
+   * unknown when ANY cycle is, so the sentinel is sticky.
+   */
   private sumOverCycles = async (
     cycles: number[],
     fetcher: (cycle: number) => Promise<bigint>,
   ): Promise<bigint> => {
     const values = await this.mapCyclesLimited(cycles, fetcher);
+    if (values.some((v) => v < BigInt(0))) return BigInt(-1);
     return values.reduce((sum, v) => sum + v, BigInt(0));
   };
 
