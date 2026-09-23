@@ -58,6 +58,20 @@ describe("FileLockRecordStore (FBS-35/52 durable store)", () => {
     expect(loaded!.fundingExternalId).toBe("bond-fund-5");
   });
 
+  it("persists the funding generation and the abandoned Fireblocks ids across reload", async () => {
+    const rec: BondLockRecord = {
+      ...makeRecord(7),
+      btcTxid: undefined,
+      fundingGeneration: 2,
+      abandonedFireblocksIds: ["fb-dead-1", "fb-dead-2"],
+    };
+    await new FileLockRecordStore(file).saveRecord("STADDR", 7, rec);
+
+    const loaded = await new FileLockRecordStore(file).loadRecord("STADDR", 7);
+    expect(loaded!.fundingGeneration).toBe(2);
+    expect(loaded!.abandonedFireblocksIds).toEqual(["fb-dead-1", "fb-dead-2"]);
+  });
+
   it("does not clobber the verified backup with a corrupt primary on the next save", async () => {
     const store = new FileLockRecordStore(file);
     await store.saveRecord("STADDR", 1, makeRecord(1)); // primary={1}, no bak

@@ -302,6 +302,7 @@ export class StacksSDK {
   ): Promise<{ success: false; error: string }> => {
     let fireblocksId: string | undefined;
     let stripFailure = "";
+    let generationAdvanced = false;
     try {
       const stored = await this.lockRecordStore.loadRecord(this.address!, bondIndex);
       if (stored) {
@@ -324,15 +325,23 @@ export class StacksSDK {
         };
         delete abandoned.fireblocksId;
         await this.lockRecordStore.saveRecord(this.address!, bondIndex, abandoned);
+        generationAdvanced = true;
       }
     } catch (e) {
       stripFailure = ` The Fireblocks id could NOT be cleared from the lock record (${formatErrorMessage(e)}); clear it before retrying with opts.btcTxid, which will otherwise be refused as an in-flight transfer.`;
     }
+    // The recovery advice turns on whether the generation advance reached the store. It
+    // did: the next attempt derives a NEW external id and re-funds this same lock. It did
+    // not: the id stays consumed, so re-funding this lock is impossible without operator
+    // intervention and the caller must be told so.
+    const recovery = generationAdvanced
+      ? `Its external id ${fundingExternalId} is consumed, but the funding generation advanced — retry createBond for this same bond index and it will derive a fresh external id and re-fund this lock.`
+      : `Its external id ${fundingExternalId} is consumed and cannot be reused, so this lock cannot be re-funded automatically — enroll under a different bond index, or resolve the transfer in Fireblocks and retry with opts.btcTxid.`;
     return {
       success: false,
       error:
         `The Fireblocks funding transfer${fireblocksId ? ` (id ${fireblocksId})` : ""} for bond ${bondIndex} terminally failed: ${formatErrorMessage(error)}. ` +
-        `Its external id ${fundingExternalId} is consumed and cannot be reused, so this lock cannot be re-funded automatically — enroll under a different bond index, or resolve the transfer in Fireblocks and retry with opts.btcTxid.${stripFailure}`,
+        `${recovery}${stripFailure}`,
     };
   };
 
