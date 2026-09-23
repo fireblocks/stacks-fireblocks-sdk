@@ -43,6 +43,8 @@ interface SerializedRecord {
   rewardBtcAddress?: string;
   rewardMaxFeeSats?: string;
   stage?: EnrollmentStage;
+  fundingGeneration?: number;
+  abandonedFireblocksIds?: string[];
 }
 
 interface StoreFile {
@@ -81,6 +83,10 @@ const serializeRecord = (r: BondLockRecord): SerializedRecord => ({
   ...(r.rewardBtcAddress !== undefined ? { rewardBtcAddress: r.rewardBtcAddress } : {}),
   ...(r.rewardMaxFeeSats !== undefined ? { rewardMaxFeeSats: r.rewardMaxFeeSats.toString() } : {}),
   ...(r.stage !== undefined ? { stage: r.stage } : {}),
+  ...(r.fundingGeneration !== undefined ? { fundingGeneration: r.fundingGeneration } : {}),
+  ...(r.abandonedFireblocksIds !== undefined
+    ? { abandonedFireblocksIds: [...r.abandonedFireblocksIds] }
+    : {}),
 });
 
 const deserializeRecord = (s: SerializedRecord): BondLockRecord => ({
@@ -99,6 +105,9 @@ const deserializeRecord = (s: SerializedRecord): BondLockRecord => ({
   rewardBtcAddress: s.rewardBtcAddress,
   rewardMaxFeeSats: s.rewardMaxFeeSats !== undefined ? BigInt(s.rewardMaxFeeSats) : undefined,
   stage: s.stage,
+  fundingGeneration: s.fundingGeneration,
+  abandonedFireblocksIds:
+    s.abandonedFireblocksIds !== undefined ? [...s.abandonedFireblocksIds] : undefined,
 });
 
 /** Deterministic JSON so the checksum is stable regardless of key insertion order. */

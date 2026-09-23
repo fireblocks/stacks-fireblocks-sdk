@@ -185,8 +185,41 @@ describe("createBond — terminal failure on the FRESH funding path", () => {
     expect(res.success).toBe(false);
     expect(res.error).toMatch(/terminally failed/i);
     // The operator needs to be told the id is spent and how to recover.
-    expect(res.error).toMatch(/opts\.btcTxid/);
+    expect(res.error).toMatch(/retry createBond/i);
     expect(res.error).toMatch(/bond-fund-/);
+  });
+
+  it("directs the operator to retry this bond index once the generation advanced", async () => {
+    const sdk = makeSdk();
+    sdk.fireblocksService.createBitcoinTransaction = acceptThenFail(
+      terminalError(TransactionStateEnum.Rejected, "REJECTED_BY_POLICY"),
+    );
+
+    const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect(await readRecord(sdk)).toMatchObject({ fundingGeneration: 1 });
+    expect(res.error).toMatch(/retry createBond/i);
+    expect(res.error).not.toMatch(/different bond index/i);
+  });
+
+  it("keeps the dead-end advice when the generation advance could NOT be persisted", async () => {
+    const sdk = makeSdk();
+    sdk.fireblocksService.createBitcoinTransaction = acceptThenFail(
+      terminalError(TransactionStateEnum.Rejected, "REJECTED_BY_POLICY"),
+    );
+    const store = sdk.lockRecordStore;
+    const realSave = store.saveRecord.bind(store);
+    // Fails only the abandon write (the sole save that advances past generation 0): the
+    // funding-intent saves that precede it must land, or the terminal path is never reached.
+    store.saveRecord = jest.fn(async (addr: string, idx: number, rec: any) => {
+      if ((rec.fundingGeneration ?? 0) > 0) throw new Error("disk full");
+      return realSave(addr, idx, rec);
+    });
+
+    const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect(res.error).toMatch(/different bond index/i);
+    expect(res.error).not.toMatch(/retry createBond/i);
   });
 
   it("drops the Fireblocks id so the btcTxid recovery path is not blocked", async () => {
@@ -231,7 +264,7 @@ describe("createBond — terminal failure on the FRESH funding path", () => {
 
     expect(res.success).toBe(false);
     expect(res.error).toMatch(/terminally failed/i);
-    expect(res.error).toMatch(/opts\.btcTxid/);
+    expect(res.error).toMatch(/retry createBond/i);
   });
 
   it("persists the terminal vendor id separately from the in-flight slot", async () => {
