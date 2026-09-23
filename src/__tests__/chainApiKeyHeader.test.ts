@@ -4,6 +4,7 @@ import {
   stacksNetworkFromProfile,
   validateNetworkProfile,
 } from "../utils/network";
+import { StacksService } from "../services/stacks.service";
 
 /**
  * The Hiro API key must actually reach the chain reads (issue 209).
@@ -65,6 +66,35 @@ describe("chainApiKey reaches the chain reads", () => {
     await network.client.fetch!("https://blockstream.info/api/tx/abc");
 
     expect(HEADER in calls[0].headers).toBe(false);
+  });
+
+  it("never attaches the key to a different origin from the StacksService axios client", async () => {
+    // The axios client set the key as an unconditional default header, so scoping rested
+    // on every call site happening to target the Stacks API. withChainApiKey makes that
+    // structural for the fetch paths; this client must not be the one place it is not.
+    const svc: any = new StacksService(
+      true,
+      {
+        baseUrl: "https://api.example-stacks.invalid",
+        chainId: 1,
+        magicBytes: "id",
+      },
+      KEY,
+    );
+    const seen: Record<string, unknown>[] = [];
+    svc.axiosClient.defaults.adapter = async (config: any) => {
+      seen.push({
+        url: config.url,
+        header: config.headers?.[HEADER] ?? config.headers?.get?.(HEADER),
+      });
+      return { data: {}, status: 200, statusText: "OK", headers: {}, config };
+    };
+
+    await svc.axiosClient.get("https://blockstream.info/api/tx/abc");
+    await svc.axiosClient.get("https://api.example-stacks.invalid/v2/info");
+
+    expect(seen[0].header).toBeFalsy();
+    expect(seen[1].header).toBe(KEY);
   });
 
   it("carries the key on the network object the PoX-5 client reads through", async () => {

@@ -41,7 +41,7 @@ export interface NetworkProfile {
 }
 
 /** The origin of a URL, or undefined when it cannot be parsed. */
-const originOf = (url: unknown): string | undefined => {
+export const originOf = (url: unknown): string | undefined => {
   try {
     return new URL(String(url)).origin;
   } catch {
