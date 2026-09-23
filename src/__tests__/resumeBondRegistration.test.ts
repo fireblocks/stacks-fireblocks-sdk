@@ -110,6 +110,30 @@ describe("resumeBondRegistration", () => {
     expect(sdk.createBond).not.toHaveBeenCalled();
   });
 
+  it("resumes a record whose funding is in flight but whose txid was never recorded", async () => {
+    // onSubmitted persisted the Fireblocks id, then awaitBitcoinTransaction timed out or
+    // crashed. BTC may already sit at the lock address, so "no Bitcoin is committed" is a
+    // false statement here. createBond's hasInFlightFireblocks branch awaits that same
+    // transfer rather than funding a second time.
+    const sdk = makeSdk(
+      jest
+        .fn()
+        .mockResolvedValue(
+          fullRecord({ btcTxid: undefined, fireblocksId: "fb-in-flight" }),
+        ),
+    );
+
+    const res = await sdk.resumeBondRegistration(4);
+
+    expect(res.success).toBe(true);
+    expect(sdk.createBond).toHaveBeenCalledWith(
+      4,
+      BigInt(120_000),
+      MANAGER,
+      undefined,
+    );
+  });
+
   it("refuses for an sBTC-backed bond, which has no BTC-committed timeout", async () => {
     const sdk = makeSdk(
       jest.fn().mockResolvedValue(fullRecord({ isL1Lock: false })),
