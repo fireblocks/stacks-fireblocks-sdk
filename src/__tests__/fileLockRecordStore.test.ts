@@ -64,12 +64,14 @@ describe("FileLockRecordStore (FBS-35/52 durable store)", () => {
       btcTxid: undefined,
       fundingGeneration: 2,
       abandonedFireblocksIds: ["fb-dead-1", "fb-dead-2"],
+      registrationGeneration: 3,
     };
     await new FileLockRecordStore(file).saveRecord("STADDR", 7, rec);
 
     const loaded = await new FileLockRecordStore(file).loadRecord("STADDR", 7);
     expect(loaded!.fundingGeneration).toBe(2);
     expect(loaded!.abandonedFireblocksIds).toEqual(["fb-dead-1", "fb-dead-2"]);
+    expect(loaded!.registrationGeneration).toBe(3);
   });
 
   it("does not clobber the verified backup with a corrupt primary on the next save", async () => {
@@ -103,7 +105,9 @@ describe("FileLockRecordStore (FBS-35/52 durable store)", () => {
     // Corrupt the primary file without touching the backup.
     await fs.writeFile(file, "{ not valid json", "utf8");
 
-    await expect(store.loadRecord("STADDR", 1)).rejects.toBeInstanceOf(CorruptLockStoreError);
+    await expect(store.loadRecord("STADDR", 1)).rejects.toBeInstanceOf(
+      CorruptLockStoreError,
+    );
     // The corrupt file must NOT be overwritten with an empty object.
     const raw = await fs.readFile(file, "utf8");
     expect(raw).toBe("{ not valid json");
@@ -131,13 +135,17 @@ describe("FileLockRecordStore (FBS-35/52 durable store)", () => {
     parsed.records["STADDR:1"].amountSats = "999"; // tamper without updating checksum
     await fs.writeFile(file, JSON.stringify(parsed), "utf8");
 
-    await expect(store.checkHealth()).rejects.toBeInstanceOf(CorruptLockStoreError);
+    await expect(store.checkHealth()).rejects.toBeInstanceOf(
+      CorruptLockStoreError,
+    );
   });
 
   it("serializes concurrent writers without losing records", async () => {
     const store = new FileLockRecordStore(file);
     await Promise.all(
-      Array.from({ length: 8 }, (_, i) => store.saveRecord("STADDR", i, makeRecord(i))),
+      Array.from({ length: 8 }, (_, i) =>
+        store.saveRecord("STADDR", i, makeRecord(i)),
+      ),
     );
     for (let i = 0; i < 8; i++) {
       const r = await store.loadRecord("STADDR", i);

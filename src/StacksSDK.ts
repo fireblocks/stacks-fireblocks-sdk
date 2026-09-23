@@ -294,6 +294,59 @@ export class StacksSDK {
   };
 
   /**
+   * Deterministic Fireblocks external id for a bond's `register-for-bond` signing request.
+   *
+   * Keyed on the NONCE as well as the enrollment: the signature covers a nonce-dependent
+   * sighash, so a retry at a different nonce is a different signing request and must not
+   * resolve to the earlier one. At the same nonce the id is stable, so a retry re-polls
+   * the outstanding request instead of opening a second one for a human to approve.
+   *
+   * `generation` escapes a request that reached a terminal state — its id is consumed
+   * permanently, so without this the derived id would resolve to that dead request on
+   * every subsequent attempt.
+   */
+  private deriveRegisterExternalId = (
+    bondIndex: number,
+    lockAddress: string,
+    nonce: bigint,
+    generation: number = 0,
+  ): string => {
+    const base = `${this.vaultAccountId}:${this.networkProfile.name}:bond:${bondIndex}:${lockAddress}:nonce:${nonce}`;
+    const material = generation > 0 ? `${base}:gen:${generation}` : base;
+    const digest = createHash("sha256").update(material).digest("hex").slice(0, 40);
+    return `bond-register-${digest}`;
+  };
+
+  /**
+   * Advances the registration generation after a `register-for-bond` signing request
+   * reached a terminal Fireblocks state, so the next attempt derives an id Fireblocks
+   * has not already consumed. The Bitcoin stays committed and the record keeps pointing
+   * at it — only the L2 leg is retried.
+   */
+  private abandonTerminalRegistration = async (
+    bondIndex: number,
+    registerExternalId: string,
+    error: unknown,
+  ): Promise<string> => {
+    let advanceFailure = "";
+    try {
+      const stored = await this.lockRecordStore.loadRecord(this.address!, bondIndex);
+      if (stored) {
+        await this.lockRecordStore.saveRecord(this.address!, bondIndex, {
+          ...stored,
+          registrationGeneration: (stored.registrationGeneration ?? 0) + 1,
+        });
+      }
+    } catch (e) {
+      advanceFailure = ` The registration generation could NOT be advanced (${formatErrorMessage(e)}); a retry would derive the same consumed id — resolve the signing request in Fireblocks before retrying.`;
+    }
+    return (
+      `The register-for-bond signing request for bond ${bondIndex} terminally failed: ${formatErrorMessage(error)}. ` +
+      `The Bitcoin is locked and remains recoverable; its external id ${registerExternalId} is consumed, so the next attempt derives a fresh one.${advanceFailure}`
+    );
+  };
+
+  /**
    * Common outcome for a funding transfer that reached a terminal Fireblocks state, on
    * either the fresh or the resume path. The Fireblocks id must not stay in the record:
    * a terminally failed transfer can never yield a txid, and while the id is present
@@ -3664,7 +3717,8 @@ export class StacksSDK {
 
       // Step 10 — register on L2. Only the nonce→sign→broadcast is serialized;
       // the Bitcoin confirmation waits above ran outside the lock.
-      const result = await this.runNonceExclusive(async () => {
+      let registerExternalId = '';
+      const register = async () => this.runNonceExclusive(async () => {
         // A native lockup custodies no sBTC, so any currently custodied sBTC is
         // refunded from pox-5 during register-for-bond — cover it or Deny mode aborts
         // AFTER the Bitcoin is already locked.
@@ -3682,10 +3736,18 @@ export class StacksSDK {
           postConditionMode: PostConditionMode.Deny,
           postConditions: [Pc.origin().willSendEq(amountUstx).ustxToLock(), ...custodyRefund.conditions],
         });
+        registerExternalId = opts?.externalId
+          ? `${opts.externalId}-register`
+          : this.deriveRegisterExternalId(
+              bondIndex,
+              metadata.lockAddress,
+              resolvedNonce,
+              priorRecord?.registrationGeneration ?? 0,
+            );
         return this.pox5SignAndBroadcast(
           tx,
           opts?.note ?? 'register-for-bond',
-          opts?.externalId ? `${opts.externalId}-register` : undefined,
+          registerExternalId,
           // BTC is already locked at this point; the bond window / eligibility / custody
           // can still change during L2 approval (e.g. ERR_BOND_ALREADY_STARTED). Re-check
           // against the CURRENT height and discard rather than broadcast a doomed
@@ -3696,6 +3758,22 @@ export class StacksSDK {
           }),
         );
       });
+
+      // A terminal signing status consumes the derived external id permanently. Advance
+      // the generation so the next attempt derives one Fireblocks has not seen; the
+      // Bitcoin is locked and stays recoverable, so only the L2 leg is retried.
+      let result: Awaited<ReturnType<typeof register>>;
+      try {
+        result = await register();
+      } catch (registerErr) {
+        if (!FireblocksService.isTerminalTransferFailure(registerErr)) throw registerErr;
+        return {
+          success: false,
+          error: await this.abandonTerminalRegistration(bondIndex, registerExternalId, registerErr),
+          btcTxid,
+          vout: lockupProof.outputIndex,
+        };
+      }
       if (!result?.txid || result.error || result.reason) {
         console.error('register-for-bond broadcast failed:', JSON.stringify(result));
         const parts = [result?.error, result?.reason, (result as any)?.reason_data ? JSON.stringify((result as any).reason_data) : undefined].filter(Boolean);

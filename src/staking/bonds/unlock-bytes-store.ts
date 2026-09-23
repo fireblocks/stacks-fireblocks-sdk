@@ -97,6 +97,14 @@ export interface BondLockRecord {
    */
   abandonedFireblocksIds?: string[];
   /**
+   * Number of `register-for-bond` signing requests abandoned after a TERMINAL Fireblocks
+   * status. Mixed into the derived register external id so a rejected request's consumed
+   * id can be superseded; without it the id would resolve to that dead request on every
+   * retry. Independent of `fundingGeneration` — the Bitcoin stays committed when only the
+   * L2 leg fails. Absent means 0.
+   */
+  registrationGeneration?: number;
+  /**
    * The Fireblocks transaction id of the BTC funding transfer, persisted as soon as
    * Fireblocks accepts the request — BEFORE the (long, throwable) confirmation poll. A
    * retry after a poll timeout / crash uses it to await or resolve the SAME transfer

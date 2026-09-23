@@ -45,6 +45,7 @@ interface SerializedRecord {
   stage?: EnrollmentStage;
   fundingGeneration?: number;
   abandonedFireblocksIds?: string[];
+  registrationGeneration?: number;
 }
 
 interface StoreFile {
@@ -87,6 +88,9 @@ const serializeRecord = (r: BondLockRecord): SerializedRecord => ({
   ...(r.abandonedFireblocksIds !== undefined
     ? { abandonedFireblocksIds: [...r.abandonedFireblocksIds] }
     : {}),
+  ...(r.registrationGeneration !== undefined
+    ? { registrationGeneration: r.registrationGeneration }
+    : {}),
 });
 
 const deserializeRecord = (s: SerializedRecord): BondLockRecord => ({
@@ -108,6 +112,7 @@ const deserializeRecord = (s: SerializedRecord): BondLockRecord => ({
   fundingGeneration: s.fundingGeneration,
   abandonedFireblocksIds:
     s.abandonedFireblocksIds !== undefined ? [...s.abandonedFireblocksIds] : undefined,
+  registrationGeneration: s.registrationGeneration,
 });
 
 /** Deterministic JSON so the checksum is stable regardless of key insertion order. */
