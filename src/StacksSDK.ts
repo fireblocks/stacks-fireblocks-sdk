@@ -4597,15 +4597,24 @@ export class StacksSDK {
       // post-signing revalidate, which keys on staker and manager only. Re-read after
       // settlement so the caller keys state by what the chain holds. A failed read
       // reports no index rather than the stale one; the announce itself still landed.
+      // An absent index means two opposite things — the read failed (unknown), or it
+      // succeeded and the chain holds no membership (settled) — so the failure is carried
+      // separately rather than collapsed into the same `undefined`.
       let settledBondIndex: number | undefined;
+      let bondIndexLookupFailed = false;
       try {
         const after = await fetchBondMembership({ address: this.address, network: this.pox5Network });
         settledBondIndex = after?.bondIndex;
       } catch {
-        settledBondIndex = undefined;
+        bondIndexLookupFailed = true;
       }
 
-      return { success: true, txHash: result.txid, ...(settledBondIndex !== undefined ? { bondIndex: settledBondIndex } : {}) };
+      return {
+        success: true,
+        txHash: result.txid,
+        ...(settledBondIndex !== undefined ? { bondIndex: settledBondIndex } : {}),
+        ...(bondIndexLookupFailed ? { bondIndexLookupFailed: true } : {}),
+      };
     } catch (error) {
       return { success: false, error: `Failed to announce early exit: ${formatErrorMessage(error)}` };
     }
