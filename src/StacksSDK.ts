@@ -3159,8 +3159,12 @@ export class StacksSDK {
       if (!record.isL1Lock) {
         return { success: false, error: `Bond ${bondIndex} is sBTC-backed, which commits no Bitcoin before registering — nothing to resume. Use createSbtcBond.` };
       }
-      if (!record.btcTxid && !opts?.btcTxid) {
-        return { success: false, error: `Lock record for bond ${bondIndex} records no funding transaction, so no Bitcoin is committed and there is nothing to resume. Use createBond to fund the enrollment.` };
+      // A record carrying a fireblocksId but no txid is an ACCEPTED transfer whose
+      // confirmation poll never completed — Bitcoin may already sit at the lock address.
+      // createBond's in-flight branch awaits that same transfer instead of funding again;
+      // at a mismatched lock address nativeRecordOverwriteGuard refuses before funding.
+      if (!record.btcTxid && !opts?.btcTxid && !record.fireblocksId) {
+        return { success: false, error: `Lock record for bond ${bondIndex} records neither a funding transaction nor an in-flight Fireblocks transfer, so no Bitcoin is committed and there is nothing to resume. Use createBond to fund the enrollment.` };
       }
       if (!record.signerManager) {
         return { success: false, error: `Lock record for bond ${bondIndex} captured no signer manager, so the registration cannot be rebuilt from it. Re-run createBond with the original signer manager.` };
