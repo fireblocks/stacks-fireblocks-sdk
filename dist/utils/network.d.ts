@@ -28,6 +28,8 @@ export interface NetworkProfile {
      */
     requirePox5Active?: boolean;
 }
+/** The origin of a URL, or undefined when it cannot be parsed. */
+export declare const originOf: (url: unknown) => string | undefined;
 /**
  * Adds the Hiro API key to a request's headers, but ONLY for the Stacks API origin.
  *

@@ -66,6 +66,26 @@ export declare class StacksSDK {
      */
     private deriveFundingExternalId;
     /**
+     * Deterministic Fireblocks external id for a bond's `register-for-bond` signing request.
+     *
+     * Keyed on the NONCE as well as the enrollment: the signature covers a nonce-dependent
+     * sighash, so a retry at a different nonce is a different signing request and must not
+     * resolve to the earlier one. At the same nonce the id is stable, so a retry re-polls
+     * the outstanding request instead of opening a second one for a human to approve.
+     *
+     * `generation` escapes a request that reached a terminal state — its id is consumed
+     * permanently, so without this the derived id would resolve to that dead request on
+     * every subsequent attempt.
+     */
+    private deriveRegisterExternalId;
+    /**
+     * Advances the registration generation after a `register-for-bond` signing request
+     * reached a terminal Fireblocks state, so the next attempt derives an id Fireblocks
+     * has not already consumed. The Bitcoin stays committed and the record keeps pointing
+     * at it — only the L2 leg is retried.
+     */
+    private abandonTerminalRegistration;
+    /**
      * Common outcome for a funding transfer that reached a terminal Fireblocks state, on
      * either the fresh or the resume path. The Fireblocks id must not stay in the record:
      * a terminally failed transfer can never yield a txid, and while the id is present
@@ -984,6 +1004,14 @@ export declare class StacksSDK {
      * one batch at a time to keep a wide cycle range from exhausting node connections.
      */
     private mapCyclesLimited;
+    /**
+     * Sums per-cycle reads, propagating a negative read-failure sentinel instead of adding
+     * it in. Summed, `-1` is worth one satoshi against the total rather than making it
+     * unknown: a failed cycle alongside a 5,000-sat one yields 4,999, which passes a
+     * `< 0` check and is reported as authoritative — and enough failures against small
+     * cycles land on exactly 0, reporting "no rewards" during an outage. A total is
+     * unknown when ANY cycle is, so the sentinel is sticky.
+     */
     private sumOverCycles;
     /**
      * Executes the two-step signer-manager reward claim for a single reward cycle.

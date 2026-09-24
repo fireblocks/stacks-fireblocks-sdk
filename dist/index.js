@@ -13862,7 +13862,7 @@ var StackingPools = /* @__PURE__ */ ((StackingPools2) => {
 })(StackingPools || {});
 
 // src/services/stacks.service.ts
-var import_network = require("@stacks/network");
+var import_network2 = require("@stacks/network");
 var import_transactions2 = require("@stacks/transactions");
 
 // src/utils/errorHandling.ts
@@ -14689,6 +14689,150 @@ function parseClarityErrCode(txResult) {
   const m = repr.match(/^\(err\s+u?(\d+)\)$/);
   if (!m) return null;
   return Number(m[1]);
+}
+
+// src/utils/network.ts
+var import_network = require("@stacks/network");
+var originOf = (url) => {
+  try {
+    return new URL(String(url)).origin;
+  } catch {
+    return void 0;
+  }
+};
+function withChainApiKey(init, apiKey, requestUrl, allowedOrigin) {
+  if (!apiKey) return init;
+  if (allowedOrigin !== void 0) {
+    const target = originOf(requestUrl);
+    if (target === void 0 || target !== originOf(allowedOrigin)) return init;
+  }
+  const headers = new Headers(init?.headers ?? {});
+  headers.set(HIRO_API_KEY_HEADER, apiKey);
+  return { ...init ?? {}, headers };
+}
+function accountBalanceNormalizingFetch(baseFetch = fetch, apiKey, allowedOrigin) {
+  const stripHexPrefix = (v) => typeof v === "string" && /^0x/i.test(v) ? v.slice(2) : v;
+  return (async (input, init) => {
+    const res = await baseFetch(input, withChainApiKey(init, apiKey, input, allowedOrigin));
+    const url = typeof input === "string" ? input : input?.url ?? String(input);
+    if (!res.ok || !/\/v2\/accounts\//.test(url)) return res;
+    const data = await res.clone().json().catch(() => null);
+    if (!data || typeof data !== "object") return res;
+    const normalized = {
+      ...data,
+      balance: stripHexPrefix(data.balance),
+      locked: stripHexPrefix(data.locked)
+    };
+    return new Response(JSON.stringify(normalized), {
+      status: res.status,
+      statusText: res.statusText,
+      headers: { "content-type": "application/json" }
+    });
+  });
+}
+function resolveNetworkProfile(opts) {
+  const envUrl = process.env.STACKS_API_URL || void 0;
+  const name = opts.network ?? (opts.testnet ? "private-devnet" : "mainnet");
+  switch (name) {
+    case "private-devnet":
+      return {
+        name: "private-devnet",
+        stacksApiUrl: opts.stacksApiUrl || envUrl || PRIVATE1_HIRO_API_BASE,
+        chainId: 256,
+        magicBytes: "id",
+        esploraBaseUrl: BTC_ESPLORA.testnet,
+        bech32Prefix: "bcrt",
+        cosignerUrl: EARLY_EXIT_SIGNER.testnet,
+        expectedPoxContractName: "pox-5"
+      };
+    case "public-testnet":
+      return {
+        name: "public-testnet",
+        stacksApiUrl: opts.stacksApiUrl || envUrl || PUBLIC_TESTNET_POX5_API,
+        chainId: import_network.STACKS_TESTNET.chainId,
+        magicBytes: import_network.STACKS_TESTNET.magicBytes,
+        esploraBaseUrl: BTC_ESPLORA.public_testnet,
+        bech32Prefix: "tb",
+        cosignerUrl: EARLY_EXIT_SIGNER.public_testnet,
+        expectedPoxContractName: "pox-5",
+        requirePox5Active: true
+      };
+    case "mainnet":
+    default:
+      return {
+        name: "mainnet",
+        stacksApiUrl: opts.stacksApiUrl || envUrl || api_constants.stacks_mainnet_rpc,
+        chainId: import_network.STACKS_MAINNET.chainId,
+        magicBytes: import_network.STACKS_MAINNET.magicBytes,
+        esploraBaseUrl: BTC_ESPLORA.mainnet,
+        bech32Prefix: void 0,
+        cosignerUrl: EARLY_EXIT_SIGNER.mainnet,
+        expectedPoxContractName: "pox-5"
+      };
+  }
+}
+function stacksNetworkFromProfile(profile, apiKey, baseFetch = fetch) {
+  const base = profile.name === "mainnet" ? import_network.STACKS_MAINNET : import_network.STACKS_TESTNET;
+  return {
+    ...base,
+    chainId: profile.chainId,
+    magicBytes: profile.magicBytes,
+    client: {
+      baseUrl: profile.stacksApiUrl,
+      // Every PoX-5 read `@stacks/bitcoin-staking` performs goes through this fetch,
+      // so the key has to be applied here rather than at individual call sites.
+      fetch: accountBalanceNormalizingFetch(baseFetch, apiKey, profile.stacksApiUrl)
+    }
+  };
+}
+async function validateNetworkProfile(profile, apiKey, baseFetch = fetch) {
+  let info;
+  try {
+    const res = await baseFetch(
+      `${profile.stacksApiUrl}/v2/info`,
+      withChainApiKey(void 0, apiKey, `${profile.stacksApiUrl}/v2/info`, profile.stacksApiUrl)
+    );
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    info = await res.json();
+  } catch (error) {
+    console.warn(
+      `Network profile validation skipped \u2014 could not read ${profile.stacksApiUrl}/v2/info: ${formatErrorMessage(error)}`
+    );
+    return;
+  }
+  if (typeof info?.network_id === "number" && info.network_id !== profile.chainId) {
+    throw new Error(
+      `Network mismatch: profile "${profile.name}" expects chain id ${profile.chainId} but ${profile.stacksApiUrl} reports ${info.network_id}. Set STACKS_API_URL / testnet to a node that matches the intended network.`
+    );
+  }
+  try {
+    const poxRes = await baseFetch(
+      `${profile.stacksApiUrl}/v2/pox`,
+      withChainApiKey(void 0, apiKey, `${profile.stacksApiUrl}/v2/pox`, profile.stacksApiUrl)
+    );
+    if (poxRes.ok) {
+      const pox = await poxRes.json();
+      const contractId = pox?.contract_id;
+      const pox5Active = typeof contractId === "string" && contractId.endsWith(`.${profile.expectedPoxContractName}`);
+      if (!pox5Active) {
+        if (profile.requirePox5Active) {
+          throw new Error(
+            `Network profile "${profile.name}" requires an active ${profile.expectedPoxContractName} contract, but ${profile.stacksApiUrl} reports "${contractId ?? "unknown"}". This network is not yet supported.`
+          );
+        }
+        console.warn(
+          `Active PoX contract "${contractId}" is not ".${profile.expectedPoxContractName}"; PoX-5 bond operations may be unavailable on this network.`
+        );
+      }
+    } else if (profile.requirePox5Active) {
+      throw new Error(
+        `Network profile "${profile.name}" could not confirm an active ${profile.expectedPoxContractName} contract (GET /v2/pox returned HTTP ${poxRes.status}). This network is not yet supported.`
+      );
+    }
+  } catch (error) {
+    if (profile.requirePox5Active) throw error;
+    console.warn(`PoX contract check skipped: ${formatErrorMessage(error)}`);
+  }
 }
 
 // src/services/stacks.service.ts
@@ -15708,7 +15852,7 @@ var StacksService = class {
      * @returns An array of contract call transactions.
      */
     this.getContractCallHistory = async (address, limit = pagination_defaults.limit, offset = pagination_defaults.page) => {
-      if (!validateAddress(address, this.network === import_network.STACKS_TESTNET)) {
+      if (!validateAddress(address, this.network === import_network2.STACKS_TESTNET)) {
         throw new Error("Invalid Stacks address");
       }
       try {
@@ -15765,12 +15909,19 @@ var StacksService = class {
     };
     this.testnet = testnet;
     this.axiosClient = import_axios.default.create();
-    if (chainApiKey) {
-      this.axiosClient.defaults.headers[HIRO_API_KEY_HEADER] = chainApiKey;
-    }
     const baseUrl = profile?.baseUrl || process.env.STACKS_API_URL || (testnet ? api_constants.stacks_testnet_rpc : api_constants.stacks_mainnet_rpc);
     this.stackBaseUrl = baseUrl;
-    const defaultNetwork = testnet ? import_network.STACKS_TESTNET : import_network.STACKS_MAINNET;
+    if (chainApiKey) {
+      const allowedOrigin = originOf(baseUrl);
+      this.axiosClient.interceptors.request.use((config2) => {
+        const target = originOf(new URL(String(config2.url), baseUrl));
+        if (allowedOrigin !== void 0 && target === allowedOrigin) {
+          config2.headers.set(HIRO_API_KEY_HEADER, chainApiKey);
+        }
+        return config2;
+      });
+    }
+    const defaultNetwork = testnet ? import_network2.STACKS_TESTNET : import_network2.STACKS_MAINNET;
     this.network = {
       ...defaultNetwork,
       ...profile ? { chainId: profile.chainId, magicBytes: profile.magicBytes } : {},
@@ -15913,6 +16064,13 @@ var FireblocksTransferError = class extends Error {
     this.name = "FireblocksTransferError";
   }
 };
+var StaleRawSignError = class extends Error {
+  constructor(message, vendorId) {
+    super(message);
+    this.vendorId = vendorId;
+    this.name = "StaleRawSignError";
+  }
+};
 var TERMINAL_TRANSACTION_STATES = /* @__PURE__ */ new Set([
   import_ts_sdk2.TransactionStateEnum.Blocked,
   import_ts_sdk2.TransactionStateEnum.Cancelled,
@@ -15924,6 +16082,17 @@ var APPROVAL_PENDING_STATES = /* @__PURE__ */ new Set([
   import_ts_sdk2.TransactionStateEnum.Pending3RdPartyManualApproval
 ]);
 var describeOperation = (operation) => operation === import_ts_sdk2.TransactionOperation.Raw ? "Signing request" : "Transfer";
+var isDuplicateExternalId = (error) => {
+  const anyErr = error;
+  if (anyErr?.response?.data?.code === 1438 || anyErr?.code === 1438) return true;
+  const msg = typeof anyErr?.message === "string" ? anyErr.message : "";
+  return /\b1438\b/.test(msg) && /duplicat|external/i.test(msg);
+};
+var normalizeHex = (h) => typeof h === "string" ? h.replace(/^0x/, "").toLowerCase() : void 0;
+var rawRequestContent = (tx) => {
+  const t = tx;
+  return normalizeHex(t?.extraParameters?.rawMessageData?.messages?.[0]?.content) ?? normalizeHex(t?.signedMessages?.[0]?.content);
+};
 var describeBudget = (ms) => ms >= 60 * 60 * 1e3 ? `${Math.round(ms / (60 * 60 * 1e3))}h` : `${Math.round(ms / 6e4)}m`;
 var FireblocksSigner = class {
   constructor(fireblocks, poll = {}) {
@@ -15987,6 +16156,54 @@ var FireblocksSigner = class {
       }
       return tx;
     };
+    /**
+     * Resolves the raw-signing request already holding `externalId` to a transaction id
+     * that may be polled for `hexContent`'s signature.
+     *
+     * A signature authorizes exact bytes. The existing request was opened over the sighash
+     * of an earlier attempt, and the two differ whenever the nonce moved between them (a
+     * concurrent vault operation consuming it), so the content is compared before the
+     * request is adopted. An unreadable content is a mismatch: without it the signature is
+     * not provably over the right bytes.
+     *
+     * A genuine 404 means the id is free and the duplicate rejection came from elsewhere —
+     * the original error is rethrown rather than masked.
+     */
+    this.resolveDuplicateRawSign = async (externalId, hexContent, createError) => {
+      let existing;
+      try {
+        existing = await this.fireblocks.transactions.getTransactionByExternalId({
+          externalTxId: externalId
+        });
+      } catch (e) {
+        const status = e?.response?.status ?? e?.status;
+        if (status === 404) throw createError;
+        throw e;
+      }
+      const tx = existing?.data;
+      const vendorId = tx?.id;
+      if (!vendorId) throw createError;
+      if (tx.operation !== void 0 && tx.operation !== import_ts_sdk2.TransactionOperation.Raw) {
+        throw new StaleRawSignError(
+          `External id ${externalId} belongs to a ${tx.operation} transaction (${vendorId}), not a signing request; refusing to read a signature from it.`,
+          vendorId
+        );
+      }
+      const existingContent = rawRequestContent(tx);
+      if (existingContent === void 0) {
+        throw new StaleRawSignError(
+          `Signing request ${vendorId} already holds external id ${externalId}, but the message it was opened over could not be read back, so its signature cannot be shown to cover the current transaction. Resolve that request in Fireblocks before retrying.`,
+          vendorId
+        );
+      }
+      if (existingContent !== normalizeHex(hexContent)) {
+        throw new StaleRawSignError(
+          `Signing request ${vendorId} already holds external id ${externalId}, but it was opened over a different message \u2014 the transaction changed between attempts (typically a nonce consumed by another operation). Its signature would not authorize this transaction. Resolve that request in Fireblocks before retrying.`,
+          vendorId
+        );
+      }
+      return vendorId;
+    };
     this.rawSign = async (content, vaultAccountId, txNote, testnet = false, externalId) => {
       try {
         if (typeof content !== "string") {
@@ -16015,18 +16232,30 @@ var FireblocksSigner = class {
           ],
           algorithm: import_ts_sdk2.SignedMessageAlgorithmEnum.EcdsaSecp256K1
         };
-        const transactionResponse = await this.fireblocks.transactions.createTransaction({
-          transactionRequest: transactionPayload
-        });
-        const txId = transactionResponse.data.id;
+        let txId;
+        try {
+          const transactionResponse = await this.fireblocks.transactions.createTransaction({
+            transactionRequest: transactionPayload
+          });
+          txId = transactionResponse.data.id;
+        } catch (createError) {
+          if (!isDuplicateExternalId(createError)) throw createError;
+          txId = await this.resolveDuplicateRawSign(
+            transactionPayload.externalTxId,
+            hexContent,
+            createError
+          );
+        }
         if (!txId) {
           throw new Error("Transaction ID is undefined.");
         }
         const txInfo = await this.getTxStatus(txId);
-        const signature = txInfo.signedMessages[0].signature;
-        return signature;
+        return txInfo.signedMessages[0].signature;
       } catch (error) {
         console.log(`Caught error in rawSign: ${error}`);
+        if (error instanceof FireblocksTransferError || error instanceof StaleRawSignError) {
+          throw error;
+        }
         throw new Error(`Error in rawSign: ${formatErrorMessage(error)}`);
       }
     };
@@ -16242,12 +16471,7 @@ var FireblocksService = class {
      * message match requires 1438 as a standalone token AND a duplicate/external cue, so an
      * unrelated error that merely contains "1438" in an amount/id/timestamp is not misread.
      */
-    this.isDuplicateExternalIdError = (error) => {
-      const anyErr = error;
-      if (anyErr?.response?.data?.code === 1438 || anyErr?.code === 1438) return true;
-      const msg = typeof anyErr?.message === "string" ? anyErr.message : "";
-      return /\b1438\b/.test(msg) && /duplicat|external/i.test(msg);
-    };
+    this.isDuplicateExternalIdError = isDuplicateExternalId;
   }
   static {
     /**
@@ -16401,150 +16625,6 @@ var CosignerService = class {
     };
   }
 };
-
-// src/utils/network.ts
-var import_network2 = require("@stacks/network");
-var originOf = (url) => {
-  try {
-    return new URL(String(url)).origin;
-  } catch {
-    return void 0;
-  }
-};
-function withChainApiKey(init, apiKey, requestUrl, allowedOrigin) {
-  if (!apiKey) return init;
-  if (allowedOrigin !== void 0) {
-    const target = originOf(requestUrl);
-    if (target === void 0 || target !== originOf(allowedOrigin)) return init;
-  }
-  const headers = new Headers(init?.headers ?? {});
-  headers.set(HIRO_API_KEY_HEADER, apiKey);
-  return { ...init ?? {}, headers };
-}
-function accountBalanceNormalizingFetch(baseFetch = fetch, apiKey, allowedOrigin) {
-  const stripHexPrefix = (v) => typeof v === "string" && /^0x/i.test(v) ? v.slice(2) : v;
-  return (async (input, init) => {
-    const res = await baseFetch(input, withChainApiKey(init, apiKey, input, allowedOrigin));
-    const url = typeof input === "string" ? input : input?.url ?? String(input);
-    if (!res.ok || !/\/v2\/accounts\//.test(url)) return res;
-    const data = await res.clone().json().catch(() => null);
-    if (!data || typeof data !== "object") return res;
-    const normalized = {
-      ...data,
-      balance: stripHexPrefix(data.balance),
-      locked: stripHexPrefix(data.locked)
-    };
-    return new Response(JSON.stringify(normalized), {
-      status: res.status,
-      statusText: res.statusText,
-      headers: { "content-type": "application/json" }
-    });
-  });
-}
-function resolveNetworkProfile(opts) {
-  const envUrl = process.env.STACKS_API_URL || void 0;
-  const name = opts.network ?? (opts.testnet ? "private-devnet" : "mainnet");
-  switch (name) {
-    case "private-devnet":
-      return {
-        name: "private-devnet",
-        stacksApiUrl: opts.stacksApiUrl || envUrl || PRIVATE1_HIRO_API_BASE,
-        chainId: 256,
-        magicBytes: "id",
-        esploraBaseUrl: BTC_ESPLORA.testnet,
-        bech32Prefix: "bcrt",
-        cosignerUrl: EARLY_EXIT_SIGNER.testnet,
-        expectedPoxContractName: "pox-5"
-      };
-    case "public-testnet":
-      return {
-        name: "public-testnet",
-        stacksApiUrl: opts.stacksApiUrl || envUrl || PUBLIC_TESTNET_POX5_API,
-        chainId: import_network2.STACKS_TESTNET.chainId,
-        magicBytes: import_network2.STACKS_TESTNET.magicBytes,
-        esploraBaseUrl: BTC_ESPLORA.public_testnet,
-        bech32Prefix: "tb",
-        cosignerUrl: EARLY_EXIT_SIGNER.public_testnet,
-        expectedPoxContractName: "pox-5",
-        requirePox5Active: true
-      };
-    case "mainnet":
-    default:
-      return {
-        name: "mainnet",
-        stacksApiUrl: opts.stacksApiUrl || envUrl || api_constants.stacks_mainnet_rpc,
-        chainId: import_network2.STACKS_MAINNET.chainId,
-        magicBytes: import_network2.STACKS_MAINNET.magicBytes,
-        esploraBaseUrl: BTC_ESPLORA.mainnet,
-        bech32Prefix: void 0,
-        cosignerUrl: EARLY_EXIT_SIGNER.mainnet,
-        expectedPoxContractName: "pox-5"
-      };
-  }
-}
-function stacksNetworkFromProfile(profile, apiKey, baseFetch = fetch) {
-  const base = profile.name === "mainnet" ? import_network2.STACKS_MAINNET : import_network2.STACKS_TESTNET;
-  return {
-    ...base,
-    chainId: profile.chainId,
-    magicBytes: profile.magicBytes,
-    client: {
-      baseUrl: profile.stacksApiUrl,
-      // Every PoX-5 read `@stacks/bitcoin-staking` performs goes through this fetch,
-      // so the key has to be applied here rather than at individual call sites.
-      fetch: accountBalanceNormalizingFetch(baseFetch, apiKey, profile.stacksApiUrl)
-    }
-  };
-}
-async function validateNetworkProfile(profile, apiKey, baseFetch = fetch) {
-  let info;
-  try {
-    const res = await baseFetch(
-      `${profile.stacksApiUrl}/v2/info`,
-      withChainApiKey(void 0, apiKey, `${profile.stacksApiUrl}/v2/info`, profile.stacksApiUrl)
-    );
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    info = await res.json();
-  } catch (error) {
-    console.warn(
-      `Network profile validation skipped \u2014 could not read ${profile.stacksApiUrl}/v2/info: ${formatErrorMessage(error)}`
-    );
-    return;
-  }
-  if (typeof info?.network_id === "number" && info.network_id !== profile.chainId) {
-    throw new Error(
-      `Network mismatch: profile "${profile.name}" expects chain id ${profile.chainId} but ${profile.stacksApiUrl} reports ${info.network_id}. Set STACKS_API_URL / testnet to a node that matches the intended network.`
-    );
-  }
-  try {
-    const poxRes = await baseFetch(
-      `${profile.stacksApiUrl}/v2/pox`,
-      withChainApiKey(void 0, apiKey, `${profile.stacksApiUrl}/v2/pox`, profile.stacksApiUrl)
-    );
-    if (poxRes.ok) {
-      const pox = await poxRes.json();
-      const contractId = pox?.contract_id;
-      const pox5Active = typeof contractId === "string" && contractId.endsWith(`.${profile.expectedPoxContractName}`);
-      if (!pox5Active) {
-        if (profile.requirePox5Active) {
-          throw new Error(
-            `Network profile "${profile.name}" requires an active ${profile.expectedPoxContractName} contract, but ${profile.stacksApiUrl} reports "${contractId ?? "unknown"}". This network is not yet supported.`
-          );
-        }
-        console.warn(
-          `Active PoX contract "${contractId}" is not ".${profile.expectedPoxContractName}"; PoX-5 bond operations may be unavailable on this network.`
-        );
-      }
-    } else if (profile.requirePox5Active) {
-      throw new Error(
-        `Network profile "${profile.name}" could not confirm an active ${profile.expectedPoxContractName} contract (GET /v2/pox returned HTTP ${poxRes.status}). This network is not yet supported.`
-      );
-    }
-  } catch (error) {
-    if (profile.requirePox5Active) throw error;
-    console.warn(`PoX contract check skipped: ${formatErrorMessage(error)}`);
-  }
-}
 
 // src/staking/bonds/unlock-bytes-store.ts
 var ENROLLMENT_STAGE_ORDER = [
@@ -16945,6 +17025,45 @@ var StacksSDK = class _StacksSDK {
       return `bond-fund-${digest}`;
     };
     /**
+     * Deterministic Fireblocks external id for a bond's `register-for-bond` signing request.
+     *
+     * Keyed on the NONCE as well as the enrollment: the signature covers a nonce-dependent
+     * sighash, so a retry at a different nonce is a different signing request and must not
+     * resolve to the earlier one. At the same nonce the id is stable, so a retry re-polls
+     * the outstanding request instead of opening a second one for a human to approve.
+     *
+     * `generation` escapes a request that reached a terminal state — its id is consumed
+     * permanently, so without this the derived id would resolve to that dead request on
+     * every subsequent attempt.
+     */
+    this.deriveRegisterExternalId = (bondIndex, lockAddress, nonce, generation = 0) => {
+      const base = `${this.vaultAccountId}:${this.networkProfile.name}:bond:${bondIndex}:${lockAddress}:nonce:${nonce}`;
+      const material = generation > 0 ? `${base}:gen:${generation}` : base;
+      const digest = (0, import_crypto2.createHash)("sha256").update(material).digest("hex").slice(0, 40);
+      return `bond-register-${digest}`;
+    };
+    /**
+     * Advances the registration generation after a `register-for-bond` signing request
+     * reached a terminal Fireblocks state, so the next attempt derives an id Fireblocks
+     * has not already consumed. The Bitcoin stays committed and the record keeps pointing
+     * at it — only the L2 leg is retried.
+     */
+    this.abandonTerminalRegistration = async (bondIndex, registerExternalId, error) => {
+      let advanceFailure = "";
+      try {
+        const stored = await this.lockRecordStore.loadRecord(this.address, bondIndex);
+        if (stored) {
+          await this.lockRecordStore.saveRecord(this.address, bondIndex, {
+            ...stored,
+            registrationGeneration: (stored.registrationGeneration ?? 0) + 1
+          });
+        }
+      } catch (e) {
+        advanceFailure = ` The registration generation could NOT be advanced (${formatErrorMessage(e)}); a retry would derive the same consumed id \u2014 resolve the signing request in Fireblocks before retrying.`;
+      }
+      return `The register-for-bond signing request for bond ${bondIndex} terminally failed: ${formatErrorMessage(error)}. The Bitcoin is locked and remains recoverable; its external id ${registerExternalId} is consumed, so the next attempt derives a fresh one.${advanceFailure}`;
+    };
+    /**
      * Common outcome for a funding transfer that reached a terminal Fireblocks state, on
      * either the fresh or the resume path. The Fireblocks id must not stay in the record:
      * a terminally failed transfer can never yield a txid, and while the id is present
@@ -16955,6 +17074,7 @@ var StacksSDK = class _StacksSDK {
     this.abandonTerminalFunding = async (bondIndex, fundingExternalId, error) => {
       let fireblocksId;
       let stripFailure = "";
+      let generationAdvanced = false;
       try {
         const stored = await this.lockRecordStore.loadRecord(this.address, bondIndex);
         if (stored) {
@@ -16971,13 +17091,15 @@ var StacksSDK = class _StacksSDK {
           };
           delete abandoned.fireblocksId;
           await this.lockRecordStore.saveRecord(this.address, bondIndex, abandoned);
+          generationAdvanced = true;
         }
       } catch (e) {
         stripFailure = ` The Fireblocks id could NOT be cleared from the lock record (${formatErrorMessage(e)}); clear it before retrying with opts.btcTxid, which will otherwise be refused as an in-flight transfer.`;
       }
+      const recovery = generationAdvanced ? `Its external id ${fundingExternalId} is consumed, but the funding generation advanced \u2014 retry createBond for this same bond index and it will derive a fresh external id and re-fund this lock.` : `Its external id ${fundingExternalId} is consumed and cannot be reused, so this lock cannot be re-funded automatically \u2014 enroll under a different bond index, or resolve the transfer in Fireblocks and retry with opts.btcTxid.`;
       return {
         success: false,
-        error: `The Fireblocks funding transfer${fireblocksId ? ` (id ${fireblocksId})` : ""} for bond ${bondIndex} terminally failed: ${formatErrorMessage(error)}. Its external id ${fundingExternalId} is consumed and cannot be reused, so this lock cannot be re-funded automatically \u2014 enroll under a different bond index, or resolve the transfer in Fireblocks and retry with opts.btcTxid.${stripFailure}`
+        error: `The Fireblocks funding transfer${fireblocksId ? ` (id ${fireblocksId})` : ""} for bond ${bondIndex} terminally failed: ${formatErrorMessage(error)}. ${recovery}${stripFailure}`
       };
     };
     /**
@@ -19104,8 +19226,8 @@ var StacksSDK = class _StacksSDK {
         if (!record.isL1Lock) {
           return { success: false, error: `Bond ${bondIndex} is sBTC-backed, which commits no Bitcoin before registering \u2014 nothing to resume. Use createSbtcBond.` };
         }
-        if (!record.btcTxid && !opts?.btcTxid) {
-          return { success: false, error: `Lock record for bond ${bondIndex} records no funding transaction, so no Bitcoin is committed and there is nothing to resume. Use createBond to fund the enrollment.` };
+        if (!record.btcTxid && !opts?.btcTxid && !record.fireblocksId) {
+          return { success: false, error: `Lock record for bond ${bondIndex} records neither a funding transaction nor an in-flight Fireblocks transfer, so no Bitcoin is committed and there is nothing to resume. Use createBond to fund the enrollment.` };
         }
         if (!record.signerManager) {
           return { success: false, error: `Lock record for bond ${bondIndex} captured no signer manager, so the registration cannot be rebuilt from it. Re-run createBond with the original signer manager.` };
@@ -19417,7 +19539,8 @@ var StacksSDK = class _StacksSDK {
             vout: lockupProof.outputIndex
           };
         }
-        const result = await this.runNonceExclusive(async () => {
+        let registerExternalId = "";
+        const register = async () => this.runNonceExclusive(async () => {
           const custodyRefund = await this.custodyRefundPostConditions();
           const resolvedNonce = await this.resolveNonce(opts?.nonce);
           const tx = await this.buildRegisterForBondTx({
@@ -19432,10 +19555,16 @@ var StacksSDK = class _StacksSDK {
             postConditionMode: import_transactions4.PostConditionMode.Deny,
             postConditions: [import_transactions4.Pc.origin().willSendEq(amountUstx).ustxToLock(), ...custodyRefund.conditions]
           });
+          registerExternalId = opts?.externalId ? `${opts.externalId}-register` : this.deriveRegisterExternalId(
+            bondIndex,
+            metadata.lockAddress,
+            resolvedNonce,
+            priorRecord?.registrationGeneration ?? 0
+          );
           return this.pox5SignAndBroadcast(
             tx,
             opts?.note ?? "register-for-bond",
-            opts?.externalId ? `${opts.externalId}-register` : void 0,
+            registerExternalId,
             // BTC is already locked at this point; the bond window / eligibility / custody
             // can still change during L2 approval (e.g. ERR_BOND_ALREADY_STARTED). Re-check
             // against the CURRENT height and discard rather than broadcast a doomed
@@ -19450,6 +19579,18 @@ var StacksSDK = class _StacksSDK {
             })
           );
         });
+        let result;
+        try {
+          result = await register();
+        } catch (registerErr) {
+          if (!FireblocksService.isTerminalTransferFailure(registerErr)) throw registerErr;
+          return {
+            success: false,
+            error: await this.abandonTerminalRegistration(bondIndex, registerExternalId, registerErr),
+            btcTxid,
+            vout: lockupProof.outputIndex
+          };
+        }
         if (!result?.txid || result.error || result.reason) {
           console.error("register-for-bond broadcast failed:", JSON.stringify(result));
           const parts = [result?.error, result?.reason, result?.reason_data ? JSON.stringify(result.reason_data) : void 0].filter(Boolean);
@@ -20142,13 +20283,19 @@ var StacksSDK = class _StacksSDK {
           return { success: false, unsettled: !settled.success, error: !settled.success ? unsettledTransactionError("announce-l1-early-exit", result.txid, settled.error) : settled.data?.tx_error ?? "announce-l1-early-exit failed on-chain", txHash: result.txid };
         }
         let settledBondIndex;
+        let bondIndexLookupFailed = false;
         try {
           const after = await (0, import_bitcoin_staking2.fetchBondMembership)({ address: this.address, network: this.pox5Network });
           settledBondIndex = after?.bondIndex;
         } catch {
-          settledBondIndex = void 0;
+          bondIndexLookupFailed = true;
         }
-        return { success: true, txHash: result.txid, ...settledBondIndex !== void 0 ? { bondIndex: settledBondIndex } : {} };
+        return {
+          success: true,
+          txHash: result.txid,
+          ...settledBondIndex !== void 0 ? { bondIndex: settledBondIndex } : {},
+          ...bondIndexLookupFailed ? { bondIndexLookupFailed: true } : {}
+        };
       } catch (error) {
         return { success: false, error: `Failed to announce early exit: ${formatErrorMessage(error)}` };
       }
@@ -21220,8 +21367,17 @@ var StacksSDK = class _StacksSDK {
       }
       return values;
     };
+    /**
+     * Sums per-cycle reads, propagating a negative read-failure sentinel instead of adding
+     * it in. Summed, `-1` is worth one satoshi against the total rather than making it
+     * unknown: a failed cycle alongside a 5,000-sat one yields 4,999, which passes a
+     * `< 0` check and is reported as authoritative — and enough failures against small
+     * cycles land on exactly 0, reporting "no rewards" during an outage. A total is
+     * unknown when ANY cycle is, so the sentinel is sticky.
+     */
     this.sumOverCycles = async (cycles, fetcher) => {
       const values = await this.mapCyclesLimited(cycles, fetcher);
+      if (values.some((v) => v < BigInt(0))) return BigInt(-1);
       return values.reduce((sum, v) => sum + v, BigInt(0));
     };
     /**
@@ -23244,7 +23400,10 @@ var serializeRecord = (r) => ({
   ...r.fireblocksId !== void 0 ? { fireblocksId: r.fireblocksId } : {},
   ...r.rewardBtcAddress !== void 0 ? { rewardBtcAddress: r.rewardBtcAddress } : {},
   ...r.rewardMaxFeeSats !== void 0 ? { rewardMaxFeeSats: r.rewardMaxFeeSats.toString() } : {},
-  ...r.stage !== void 0 ? { stage: r.stage } : {}
+  ...r.stage !== void 0 ? { stage: r.stage } : {},
+  ...r.fundingGeneration !== void 0 ? { fundingGeneration: r.fundingGeneration } : {},
+  ...r.abandonedFireblocksIds !== void 0 ? { abandonedFireblocksIds: [...r.abandonedFireblocksIds] } : {},
+  ...r.registrationGeneration !== void 0 ? { registrationGeneration: r.registrationGeneration } : {}
 });
 var deserializeRecord = (s) => ({
   bondIndex: s.bondIndex,
@@ -23261,7 +23420,10 @@ var deserializeRecord = (s) => ({
   fireblocksId: s.fireblocksId,
   rewardBtcAddress: s.rewardBtcAddress,
   rewardMaxFeeSats: s.rewardMaxFeeSats !== void 0 ? BigInt(s.rewardMaxFeeSats) : void 0,
-  stage: s.stage
+  stage: s.stage,
+  fundingGeneration: s.fundingGeneration,
+  abandonedFireblocksIds: s.abandonedFireblocksIds !== void 0 ? [...s.abandonedFireblocksIds] : void 0,
+  registrationGeneration: s.registrationGeneration
 });
 var stableStringify = (records) => {
   const sortedKeys = Object.keys(records).sort();
