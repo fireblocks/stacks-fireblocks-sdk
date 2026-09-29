@@ -124,4 +124,94 @@ describe("FireblocksSigner.getTxStatus — approval-pending deadlines", () => {
     // advance on it, or a second BTC transfer becomes possible.
     expect(FireblocksService.isTerminalTransferFailure(err)).toBe(false);
   });
+
+  describe("budgets are independent, not measured from one shared clock", () => {
+    afterEach(() => jest.restoreAllMocks());
+
+    it("does not inherit elapsed approval time when transitioning to a machine-paced status", async () => {
+      // 40 minutes in PendingAuthorization (within the 60-minute approval budget), then a
+      // transition to PendingSignature (machine-paced, 30-minute budget). Sharing one
+      // clock from the start means the 40 already-spent minutes immediately exceed the
+      // 30-minute machine budget the instant machine processing begins.
+      let mockedNow = Date.now();
+      jest.spyOn(Date, "now").mockImplementation(() => mockedNow);
+
+      let call = 0;
+      const statuses = [
+        TransactionStateEnum.PendingAuthorization,
+        TransactionStateEnum.PendingSignature,
+        TransactionStateEnum.Completed,
+      ];
+      const fireblocks = {
+        transactions: {
+          getTransaction: async () => {
+            const index = Math.min(call, statuses.length - 1);
+            // The 40 minutes elapse WHILE waiting on approval, surfacing only once the
+            // status read reveals the transition to the machine-paced state.
+            if (index === 1) mockedNow += 40 * 60_000;
+            call++;
+            return {
+              data: {
+                id: "fb-tx-transition",
+                status: statuses[index],
+                operation: TransactionOperation.Transfer,
+              },
+            };
+          },
+        },
+      } as unknown as Fireblocks;
+
+      const signer = new FireblocksSigner(fireblocks, {
+        initialMs: 1,
+        ceilingMs: 1,
+        timeoutMs: 30 * 60_000,
+        approvalTimeoutMs: 60 * 60_000,
+      });
+
+      const tx = await signer.getTxStatus("fb-tx-transition");
+
+      expect(tx.status).toBe(TransactionStateEnum.Completed);
+    });
+
+    it("still enforces the machine budget once it has genuinely been spent in that state", async () => {
+      // The reset on transition must not become "never times out after moving states" —
+      // once IN the machine-paced state, its own budget still applies.
+      let mockedNow = Date.now();
+      jest.spyOn(Date, "now").mockImplementation(() => mockedNow);
+
+      let call = 0;
+      const statuses = [
+        TransactionStateEnum.PendingAuthorization,
+        TransactionStateEnum.PendingSignature,
+        TransactionStateEnum.PendingSignature,
+      ];
+      const fireblocks = {
+        transactions: {
+          getTransaction: async () => {
+            const index = Math.min(call, statuses.length - 1);
+            if (index >= 1) mockedNow += 31 * 60_000; // exceeds the 30-min machine budget
+            call++;
+            return {
+              data: {
+                id: "fb-tx-stuck",
+                status: statuses[index],
+                operation: TransactionOperation.Transfer,
+              },
+            };
+          },
+        },
+      } as unknown as Fireblocks;
+
+      const signer = new FireblocksSigner(fireblocks, {
+        initialMs: 1,
+        ceilingMs: 1,
+        timeoutMs: 30 * 60_000,
+        approvalTimeoutMs: 60 * 60_000,
+      });
+
+      await expect(signer.getTxStatus("fb-tx-stuck")).rejects.toThrow(
+        /timed out/i,
+      );
+    });
+  });
 });
