@@ -142,6 +142,9 @@ describe("ClaimResultItem — a timed-out leg is not a failed leg", () => {
     // The cycle-level record is what a caller reconciles against; a definite 'failed'
     // here invites recording a cycle as failed while its leg is still in the mempool.
     expect(results[0].unsettled).toBe(true);
+    // A consumer that branches on `status` ALONE (the app currently has no occurrence
+    // of `unsettled` anywhere) must not see a definitive verdict either.
+    expect(results[0].status).toBe("unsettled");
   });
 
   it("flags the per-bond staker payout leg as unsettled on a timeout", async () => {
@@ -155,6 +158,7 @@ describe("ClaimResultItem — a timed-out leg is not a failed leg", () => {
 
     expect(outcome.unsettled).toBe(true);
     expect(results[0].unsettled).toBe(true);
+    expect(results[0].status).toBe("unsettled");
   });
 
   it("does not flag unsettled on a leg that definitively aborted on-chain", async () => {

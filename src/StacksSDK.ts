@@ -3535,6 +3535,12 @@ export class StacksSDK {
         ...(priorRecord?.abandonedFireblocksIds !== undefined
           ? { abandonedFireblocksIds: priorRecord.abandonedFireblocksIds }
           : {}),
+        // Carried forward for the same reason: omitting it resets the counter this
+        // attempt's OWN register external id was just derived from, so a second terminal
+        // signing failure in a row re-derives the id the first retry just consumed.
+        ...(priorRecord?.registrationGeneration !== undefined
+          ? { registrationGeneration: priorRecord.registrationGeneration }
+          : {}),
         // Persist the reward destination so renewBond / updateBondRegistration re-supply
         // the pox-addr calldata rather than dropping it (a `none` map-deletes it).
         ...(effectiveRewardBtcAddress !== undefined ? { rewardBtcAddress: effectiveRewardBtcAddress } : {}),
@@ -6168,7 +6174,7 @@ export class StacksSDK {
           stakerPaidSats: null,
           signerClaimTxid,
           stakerClaimTxid: null,
-          status: 'failed',
+          status: unsettled ? 'unsettled' : 'failed',
           ...(unsettled ? { unsettled: true } : {}),
           error,
         });
@@ -6264,7 +6270,7 @@ export class StacksSDK {
           stakerPaidSats: status === 'claimed' ? stakerEntitlementSats?.toString() ?? null : null,
           signerClaimTxid,
           stakerClaimTxid,
-          status,
+          status: unsettled ? 'unsettled' : status,
           ...(unsettled ? { unsettled: true } : {}),
           ...(error ? { error } : {}),
         });
