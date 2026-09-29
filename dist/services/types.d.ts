@@ -515,13 +515,16 @@ export type ClaimResultItem = {
     signerClaimTxid: string | null;
     /** `claim-staker-rewards` transaction id for this bond. */
     stakerClaimTxid: string | null;
-    status: "claimed" | "failed";
     /**
-     * Settlement polling timed out for this leg: it was broadcast but its on-chain state
-     * is UNKNOWN and may still succeed, so `status: "failed"` here is not a confirmed
-     * failure. Both claim legs are contract-idempotent, so re-claiming the cycle is the
-     * correct response; recording the cycle as failed is not.
+     * `"unsettled"` is a leg the settlement poll timed out on: it was broadcast but its
+     * on-chain state is UNKNOWN and may still succeed. It is a distinct value, not
+     * `"failed"` plus the `unsettled` flag below, so a consumer that switches on `status`
+     * alone — without also checking `unsettled` — cannot read it as a confirmed failure.
+     * Both claim legs are contract-idempotent, so re-claiming the cycle is the correct
+     * response to `"unsettled"`; recording the cycle as failed is not.
      */
+    status: "claimed" | "failed" | "unsettled";
+    /** Kept alongside `status: "unsettled"` for callers already checking this flag. */
     unsettled?: boolean;
     error?: string;
 };
