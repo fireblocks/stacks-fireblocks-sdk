@@ -16120,8 +16120,9 @@ var FireblocksSigner = class {
     this.getTxStatus = async (txId) => {
       let response = await this.fireblocks.transactions.getTransaction({ txId });
       let tx = response.data;
-      const startedAt = Date.now();
       let delay = this.poll.initialMs;
+      let isApprovalCategory = APPROVAL_PENDING_STATES.has(tx.status);
+      let categoryStartedAt = Date.now();
       while (tx.status !== import_ts_sdk2.TransactionStateEnum.Completed) {
         const label = describeOperation(tx.operation);
         const details = () => ({
@@ -16137,8 +16138,13 @@ var FireblocksSigner = class {
             details()
           );
         }
-        const budget = APPROVAL_PENDING_STATES.has(tx.status) ? this.poll.approvalTimeoutMs : this.poll.timeoutMs;
-        if (Date.now() + delay > startedAt + budget) {
+        const isApproval = APPROVAL_PENDING_STATES.has(tx.status);
+        if (isApproval !== isApprovalCategory) {
+          isApprovalCategory = isApproval;
+          categoryStartedAt = Date.now();
+        }
+        const budget = isApproval ? this.poll.approvalTimeoutMs : this.poll.timeoutMs;
+        if (Date.now() + delay > categoryStartedAt + budget) {
           throw new FireblocksTransferError(
             `${label} ${tx.id} timed out after ${describeBudget(budget)}: still ${tx.status}${tx.subStatus ? ` (${tx.subStatus})` : ""}`,
             details()
@@ -16446,6 +16452,9 @@ var FireblocksService = class {
         return signature;
       } catch (error) {
         console.error("Error in signTransaction:", formatErrorMessage(error));
+        if (error instanceof FireblocksTransferError || error instanceof StaleRawSignError) {
+          throw error;
+        }
         throw new Error(
           `Failed to sign transaction: ${formatErrorMessage(error)}`
         );
@@ -16939,7 +16948,7 @@ function toDerSignature(r, s, sighashType = 1) {
 
 // src/StacksSDK.ts
 var StacksSDK = class _StacksSDK {
-  constructor(vaultAccountId, fireblocksConfig) {
+  constructor(vaultAccountId, fireblocksConfig, hiroApiKey) {
     this.cachedTransactions = [];
     this.testnet = false;
     this.btcRecoveryAllowlist = [];
@@ -19428,6 +19437,10 @@ var StacksSDK = class _StacksSDK {
           // Carried forward explicitly: this literal replaces the stored record, so an
           // omitted field erases the history of abandoned transfers on the next attempt.
           ...priorRecord?.abandonedFireblocksIds !== void 0 ? { abandonedFireblocksIds: priorRecord.abandonedFireblocksIds } : {},
+          // Carried forward for the same reason: omitting it resets the counter this
+          // attempt's OWN register external id was just derived from, so a second terminal
+          // signing failure in a row re-derives the id the first retry just consumed.
+          ...priorRecord?.registrationGeneration !== void 0 ? { registrationGeneration: priorRecord.registrationGeneration } : {},
           // Persist the reward destination so renewBond / updateBondRegistration re-supply
           // the pox-addr calldata rather than dropping it (a `none` map-deletes it).
           ...effectiveRewardBtcAddress !== void 0 ? { rewardBtcAddress: effectiveRewardBtcAddress } : {},
@@ -21437,7 +21450,7 @@ var StacksSDK = class _StacksSDK {
             stakerPaidSats: null,
             signerClaimTxid: signerClaimTxid2,
             stakerClaimTxid: null,
-            status: "failed",
+            status: unsettled ? "unsettled" : "failed",
             ...unsettled ? { unsettled: true } : {},
             error
           });
@@ -21497,7 +21510,7 @@ var StacksSDK = class _StacksSDK {
           stakerPaidSats: status === "claimed" ? stakerEntitlementSats?.toString() ?? null : null,
           signerClaimTxid,
           stakerClaimTxid,
-          status,
+          status: unsettled ? "unsettled" : status,
           ...unsettled ? { unsettled: true } : {},
           ...error ? { error } : {}
         });
@@ -22640,7 +22653,7 @@ var StacksSDK = class _StacksSDK {
         stacksApiUrl: fireblocksConfig?.stacksApiUrl
       });
       this.testnet = this.networkProfile.name !== "mainnet";
-      this.chainApiKey = fireblocksConfig?.chainApiKey;
+      this.chainApiKey = fireblocksConfig?.chainApiKey ?? hiroApiKey;
       this._pox5Network = stacksNetworkFromProfile(
         this.networkProfile,
         this.chainApiKey
@@ -22670,12 +22683,13 @@ var StacksSDK = class _StacksSDK {
      * Creates an instance of StacksSDK.
      * @param vaultAccountId - The Fireblocks vault account ID.
      * @param fireblocksConfig - Optional Fireblocks configuration.
+     * @param hiroApiKey - Deprecated; pass `chainApiKey` on `fireblocksConfig` instead.
      * @returns A Promise that resolves to an instance of StacksSDK.
      * @throws Will throw an error if the instance creation fails.
      */
-    this.create = async (vaultAccountId, fireblocksConfig) => {
+    this.create = async (vaultAccountId, fireblocksConfig, hiroApiKey) => {
       try {
-        const instance = new _StacksSDK(vaultAccountId, fireblocksConfig);
+        const instance = new _StacksSDK(vaultAccountId, fireblocksConfig, hiroApiKey);
         await validateNetworkProfile(
           instance.networkProfile,
           instance.chainApiKey
