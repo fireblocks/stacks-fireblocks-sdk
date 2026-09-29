@@ -407,6 +407,10 @@ export class StacksSDK {
   private constructor(
     vaultAccountId: string | number,
     fireblocksConfig?: FireblocksConfig,
+    /** @deprecated Pass `chainApiKey` on `fireblocksConfig` instead. Kept so an existing
+     * positional caller does not silently fall back to anonymous Hiro requests; used
+     * only when `fireblocksConfig.chainApiKey` is absent. */
+    hiroApiKey?: string,
   ) {
     try {
       // Validate Fireblocks API credentials before initializing services
@@ -432,7 +436,7 @@ export class StacksSDK {
       // Both testnet-family profiles (public-testnet, private-devnet) use testnet
       // address formats, BTC networks, and faucet gating.
       this.testnet = this.networkProfile.name !== "mainnet";
-      this.chainApiKey = fireblocksConfig?.chainApiKey;
+      this.chainApiKey = fireblocksConfig?.chainApiKey ?? hiroApiKey;
       this._pox5Network = stacksNetworkFromProfile(
         this.networkProfile,
         this.chainApiKey,
@@ -467,6 +471,7 @@ export class StacksSDK {
    * Creates an instance of StacksSDK.
    * @param vaultAccountId - The Fireblocks vault account ID.
    * @param fireblocksConfig - Optional Fireblocks configuration.
+   * @param hiroApiKey - Deprecated; pass `chainApiKey` on `fireblocksConfig` instead.
    * @returns A Promise that resolves to an instance of StacksSDK.
    * @throws Will throw an error if the instance creation fails.
    */
@@ -474,9 +479,11 @@ export class StacksSDK {
   public static create = async (
     vaultAccountId: string | number,
     fireblocksConfig?: FireblocksConfig,
+    /** @deprecated Pass `chainApiKey` on `fireblocksConfig` instead. */
+    hiroApiKey?: string,
   ): Promise<StacksSDK> => {
     try {
-      const instance = new StacksSDK(vaultAccountId, fireblocksConfig);
+      const instance = new StacksSDK(vaultAccountId, fireblocksConfig, hiroApiKey);
       // Fail construction on a definite chain-id / PoX-contract mismatch.
       await validateNetworkProfile(
         instance.networkProfile,
