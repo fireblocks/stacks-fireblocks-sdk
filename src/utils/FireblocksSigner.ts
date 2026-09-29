@@ -188,8 +188,15 @@ export class FireblocksSigner {
     let response: FireblocksResponse<TransactionResponse> =
       await this.fireblocks.transactions.getTransaction({ txId });
     let tx: TransactionResponse = response.data;
-    const startedAt = Date.now();
     let delay = this.poll.initialMs;
+
+    // Elapsed time is tracked per BUDGET CATEGORY, not from one shared clock: a request
+    // approved after 40 minutes and then entering a machine-paced state must not
+    // immediately time out against the machine budget for time spent waiting on a
+    // person. The clock resets on a category TRANSITION only, so a status that stays
+    // in one category the whole time behaves exactly as before.
+    let isApprovalCategory = APPROVAL_PENDING_STATES.has(tx.status);
+    let categoryStartedAt = Date.now();
 
     while (tx.status !== TransactionStateEnum.Completed) {
       const label = describeOperation(tx.operation);
@@ -210,11 +217,14 @@ export class FireblocksSigner {
 
       // The budget is re-read each pass: a transaction can move in and out of an
       // approval wait, and the two waits are paced by different things.
-      const budget = APPROVAL_PENDING_STATES.has(tx.status)
-        ? this.poll.approvalTimeoutMs
-        : this.poll.timeoutMs;
+      const isApproval = APPROVAL_PENDING_STATES.has(tx.status);
+      if (isApproval !== isApprovalCategory) {
+        isApprovalCategory = isApproval;
+        categoryStartedAt = Date.now();
+      }
+      const budget = isApproval ? this.poll.approvalTimeoutMs : this.poll.timeoutMs;
 
-      if (Date.now() + delay > startedAt + budget) {
+      if (Date.now() + delay > categoryStartedAt + budget) {
         // Typed, so a caller can tell an outstanding approval from a genuine stall.
         // Not a terminal status, so this never advances a funding generation.
         throw new FireblocksTransferError(
