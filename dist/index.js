@@ -16121,8 +16121,10 @@ var FireblocksSigner = class {
       let response = await this.fireblocks.transactions.getTransaction({ txId });
       let tx = response.data;
       let delay = this.poll.initialMs;
+      const overallStartedAt = Date.now();
+      const overallCeilingMs = this.poll.approvalTimeoutMs + this.poll.timeoutMs;
       let isApprovalCategory = APPROVAL_PENDING_STATES.has(tx.status);
-      let categoryStartedAt = Date.now();
+      let categoryStartedAt = overallStartedAt;
       while (tx.status !== import_ts_sdk2.TransactionStateEnum.Completed) {
         const label = describeOperation(tx.operation);
         const details = () => ({
@@ -16135,6 +16137,12 @@ var FireblocksSigner = class {
         if (TERMINAL_TRANSACTION_STATES.has(tx.status)) {
           throw new FireblocksTransferError(
             `${label} ${tx.id} reached terminal status ${tx.status}${tx.subStatus ? ` (${tx.subStatus})` : ""}`,
+            details()
+          );
+        }
+        if (Date.now() + delay > overallStartedAt + overallCeilingMs) {
+          throw new FireblocksTransferError(
+            `${label} ${tx.id} timed out after ${describeBudget(overallCeilingMs)} total: still ${tx.status}${tx.subStatus ? ` (${tx.subStatus})` : ""} (status kept moving between approval and machine-paced waits)`,
             details()
           );
         }
