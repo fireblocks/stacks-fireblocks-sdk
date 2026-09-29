@@ -195,8 +195,17 @@ export class FireblocksSigner {
     // immediately time out against the machine budget for time spent waiting on a
     // person. The clock resets on a category TRANSITION only, so a status that stays
     // in one category the whole time behaves exactly as before.
+    //
+    // That per-category reset has no upper bound on its own: a status alternating
+    // category on every poll resets categoryStartedAt every iteration, so the
+    // per-category check never accumulates enough elapsed time to trip. overallCeilingMs
+    // is the backstop — measured from the true start, never reset — sized to the sum of
+    // both budgets so it never fires on the legitimate single-transition case (a full
+    // approval wait followed by a full machine wait), only on repeated flapping.
+    const overallStartedAt = Date.now();
+    const overallCeilingMs = this.poll.approvalTimeoutMs + this.poll.timeoutMs;
     let isApprovalCategory = APPROVAL_PENDING_STATES.has(tx.status);
-    let categoryStartedAt = Date.now();
+    let categoryStartedAt = overallStartedAt;
 
     while (tx.status !== TransactionStateEnum.Completed) {
       const label = describeOperation(tx.operation);
@@ -211,6 +220,13 @@ export class FireblocksSigner {
       if (TERMINAL_TRANSACTION_STATES.has(tx.status)) {
         throw new FireblocksTransferError(
           `${label} ${tx.id} reached terminal status ${tx.status}${tx.subStatus ? ` (${tx.subStatus})` : ""}`,
+          details(),
+        );
+      }
+
+      if (Date.now() + delay > overallStartedAt + overallCeilingMs) {
+        throw new FireblocksTransferError(
+          `${label} ${tx.id} timed out after ${describeBudget(overallCeilingMs)} total: still ${tx.status}${tx.subStatus ? ` (${tx.subStatus})` : ""} (status kept moving between approval and machine-paced waits)`,
           details(),
         );
       }
