@@ -173,6 +173,54 @@ describe("FireblocksSigner.getTxStatus — approval-pending deadlines", () => {
       expect(tx.status).toBe(TransactionStateEnum.Completed);
     });
 
+    it("still times out eventually when the status keeps flapping between categories", async () => {
+      // A per-category reset that resets on EVERY transition, with no absolute ceiling,
+      // never fires if the status alternates category every poll: categoryStartedAt is
+      // always ~now, so the elapsed check never sees enough elapsed time to trip. An
+      // absolute ceiling across the whole wait is the backstop for that case.
+      let mockedNow = Date.now();
+      jest.spyOn(Date, "now").mockImplementation(() => mockedNow);
+
+      // Bounded rather than truly infinite, so a MISSING fix fails this assertion fast
+      // (the promise resolves once flapping ends) instead of hanging on Jest's own
+      // watchdog. 200 flaps * 20 minutes vastly exceeds any reasonable combined budget,
+      // so a working ceiling must trip well before the cap is reached.
+      let call = 0;
+      const MAX_FLAPS = 200;
+      const fireblocks = {
+        transactions: {
+          getTransaction: async () => {
+            mockedNow += 20 * 60_000;
+            const flapIndex = call++;
+            const status =
+              flapIndex >= MAX_FLAPS
+                ? TransactionStateEnum.Completed
+                : flapIndex % 2 === 0
+                  ? TransactionStateEnum.PendingAuthorization
+                  : TransactionStateEnum.PendingSignature;
+            return {
+              data: {
+                id: "fb-tx-flap",
+                status,
+                operation: TransactionOperation.Transfer,
+              },
+            };
+          },
+        },
+      } as unknown as Fireblocks;
+
+      const signer = new FireblocksSigner(fireblocks, {
+        initialMs: 1,
+        ceilingMs: 1,
+        timeoutMs: 30 * 60_000,
+        approvalTimeoutMs: 60 * 60_000,
+      });
+
+      await expect(signer.getTxStatus("fb-tx-flap")).rejects.toThrow(
+        /timed out/i,
+      );
+    });
+
     it("still enforces the machine budget once it has genuinely been spent in that state", async () => {
       // The reset on transition must not become "never times out after moving states" —
       // once IN the machine-paced state, its own budget still applies.
