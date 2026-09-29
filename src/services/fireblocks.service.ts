@@ -24,6 +24,7 @@ import { formatErrorMessage } from "../utils/errorHandling";
 import {
   FireblocksSigner,
   FireblocksTransferError,
+  StaleRawSignError,
   TERMINAL_TRANSACTION_STATES,
   isDuplicateExternalId,
 } from "../utils/FireblocksSigner";
@@ -307,6 +308,13 @@ export class FireblocksService {
       return signature;
     } catch (error) {
       console.error("Error in signTransaction:", formatErrorMessage(error));
+      // Typed failures carry the classification callers switch on — isTerminalTransferFailure
+      // reads error.details.status, which only exists on the typed error. Wrapping it here
+      // would make every caller of signTransaction (not just rawSign's own callers) unable
+      // to ever observe a terminal signing failure as terminal.
+      if (error instanceof FireblocksTransferError || error instanceof StaleRawSignError) {
+        throw error;
+      }
       throw new Error(
         `Failed to sign transaction: ${formatErrorMessage(error)}`,
       );
