@@ -182,12 +182,10 @@ beforeEach(() => {
     unlockHeight: 900,
     outputScript: OUTPUT_SCRIPT,
   });
-  (fetchCallReadOnlyFunction as jest.Mock)
-    .mockReset()
-    .mockResolvedValue({
-      type: "ok",
-      value: { type: "buffer", value: OUTPUT_SCRIPT_HEX },
-    });
+  (fetchCallReadOnlyFunction as jest.Mock).mockReset().mockResolvedValue({
+    type: "ok",
+    value: { type: "buffer", value: OUTPUT_SCRIPT_HEX },
+  });
   (fetchConstructLockupOutputScript as jest.Mock)
     .mockReset()
     .mockResolvedValue(OUTPUT_SCRIPT);
@@ -265,5 +263,31 @@ describe("createBond — register-for-bond external id", () => {
     await retry.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
 
     expect(registerIdFrom(retry)).not.toBe(wedgedId);
+  });
+
+  it("does not reuse a just-consumed id after a SECOND terminal failure in a row", async () => {
+    // The pre-funding save writes a lockRecord literal that replaces the stored record.
+    // If that literal omits registrationGeneration, a retry's own save silently resets
+    // the generation the PRIOR failure just advanced — so the second failure's abandon
+    // step re-derives the id the second attempt just consumed, instead of a fresh one.
+    const attempt1 = makeSdk();
+    attempt1.pox5SignAndBroadcast = jest
+      .fn()
+      .mockRejectedValue(terminalSigningError());
+    await attempt1.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    const attempt2 = makeSdk();
+    attempt2.lockRecordStore = attempt1.lockRecordStore;
+    attempt2.pox5SignAndBroadcast = jest
+      .fn()
+      .mockRejectedValue(terminalSigningError());
+    await attempt2.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+    const idConsumedByAttempt2 = registerIdFrom(attempt2);
+
+    const attempt3 = makeSdk();
+    attempt3.lockRecordStore = attempt1.lockRecordStore;
+    await attempt3.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect(registerIdFrom(attempt3)).not.toBe(idConsumedByAttempt2);
   });
 });
