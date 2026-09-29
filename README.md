@@ -104,6 +104,17 @@ Environment variables (via `.env`) control SDK behavior:
 | NETWORK                    | No       | MAINNET                               | Stacks mainnet or testnet               |
 | EARLY_EXIT_SIGNER_URL      | No       | Built-in testnet URL (none on mainnet) | Base URL of the external KMS cosigner service for bond early-exit spends |
 
+**Hiro API key.** This branch reads no environment for it — set `chainApiKey` on the
+`ApiServiceConfig` you construct. It is sent as `x-hiro-api-key` on Stacks API reads only;
+anonymous requests are served on Hiro's lowest rate-limit tier.
+
+**Signer-manager allowlist.** Likewise not an environment variable here — pass
+`signerManagerAdapters` on the `ApiServiceConfig`. A non-empty list is an allowlist: a manager
+absent from it is refused before anything is signed. Leave it unset to allow any manager, which is
+what lets a staker enrol with one they enter themselves. Reward payout amounts need no
+configuration — pox-5 computes the staker's entitlement and the claim is bounded by that value read
+from chain.
+
 ### Sample `.env`:
 
 See `.env.example` for a placeholder-only template.

@@ -4,22 +4,26 @@ import { ActionType, ApiServiceConfig } from "../pool/types";
 import { PoolError } from "../pool/errors";
 import { StacksSDK } from "../StacksSDK";
 import { formatErrorMessage } from "../utils/errorHandling";
-import { SDKResponse } from "../services/types";
+import { SDKResponse, FireblocksConfig } from "../services/types";
 
 export class ApiService {
   private sdkManager: SdkManager;
 
   constructor(config: ApiServiceConfig) {
-    const baseConfig = {
+    const baseConfig: FireblocksConfig = {
       apiKey: config.apiKey,
       apiSecret: config.apiSecret,
       basePath: (config.basePath as BasePath) || BasePath.US,
-      vaultAccountId: "", // Will be overridden per request
       testnet: !!config.testnet,
       verifyEarlyExitCosignerAtFunding: !!config.verifyEarlyExitCosignerAtFunding,
+      // Every option belongs on the config object, not a positional parameter: a
+      // positional must be re-passed at each hop, which is the failure mode this fix
+      // exists to remove.
+      chainApiKey: config.chainApiKey,
+      signerManagerAdapters: config.signerManagerAdapters,
     };
 
-    this.sdkManager = new SdkManager(baseConfig, config.chainApiKey, config.poolConfig);
+    this.sdkManager = new SdkManager(baseConfig, config.poolConfig);
   }
 
   /**
@@ -264,6 +268,9 @@ export class ApiService {
         case ActionType.GET_BOND_POSITION:
           result = await sdk.getBondPosition();
           break;
+        case ActionType.LIST_BOND_LOCK_RECORDS:
+          result = await sdk.listBondLockRecords();
+          break;
         case ActionType.GET_HISTORICAL_BOND_POSITION:
           result = await sdk.getHistoricalBondPosition(params.bondIndex);
           break;
@@ -287,6 +294,12 @@ export class ApiService {
           break;
         case ActionType.RENEW_BOND:
           result = await sdk.renewBond(params.nextBondIndex, params.signerManager, { feeSats: params.feeSats, note: params.note, nonce: params.nonce, externalId: params.externalId, confirmations: params.confirmations, signerCalldata: params.signerCalldata, rewardBtcAddress: params.rewardBtcAddress, rewardMaxFeeSats: params.rewardMaxFeeSats });
+          break;
+        case ActionType.HAS_ANNOUNCED_EARLY_EXIT:
+          result = await sdk.hasAnnouncedEarlyExit(params.bondIndex);
+          break;
+        case ActionType.RESUME_BOND_REGISTRATION:
+          result = await sdk.resumeBondRegistration(params.bondIndex, { note: params.note, nonce: params.nonce, confirmations: params.confirmations, btcTxid: params.btcTxid });
           break;
         case ActionType.UPDATE_BOND_REGISTRATION:
           result = await sdk.updateBondRegistration(params.signerManager, params.oldSignerManager, { note: params.note, nonce: params.nonce, externalId: params.externalId, signerCalldata: params.signerCalldata, rewardBtcAddress: params.rewardBtcAddress, rewardMaxFeeSats: params.rewardMaxFeeSats });

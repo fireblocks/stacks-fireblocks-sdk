@@ -269,6 +269,9 @@ export const PRIVATE1_HIRO_API_BASE = 'https://api.private-1.hiro.so';
 // configured override) serves the PoX-5 boot contract.
 export const PUBLIC_TESTNET_POX5_API = 'https://api.testnet-pox5.hiro.so';
 
+// Hiro's API-key header. Requests without it are served on the lowest rate-limit tier.
+export const HIRO_API_KEY_HEADER = 'x-hiro-api-key';
+
 // External KMS cosigner for the bond early-exit (OP_ELSE) spend path.
 // Auth-less public endpoints — no secrets involved. Public testnet is not provisioned;
 // resolveCosignerUrl throws for it unless EARLY_EXIT_SIGNER_URL is set.
@@ -287,11 +290,12 @@ export const EARLY_EXIT_SIGNER = {
  * (2026-08-29) alongside the connection values.
  *
  * PRESENTATION ONLY. This list does not gate anything, and must not be confused with the
- * two enforcement concepts it sits beside:
- *   - the signer-manager ALLOWLIST (`signerManagerAdapters`), which refuses managers when
- *     configured, and is deliberately left unconfigured so a staker can enter their own;
- *   - a manager's PAYOUT BOUND, required to claim rewards through it.
- * Featuring a manager here grants neither. A staker may still enrol with any manager.
+ * signer-manager ALLOWLIST (`signerManagerAdapters` / `SIGNER_MANAGER_ALLOWLIST`), which
+ * refuses managers when configured and is deliberately left unconfigured so a staker can
+ * enter their own. Featuring a manager here grants nothing.
+ *
+ * Reward claims need no per-manager configuration: pox-5 computes the staker's
+ * entitlement and the claim leg is bounded by that value read from chain.
  *
  * Third-party managers were removed from the list at the client's request after several
  * deployed ones turned out not to work; the entries below are the ones they support today.
@@ -350,7 +354,10 @@ export const POX5_BOND_ERRORS: Record<number, { name: string; message: string }>
   43: { name: 'ERR_BOND_ALREADY_STARTED',              message: 'Registered after bond-start-height — no grace period.' },
   45: { name: 'ERR_INVALID_LOCKUP_AMOUNT',             message: 'Proof amount ≠ decoded output value.' },
   46: { name: 'ERR_DUPLICATE_LOCKUP_OUTPOINT',         message: 'Same (txid, vout) submitted twice.' },
-  47: { name: 'ERR_STAKE_IN_PREPARE_PHASE',            message: 'Landed in prepare phase — broadcast earlier in the cycle.' },
+  // Temporary by construction: the prepare phase is ~17 hours of every two-week mainnet
+  // cycle, so this is a routine timing outcome rather than a fault. The wording says so,
+  // and says nothing was spent, because the operator reaches it only after authenticating.
+  47: { name: 'ERR_STAKE_IN_PREPARE_PHASE',            message: 'Temporary timing condition, not a failure: the reward cycle is in its prepare phase, during which staking is not accepted. Nothing was sent and no fee was charged. Retry once the prepare phase ends and the next cycle begins.' },
   48: { name: 'ERR_ROLLOVER_TOO_EARLY',                message: 'Rollover attempted before prior bond L1 unlock window.' },
   50: { name: 'ERR_L1_EARLY_EXIT_ALREADY_ANNOUNCED',  message: 'announceEarlyExit already called for this membership.' },
 };

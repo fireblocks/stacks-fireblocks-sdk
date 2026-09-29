@@ -1,7 +1,6 @@
 import { BasePath } from "@fireblocks/ts-sdk";
 import { SignerManagerAdapter } from "../staking/signer-manager-adapter";
 
-
 export type Network = "mainnet" | "testnet";
 
 export type GetNativeBalanceResponse = {
@@ -67,6 +66,11 @@ export type FireblocksConfig = {
    * enabling this trades that fallback's availability for a guaranteed early-exit path.
    */
   verifyEarlyExitCosignerAtFunding?: boolean;
+  /**
+   * Hiro API key applied to Stacks chain reads. Anonymous requests get Hiro's lowest
+   * rate-limit tier, so an unkeyed deployment sees 429s under load.
+   */
+  chainApiKey?: string;
 };
 
 export type CreateTransactionResponse = {
@@ -100,7 +104,7 @@ export type GetPoxInfoResponse = {
   success: boolean;
   data?: any;
   error?: string;
-}
+};
 
 export type TransactionDetails = {
   tx_id: string;
@@ -113,7 +117,7 @@ export type TransactionDetails = {
 export type GetTransactionStatusResponse = {
   success: boolean;
   /** The chain this status was read from — always Stacks for this endpoint. */
-  chain?: 'stacks';
+  chain?: "stacks";
   data?: TransactionDetails;
   error?: string;
 };
@@ -125,7 +129,7 @@ export type GetTransactionStatusResponse = {
  */
 export type BtcTxStatusResponse = {
   success: boolean;
-  chain: 'bitcoin';
+  chain: "bitcoin";
   data?: {
     txid: string;
     found: boolean;
@@ -192,6 +196,11 @@ export type CheckStatusData = {
     is_prepare_phase: boolean;
     /** True when the PoX read failed: the height/cycle/prepare fields are unknown, not authoritative. */
     pox_lookup_failed: boolean;
+    /**
+     * True when the staker-info read failed, meaning `is_staked: false` reflects an
+     * unknown state rather than a confirmed absence of a stake.
+     */
+    staker_lookup_failed: boolean;
   };
   bond: {
     bond_index: number;
@@ -200,6 +209,11 @@ export type CheckStatusData = {
     signer_manager: string;
     is_l1_lock: boolean;
   } | null;
+  /**
+   * True when the bond-membership read failed, meaning `bond: null` reflects an unknown
+   * state rather than a confirmed absence of a bond.
+   */
+  bond_lookup_failed: boolean;
 };
 
 export type CheckStatusResponse = {
@@ -264,6 +278,12 @@ export type VerifySignerGrantResponse = {
   ready_to_stake?: boolean;
   tx_status?: string | null;
   notes?: string[];
+  /**
+   * Settlement polling for the supplied txid timed out, so the grant transaction's
+   * outcome is UNKNOWN. The grant/registration fields are absent rather than false:
+   * this path never reaches the chain reads that would populate them.
+   */
+  unsettled?: boolean;
   error?: string;
 };
 
@@ -298,8 +318,9 @@ export type BondPositionData = {
   stx_unlock_burn_height: number | null;
   /** Projected paired-STX unlock from the bond phase schedule (display aid). */
   projected_stx_unlock_burn_height: number | null;
-  earned_sats: string;
-  earned_btc: string;
+  /** Summed earned rewards; null when any cycle read failed (unknown, not zero). */
+  earned_sats: string | null;
+  earned_btc: string | null;
 } | null;
 
 export type BondPositionResponse = {
@@ -312,24 +333,53 @@ export type BondPositionResponse = {
       num_cycles: number;
       signer_manager: string;
     } | null;
+    /**
+     * Native-BTC bonds with no live on-chain membership whose Bitcoin is not confirmed
+     * recovered — populated only when `bond` is null. Membership is mutable (maturity
+     * drops it, early exit zeroes it, a later registration overwrites it) while the
+     * durable lock record is not, so `bond: null` alone does not mean no committed BTC.
+     * Entries with `recovered: null` are included: unknown is not recovered.
+     */
+    historical_bonds?: HistoricalBondPositionData[];
+    /**
+     * The lock-record store could not be enumerated, so prior bonds are UNKNOWN rather
+     * than absent. `historical_bonds` is omitted in that case rather than empty.
+     */
+    historical_lookup_failed?: boolean;
   };
   error?: string;
 };
 
+export type HistoricalBondPositionData = {
+  bond_index: number;
+  amount_sats: string;
+  amount_btc: string;
+  lock_address: string;
+  unlock_height: number;
+  btc_txid: string | null;
+  vout: number | null;
+  /** Live UTXO state; null when the Bitcoin lookup failed (unknown, not spent). */
+  still_locked: boolean | null;
+  recovered: boolean | null;
+  matured: boolean | null;
+};
+
 export type HistoricalBondPositionResponse = {
+  success: boolean;
+  data?: HistoricalBondPositionData;
+  error?: string;
+};
+
+export type HasAnnouncedEarlyExitResponse = {
   success: boolean;
   data?: {
     bond_index: number;
-    amount_sats: string;
-    amount_btc: string;
-    lock_address: string;
-    unlock_height: number;
-    btc_txid: string | null;
-    vout: number | null;
-    /** Live UTXO state; null when the Bitcoin lookup failed (unknown, not spent). */
-    still_locked: boolean | null;
-    recovered: boolean | null;
-    matured: boolean | null;
+    /**
+     * Chain-authoritative. The contract's announcement map is written irreversibly and
+     * has no delete, so this is only ever present on a read that resolved — a failed
+     * read sets `success: false` rather than reporting `false`.
+     */
+    announced: boolean;
   };
   error?: string;
 };
@@ -340,6 +390,21 @@ export type AnnounceEarlyExitResponse = {
   error?: string;
   /** Settlement timed out — state unknown, may still succeed (not a confirmed failure). */
   unsettled?: boolean;
+  /**
+   * Bond index as read from chain AFTER settlement, which is what the contract recorded
+   * the announcement against — it derives the index from membership at execution time,
+   * not from anything the caller passes.
+   *
+   * Absent for two opposite reasons, separated by `bondIndexLookupFailed`: the read
+   * failed (unknown), or it succeeded and the chain holds no membership (settled). The
+   * announce itself landed either way.
+   */
+  bondIndex?: number;
+  /**
+   * The post-settlement membership read failed, so `bondIndex` is UNKNOWN rather than
+   * absent. Retry the read; do not treat the missing index as "no membership".
+   */
+  bondIndexLookupFailed?: boolean;
 };
 
 export type RequirementsResponse = {
@@ -363,20 +428,27 @@ export type RequirementsResponse = {
         // full eligibility decision — do not fund BTC on this alone (see
         // requested_bond.eligible for the authoritative check).
         open_and_allowlisted: boolean;
+        /**
+         * The allowance read failed, so open_and_allowlisted is false because nothing
+         * is known — not because the caller was refused.
+         */
+        allowance_lookup_failed: boolean;
         stx_value_ratio: string;
         target_rate_bps: number;
         min_ustx_ratio_bps: number;
-        your_allowance_sats: string;
+        /** null when the allowance read failed (unknown, not zero). */
+        your_allowance_sats: string | null;
         projected_stx_unlock_burn_height?: number | null;
       } | null;
       next_open_bond: {
         bond_index: number;
         bond_phase: string;
         open_and_allowlisted: boolean;
+        allowance_lookup_failed: boolean;
         stx_value_ratio: string;
         target_rate_bps: number;
         min_ustx_ratio_bps: number;
-        your_allowance_sats: string;
+        your_allowance_sats: string | null;
         projected_stx_unlock_burn_height?: number | null;
         min_stx_for_sats?: number;
         min_ustx_for_sats?: string;
@@ -385,10 +457,11 @@ export type RequirementsResponse = {
         bond_index: number;
         bond_phase: string;
         open_and_allowlisted: boolean;
+        allowance_lookup_failed: boolean;
         stx_value_ratio: string;
         target_rate_bps: number;
         min_ustx_ratio_bps: number;
-        your_allowance_sats: string;
+        your_allowance_sats: string | null;
         projected_stx_unlock_burn_height?: number | null;
         min_stx_for_sats?: number;
         min_ustx_for_sats?: string;
@@ -447,7 +520,7 @@ export type BtcFeeReplacementResponse = {
     feeRateOldSatVb: string;
     feeRateNewSatVb: string;
     destination: string;
-    branch: 'matured' | 'early-exit';
+    branch: "matured" | "early-exit";
   };
 };
 
@@ -486,7 +559,17 @@ export type ClaimResultItem = {
   signerClaimTxid: string | null;
   /** `claim-staker-rewards` transaction id for this bond. */
   stakerClaimTxid: string | null;
-  status: "claimed" | "failed";
+  /**
+   * `"unsettled"` is a leg the settlement poll timed out on: it was broadcast but its
+   * on-chain state is UNKNOWN and may still succeed. It is a distinct value, not
+   * `"failed"` plus the `unsettled` flag below, so a consumer that switches on `status`
+   * alone — without also checking `unsettled` — cannot read it as a confirmed failure.
+   * Both claim legs are contract-idempotent, so re-claiming the cycle is the correct
+   * response to `"unsettled"`; recording the cycle as failed is not.
+   */
+  status: "claimed" | "failed" | "unsettled";
+  /** Kept alongside `status: "unsettled"` for callers already checking this flag. */
+  unsettled?: boolean;
   error?: string;
 };
 
@@ -510,6 +593,12 @@ export type EarnedRewardsResponse = {
     staker_earned_sats?: string;
   };
   error?: string;
+  /**
+   * A chain read failed, so the amount is UNKNOWN rather than zero. Set instead of
+   * substituting 0, which a caller cannot distinguish from a genuine zero — retrying is
+   * the right response here, and recording a zero is not.
+   */
+  readFailed?: boolean;
 };
 
 export type BondLockAddressResponse = {
@@ -543,7 +632,7 @@ export type GetTransactionHistoryParams = {
   getCachedTransactions?: boolean;
   limit?: number;
   offset?: number;
-}
+};
 export type ContractCallTransaction = {
   transaction_hash: string;
   timestamp: any;
@@ -560,4 +649,3 @@ export type GetContractCallHistoryResponse = {
   data?: ContractCallTransaction[];
   error?: string;
 };
-

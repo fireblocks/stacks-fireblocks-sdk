@@ -234,7 +234,7 @@ describe("createBond — in-flight Fireblocks funding resume", () => {
     const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, `${BOOT_ADDR}.signer-manager`);
     expect(res.success).toBe(false);
     expect(res.error).toMatch(/terminally failed/i);
-    expect(res.error).toMatch(/opts\.btcTxid/);
+    expect(res.error).toMatch(/retry createBond/i);
 
     const after = await readRecord(sdk);
     // The external id is kept for diagnostics. It is DERIVED from (vault, network, bond,
@@ -243,7 +243,7 @@ describe("createBond — in-flight Fireblocks funding resume", () => {
     expect(after.fundingExternalId).toEqual(expect.stringContaining("bond-fund-"));
     expect(after.lockAddress).toBe(LOCK_ADDRESS);
     // ...but the Fireblocks id must be gone, or hasInFlightFireblocks stays true and the
-    // caller-btcTxid guard blocks the recovery this branch's error message prescribes.
+    // prescribed retry awaits the dead transfer again instead of re-funding.
     expect(after.fireblocksId).toBeUndefined();
   });
 
