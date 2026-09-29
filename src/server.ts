@@ -94,7 +94,10 @@ async function boot() {
   // schedule the contract does not enforce would lock or spend funds at the wrong height.
   // A transient read failure (UNKNOWN) is logged but not fatal, unless
   // STRICT_BOND_SCHEDULE_CHECK is set, so a momentary upstream outage does not brick boot.
-  const schedule = await validateBondScheduleAgainstChain({ profile: resolveServerProfile() });
+  const schedule = await validateBondScheduleAgainstChain({
+    profile: resolveServerProfile(),
+    chainApiKey: process.env.CHAIN_API_KEY || undefined,
+  });
   if (schedule.diff && !schedule.ok) {
     console.error(`FATAL: ${schedule.error}`);
     process.exit(1);

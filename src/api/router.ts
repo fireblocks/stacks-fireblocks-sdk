@@ -1247,6 +1247,61 @@ router.post("/:vaultId/stacking/pox5/bond/create", validateVaultId, controller.c
 
 /**
  * @openapi
+ * /{vaultId}/stacking/pox5/bond/{bondIndex}/resume:
+ *   post:
+ *     tags: [PoX-5 BTC Bonds]
+ *     summary: Resume a bond registration whose Bitcoin is already locked
+ *     description: >
+ *       Continues an enrollment that returned `unsettled: true` from bond/create or
+ *       bond/renew — the BTC is locked on L1 but the L2 register-for-bond outcome was
+ *       never observed. Sends NO Bitcoin: the funded amount and signer manager are read
+ *       from the durable lock record, and a record with no committed funding is refused
+ *       rather than funded. Safe to call repeatedly — a registration that did land is
+ *       caught by the SPV duplicate-outpoint preflight.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *       - in: path
+ *         name: bondIndex
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           minimum: 0
+ *         description: Index of the bond whose registration is being resumed.
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               confirmations:
+ *                 type: integer
+ *                 minimum: 1
+ *                 description: BTC confirmations to wait for before re-registering.
+ *               note:
+ *                 type: string
+ *                 description: Optional note attached to the Fireblocks transaction.
+ *               nonce:
+ *                 type: integer
+ *                 minimum: 0
+ *                 description: Optional Stacks nonce override for the L2 registration.
+ *               btcTxid:
+ *                 type: string
+ *                 description: >
+ *                   Actual funding txid, when the recorded one was RBF-bumped by Fireblocks
+ *                   or evicted. Look the transfer up by external id before supplying this.
+ *     responses:
+ *       200:
+ *         description: Resume attempted; inspect `success` and `unsettled` on the body.
+ *       400:
+ *         description: Invalid bondIndex or resume parameter.
+ *       500:
+ *         description: Internal server error
+ */
+router.post("/:vaultId/stacking/pox5/bond/:bondIndex/resume", validateVaultId, controller.resumeBondRegistration);
+
+/**
+ * @openapi
  * /{vaultId}/stacking/pox5/bond/sbtc/create:
  *   post:
  *     summary: Register an sBTC-backed bond (locks paired STX and transfers sBTC)
@@ -1600,6 +1655,30 @@ router.post("/:vaultId/stacking/pox5/bond/replace-fee", validateVaultId, control
  *         description: Internal server error
  */
 router.get("/:vaultId/stacking/pox5/bond/historical", validateVaultId, controller.getHistoricalBondPosition);
+
+/**
+ * @openapi
+ * /{vaultId}/stacking/pox5/bond/lock-records:
+ *   get:
+ *     tags: [PoX-5 BTC Bonds]
+ *     summary: List every durable bond lock record held for this vault
+ *     description: >
+ *       Discovery by staker address alone, for a caller that has LOST the bond index and
+ *       therefore cannot use bond/historical. Each record carries the lock address, the
+ *       funding outpoint and the immutable funded amount, so committed Bitcoin can be
+ *       located and recovered. A store that cannot enumerate is refused rather than
+ *       reported as empty — "no records" and "the store cannot answer" lead to opposite
+ *       operator decisions about whether BTC is at stake. Satoshi amounts are decimal
+ *       strings and unlockBytes is hex.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *     responses:
+ *       200:
+ *         description: Lock records for this vault's staker address; inspect `success`.
+ *       500:
+ *         description: Internal server error
+ */
+router.get("/:vaultId/stacking/pox5/bond/lock-records", validateVaultId, controller.listBondLockRecords);
 
 /**
  * @openapi

@@ -21,7 +21,13 @@ import {
 } from "../utils/fireblocks.utils";
 import { FireblocksConfig } from "./types";
 import { formatErrorMessage } from "../utils/errorHandling";
-import { FireblocksSigner } from "../utils/FireblocksSigner";
+import {
+  FireblocksSigner,
+  FireblocksTransferError,
+  StaleRawSignError,
+  TERMINAL_TRANSACTION_STATES,
+  isDuplicateExternalId,
+} from "../utils/FireblocksSigner";
 
 const secretKeyPath = process.env.FIREBLOCKS_SECRET_KEY_PATH || "";
 const basePath = process.env.FIREBLOCKS_BASE_PATH || BasePath.US;
@@ -245,30 +251,28 @@ export class FireblocksService {
   };
 
   /**
-   * Looks up a prior BTC transfer by its external id (the deterministic funding id) and
-   * awaits its Bitcoin txid. Used when a retry's re-submit is rejected as a duplicate
-   * external id (Fireblocks error 1438): the transfer already exists, so resolve it
-   * rather than failing. Returns null when Fireblocks has no transaction for the id.
+   * Lookup ONLY — returns the Fireblocks id for an external id without polling it.
+   *
+   * Deliberately does not poll: a combined lookup-and-await loses the id when the
+   * transfer is already terminal, because the await throws before the caller can persist
+   * what the lookup just found. The record then keeps no pointer to the dead transfer and
+   * every retry repeats the same generic error. Callers persist between the two steps.
    */
-  public resolveBitcoinTransactionByExternalId = async (
+  public findBitcoinTransactionByExternalId = async (
     externalId: string,
-  ): Promise<{ fireblocksId: string; btcTxid: string } | null> => {
+  ): Promise<string | null> => {
     let existing;
     try {
       existing = await this.fireblocksSDK.transactions.getTransactionByExternalId({ externalTxId: externalId });
     } catch (e) {
-      // ONLY a genuine 404 means "no transfer under this id". A transient 5xx/network
-      // error must NOT masquerade as not-found — that would turn a recoverable resume
-      // into a hard failure — so it rethrows and the caller surfaces a retryable error.
+      // Only a genuine 404 means "no transfer under this id"; a transient 5xx must not
+      // masquerade as not-found and turn a recoverable resume into a hard failure.
       const status = (e as { response?: { status?: number }; status?: number })?.response?.status
         ?? (e as { status?: number })?.status;
       if (status === 404) return null;
       throw e;
     }
-    const fireblocksId = existing?.data?.id;
-    if (!fireblocksId) return null;
-    const btcTxid = await this.awaitBitcoinTransaction(fireblocksId);
-    return { fireblocksId, btcTxid };
+    return existing?.data?.id ?? null;
   };
 
   /**
@@ -276,23 +280,16 @@ export class FireblocksService {
    * message match requires 1438 as a standalone token AND a duplicate/external cue, so an
    * unrelated error that merely contains "1438" in an amount/id/timestamp is not misread.
    */
-  public static isDuplicateExternalIdError = (error: unknown): boolean => {
-    const anyErr = error as { response?: { data?: { code?: number } }; code?: number; message?: string };
-    if (anyErr?.response?.data?.code === 1438 || anyErr?.code === 1438) return true;
-    const msg = typeof anyErr?.message === 'string' ? anyErr.message : '';
-    return /\b1438\b/.test(msg) && /duplicat|external/i.test(msg);
-  };
+  public static isDuplicateExternalIdError = isDuplicateExternalId;
 
   /**
    * True when a transfer error means the Fireblocks transaction reached a TERMINAL
    * failure state (Blocked/Cancelled/Failed/Rejected) — as opposed to a timeout or a
    * transient read error. Matches the message raised by FireblocksSigner.getTxStatus.
    */
-  public static isTerminalTransferFailure = (error: unknown): boolean => {
-    const msg = typeof (error as { message?: string })?.message === 'string' ? (error as { message: string }).message : '';
-    return /status is (BLOCKED|CANCELLED|FAILED|REJECTED)/i.test(msg)
-      || msg.includes('failed/blocked/cancelled');
-  };
+  public static isTerminalTransferFailure = (error: unknown): boolean =>
+    error instanceof FireblocksTransferError &&
+    TERMINAL_TRANSACTION_STATES.has(error.details.status);
 
   public signTransaction = async (
     content: string,
@@ -311,6 +308,13 @@ export class FireblocksService {
       return signature;
     } catch (error) {
       console.error("Error in signTransaction:", formatErrorMessage(error));
+      // Typed failures carry the classification callers switch on — isTerminalTransferFailure
+      // reads error.details.status, which only exists on the typed error. Wrapping it here
+      // would make every caller of signTransaction (not just rawSign's own callers) unable
+      // to ever observe a terminal signing failure as terminal.
+      if (error instanceof FireblocksTransferError || error instanceof StaleRawSignError) {
+        throw error;
+      }
       throw new Error(
         `Failed to sign transaction: ${formatErrorMessage(error)}`,
       );

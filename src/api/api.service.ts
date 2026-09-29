@@ -1,28 +1,14 @@
-import { BasePath, TransactionResponse } from "@fireblocks/ts-sdk";
+import { TransactionResponse } from "@fireblocks/ts-sdk";
 import { SdkManager } from "../pool/SdkManager";
 import { ActionType, ApiServiceConfig } from "../pool/types";
+import { apiServiceConfigFromEnv, toFireblocksConfig } from "../pool/config";
 import { PoolError } from "../pool/errors";
 import { StacksSDK } from "../StacksSDK";
 import { formatErrorMessage } from "../utils/errorHandling";
 import { SDKResponse } from "../services/types";
 
 // Configure the API Service once for all handlers
-const apiConfig: ApiServiceConfig = {
-  apiKey: process.env.FIREBLOCKS_API_KEY || "",
-  apiSecret: process.env.FIREBLOCKS_SECRET_KEY_PATH || "",
-  basePath: (process.env.FIREBLOCKS_BASE_PATH as BasePath) || BasePath.US,
-  testnet: (process.env.NETWORK ?? "").toLowerCase() === "testnet",
-  verifyEarlyExitCosignerAtFunding:
-    (process.env.VERIFY_EARLY_EXIT_COSIGNER_AT_FUNDING ?? "").toLowerCase() === "true",
-  // Optional: customize pool size/timeouts here
-  poolConfig: {
-    maxPoolSize: parseInt(process.env.POOL_MAX_SIZE || "100"),
-    idleTimeoutMs: parseInt(process.env.POOL_IDLE_TIMEOUT_MS || "1800000"),
-    cleanupIntervalMs: parseInt(
-      process.env.POOL_CLEANUP_INTERVAL_MS || "300000",
-    ),
-  },
-};
+const apiConfig: ApiServiceConfig = apiServiceConfigFromEnv();
 
 // Validate required environment variables
 if (apiConfig.apiKey === "") {
@@ -38,16 +24,10 @@ export class ApiService {
   private sdkManager: SdkManager;
 
   constructor(config: ApiServiceConfig) {
-    const baseConfig = {
-      apiKey: config.apiKey,
-      apiSecret: config.apiSecret,
-      basePath: (config.basePath as BasePath) || BasePath.US,
-      vaultAccountId: "", // Will be overridden per request
-      testnet: !!config.testnet,
-      verifyEarlyExitCosignerAtFunding: !!config.verifyEarlyExitCosignerAtFunding,
-    };
-
-    this.sdkManager = new SdkManager(baseConfig, config.poolConfig);
+    this.sdkManager = new SdkManager(
+      toFireblocksConfig(config),
+      config.poolConfig,
+    );
   }
 
   /**
@@ -292,6 +272,9 @@ export class ApiService {
         case ActionType.GET_BOND_POSITION:
           result = await sdk.getBondPosition();
           break;
+        case ActionType.LIST_BOND_LOCK_RECORDS:
+          result = await sdk.listBondLockRecords();
+          break;
         case ActionType.GET_HISTORICAL_BOND_POSITION:
           result = await sdk.getHistoricalBondPosition(params.bondIndex);
           break;
@@ -315,6 +298,9 @@ export class ApiService {
           break;
         case ActionType.RENEW_BOND:
           result = await sdk.renewBond(params.nextBondIndex, params.signerManager, { feeSats: params.feeSats, note: params.note, nonce: params.nonce, externalId: params.externalId, confirmations: params.confirmations, signerCalldata: params.signerCalldata, rewardBtcAddress: params.rewardBtcAddress, rewardMaxFeeSats: params.rewardMaxFeeSats });
+          break;
+        case ActionType.RESUME_BOND_REGISTRATION:
+          result = await sdk.resumeBondRegistration(params.bondIndex, { note: params.note, nonce: params.nonce, confirmations: params.confirmations, btcTxid: params.btcTxid });
           break;
         case ActionType.UPDATE_BOND_REGISTRATION:
           result = await sdk.updateBondRegistration(params.signerManager, params.oldSignerManager, { note: params.note, nonce: params.nonce, externalId: params.externalId, signerCalldata: params.signerCalldata, rewardBtcAddress: params.rewardBtcAddress, rewardMaxFeeSats: params.rewardMaxFeeSats });

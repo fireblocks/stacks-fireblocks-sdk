@@ -1174,6 +1174,42 @@ export const getHistoricalBondPosition: Handler = async (req, res, next) => {
   }
 };
 
+/**
+ * JSON-safe form of a BondLockRecord. `res.json` calls JSON.stringify, which THROWS on a
+ * bigint and renders a Uint8Array as an index map, so the two must be converted before
+ * the record crosses the HTTP boundary. Bigints become decimal strings and unlock bytes
+ * hex, matching the durable store's own on-disk encoding. Absent optional fields are
+ * omitted rather than emitted as null — the SDK distinguishes the two.
+ */
+const serializeLockRecord = (r: Record<string, unknown>): Record<string, unknown> => {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(r)) {
+    if (v === undefined) continue;
+    if (typeof v === "bigint") out[k] = v.toString();
+    else if (v instanceof Uint8Array) out[k] = Buffer.from(v).toString("hex");
+    else out[k] = v;
+  }
+  return out;
+};
+
+// GET /:vaultId/stacking/pox5/bond/lock-records
+export const listBondLockRecords: Handler = async (req, res, next) => {
+  try {
+    const vaultId = getVaultId(req);
+    const result = await apiService.executeAction(vaultId, ActionType.LIST_BOND_LOCK_RECORDS, {}) as {
+      success: boolean;
+      data?: Record<string, unknown>[];
+      error?: string;
+    };
+    res.json({
+      ...result,
+      ...(result.data !== undefined ? { data: result.data.map(serializeLockRecord) } : {}),
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 // GET /:vaultId/stacking/pox5/bond/reward-address
 export const getCommittedRewardAddress: Handler = async (req, res, next) => {
   try {
@@ -1311,6 +1347,48 @@ export const replaceBtcRecoveryFee: Handler = async (req, res, next) => {
     }
     const kind = req.body.kind === 'matured' || req.body.kind === 'early-exit' ? req.body.kind : undefined;
     const result = await apiService.executeAction(vaultId, ActionType.REPLACE_BTC_RECOVERY_FEE, { originalTxid, newFeeSats, bondIndex, kind });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /:vaultId/stacking/pox5/bond/:bondIndex/resume
+export const resumeBondRegistration: Handler = async (req, res, next) => {
+  try {
+    const vaultId = getVaultId(req);
+    const bondIndex = Number(req.params.bondIndex);
+    if (!Number.isInteger(bondIndex) || bondIndex < 0) {
+      res.status(400).json({ error: "Bad Request: bondIndex must be a non-negative integer" });
+      return;
+    }
+    // The funded amount and signer manager are deliberately NOT accepted here: they come
+    // from the durable record, so a resume cannot restate them.
+    let nonce: bigint | undefined;
+    if (req.body.nonce !== undefined) {
+      try {
+        nonce = BigInt(String(req.body.nonce));
+      } catch {
+        res.status(400).json({ error: "Bad Request: nonce must be an integer" });
+        return;
+      }
+    }
+    let confirmations: number | undefined;
+    if (req.body.confirmations !== undefined) {
+      confirmations = Number(req.body.confirmations);
+      if (!Number.isInteger(confirmations) || confirmations < 1) {
+        res.status(400).json({ error: "Bad Request: confirmations must be a positive integer" });
+        return;
+      }
+    }
+    const btcTxid = req.body.btcTxid !== undefined ? String(req.body.btcTxid).trim() : undefined;
+    if (btcTxid !== undefined && !/^[0-9a-fA-F]{64}$/.test(btcTxid)) {
+      res.status(400).json({ error: "Bad Request: btcTxid must be 64 hex characters" });
+      return;
+    }
+    const note = req.body.note !== undefined ? String(req.body.note) : undefined;
+
+    const result = await apiService.executeAction(vaultId, ActionType.RESUME_BOND_REGISTRATION, { bondIndex, note, nonce, confirmations, btcTxid });
     res.json(result);
   } catch (err) {
     next(err);
