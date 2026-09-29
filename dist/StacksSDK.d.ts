@@ -99,10 +99,13 @@ export declare class StacksSDK {
      * Creates an instance of StacksSDK.
      * @param vaultAccountId - The Fireblocks vault account ID.
      * @param fireblocksConfig - Optional Fireblocks configuration.
+     * @param hiroApiKey - Deprecated; pass `chainApiKey` on `fireblocksConfig` instead.
      * @returns A Promise that resolves to an instance of StacksSDK.
      * @throws Will throw an error if the instance creation fails.
      */
-    static create: (vaultAccountId: string | number, fireblocksConfig?: FireblocksConfig) => Promise<StacksSDK>;
+    static create: (vaultAccountId: string | number, fireblocksConfig?: FireblocksConfig, 
+    /** @deprecated Pass `chainApiKey` on `fireblocksConfig` instead. */
+    hiroApiKey?: string) => Promise<StacksSDK>;
     /**
      * Retrieves the Stacks account public key associated with the Fireblocks vault account.
      * @returns The Stacks account public key or empty string if not set.
