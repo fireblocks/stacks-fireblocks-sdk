@@ -52,10 +52,23 @@ It's designed to simplify integration with Fireblocks for secure Stacks transact
 
 ## 📦 Installation
 
-Install the package in your project:
+This package is **not published to npm**. Clone the repository and install its
+dependencies:
 
 ```bash
-npm install stacks-fireblocks-sdk
+git clone https://github.com/fireblocks/stacks-fireblocks-sdk
+cd stacks-fireblocks-sdk
+npm install
+```
+
+A built `dist/` is committed on this branch, so no build step is needed to consume
+it. Run `npm run build` only after changing source.
+
+Then add it to your own project from that local path:
+
+```bash
+cd /path/to/your-project
+npm install /absolute/path/to/stacks-fireblocks-sdk
 ```
 
 Import and use in your code:
