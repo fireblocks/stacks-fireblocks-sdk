@@ -52,10 +52,22 @@ It's designed to simplify integration with Fireblocks for secure Stacks transact
 
 ### **Option 1: TypeScript SDK (for Node.js applications)**
 
-Install the package in your project:
+This package is **not published to npm**. Clone the repository and build it locally:
 
 ```bash
-npm install stacks-fireblocks-sdk
+git clone https://github.com/fireblocks/stacks-fireblocks-sdk
+cd stacks-fireblocks-sdk
+npm install
+npm run build
+```
+
+The build step is required — the package entry point is `dist/`, which is not committed.
+
+Then add it to your own project from that local path:
+
+```bash
+cd /path/to/your-project
+npm install /absolute/path/to/stacks-fireblocks-sdk
 ```
 
 Import and use in your code:
