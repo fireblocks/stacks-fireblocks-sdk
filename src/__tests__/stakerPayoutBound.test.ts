@@ -161,6 +161,43 @@ describe("claim-staker-rewards bound — from chain, not from a constant", () =>
     expect(results[0].status).toBe("failed");
   });
 
+  it("does not broadcast claim-staker-rewards when this staker's entitlement is zero", async () => {
+    // The cohort accrual can stay above zero (other stakers) while this staker's own
+    // entitlement is zero — e.g. a bond that announced early exit. The manager aborts
+    // claim-staker-rewards on (asserts! (> earned u0)) (Stacks Labs, review item 2), so
+    // broadcasting it only spends a fee and a signature.
+    const sdk = makeSdk();
+    (fetchEarnedStakerRewards as jest.Mock).mockResolvedValue(BigInt(0));
+
+    const { outcome } = await runClaimCycle(sdk);
+
+    expect(outcome.error).toBeUndefined();
+    const legTwo = (makeUnsignedContractCall as jest.Mock).mock.calls.filter(
+      (c) => c[0].functionName === "claim-staker-rewards",
+    );
+    expect(legTwo).toHaveLength(0);
+  });
+
+  it("still claims the next bond after one with a zero entitlement", async () => {
+    // The aborted leg used to end the run, leaving every later bond and cycle unclaimed.
+    const sdk = makeSdk();
+    (fetchEarnedStakerRewards as jest.Mock).mockImplementation(async ({ bondIndex }: any) =>
+      bondIndex === 3 ? BigInt(0) : BigInt(777),
+    );
+
+    const results: any[] = [];
+    const outcome = await sdk.executeClaimCycle(
+      BOOT_ADDR, MANAGER_NAME, 7, [3, 4], [3, 4], { value: undefined }, undefined, [], results,
+    );
+
+    expect(outcome.error).toBeUndefined();
+    const legTwo = (makeUnsignedContractCall as jest.Mock).mock.calls.filter(
+      (c) => c[0].functionName === "claim-staker-rewards",
+    );
+    expect(legTwo).toHaveLength(1);
+    expect(results.find((r) => r.bondIndex === 4)?.status).toBe("claimed");
+  });
+
   it("defaults the payout asset to the chain-resolved sBTC asset", async () => {
     const sdk = makeSdk();
 

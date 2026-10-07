@@ -6373,6 +6373,10 @@ export class StacksSDK {
         recordResult('failed', null, msg);
         return { error: msg };
       }
+      // The manager aborts claim-staker-rewards on (asserts! (> earned u0)), and an aborted
+      // transaction is still mined and charged. A zero entitlement while the cohort accrual
+      // is positive is normal — e.g. a bond that announced early exit.
+      if (stakerEntitlementSats === BigInt(0)) continue;
 
       const smStaker = await broadcastLeg(
         (n) => makeUnsignedContractCall({
