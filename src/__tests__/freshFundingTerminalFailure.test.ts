@@ -122,6 +122,30 @@ function makeSdk(): any {
   return sdk;
 }
 
+/** A terminal failure for a specific transfer, as Fireblocks reports it. */
+const terminalErrorFor = (vendorId: string, status: TransactionStateEnum) =>
+  new FireblocksTransferError(`Transfer ${vendorId} reached terminal status ${status}`, {
+    operation: "TRANSFER",
+    status,
+    vendorId,
+  });
+
+/** A promise plus the handles to settle it from outside, for ordering concurrent calls. */
+const deferred = <T>() => {
+  let resolve!: (v: T) => void;
+  let reject!: (e: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+};
+
+const until = async (cond: () => boolean) => {
+  for (let i = 0; i < 200 && !cond(); i++) await new Promise((r) => setImmediate(r));
+  if (!cond()) throw new Error("condition never became true");
+};
+
 const readRecord = (sdk: any) =>
   sdk.lockRecordStore.loadRecord(sdk.address, BOND_INDEX);
 
@@ -290,12 +314,14 @@ describe("createBond — terminal failure on the FRESH funding path", () => {
     );
 
     await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
-    // Second attempt derives a new external id (generation advanced) and also dies.
+    // Second attempt derives a new external id (generation advanced) and also dies. Its
+    // error names ITS OWN transfer: an error naming the first transfer would be a stale
+    // failure, which must not abandon this one.
     sdk.fireblocksService.createBitcoinTransaction = jest
       .fn()
       .mockImplementation(async (..._args: any[]) => {
         await _args[5]?.("fireblocks-tx-id-second");
-        throw terminalError(TransactionStateEnum.Failed);
+        throw terminalErrorFor("fireblocks-tx-id-second", TransactionStateEnum.Failed);
       });
     await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
 
@@ -304,6 +330,60 @@ describe("createBond — terminal failure on the FRESH funding path", () => {
       FB_ID,
       "fireblocks-tx-id-second",
     ]);
+  });
+
+  it("a stale failure from an overlapping call does not abandon the transfer that replaced it", async () => {
+    // Two overlapping createBond calls (an HTTP retry is enough) both await transfer A.
+    // A is rejected; call 1 abandons it and a retry opens B. Call 2 then receives A's
+    // rejection. Abandoning whatever the record holds would clear B — still live — and
+    // advance the generation again, so the next retry opens C and two transfers land.
+    const sdk = makeSdk();
+
+    // Leave A in flight: accepted (id persisted), then the confirmation poll dies.
+    sdk.fireblocksService.createBitcoinTransaction = jest
+      .fn()
+      .mockImplementation(async (..._args: any[]) => {
+        await _args[5]?.(FB_ID);
+        throw new Error("ECONNRESET");
+      });
+    await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+    expect((await readRecord(sdk)).fireblocksId).toBe(FB_ID);
+
+    const a1 = deferred<string>();
+    const a2 = deferred<string>();
+    sdk.fireblocksService.awaitBitcoinTransaction = jest
+      .fn()
+      .mockImplementationOnce(() => a1.promise)
+      .mockImplementationOnce(() => a2.promise);
+
+    const call1 = sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+    const call2 = sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+    await until(() => sdk.fireblocksService.awaitBitcoinTransaction.mock.calls.length === 2);
+
+    a1.reject(terminalErrorFor(FB_ID, TransactionStateEnum.Rejected));
+    await call1;
+
+    // A retry opens B, which Fireblocks accepts and is still processing.
+    let bAccepted = false;
+    sdk.fireblocksService.createBitcoinTransaction = jest
+      .fn()
+      .mockImplementation(async (..._args: any[]) => {
+        await _args[5]?.("fireblocks-tx-id-B");
+        bAccepted = true;
+        return new Promise(() => {});
+      });
+    void sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+    await until(() => bAccepted);
+
+    a2.reject(terminalErrorFor(FB_ID, TransactionStateEnum.Rejected));
+    const stale = await call2;
+
+    const after = await readRecord(sdk);
+    expect(after.fireblocksId).toBe("fireblocks-tx-id-B");
+    expect(after.fundingGeneration).toBe(1);
+    expect(after.abandonedFireblocksIds).toEqual([FB_ID]);
+    expect(stale.success).toBe(false);
+    expect(stale.error).not.toMatch(/derive a fresh external id/);
   });
 
   it("persists the resolved id BEFORE polling it, so a timeout still leaves a pointer", async () => {

@@ -14,17 +14,20 @@
  * recovery that branch's own error message prescribes.
  */
 
-jest.mock("../services/fireblocks.service", () => ({
-  FireblocksService: Object.assign(
-    jest.fn().mockImplementation(() => ({})),
-    {
-      // Static helpers the funding branches call.
-      isTerminalTransferFailure: (e: unknown) =>
-        /terminally-failed/.test((e as Error)?.message ?? ""),
-      isDuplicateExternalIdError: () => false,
-    },
-  ),
-}));
+jest.mock("../services/fireblocks.service", () => {
+  // The REAL terminal classifier: it reads the typed vendor status, and the abandon path
+  // keys on the vendor id that only a typed error carries.
+  const actual = jest.requireActual("../services/fireblocks.service");
+  return {
+    FireblocksService: Object.assign(
+      jest.fn().mockImplementation(() => ({})),
+      {
+        isTerminalTransferFailure: actual.FireblocksService.isTerminalTransferFailure,
+        isDuplicateExternalIdError: () => false,
+      },
+    ),
+  };
+});
 
 jest.mock("@stacks/bitcoin-staking", () => {
   const actual = jest.requireActual("@stacks/bitcoin-staking");
@@ -49,7 +52,9 @@ jest.mock("@stacks/transactions", () => {
   return { ...actual, fetchCallReadOnlyFunction: jest.fn() };
 });
 
+import { TransactionStateEnum } from "@fireblocks/ts-sdk";
 import { StacksSDK } from "../StacksSDK";
+import { FireblocksTransferError } from "../utils/FireblocksSigner";
 import {
   fetchBondAllowance,
   fetchPoxInfo,
@@ -76,6 +81,14 @@ const LOCK_ADDRESS = "lock-address-under-test";
 const OUTPUT_SCRIPT = new Uint8Array([0x00, 0x20, ...new Array(32).fill(0xab)]);
 const OUTPUT_SCRIPT_HEX = Buffer.from(OUTPUT_SCRIPT).toString("hex");
 const FB_ID = "fireblocks-tx-id-1";
+
+/** The in-flight transfer reaching a terminal status, as Fireblocks reports it. */
+const inFlightRejected = () =>
+  new FireblocksTransferError(`Transfer ${FB_ID} reached terminal status REJECTED`, {
+    operation: "TRANSFER",
+    status: TransactionStateEnum.Rejected,
+    vendorId: FB_ID,
+  });
 const AMOUNT_SATS = BigInt(100_000);
 const GOOD_TXID = "ab".repeat(32);
 
@@ -227,9 +240,7 @@ describe("createBond — in-flight Fireblocks funding resume", () => {
   it("drops fireblocksId on a TERMINAL failure so the btcTxid recovery path stays open", async () => {
     const sdk = makeSdk();
     await seedInFlightRecord(sdk);
-    sdk.fireblocksService.awaitBitcoinTransaction.mockRejectedValue(
-      new Error("transfer terminally-failed: REJECTED"),
-    );
+    sdk.fireblocksService.awaitBitcoinTransaction.mockRejectedValue(inFlightRejected());
 
     const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, `${BOOT_ADDR}.signer-manager`);
     expect(res.success).toBe(false);
@@ -250,9 +261,7 @@ describe("createBond — in-flight Fireblocks funding resume", () => {
   it("after a terminal failure, a retry WITH opts.btcTxid is accepted (not refused as in-flight)", async () => {
     const sdk = makeSdk();
     await seedInFlightRecord(sdk);
-    sdk.fireblocksService.awaitBitcoinTransaction.mockRejectedValue(
-      new Error("transfer terminally-failed: REJECTED"),
-    );
+    sdk.fireblocksService.awaitBitcoinTransaction.mockRejectedValue(inFlightRejected());
     await sdk.createBond(BOND_INDEX, AMOUNT_SATS, `${BOOT_ADDR}.signer-manager`);
 
     // The operator resolves the transfer in Fireblocks and retries with the real txid.
