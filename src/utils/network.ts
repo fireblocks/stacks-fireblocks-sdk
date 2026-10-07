@@ -75,7 +75,10 @@ export function withChainApiKey(
   }
   const headers = new Headers(init?.headers ?? {});
   headers.set(HIRO_API_KEY_HEADER, apiKey);
-  return { ...(init ?? {}), headers };
+  // The origin check above covers only the first hop. A followed redirect keeps custom
+  // headers (only Authorization is dropped cross-origin), so a keyed request refuses
+  // redirects outright.
+  return { ...(init ?? {}), headers, redirect: "error" };
 }
 
 const ERROR_BODY_EXCERPT_CHARS = 200;

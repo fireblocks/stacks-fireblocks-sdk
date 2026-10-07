@@ -92,6 +92,9 @@ export class StacksService {
         const target = originOf(new URL(String(config.url), baseUrl));
         if (allowedOrigin !== undefined && target === allowedOrigin) {
           config.headers.set(HIRO_API_KEY_HEADER, chainApiKey);
+          // A followed redirect keeps custom headers, so the key would leave the origin
+          // checked above; a keyed request does not follow redirects.
+          config.maxRedirects = 0;
         }
         return config;
       });
