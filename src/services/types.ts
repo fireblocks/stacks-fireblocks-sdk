@@ -1,5 +1,6 @@
 import { BasePath } from "@fireblocks/ts-sdk";
 import { SignerManagerAdapter } from "../staking/signer-manager-adapter";
+import type { PollConfig } from "../utils/FireblocksSigner";
 
 export type Network = "mainnet" | "testnet";
 
@@ -25,6 +26,13 @@ export type FireblocksConfig = {
   apiSecret: string; // can be path or inline string
   basePath?: BasePath;
   testnet?: boolean;
+  /**
+   * Fireblocks request polling budgets. `approvalTimeoutMs` bounds the wait on a person
+   * (PENDING_AUTHORIZATION, third-party manual approval); it defaults to the
+   * machine-paced `timeoutMs`, because a longer wait lets an approval straddle the
+   * prepare-phase boundary against a stale preflight.
+   */
+  poll?: PollConfig;
   /**
    * Explicit network profile. Takes precedence over `testnet`. `public-testnet` is
    * currently gated and fails construction until a node serving the PoX-5 boot
@@ -296,6 +304,16 @@ export type CreateBondResult = {
   error?: string;
   /** Settlement timed out — state unknown, may still succeed (not a confirmed failure). */
   unsettled?: boolean;
+  /**
+   * The wait ended while a Fireblocks request (the BTC funding transfer or the
+   * register-for-bond signing request) was still outstanding — not failed. Retrying
+   * createBond resumes the same request; it never opens a second one.
+   */
+  pendingFireblocksId?: string;
+  /** The outstanding request's Fireblocks status when the wait ended. */
+  pendingFireblocksStatus?: string;
+  /** The outstanding request is waiting on a person to approve it in Fireblocks. */
+  pendingApproval?: boolean;
 };
 
 export type BondPositionData = {

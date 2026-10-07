@@ -21,7 +21,7 @@
 import { StacksService } from "./services/stacks.service";
 import { type StacksNetwork } from "@stacks/network";
 import { FireblocksService } from "./services/fireblocks.service";
-import { FireblocksTransferError } from "./utils/FireblocksSigner";
+import { APPROVAL_PENDING_STATES, FireblocksTransferError, TERMINAL_TRANSACTION_STATES } from "./utils/FireblocksSigner";
 import { CosignerService, resolveCosignerUrl } from "./services/cosigner.service";
 import {
   AnnounceEarlyExitResponse,
@@ -3825,6 +3825,20 @@ export class StacksSDK {
         amountUstx: amountUstx.toString(),
       };
     } catch (error) {
+      // A non-terminal typed failure is the poll giving up on a request that is still
+      // outstanding. Retrying resumes it — the funding id is in the record and the
+      // register id is derived — so it is reported as pending, not as a failure.
+      if (error instanceof FireblocksTransferError && !TERMINAL_TRANSACTION_STATES.has(error.details.status)) {
+        const awaitingApproval = APPROVAL_PENDING_STATES.has(error.details.status);
+        return {
+          success: false,
+          error: `Fireblocks request ${error.details.vendorId} is still ${error.details.status}${awaitingApproval ? " (awaiting approval)" : ""} — not failed. Retry createBond for bond ${bondIndex} to keep waiting on the same request; nothing new is sent.`,
+          pendingFireblocksId: error.details.vendorId,
+          pendingFireblocksStatus: error.details.status,
+          ...(awaitingApproval ? { pendingApproval: true } : {}),
+          ...committedBtc,
+        };
+      }
       console.error('createBond error:', error);
       return { success: false, error: `Failed to create bond: ${formatErrorMessage(error)}`, ...committedBtc };
     }

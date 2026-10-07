@@ -97,4 +97,5 @@ export const toFireblocksConfig = (
   verifyEarlyExitCosignerAtFunding: !!config.verifyEarlyExitCosignerAtFunding,
   chainApiKey: config.chainApiKey,
   signerManagerAdapters: config.signerManagerAdapters,
+  ...(config.poll !== undefined ? { poll: config.poll } : {}),
 });
