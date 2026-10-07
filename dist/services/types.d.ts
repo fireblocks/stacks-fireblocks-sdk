@@ -1,5 +1,6 @@
 import { BasePath } from "@fireblocks/ts-sdk";
 import { SignerManagerAdapter } from "../staking/signer-manager-adapter";
+import type { PollConfig } from "../utils/FireblocksSigner";
 export type Network = "mainnet" | "testnet";
 export type GetNativeBalanceResponse = {
     success: boolean;
@@ -21,6 +22,13 @@ export type FireblocksConfig = {
     apiSecret: string;
     basePath?: BasePath;
     testnet?: boolean;
+    /**
+     * Fireblocks request polling budgets. `approvalTimeoutMs` bounds the wait on a person
+     * (PENDING_AUTHORIZATION, third-party manual approval); it defaults to the
+     * machine-paced `timeoutMs`, because a longer wait lets an approval straddle the
+     * prepare-phase boundary against a stale preflight.
+     */
+    poll?: PollConfig;
     /**
      * Explicit network profile. Takes precedence over `testnet`. `public-testnet` is
      * currently gated and fails construction until a node serving the PoX-5 boot
@@ -273,6 +281,16 @@ export type CreateBondResult = {
     error?: string;
     /** Settlement timed out — state unknown, may still succeed (not a confirmed failure). */
     unsettled?: boolean;
+    /**
+     * The wait ended while a Fireblocks request (the BTC funding transfer or the
+     * register-for-bond signing request) was still outstanding — not failed. Retrying
+     * createBond resumes the same request; it never opens a second one.
+     */
+    pendingFireblocksId?: string;
+    /** The outstanding request's Fireblocks status when the wait ended. */
+    pendingFireblocksStatus?: string;
+    /** The outstanding request is waiting on a person to approve it in Fireblocks. */
+    pendingApproval?: boolean;
 };
 export type BondPositionData = {
     bond_index: number;
@@ -360,18 +378,15 @@ export type AnnounceEarlyExitResponse = {
     /** Settlement timed out — state unknown, may still succeed (not a confirmed failure). */
     unsettled?: boolean;
     /**
-     * Bond index as read from chain AFTER settlement, which is what the contract recorded
-     * the announcement against — it derives the index from membership at execution time,
-     * not from anything the caller passes.
-     *
-     * Absent for two opposite reasons, separated by `bondIndexLookupFailed`: the read
-     * failed (unknown), or it succeeded and the chain holds no membership (settled). The
-     * announce itself landed either way.
+     * The bond the announcement was recorded against, taken from the settled transaction
+     * result — the contract derives it from membership at execution time and returns it.
+     * Present on every successful announce whose result could be decoded.
      */
     bondIndex?: number;
     /**
-     * The post-settlement membership read failed, so `bondIndex` is UNKNOWN rather than
-     * absent. Retry the read; do not treat the missing index as "no membership".
+     * The announce landed but its result could not be decoded, so `bondIndex` is UNKNOWN.
+     * Look the transaction up by `txHash`; do not infer the bond from current membership,
+     * which may already name a later bond.
      */
     bondIndexLookupFailed?: boolean;
 };
@@ -449,6 +464,8 @@ export type DerivedLock = {
     /** Funding outpoint from the durable record, when available. */
     btcTxid?: string;
     vout?: number;
+    /** Fireblocks id of a funding transfer accepted but not yet recorded as broadcast. */
+    fireblocksId?: string;
 };
 export type UnlockBtcResponse = {
     success: boolean;

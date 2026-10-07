@@ -14710,12 +14710,34 @@ function withChainApiKey(init, apiKey, requestUrl, allowedOrigin) {
   headers.set(HIRO_API_KEY_HEADER, apiKey);
   return { ...init ?? {}, headers };
 }
+var ERROR_BODY_EXCERPT_CHARS = 200;
+async function assertErrorBodyIsReadable(res, url) {
+  const body = await res.clone().text().catch(() => "");
+  try {
+    JSON.parse(body);
+    return;
+  } catch {
+  }
+  let path2 = url;
+  try {
+    path2 = new URL(url).pathname;
+  } catch {
+  }
+  const excerpt = body.length > ERROR_BODY_EXCERPT_CHARS ? `${body.slice(0, ERROR_BODY_EXCERPT_CHARS)}\u2026` : body;
+  throw new Error(
+    `Stacks API ${path2} returned HTTP ${res.status}${res.statusText ? ` ${res.statusText}` : ""}${excerpt ? `: ${excerpt}` : " with an empty body"}`
+  );
+}
 function accountBalanceNormalizingFetch(baseFetch = fetch, apiKey, allowedOrigin) {
   const stripHexPrefix = (v) => typeof v === "string" && /^0x/i.test(v) ? v.slice(2) : v;
   return (async (input, init) => {
     const res = await baseFetch(input, withChainApiKey(init, apiKey, input, allowedOrigin));
     const url = typeof input === "string" ? input : input?.url ?? String(input);
-    if (!res.ok || !/\/v2\/accounts\//.test(url)) return res;
+    if (!res.ok) {
+      await assertErrorBodyIsReadable(res, url);
+      return res;
+    }
+    if (!/\/v2\/accounts\//.test(url)) return res;
     const data = await res.clone().json().catch(() => null);
     if (!data || typeof data !== "object") return res;
     const normalized = {
@@ -16480,7 +16502,7 @@ var FireblocksService = class {
       secretKey: privateKey,
       basePath: fireblocksConfig && fireblocksConfig.basePath ? fireblocksConfig.basePath : basePath
     });
-    this.fireblocksSigner = new FireblocksSigner(this.fireblocksSDK);
+    this.fireblocksSigner = new FireblocksSigner(this.fireblocksSDK, fireblocksConfig?.poll);
   }
   static {
     /**
@@ -16955,6 +16977,19 @@ function toDerSignature(r, s, sighashType = 1) {
 }
 
 // src/StacksSDK.ts
+var announcedBondIndexFromResult = (txResult) => {
+  const hex3 = txResult?.hex;
+  if (typeof hex3 !== "string") return void 0;
+  try {
+    const cv = (0, import_transactions4.deserializeCV)(hex3);
+    if (cv.type !== "ok" || cv.value?.type !== "tuple") return void 0;
+    const index = cv.value.value?.["bond-index"];
+    if (index?.type !== "uint") return void 0;
+    return Number(index.value);
+  } catch {
+    return void 0;
+  }
+};
 var StacksSDK = class _StacksSDK {
   constructor(vaultAccountId, fireblocksConfig, hiroApiKey) {
     this.cachedTransactions = [];
@@ -17087,13 +17122,25 @@ var StacksSDK = class _StacksSDK {
      * `hasInFlightFireblocks` stays true, so the caller-btcTxid guard would refuse exactly
      * the recovery this error prescribes. The lock parameters and the (consumed) external
      * id are kept for diagnostics.
+     *
+     * Acts only on the transfer that failed. Overlapping createBond calls for one bond all
+     * await the same transfer; once one of them has abandoned it, a retry can open a new
+     * transfer, and a late failure of the old one must not clear the new one — that would
+     * advance the generation again and let a third transfer fund the same lock.
      */
     this.abandonTerminalFunding = async (bondIndex, fundingExternalId, error) => {
+      const failedId = error instanceof FireblocksTransferError ? error.details.vendorId : void 0;
       let fireblocksId;
       let stripFailure = "";
       let generationAdvanced = false;
       try {
         const stored = await this.lockRecordStore.loadRecord(this.address, bondIndex);
+        if (stored && (failedId === void 0 || stored.fireblocksId !== failedId)) {
+          return {
+            success: false,
+            error: `The Fireblocks funding transfer${failedId ? ` (id ${failedId})` : ""} for bond ${bondIndex} terminally failed: ${formatErrorMessage(error)}. The lock record no longer tracks it (now: ${stored.fireblocksId ?? "no transfer in flight"}) \u2014 a concurrent attempt already handled it, so nothing was abandoned. Retry createBond for this bond index to continue the current attempt.`
+          };
+        }
         if (stored) {
           fireblocksId = stored.fireblocksId;
           const abandoned = {
@@ -19646,6 +19693,17 @@ var StacksSDK = class _StacksSDK {
           amountUstx: amountUstx.toString()
         };
       } catch (error) {
+        if (error instanceof FireblocksTransferError && !TERMINAL_TRANSACTION_STATES.has(error.details.status)) {
+          const awaitingApproval = APPROVAL_PENDING_STATES.has(error.details.status);
+          return {
+            success: false,
+            error: `Fireblocks request ${error.details.vendorId} is still ${error.details.status}${awaitingApproval ? " (awaiting approval)" : ""} \u2014 not failed. Retry createBond for bond ${bondIndex} to keep waiting on the same request; nothing new is sent.`,
+            pendingFireblocksId: error.details.vendorId,
+            pendingFireblocksStatus: error.details.status,
+            ...awaitingApproval ? { pendingApproval: true } : {},
+            ...committedBtc
+          };
+        }
         console.error("createBond error:", error);
         return { success: false, error: `Failed to create bond: ${formatErrorMessage(error)}`, ...committedBtc };
       }
@@ -20293,6 +20351,10 @@ var StacksSDK = class _StacksSDK {
               const reasons = recheck.reasons ?? [];
               return `eligibility changed during approval: ${this.describeBondReasons(reasons)}`;
             }
+            const current = await (0, import_bitcoin_staking2.fetchBondMembership)({ address: this.address, network: this.pox5Network });
+            if (!current || current.bondIndex !== membership.bondIndex) {
+              return `the bond changed during approval (reviewed bond ${membership.bondIndex}, now ${current ? `bond ${current.bondIndex}` : "no membership"})`;
+            }
             return void 0;
           });
         });
@@ -20303,19 +20365,11 @@ var StacksSDK = class _StacksSDK {
         if (!settled.success || settled.data?.tx_status !== "success") {
           return { success: false, unsettled: !settled.success, error: !settled.success ? unsettledTransactionError("announce-l1-early-exit", result.txid, settled.error) : settled.data?.tx_error ?? "announce-l1-early-exit failed on-chain", txHash: result.txid };
         }
-        let settledBondIndex;
-        let bondIndexLookupFailed = false;
-        try {
-          const after = await (0, import_bitcoin_staking2.fetchBondMembership)({ address: this.address, network: this.pox5Network });
-          settledBondIndex = after?.bondIndex;
-        } catch {
-          bondIndexLookupFailed = true;
-        }
+        const settledBondIndex = announcedBondIndexFromResult(settled.data?.tx_result);
         return {
           success: true,
           txHash: result.txid,
-          ...settledBondIndex !== void 0 ? { bondIndex: settledBondIndex } : {},
-          ...bondIndexLookupFailed ? { bondIndexLookupFailed: true } : {}
+          ...settledBondIndex !== void 0 ? { bondIndex: settledBondIndex } : { bondIndexLookupFailed: true }
         };
       } catch (error) {
         return { success: false, error: `Failed to announce early exit: ${formatErrorMessage(error)}` };
@@ -20599,6 +20653,7 @@ var StacksSDK = class _StacksSDK {
         // sBTC membership must not mislabel it.
         isL1Lock: record?.isL1Lock ?? true,
         btcTxid: record?.btcTxid,
+        fireblocksId: record?.fireblocksId,
         vout: record?.vout
       };
     };
@@ -20749,7 +20804,8 @@ var StacksSDK = class _StacksSDK {
           const utxos = await utxosRes.json();
           const isUnspent = lock.btcTxid !== void 0 && lock.vout !== void 0 ? utxos.some((u) => u.txid === lock.btcTxid && u.vout === lock.vout) : utxos.length > 0;
           still_locked = isUnspent;
-          recovered = !isUnspent;
+          const fundingInFlight = lock.btcTxid === void 0 && lock.fireblocksId !== void 0;
+          recovered = isUnspent ? false : fundingInFlight ? null : true;
           matured = tipHeight !== null ? tipHeight >= lock.unlockHeight : null;
         } catch {
           still_locked = null;
@@ -21536,6 +21592,7 @@ var StacksSDK = class _StacksSDK {
           recordResult("failed", null, msg);
           return { error: msg };
         }
+        if (stakerEntitlementSats === BigInt(0)) continue;
         const smStaker = await broadcastLeg(
           (n) => (0, import_transactions4.makeUnsignedContractCall)({
             contractAddress: signerContractAddress,
@@ -23386,7 +23443,8 @@ var ApiService = class {
       // positional must be re-passed at each hop, which is the failure mode this fix
       // exists to remove.
       chainApiKey: config2.chainApiKey,
-      signerManagerAdapters: config2.signerManagerAdapters
+      signerManagerAdapters: config2.signerManagerAdapters,
+      ...config2.poll !== void 0 ? { poll: config2.poll } : {}
     };
     this.sdkManager = new SdkManager(baseConfig, config2.poolConfig);
   }

@@ -92,6 +92,11 @@ export declare class StacksSDK {
      * `hasInFlightFireblocks` stays true, so the caller-btcTxid guard would refuse exactly
      * the recovery this error prescribes. The lock parameters and the (consumed) external
      * id are kept for diagnostics.
+     *
+     * Acts only on the transfer that failed. Overlapping createBond calls for one bond all
+     * await the same transfer; once one of them has abandoned it, a retry can open a new
+     * transfer, and a late failure of the old one must not clear the new one — that would
+     * advance the generation again and let a third transfer fund the same lock.
      */
     private abandonTerminalFunding;
     private constructor();

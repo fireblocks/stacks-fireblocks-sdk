@@ -2,6 +2,7 @@ import { BasePath } from "@fireblocks/ts-sdk";
 import { StacksSDK } from "../StacksSDK";
 import { LockRecordStore } from "../staking/bonds/unlock-bytes-store";
 import { SignerManagerAdapter } from "../staking/signer-manager-adapter";
+import type { PollConfig } from "../utils/FireblocksSigner";
 export interface PoolConfig {
     maxPoolSize: number;
     idleTimeoutMs: number;
@@ -52,6 +53,11 @@ export interface ApiServiceConfig {
      * the claim leg is bounded by that value read from chain.
      */
     signerManagerAdapters?: SignerManagerAdapter[];
+    /**
+     * Fireblocks request polling budgets forwarded to every pooled SDK. Must be added to
+     * the `FireblocksConfig` built at this boundary, or it never reaches the signer.
+     */
+    poll?: PollConfig;
 }
 export declare enum ActionType {
     CREATE_NATIVE_TRANSACTION = "createNativeTransaction",
