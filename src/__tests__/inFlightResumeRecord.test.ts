@@ -237,6 +237,54 @@ describe("renewBond — reward carry-forward must fail closed", () => {
   });
 });
 
+/**
+ * Review item 9. When the recorded funding tx is not visible on Esplora, the error told the
+ * operator to "retry with opts.btcTxid set to the actual funding txid" — and createBond
+ * refuses any btcTxid that differs from the recorded one. Following the advice was a
+ * guaranteed refusal. The refusal is deliberate (overwriting the recorded pointer can strand
+ * already-committed Bitcoin); the advice was what was wrong.
+ */
+describe("createBond — a recorded funding tx that is not visible", () => {
+  const seedRecordedFunding = (sdk: any) =>
+    sdk.lockRecordStore.saveRecord(sdk.address, BOND_INDEX, {
+      bondIndex: BOND_INDEX,
+      unlockBytes: new Uint8Array([1, 2, 3]),
+      lockAddress: LOCK_ADDRESS,
+      unlockHeight: 900,
+      amountSats: AMOUNT_SATS,
+      isL1Lock: true,
+      btcTxid: GOOD_TXID,
+      stage: "btc-broadcast",
+    });
+
+  it("does not prescribe the btcTxid retry that createBond refuses", async () => {
+    const sdk = makeSdk();
+    await seedRecordedFunding(sdk);
+    sdk.getBtcTxStatus = jest.fn().mockResolvedValue({ success: true, data: { found: false } });
+
+    const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, `${BOOT_ADDR}.signer-manager`);
+
+    expect(res.success).toBe(false);
+    expect(res.error).not.toMatch(/retry with opts\.btcTxid/i);
+    // What is true: a later retry without btcTxid covers indexer lag, and funding again is
+    // never the answer.
+    expect(res.error).toMatch(/without opts\.btcTxid/i);
+    expect(res.error).toMatch(/do not fund/i);
+  });
+
+  it("refuses a btcTxid that differs from the recorded one — the refusal the old advice ran into", async () => {
+    const sdk = makeSdk();
+    await seedRecordedFunding(sdk);
+
+    const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, `${BOOT_ADDR}.signer-manager`, {
+      btcTxid: "cd".repeat(32),
+    });
+
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/refusing to replace it/i);
+  });
+});
+
 describe("createBond — in-flight Fireblocks funding resume", () => {
   it("keeps fireblocksId and the reached stage when the resume fails mid-poll", async () => {
     const sdk = makeSdk();
