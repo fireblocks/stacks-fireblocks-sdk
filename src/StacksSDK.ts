@@ -3513,8 +3513,8 @@ export class StacksSDK {
       // and a mempool can evict one — resuming a dead txid would block the full
       // confirmation timeout on every retry. Unlike renewBond, do NOT rebuild on
       // not-found (a 404 can be indexer lag, and re-funding is a second Fireblocks
-      // transfer): refuse with the external id so the operator can resolve the actual
-      // transfer and retry with opts.btcTxid.
+      // transfer): refuse with the external id. A caller-supplied btcTxid cannot repair
+      // this — the conflict guard above refuses any txid that differs from the recorded one.
       if (canResumeFunding) {
         const recordedTx = await this.getBtcTxStatus(priorRecord!.btcTxid!);
         if (!recordedTx.success) {
@@ -3523,7 +3523,7 @@ export class StacksSDK {
         if (!recordedTx.data!.found) {
           return {
             success: false,
-            error: `Recorded funding tx ${priorRecord!.btcTxid} for bond ${bondIndex} is not visible on the configured Esplora — it may have been RBF-bumped by Fireblocks (new txid) or evicted. Look up the transfer by external id ${fundingExternalId} in Fireblocks and retry with opts.btcTxid set to the actual funding txid.`,
+            error: `Recorded funding tx ${priorRecord!.btcTxid} for bond ${bondIndex} is not visible on the configured Esplora. If that is indexer lag, retry createBond later without opts.btcTxid. If Fireblocks replaced the transaction (new txid) or it was evicted, the lock record still points at the old txid and cannot be repointed through createBond — a different opts.btcTxid is refused. Do not fund this bond again; the record has to be corrected before it can resume. The transfer's external id is ${fundingExternalId}.`,
             btcTxid: priorRecord!.btcTxid,
             vout: priorRecord!.vout,
           };

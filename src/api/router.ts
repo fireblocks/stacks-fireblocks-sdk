@@ -1288,8 +1288,10 @@ router.post("/:vaultId/stacking/pox5/bond/create", validateVaultId, controller.c
  *               btcTxid:
  *                 type: string
  *                 description: >
- *                   Actual funding txid, when the recorded one was RBF-bumped by Fireblocks
- *                   or evicted. Look the transfer up by external id before supplying this.
+ *                   Funding txid, for a lock record that has none recorded (e.g. funded
+ *                   outside this service). Refused when the record already holds a funding
+ *                   txid or an in-flight Fireblocks transfer, so it cannot repoint a record
+ *                   whose recorded txid was replaced or evicted.
  *     responses:
  *       200:
  *         description: Resume attempted; inspect `success` and `unsettled` on the body.
