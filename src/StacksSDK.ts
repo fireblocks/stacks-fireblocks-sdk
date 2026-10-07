@@ -21,6 +21,7 @@
 import { StacksService } from "./services/stacks.service";
 import { type StacksNetwork } from "@stacks/network";
 import { FireblocksService } from "./services/fireblocks.service";
+import { FireblocksTransferError } from "./utils/FireblocksSigner";
 import { CosignerService, resolveCosignerUrl } from "./services/cosigner.service";
 import {
   AnnounceEarlyExitResponse,
@@ -347,17 +348,31 @@ export class StacksSDK {
    * `hasInFlightFireblocks` stays true, so the caller-btcTxid guard would refuse exactly
    * the recovery this error prescribes. The lock parameters and the (consumed) external
    * id are kept for diagnostics.
+   *
+   * Acts only on the transfer that failed. Overlapping createBond calls for one bond all
+   * await the same transfer; once one of them has abandoned it, a retry can open a new
+   * transfer, and a late failure of the old one must not clear the new one — that would
+   * advance the generation again and let a third transfer fund the same lock.
    */
   private abandonTerminalFunding = async (
     bondIndex: number,
     fundingExternalId: string,
     error: unknown,
   ): Promise<{ success: false; error: string }> => {
+    const failedId = error instanceof FireblocksTransferError ? error.details.vendorId : undefined;
     let fireblocksId: string | undefined;
     let stripFailure = "";
     let generationAdvanced = false;
     try {
       const stored = await this.lockRecordStore.loadRecord(this.address!, bondIndex);
+      if (stored && (failedId === undefined || stored.fireblocksId !== failedId)) {
+        return {
+          success: false,
+          error:
+            `The Fireblocks funding transfer${failedId ? ` (id ${failedId})` : ""} for bond ${bondIndex} terminally failed: ${formatErrorMessage(error)}. ` +
+            `The lock record no longer tracks it (now: ${stored.fireblocksId ?? "no transfer in flight"}) — a concurrent attempt already handled it, so nothing was abandoned. Retry createBond for this bond index to continue the current attempt.`,
+        };
+      }
       if (stored) {
         fireblocksId = stored.fireblocksId;
         // Single write: the generation advance, the id clear, and moving the dead id into
