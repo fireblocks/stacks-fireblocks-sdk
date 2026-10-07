@@ -78,6 +78,38 @@ export function withChainApiKey(
   return { ...(init ?? {}), headers };
 }
 
+const ERROR_BODY_EXCERPT_CHARS = 200;
+
+/**
+ * `@stacks/bitcoin-staking` reads `/v2/pox`, `/v2/accounts/*` and the bond-admin data var
+ * with `response.json()` and no `ok` check, so a plain-text error body — a rate limit, a
+ * gateway page — surfaces as a bare SyntaxError that names neither the status nor the
+ * endpoint. A non-OK response whose body is not JSON can only ever fail there, so it is
+ * reported here with what actually came back. A JSON error body is left for the caller,
+ * which may read it.
+ *
+ * Only the path is reported: the query string is not part of the diagnosis.
+ */
+async function assertErrorBodyIsReadable(res: Response, url: string): Promise<void> {
+  const body = await res.clone().text().catch(() => "");
+  try {
+    JSON.parse(body);
+    return;
+  } catch {
+    // not JSON — fall through to the descriptive error
+  }
+  let path = url;
+  try {
+    path = new URL(url).pathname;
+  } catch {
+    // relative or unparseable: keep the raw value
+  }
+  const excerpt = body.length > ERROR_BODY_EXCERPT_CHARS ? `${body.slice(0, ERROR_BODY_EXCERPT_CHARS)}…` : body;
+  throw new Error(
+    `Stacks API ${path} returned HTTP ${res.status}${res.statusText ? ` ${res.statusText}` : ""}${excerpt ? `: ${excerpt}` : " with an empty body"}`,
+  );
+}
+
 export function accountBalanceNormalizingFetch(
   baseFetch: typeof fetch = fetch,
   apiKey?: string,
@@ -90,7 +122,11 @@ export function accountBalanceNormalizingFetch(
     const res = await baseFetch(input, withChainApiKey(init, apiKey, input, allowedOrigin));
     const url =
       typeof input === "string" ? input : (input?.url ?? String(input));
-    if (!res.ok || !/\/v2\/accounts\//.test(url)) return res;
+    if (!res.ok) {
+      await assertErrorBodyIsReadable(res, url);
+      return res;
+    }
+    if (!/\/v2\/accounts\//.test(url)) return res;
 
     const data = await res
       .clone()
