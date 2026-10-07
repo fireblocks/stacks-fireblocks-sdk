@@ -5033,6 +5033,7 @@ export class StacksSDK {
       // sBTC membership must not mislabel it.
       isL1Lock: record?.isL1Lock ?? true,
       btcTxid: record?.btcTxid,
+      fireblocksId: record?.fireblocksId,
       vout: record?.vout,
     };
   };
@@ -5227,7 +5228,10 @@ export class StacksSDK {
             ? utxos.some((u) => u.txid === lock.btcTxid && u.vout === lock.vout)
             : utxos.length > 0;
         still_locked = isUnspent;
-        recovered = !isUnspent;
+        // A funding transfer Fireblocks accepted but that has not landed has put nothing at
+        // the address yet, so an empty address is no evidence the Bitcoin was recovered.
+        const fundingInFlight = lock.btcTxid === undefined && lock.fireblocksId !== undefined;
+        recovered = isUnspent ? false : fundingInFlight ? null : true;
         matured = tipHeight !== null ? tipHeight >= lock.unlockHeight : null;
       } catch {
         // Bitcoin lookup failed — indeterminate, not "recovered".

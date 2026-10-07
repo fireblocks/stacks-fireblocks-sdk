@@ -486,6 +486,8 @@ export type DerivedLock = {
   /** Funding outpoint from the durable record, when available. */
   btcTxid?: string;
   vout?: number;
+  /** Fireblocks id of a funding transfer accepted but not yet recorded as broadcast. */
+  fireblocksId?: string;
 };
 
 export type UnlockBtcResponse = {
