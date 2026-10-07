@@ -21,6 +21,7 @@ export class ApiService {
       // exists to remove.
       chainApiKey: config.chainApiKey,
       signerManagerAdapters: config.signerManagerAdapters,
+      ...(config.poll !== undefined ? { poll: config.poll } : {}),
     };
 
     this.sdkManager = new SdkManager(baseConfig, config.poolConfig);

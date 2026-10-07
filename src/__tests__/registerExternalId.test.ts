@@ -265,6 +265,26 @@ describe("createBond — register-for-bond external id", () => {
     expect(registerIdFrom(retry)).not.toBe(wedgedId);
   });
 
+  it("reports a register signing request awaiting approval as a field, keeping the BTC pointer", async () => {
+    // The Bitcoin is already locked when the register leg waits on approval, so the
+    // result must say both: pending (not failed) and where the BTC is.
+    const sdk = makeSdk();
+    sdk.pox5SignAndBroadcast = jest.fn().mockRejectedValue(
+      new FireblocksTransferError("Signing request fb-raw-9 timed out after 30m: still PENDING_AUTHORIZATION", {
+        operation: "RAW",
+        status: TransactionStateEnum.PendingAuthorization,
+        vendorId: "fb-raw-9",
+      }),
+    );
+
+    const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect(res.success).toBe(false);
+    expect(res.pendingApproval).toBe(true);
+    expect(res.pendingFireblocksId).toBe("fb-raw-9");
+    expect(res.btcTxid).toBe(BTC_TXID);
+  });
+
   it("does not reuse a just-consumed id after a SECOND terminal failure in a row", async () => {
     // The pre-funding save writes a lockRecord literal that replaces the stored record.
     // If that literal omits registrationGeneration, a retry's own save silently resets

@@ -60,7 +60,7 @@ export class FireblocksService {
           : basePath,
     });
 
-    this.fireblocksSigner = new FireblocksSigner(this.fireblocksSDK);
+    this.fireblocksSigner = new FireblocksSigner(this.fireblocksSDK, fireblocksConfig?.poll);
   }
 
   /**

@@ -386,6 +386,48 @@ describe("createBond — terminal failure on the FRESH funding path", () => {
     expect(stale.error).not.toMatch(/derive a fresh external id/);
   });
 
+  it("reports a funding transfer still awaiting approval as a field, not as a failure string", async () => {
+    // Review item 4: the poll gave up while the transfer sat in PENDING_AUTHORIZATION.
+    // The app could only tell that from a failure by parsing "…timed out…" out of error.
+    const sdk = makeSdk();
+    sdk.fireblocksService.createBitcoinTransaction = acceptThenFail(
+      terminalErrorFor(FB_ID, TransactionStateEnum.PendingAuthorization),
+    );
+
+    const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect(res.success).toBe(false);
+    expect(res.pendingApproval).toBe(true);
+    expect(res.pendingFireblocksId).toBe(FB_ID);
+    expect(res.pendingFireblocksStatus).toBe(TransactionStateEnum.PendingAuthorization);
+    expect(res.error).not.toMatch(/^Failed to create bond/);
+  });
+
+  it("reports a machine-paced stall with its id, but not as an approval", async () => {
+    const sdk = makeSdk();
+    sdk.fireblocksService.createBitcoinTransaction = acceptThenFail(
+      terminalErrorFor(FB_ID, TransactionStateEnum.PendingSignature),
+    );
+
+    const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect(res.pendingApproval).toBeUndefined();
+    expect(res.pendingFireblocksId).toBe(FB_ID);
+    expect(res.pendingFireblocksStatus).toBe(TransactionStateEnum.PendingSignature);
+  });
+
+  it("does not report a terminal failure as pending", async () => {
+    const sdk = makeSdk();
+    sdk.fireblocksService.createBitcoinTransaction = acceptThenFail(
+      terminalErrorFor(FB_ID, TransactionStateEnum.Rejected),
+    );
+
+    const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect(res.pendingApproval).toBeUndefined();
+    expect(res.pendingFireblocksId).toBeUndefined();
+  });
+
   it("persists the resolved id BEFORE polling it, so a timeout still leaves a pointer", async () => {
     const sdk = makeSdk();
     const dupErr = Object.assign(
