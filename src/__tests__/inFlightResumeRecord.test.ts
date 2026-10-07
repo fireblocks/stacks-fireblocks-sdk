@@ -198,6 +198,43 @@ describe("renewBond — reward carry-forward must fail closed", () => {
     // irrelevant and must not produce the fail-closed refusal.
     expect(res.error ?? "").not.toMatch(/could not be read/i);
   });
+
+  it("keeps the generation fields and abandoned ids when it rewrites the next bond's record", async () => {
+    // Review item 10. A record already exists for the next bond — e.g. an earlier createBond
+    // whose funding was abandoned. renewBond rebuilt it from scratch, so the generations reset
+    // to 0 (a later createBond re-derives a consumed external id) and the abandoned ids —
+    // the operator's only pointer to the dead transfers — were lost.
+    const sdk = makeSdk();
+    await sdk.lockRecordStore.saveRecord(sdk.address, NEXT_BOND, {
+      bondIndex: NEXT_BOND,
+      unlockBytes: new Uint8Array([1, 2, 3]),
+      lockAddress: LOCK_ADDRESS,
+      unlockHeight: 900,
+      amountSats: AMOUNT_SATS,
+      isL1Lock: true,
+      btcTxid: GOOD_TXID,
+      fundingGeneration: 2,
+      registrationGeneration: 1,
+      abandonedFireblocksIds: ["fb-dead-1", "fb-dead-2"],
+    });
+    // Resume path: the recorded re-lock still exists, so no BTC is spent.
+    sdk.getBtcTxStatus = jest.fn().mockResolvedValue({ success: true, data: { found: true } });
+    sdk.waitForBtcConfirmations = jest.fn().mockResolvedValue({ blockHash: "bh" });
+    sdk.assembleLockupProof = jest.fn().mockResolvedValue({ outputIndex: 0 });
+    // Stop right after the record write: the proof preflight refuses.
+    (fetchEligibleRegisterForBond as jest.Mock).mockResolvedValue({ ok: false, reasons: [] });
+
+    await sdk.renewBond(NEXT_BOND, MANAGER, {
+      rewardBtcAddress: "bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080",
+      rewardMaxFeeSats: BigInt(5_000),
+    });
+
+    expect(sdk.assembleLockupProof).toHaveBeenCalled();
+    const after = await sdk.lockRecordStore.loadRecord(sdk.address, NEXT_BOND);
+    expect(after.fundingGeneration).toBe(2);
+    expect(after.registrationGeneration).toBe(1);
+    expect(after.abandonedFireblocksIds).toEqual(["fb-dead-1", "fb-dead-2"]);
+  });
 });
 
 describe("createBond — in-flight Fireblocks funding resume", () => {

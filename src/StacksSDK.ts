@@ -5748,6 +5748,12 @@ export class StacksSDK {
         // Carry the reward destination onto the new position's record.
         ...(rewardBtcAddress !== undefined ? { rewardBtcAddress } : {}),
         ...(rewardMaxFeeSats !== undefined ? { rewardMaxFeeSats } : {}),
+        // This literal replaces any record already at nextBondIndex. The generations keep a
+        // later createBond off already-consumed external ids, and the abandoned ids are the
+        // only pointer to dead funding transfers, so neither may be reset here.
+        ...(priorNextRecord?.fundingGeneration !== undefined ? { fundingGeneration: priorNextRecord.fundingGeneration } : {}),
+        ...(priorNextRecord?.registrationGeneration !== undefined ? { registrationGeneration: priorNextRecord.registrationGeneration } : {}),
+        ...(priorNextRecord?.abandonedFireblocksIds !== undefined ? { abandonedFireblocksIds: priorNextRecord.abandonedFireblocksIds } : {}),
         ...extra,
       });
 
