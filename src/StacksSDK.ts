@@ -176,6 +176,25 @@ import { Signature as Secp256k1Signature } from '@noble/secp256k1';
 import { hexToBytes, bytesToHex, signatureVrsToRsv } from "@stacks/common";
 import { toDerSignature } from "./utils/der";
 
+/**
+ * The bond index an `announce-l1-early-exit` acted on, from its settled result
+ * `(ok { staker, signer, bond-index, amount-sats-released })`. Undefined when the result
+ * is missing or not that shape.
+ */
+const announcedBondIndexFromResult = (txResult: unknown): number | undefined => {
+  const hex = (txResult as { hex?: unknown } | undefined)?.hex;
+  if (typeof hex !== "string") return undefined;
+  try {
+    const cv = deserializeCV(hex) as { type?: string; value?: { type?: string; value?: Record<string, { type?: string; value?: unknown }> } };
+    if (cv.type !== "ok" || cv.value?.type !== "tuple") return undefined;
+    const index = cv.value.value?.["bond-index"];
+    if (index?.type !== "uint") return undefined;
+    return Number(index.value);
+  } catch {
+    return undefined;
+  }
+};
+
 export class StacksSDK {
   private fireblocksService: FireblocksService;
   private chainService: StacksService;
@@ -4667,6 +4686,14 @@ export class StacksSDK {
             const reasons = (recheck as { reasons?: number[] }).reasons ?? [];
             return `eligibility changed during approval: ${this.describeBondReasons(reasons)}`;
           }
+          // The contract forfeits whichever bond the membership names at execution, and
+          // eligibility is keyed on staker and manager only — a registration landing during
+          // approval passes it under the same manager. The cosigner key above was verified
+          // for the preflight bond, so any other bond is one the operator did not review.
+          const current = await fetchBondMembership({ address: this.address!, network: this.pox5Network });
+          if (!current || current.bondIndex !== membership.bondIndex) {
+            return `the bond changed during approval (reviewed bond ${membership.bondIndex}, now ${current ? `bond ${current.bondIndex}` : "no membership"})`;
+          }
           return undefined;
         });
       });
@@ -4681,29 +4708,16 @@ export class StacksSDK {
             : (settled.data?.tx_error ?? 'announce-l1-early-exit failed on-chain'), txHash: result.txid };
       }
 
-      // The contract derives bond-index from membership at execution time, so the index
-      // captured during preflight can differ from the one the announcement was recorded
-      // against — a membership that rolled over under the same signer manager passes the
-      // post-signing revalidate, which keys on staker and manager only. Re-read after
-      // settlement so the caller keys state by what the chain holds. A failed read
-      // reports no index rather than the stale one; the announce itself still landed.
-      // An absent index means two opposite things — the read failed (unknown), or it
-      // succeeded and the chain holds no membership (settled) — so the failure is carried
-      // separately rather than collapsed into the same `undefined`.
-      let settledBondIndex: number | undefined;
-      let bondIndexLookupFailed = false;
-      try {
-        const after = await fetchBondMembership({ address: this.address, network: this.pox5Network });
-        settledBondIndex = after?.bondIndex;
-      } catch {
-        bondIndexLookupFailed = true;
-      }
+      // The contract returns the index it acted on: (ok { staker, signer, bond-index,
+      // amount-sats-released }). A membership read after settlement can already name a
+      // later bond, so the result is the only authoritative source. An undecodable result
+      // leaves the index unknown — the announce itself still landed.
+      const settledBondIndex = announcedBondIndexFromResult(settled.data?.tx_result);
 
       return {
         success: true,
         txHash: result.txid,
-        ...(settledBondIndex !== undefined ? { bondIndex: settledBondIndex } : {}),
-        ...(bondIndexLookupFailed ? { bondIndexLookupFailed: true } : {}),
+        ...(settledBondIndex !== undefined ? { bondIndex: settledBondIndex } : { bondIndexLookupFailed: true }),
       };
     } catch (error) {
       return { success: false, error: `Failed to announce early exit: ${formatErrorMessage(error)}` };

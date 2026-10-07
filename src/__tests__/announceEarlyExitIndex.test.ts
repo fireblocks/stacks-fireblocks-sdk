@@ -1,19 +1,20 @@
 /**
- * Chain-derived bond index on the early-exit announcement (FBS-54).
+ * Early exit acts on the bond the operator reviewed, and reports the one it acted on.
  *
- * `announceEarlyExit` took no bond index and returned none. On chain the contract picks
- * the membership live and records the announcement against the index IT derives, then
- * writes an irreversible map entry. The caller meanwhile keys its own state by whatever
- * index it happened to hold from the preflight read. When those differ, the app shows
- * early exit as announced for the wrong bond — or not announced for the bond that was —
- * and the write cannot be undone.
+ * `announce-l1-early-exit` takes no bond index: the contract reads the staker's membership
+ * when the transaction executes and forfeits THAT bond. Two consequences (review item 3):
  *
- * The post-signing revalidate does not close this: it is keyed by staker and signer
- * manager only, so a membership that rolls into a new bond index under the same manager
- * still passes it.
- *
- * The fix returns the index re-read AFTER settlement, so the caller keys state by what
- * the chain actually holds rather than by a stale preflight capture.
+ * - A registration landing during Fireblocks approval changes which bond is forfeited. The
+ *   post-signing revalidate re-checked eligibility, which is keyed on staker and signer
+ *   manager only, so a membership rolled into a new bond index under the same manager
+ *   passed it — and the cosigner key was only ever verified for the preflight bond. The
+ *   revalidate now re-reads membership and discards the signed transaction when the bond
+ *   index moved.
+ * - The index returned afterwards came from a later membership read, which can already
+ *   name a different bond. The contract returns the index it acted on in its result —
+ *   `(ok { staker, signer, bond-index, amount-sats-released })`, verified against the
+ *   deployed mainnet pox-5 source and a settled private-1 transaction — so that is the
+ *   source now.
  */
 
 jest.mock("@stacks/bitcoin-staking", () => {
@@ -44,7 +45,19 @@ const FAKE_INLINE_PEM = [
 ].join(" ");
 const TXID = "cc".repeat(32);
 
-const makeSdk = (): any => {
+/**
+ * The result of a real settled announce on private-1
+ * (0xa42880c2520f68ee423c5fd2866ecb9a2f0c84c8c149818b8015fa4f5bdd965d):
+ * (ok (tuple (amount-sats-released u10000) (bond-index u484) (signer …) (staker …)))
+ */
+const REAL_RESULT_BOND_484 = {
+  hex: "0x070c0000000414616d6f756e742d736174732d72656c656173656401000000000000000000000000000027100a626f6e642d696e64657801000000000000000000000000000001e4067369676e6572061a280ae1f7806e4e56baba3d4cf49786426b659a6c0e7369676e65722d6d616e61676572067374616b6572051ae2bb4c1b2fcc04d02514c043ebc8e1895d610d89",
+  repr: "(ok (tuple (amount-sats-released u10000) (bond-index u484) (signer 'STM0NRFQG1Q4WNNTQ8YMSX4QGS16PSCTDHFTDMTA.signer-manager) (staker 'ST3HBPK0V5Z609M152K047TY8W64NTR8DH4MRXVC8)))",
+};
+
+const membership = (bondIndex: number) => ({ bondIndex, signer: MANAGER, isL1Lock: true });
+
+const makeSdk = (txResult: unknown = REAL_RESULT_BOND_484): any => {
   const sdk: any = new (StacksSDK as any)("7", {
     apiKey: "12345678-1234-4123-8123-123456789012",
     apiSecret: FAKE_INLINE_PEM,
@@ -57,82 +70,101 @@ const makeSdk = (): any => {
   sdk.runNonceExclusive = jest.fn(async (fn: any) => fn());
   sdk.resolveNonce = jest.fn().mockResolvedValue(BigInt(1));
   sdk.buildPox5Call = jest.fn().mockResolvedValue({});
-  sdk.pox5SignAndBroadcast = jest.fn().mockResolvedValue({ txid: TXID });
+  // Mirrors the production contract: the post-signing revalidate runs before broadcast,
+  // and a returned reason discards the signed transaction.
+  sdk.pox5SignAndBroadcast = jest.fn(async (_tx: unknown, _note: unknown, _ext: unknown, revalidate?: () => Promise<string | undefined>) => {
+    const changed = revalidate ? await revalidate() : undefined;
+    if (changed) return { error: `Transaction discarded after signing — ${changed}.` };
+    return { txid: TXID };
+  });
   sdk.waitForTxSettlement = jest
     .fn()
-    .mockResolvedValue({ success: true, data: { tx_status: "success" } });
+    .mockResolvedValue({ success: true, data: { tx_status: "success", tx_result: txResult } });
   return sdk;
 };
 
 beforeEach(() => {
-  (fetchEligibleAnnounceL1EarlyExit as jest.Mock)
-    .mockReset()
-    .mockResolvedValue({ ok: true });
-  (fetchBond as jest.Mock)
-    .mockReset()
-    .mockResolvedValue({ earlyUnlockBytes: "aabb" });
+  (fetchEligibleAnnounceL1EarlyExit as jest.Mock).mockReset().mockResolvedValue({ ok: true });
+  (fetchBond as jest.Mock).mockReset().mockResolvedValue({ earlyUnlockBytes: "aabb" });
+  (fetchBondMembership as jest.Mock).mockReset().mockResolvedValue(membership(484));
 });
 
-describe("announceEarlyExit — chain-derived bond index", () => {
-  it("returns the bond index the chain holds after settlement", async () => {
+describe("announceEarlyExit — the bond must not change during approval", () => {
+  it("discards the signed transaction when the bond index moved during approval", async () => {
     const sdk = makeSdk();
+    // Preflight reviews bond 4; a registration lands during approval and the staker's
+    // membership is now bond 5 under the SAME manager — eligibility still passes.
     (fetchBondMembership as jest.Mock)
       .mockReset()
-      .mockResolvedValue({ bondIndex: 4, signer: MANAGER, isL1Lock: true });
+      .mockResolvedValueOnce(membership(4))
+      .mockResolvedValue(membership(5));
 
     const res = await sdk.announceEarlyExit();
 
-    expect(res.success).toBe(true);
-    expect(res.bondIndex).toBe(4);
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/discarded/i);
+    expect(res.error).toMatch(/4/);
+    expect(res.error).toMatch(/5/);
+    expect(sdk.waitForTxSettlement).not.toHaveBeenCalled();
   });
 
-  it("reports the post-settlement index, not the preflight one, when membership rolled over", async () => {
-    const sdk = makeSdk();
-    // Preflight sees bond 4; by the time the announce settles the staker's membership
-    // has rolled into bond 5 under the SAME manager — which the revalidate cannot catch,
-    // because it keys on staker + signer manager only.
-    (fetchBondMembership as jest.Mock)
-      .mockReset()
-      .mockResolvedValueOnce({ bondIndex: 4, signer: MANAGER, isL1Lock: true })
-      .mockResolvedValue({ bondIndex: 5, signer: MANAGER, isL1Lock: true });
-
-    const res = await sdk.announceEarlyExit();
-
-    // Keying state by 4 here is the defect: the contract recorded against what it read live.
-    expect(res.bondIndex).toBe(5);
-  });
-
-  it("still succeeds when the post-settlement re-read fails, without inventing an index", async () => {
+  it("discards when the membership is gone by the time approval completes", async () => {
     const sdk = makeSdk();
     (fetchBondMembership as jest.Mock)
       .mockReset()
-      .mockResolvedValueOnce({ bondIndex: 4, signer: MANAGER, isL1Lock: true })
-      .mockRejectedValue(new Error("hiro 503"));
-
-    const res = await sdk.announceEarlyExit();
-
-    // The announce landed — an unreadable follow-up must not turn that into a failure,
-    // and must not report a stale index as though the chain confirmed it.
-    expect(res.success).toBe(true);
-    expect(res.txHash).toBe(TXID);
-    expect(res.bondIndex).toBeUndefined();
-    // Absent for two opposite reasons; the caller needs to know which applies here.
-    expect(res.bondIndexLookupFailed).toBe(true);
-  });
-
-  it("distinguishes a chain that holds no membership from a read that failed", async () => {
-    const sdk = makeSdk();
-    (fetchBondMembership as jest.Mock)
-      .mockReset()
-      .mockResolvedValueOnce({ bondIndex: 4, signer: MANAGER, isL1Lock: true })
+      .mockResolvedValueOnce(membership(4))
       .mockResolvedValue(null);
 
     const res = await sdk.announceEarlyExit();
 
-    // The read SUCCEEDED and the chain holds no membership — a settled state the caller
-    // may act on, unlike an unreadable one it should retry.
+    expect(res.success).toBe(false);
+    expect(sdk.waitForTxSettlement).not.toHaveBeenCalled();
+  });
+
+  it("broadcasts when the bond is unchanged", async () => {
+    const sdk = makeSdk();
+
+    const res = await sdk.announceEarlyExit();
+
     expect(res.success).toBe(true);
-    expect(res.bondIndex).toBeUndefined();
+    expect(res.txHash).toBe(TXID);
+  });
+});
+
+describe("announceEarlyExit — the bond index it acted on comes from the transaction result", () => {
+  it("returns the index from the settled result, not from a membership read", async () => {
+    const sdk = makeSdk(REAL_RESULT_BOND_484);
+    // Membership reads say 7 throughout; the result says the contract acted on 484. Only
+    // the result is authoritative for what was announced.
+    (fetchBondMembership as jest.Mock).mockReset().mockResolvedValue(membership(7));
+
+    const res = await sdk.announceEarlyExit();
+
+    expect(res.bondIndex).toBe(484);
     expect(res.bondIndexLookupFailed).toBeUndefined();
+  });
+
+  it("does not read membership after settlement, which can already name another bond", async () => {
+    const sdk = makeSdk(REAL_RESULT_BOND_484);
+
+    await sdk.announceEarlyExit();
+
+    const settledAt = sdk.waitForTxSettlement.mock.invocationCallOrder[0];
+    const readsAfter = (fetchBondMembership as jest.Mock).mock.invocationCallOrder.filter(
+      (order: number) => order > settledAt,
+    );
+    expect(readsAfter).toHaveLength(0);
+  });
+
+  it("reports the index as unknown, not absent, when the result cannot be decoded", async () => {
+    const sdk = makeSdk({ repr: "(ok true)" });
+
+    const res = await sdk.announceEarlyExit();
+
+    // The announce landed; only the index is unknown.
+    expect(res.success).toBe(true);
+    expect(res.txHash).toBe(TXID);
+    expect(res.bondIndex).toBeUndefined();
+    expect(res.bondIndexLookupFailed).toBe(true);
   });
 });
