@@ -1364,29 +1364,29 @@ export const resumeBondRegistration: Handler = async (req, res, next) => {
     }
     // The funded amount and signer manager are deliberately NOT accepted here: they come
     // from the durable record, so a resume cannot restate them.
+    // Every body field is optional, and Express 5 leaves req.body undefined when none is sent.
+    const body = req.body ?? {};
     let nonce: bigint | undefined;
-    if (req.body.nonce !== undefined) {
-      try {
-        nonce = BigInt(String(req.body.nonce));
-      } catch {
-        res.status(400).json({ error: "Bad Request: nonce must be an integer" });
-        return;
-      }
+    try {
+      nonce = parseOptionalNonce(body.nonce);
+    } catch {
+      res.status(400).json({ error: "Bad Request: nonce must be a non-negative integer" });
+      return;
     }
     let confirmations: number | undefined;
-    if (req.body.confirmations !== undefined) {
-      confirmations = Number(req.body.confirmations);
+    if (body.confirmations !== undefined) {
+      confirmations = Number(body.confirmations);
       if (!Number.isInteger(confirmations) || confirmations < 1) {
         res.status(400).json({ error: "Bad Request: confirmations must be a positive integer" });
         return;
       }
     }
-    const btcTxid = req.body.btcTxid !== undefined ? String(req.body.btcTxid).trim() : undefined;
+    const btcTxid = body.btcTxid !== undefined ? String(body.btcTxid).trim() : undefined;
     if (btcTxid !== undefined && !/^[0-9a-fA-F]{64}$/.test(btcTxid)) {
       res.status(400).json({ error: "Bad Request: btcTxid must be 64 hex characters" });
       return;
     }
-    const note = req.body.note !== undefined ? String(req.body.note) : undefined;
+    const note = body.note !== undefined ? String(body.note) : undefined;
 
     const result = await apiService.executeAction(vaultId, ActionType.RESUME_BOND_REGISTRATION, { bondIndex, note, nonce, confirmations, btcTxid });
     res.json(result);
