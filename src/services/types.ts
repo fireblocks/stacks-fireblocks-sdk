@@ -375,18 +375,15 @@ export type AnnounceEarlyExitResponse = {
   /** Settlement timed out — state unknown, may still succeed (not a confirmed failure). */
   unsettled?: boolean;
   /**
-   * Bond index as read from chain AFTER settlement, which is what the contract recorded
-   * the announcement against — it derives the index from membership at execution time,
-   * not from anything the caller passes.
-   *
-   * Absent for two opposite reasons, separated by `bondIndexLookupFailed`: the read
-   * failed (unknown), or it succeeded and the chain holds no membership (settled). The
-   * announce itself landed either way.
+   * The bond the announcement was recorded against, taken from the settled transaction
+   * result — the contract derives it from membership at execution time and returns it.
+   * Present on every successful announce whose result could be decoded.
    */
   bondIndex?: number;
   /**
-   * The post-settlement membership read failed, so `bondIndex` is UNKNOWN rather than
-   * absent. Retry the read; do not treat the missing index as "no membership".
+   * The announce landed but its result could not be decoded, so `bondIndex` is UNKNOWN.
+   * Look the transaction up by `txHash`; do not infer the bond from current membership,
+   * which may already name a later bond.
    */
   bondIndexLookupFailed?: boolean;
 };
