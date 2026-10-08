@@ -137,6 +137,17 @@ describe("claim-staker-rewards bound — from chain, not from a constant", () =>
     expect(results[0].status).toBe("claimed");
   });
 
+  it("reports the entitlement the leg was bounded at, under a name that says so (review item 13)", async () => {
+    // A manager that charges a fee pays less than the entitlement, so the field must not
+    // claim to be the amount paid.
+    const sdk = makeSdk();
+
+    const { results } = await runClaimCycle(sdk);
+
+    expect(results[0].stakerEntitlementSats).toBe("4321");
+    expect(results[0]).not.toHaveProperty("stakerPaidSats");
+  });
+
   it("tracks the entitlement rather than a fixed ceiling", async () => {
     const sdk = makeSdk();
     (fetchEarnedStakerRewards as jest.Mock).mockResolvedValue(BigInt(99));
