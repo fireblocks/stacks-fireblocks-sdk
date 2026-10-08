@@ -21,6 +21,7 @@ import {
 } from "../utils/fireblocks.utils";
 import { FireblocksConfig } from "./types";
 import { formatErrorMessage } from "../utils/errorHandling";
+import { FIREBLOCKS_REQUEST_TIMEOUT_MS } from "../utils/constants";
 import {
   FireblocksSigner,
   FireblocksTransferError,
@@ -58,6 +59,9 @@ export class FireblocksService {
         fireblocksConfig && fireblocksConfig.basePath
           ? fireblocksConfig.basePath
           : basePath,
+      additionalOptions: {
+        baseOptions: { timeout: FIREBLOCKS_REQUEST_TIMEOUT_MS },
+      },
     });
 
     this.fireblocksSigner = new FireblocksSigner(this.fireblocksSDK, fireblocksConfig?.poll);

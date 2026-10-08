@@ -29,6 +29,9 @@ export const RBF_MIN_FEE_MULTIPLIER = 1.25;
 export const MAX_FEE_STX = 10;
 export const DEFAULT_POX_FEE_USTX = BigInt(10000);
 
+// Per-request timeout for Fireblocks API calls. The client's axios default is none.
+export const FIREBLOCKS_REQUEST_TIMEOUT_MS = 30_000;
+
 export const api_constants = {
   stacks_mainnet_rpc: "https://api.hiro.so",
   stacks_testnet_rpc: "https://api.testnet.hiro.so",

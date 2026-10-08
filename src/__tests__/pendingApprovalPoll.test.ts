@@ -125,6 +125,49 @@ describe("FireblocksSigner.getTxStatus — approval-pending deadlines", () => {
     expect(FireblocksService.isTerminalTransferFailure(err)).toBe(false);
   });
 
+  describe("a failed status read during the poll (review item 8)", () => {
+    /** First read reports a pending transfer; every later read fails with `err`. */
+    const signerFailingWith = (err: unknown, then?: () => unknown) => {
+      let call = 0;
+      const getTransaction = jest.fn(async () => {
+        call++;
+        if (call === 1) {
+          return { data: { id: "fb-tx-poll", status: TransactionStateEnum.PendingSignature, operation: TransactionOperation.Transfer } };
+        }
+        if (then && call > 2) return then();
+        throw err;
+      });
+      const fireblocks = { transactions: { getTransaction } } as unknown as Fireblocks;
+      // A short real budget: a swallowed auth error would otherwise poll until it.
+      const signer = new FireblocksSigner(fireblocks, { initialMs: 1, ceilingMs: 1, timeoutMs: 300, approvalTimeoutMs: 300 });
+      return { signer, getTransaction };
+    };
+
+    it.each([[401], [403]])("stops at once on HTTP %p — an auth failure does not fix itself", async (statusCode) => {
+      const { signer, getTransaction } = signerFailingWith(
+        Object.assign(new Error("unauthorized"), { response: { statusCode } }),
+      );
+
+      const err = await signer.getTxStatus("fb-tx-poll").catch((e) => e);
+
+      expect(err.message).toMatch(new RegExp(String(statusCode)));
+      expect(err.message).not.toMatch(/timed out/i);
+      // The initial read plus the one that failed — no retries for the rest of the budget.
+      expect(getTransaction).toHaveBeenCalledTimes(2);
+    });
+
+    it("still retries a transient error", async () => {
+      const { signer } = signerFailingWith(
+        Object.assign(new Error("bad gateway"), { response: { statusCode: 502 } }),
+        () => ({ data: { id: "fb-tx-poll", status: TransactionStateEnum.Completed, operation: TransactionOperation.Transfer } }),
+      );
+
+      const tx = await signer.getTxStatus("fb-tx-poll");
+
+      expect(tx.status).toBe(TransactionStateEnum.Completed);
+    });
+  });
+
   describe("budgets are independent, not measured from one shared clock", () => {
     afterEach(() => jest.restoreAllMocks());
 
