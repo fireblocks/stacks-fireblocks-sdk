@@ -310,23 +310,30 @@ export class StacksSDK {
   /**
    * Deterministic Fireblocks external id for a bond's `register-for-bond` signing request.
    *
-   * Keyed on the NONCE as well as the enrollment: the signature covers a nonce-dependent
-   * sighash, so a retry at a different nonce is a different signing request and must not
-   * resolve to the earlier one. At the same nonce the id is stable, so a retry re-polls
-   * the outstanding request instead of opening a second one for a human to approve.
+   * Keyed on the pre-sign sighash: a request can only ever sign the bytes it was opened
+   * over, so the same bytes resolve to the outstanding request and any change (nonce,
+   * fee, post-conditions) opens a new one.
    *
    * `generation` escapes a request that reached a terminal state — its id is consumed
-   * permanently, so without this the derived id would resolve to that dead request on
-   * every subsequent attempt.
+   * permanently, so without this the id would resolve to that dead request on every
+   * subsequent attempt.
+   *
+   * A caller-supplied id is kept as a recognisable prefix, with the same sighash and
+   * generation folded into a fixed-length suffix.
    */
   private deriveRegisterExternalId = (
     bondIndex: number,
     lockAddress: string,
-    nonce: bigint,
+    preSignSigHash: string,
     generation: number = 0,
+    callerExternalId?: string,
   ): string => {
-    const base = `${this.vaultAccountId}:${this.networkProfile.name}:bond:${bondIndex}:${lockAddress}:nonce:${nonce}`;
-    const material = generation > 0 ? `${base}:gen:${generation}` : base;
+    const keyed = `sighash:${preSignSigHash}:gen:${generation}`;
+    if (callerExternalId) {
+      const suffix = createHash("sha256").update(keyed).digest("hex").slice(0, 16);
+      return `${callerExternalId}-register-${suffix}`;
+    }
+    const material = `${this.vaultAccountId}:${this.networkProfile.name}:bond:${bondIndex}:${lockAddress}:${keyed}`;
     const digest = createHash("sha256").update(material).digest("hex").slice(0, 40);
     return `bond-register-${digest}`;
   };
@@ -1355,6 +1362,15 @@ export class StacksSDK {
     }
   };
 
+  /** The hash a single-sig origin signs for `tx`; covers the payload, post-conditions, fee and nonce. */
+  private preSignSigHashOf = (tx: StacksTransactionWire): string =>
+    sigHashPreSign(
+      tx.signBegin(),
+      tx.auth.authType,
+      (tx.auth.spendingCondition as any).fee,
+      (tx.auth.spendingCondition as any).nonce,
+    );
+
   private pox5SignAndBroadcast = async (
     tx: StacksTransactionWire,
     note: string,
@@ -1364,13 +1380,7 @@ export class StacksSDK {
     // or undefined when it is still valid.
     revalidate?: () => Promise<string | undefined>,
   ): Promise<{ txid?: string; error?: string; reason?: string }> => {
-    const sigHash = tx.signBegin();
-    const preSignSigHash = sigHashPreSign(
-      sigHash,
-      tx.auth.authType,
-      (tx.auth.spendingCondition as any).fee,
-      (tx.auth.spendingCondition as any).nonce,
-    );
+    const preSignSigHash = this.preSignSigHashOf(tx);
     const rawSignature = await this.fireblocksService.signTransaction(
       preSignSigHash, this.vaultAccountId.toString(), note, externalId,
     );
@@ -3753,14 +3763,13 @@ export class StacksSDK {
           postConditionMode: PostConditionMode.Deny,
           postConditions: [Pc.origin().willSendEq(amountUstx).ustxToLock(), ...custodyRefund.conditions],
         });
-        registerExternalId = opts?.externalId
-          ? `${opts.externalId}-register`
-          : this.deriveRegisterExternalId(
-              bondIndex,
-              metadata.lockAddress,
-              resolvedNonce,
-              priorRecord?.registrationGeneration ?? 0,
-            );
+        registerExternalId = this.deriveRegisterExternalId(
+          bondIndex,
+          metadata.lockAddress,
+          this.preSignSigHashOf(tx),
+          priorRecord?.registrationGeneration ?? 0,
+          opts?.externalId,
+        );
         return this.pox5SignAndBroadcast(
           tx,
           opts?.note ?? 'register-for-bond',

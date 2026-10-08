@@ -3,7 +3,12 @@ import {
   TransactionOperation,
   TransactionStateEnum,
 } from "@fireblocks/ts-sdk";
-import { FireblocksSigner, StaleRawSignError } from "../utils/FireblocksSigner";
+import { FireblocksService } from "../services/fireblocks.service";
+import {
+  FireblocksSigner,
+  FireblocksTransferError,
+  StaleRawSignError,
+} from "../utils/FireblocksSigner";
 
 /**
  * Re-polling an outstanding raw-signing request instead of creating a second one
@@ -129,6 +134,27 @@ describe("FireblocksSigner.rawSign — duplicate external id", () => {
     await expect(
       signer.rawSign(SIGHASH, "7", "register", true, EXTERNAL_ID),
     ).rejects.toThrow(StaleRawSignError);
+  });
+
+  it.each([
+    ["a different sighash", { signedMessages: [{ content: OTHER_SIGHASH, signature: SIGNATURE }] }],
+    ["no readable content", { signedMessages: [{ signature: SIGNATURE }] }],
+  ])("reports a terminal request under the id as terminal, even with %s (review item 7)", async (_label, over) => {
+    // A cancelled or rejected request has consumed its id. Reporting it as stale instead
+    // leaves the caller's generation where it is, so every retry lands on it again.
+    const signer = signerFor(
+      fireblocksWithExisting(
+        rawTx({ status: TransactionStateEnum.Cancelled, ...over }),
+      ),
+    );
+
+    const err = await signer
+      .rawSign(SIGHASH, "7", "register", true, EXTERNAL_ID)
+      .catch((e) => e);
+
+    expect(err).toBeInstanceOf(FireblocksTransferError);
+    expect(FireblocksService.isTerminalTransferFailure(err)).toBe(true);
+    expect(err.details.vendorId).toBe("fb-raw-original");
   });
 
   it("rethrows the duplicate error when no request is found under the id", async () => {

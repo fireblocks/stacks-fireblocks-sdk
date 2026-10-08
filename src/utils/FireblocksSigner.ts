@@ -299,7 +299,9 @@ export class FireblocksSigner {
       if (status === 404) throw createError;
       throw e;
     }
-    const tx = existing?.data as { id?: string; operation?: string } | undefined;
+    const tx = existing?.data as
+      | { id?: string; operation?: string; status?: string; subStatus?: string }
+      | undefined;
     const vendorId = tx?.id;
     if (!vendorId) throw createError;
 
@@ -307,6 +309,21 @@ export class FireblocksSigner {
       throw new StaleRawSignError(
         `External id ${externalId} belongs to a ${tx.operation} transaction (${vendorId}), not a signing request; refusing to read a signature from it.`,
         vendorId,
+      );
+    }
+
+    // A terminal request has consumed its id whatever it was opened over; reported as
+    // terminal, the caller moves to a fresh id rather than landing on this one again.
+    if (tx.status !== undefined && TERMINAL_TRANSACTION_STATES.has(tx.status)) {
+      throw new FireblocksTransferError(
+        `Signing request ${vendorId} holding external id ${externalId} reached terminal status ${tx.status}${tx.subStatus ? ` (${tx.subStatus})` : ""}`,
+        {
+          operation: tx.operation ?? TransactionOperation.Raw,
+          status: tx.status as TransactionStateEnum,
+          subStatus: tx.subStatus,
+          errorDescription: (tx as { errorDescription?: string }).errorDescription,
+          vendorId,
+        },
       );
     }
 
