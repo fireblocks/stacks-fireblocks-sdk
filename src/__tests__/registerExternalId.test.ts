@@ -1,0 +1,372 @@
+/**
+ * A deterministic external id for the register-for-bond signing request (review F4).
+ *
+ * The funding leg derives its id, so a retry reuses it and Fireblocks de-duplicates. The
+ * register leg passed `undefined` unless the caller supplied `opts.externalId` — and the
+ * desktop app supplies none — so Fireblocks assigned a fresh id and every retry after an
+ * approval timeout opened a SECOND signing request for the same registration. Under a
+ * 1-of-N approval rule that is another item for a human to act on, and only one of the
+ * two can ever be used.
+ *
+ * The id is keyed on the pre-sign sighash (review item 7): a request can only sign the bytes
+ * it was opened over, so different bytes — a new nonce, fee or post-condition — must open a
+ * new request rather than resolve to one that will be refused as stale on every retry.
+ */
+
+jest.mock("../services/fireblocks.service", () => {
+  const actual = jest.requireActual("../services/fireblocks.service");
+  return {
+    FireblocksService: Object.assign(
+      jest.fn().mockImplementation(() => ({})),
+      {
+        isTerminalTransferFailure:
+          actual.FireblocksService.isTerminalTransferFailure,
+        isDuplicateExternalIdError:
+          actual.FireblocksService.isDuplicateExternalIdError,
+      },
+    ),
+  };
+});
+
+jest.mock("@stacks/bitcoin-staking", () => {
+  const actual = jest.requireActual("@stacks/bitcoin-staking");
+  return {
+    ...actual,
+    fetchBondAllowance: jest.fn(),
+    fetchPoxInfo: jest.fn(),
+    fetchBond: jest.fn(),
+    minUstxForSatsAmount: jest.fn(),
+    fetchAccountStatus: jest.fn(),
+    fetchEligibleRegisterForBond: jest.fn(),
+    firstPox5RewardCycle: jest.fn(),
+    buildRegisterMetadata: jest.fn(),
+    bondPeriodToRewardCycle: jest.fn(),
+    fetchConstructLockupOutputScript: jest.fn(),
+    fetchBondMembership: jest.fn(),
+  };
+});
+
+jest.mock("@stacks/transactions", () => {
+  const actual = jest.requireActual("@stacks/transactions");
+  return { ...actual, fetchCallReadOnlyFunction: jest.fn() };
+});
+
+import { TransactionStateEnum } from "@fireblocks/ts-sdk";
+import { StacksSDK } from "../StacksSDK";
+import { FireblocksTransferError } from "../utils/FireblocksSigner";
+import {
+  fetchBondAllowance,
+  fetchPoxInfo,
+  fetchBond,
+  minUstxForSatsAmount,
+  fetchAccountStatus,
+  fetchEligibleRegisterForBond,
+  firstPox5RewardCycle,
+  buildRegisterMetadata,
+  bondPeriodToRewardCycle,
+  fetchConstructLockupOutputScript,
+  fetchBondMembership,
+} from "@stacks/bitcoin-staking";
+import { fetchCallReadOnlyFunction } from "@stacks/transactions";
+
+const { InMemoryLockRecordStore } = jest.requireActual(
+  "../staking/bonds/unlock-bytes-store",
+);
+
+const BOOT_ADDR = "ST000000000000000000002AMW42H";
+const FAKE_INLINE_PEM = [
+  "-----BEGIN",
+  "PRIVATE KEY-----",
+  "not-a-key",
+  "-----END",
+  "PRIVATE KEY-----",
+].join(" ");
+
+const BOND_INDEX = 4;
+const LOCK_ADDRESS = "lock-address-under-test";
+const OUTPUT_SCRIPT = new Uint8Array([0x00, 0x20, ...new Array(32).fill(0xab)]);
+const OUTPUT_SCRIPT_HEX = Buffer.from(OUTPUT_SCRIPT).toString("hex");
+const AMOUNT_SATS = BigInt(100_000);
+const MANAGER = `${BOOT_ADDR}.signer-manager`;
+const BTC_TXID = "ab".repeat(32);
+
+const terminalSigningError = () =>
+  new FireblocksTransferError(
+    "Signing request fb-raw-1 reached terminal status REJECTED",
+    {
+      operation: "RAW",
+      status: TransactionStateEnum.Rejected,
+      subStatus: "REJECTED_BY_POLICY",
+      vendorId: "fb-raw-1",
+    },
+  );
+
+function makeSdk(nonce = 1): any {
+  const sdk: any = new (StacksSDK as any)("7", {
+    apiKey: "12345678-1234-4123-8123-123456789012",
+    apiSecret: FAKE_INLINE_PEM,
+    testnet: true,
+  });
+  sdk.address = BOOT_ADDR;
+  sdk.publicKey = `02${"a".repeat(64)}`;
+  sdk.vaultAccountId = "7";
+  sdk.assertDurableLockStore = jest.fn().mockResolvedValue(undefined);
+  sdk.signerManagerAllowedError = jest.fn().mockReturnValue(undefined);
+  sdk.nativeRecordOverwriteGuard = jest.fn().mockResolvedValue(undefined);
+  sdk.resolveBondStxAmount = jest
+    .fn()
+    .mockReturnValue({ amountUstx: BigInt(1_000) });
+  sdk.fireblocksService = {
+    createBitcoinTransaction: jest
+      .fn()
+      .mockImplementation(async (..._a: any[]) => ({
+        fireblocksId: "fb-1",
+        btcTxid: BTC_TXID,
+      })),
+  };
+  sdk.setLockRecordStore(new InMemoryLockRecordStore());
+
+  // Past funding, straight to the register step.
+  // A retry resumes the recorded funding, which verifies the txid still exists.
+  sdk.getBtcTxStatus = jest
+    .fn()
+    .mockResolvedValue({ success: true, data: { found: true } });
+  sdk.waitForBtcConfirmations = jest
+    .fn()
+    .mockResolvedValue({ blockHash: "bh" });
+  sdk.assembleLockupProof = jest.fn().mockResolvedValue({ outputIndex: 0 });
+  sdk.custodyRefundPostConditions = jest
+    .fn()
+    .mockResolvedValue({ conditions: [], custodiedSats: BigInt(0) });
+  sdk.runNonceExclusive = jest.fn(async (fn: any) => fn());
+  sdk.resolveNonce = jest.fn().mockResolvedValue(BigInt(nonce));
+  // Stands in for the transaction bytes: the nonce and post-conditions both feed the sighash.
+  sdk.buildRegisterForBondTx = jest.fn(async (a: any) => ({
+    bytes: `nonce:${a.nonce}|postConditions:${a.postConditions.length}`,
+  }));
+  sdk.preSignSigHashOf = jest.fn((tx: any) => tx.bytes);
+  sdk.revalidateRegisterForBond = jest.fn().mockResolvedValue(undefined);
+  sdk.pox5SignAndBroadcast = jest.fn().mockResolvedValue({ txid: "stx-tx" });
+  sdk.waitForTxSettlement = jest
+    .fn()
+    .mockResolvedValue({ success: true, data: { tx_status: "success" } });
+  return sdk;
+}
+
+/** The external id createBond handed to the register signing request. */
+const registerIdFrom = (sdk: any): string | undefined =>
+  sdk.pox5SignAndBroadcast.mock.calls[0][2];
+
+beforeEach(() => {
+  (fetchBondAllowance as jest.Mock)
+    .mockReset()
+    .mockResolvedValue(BigInt(10_000_000));
+  (fetchPoxInfo as jest.Mock)
+    .mockReset()
+    .mockResolvedValue({ rewardCycleId: 10 });
+  (fetchBond as jest.Mock).mockReset().mockResolvedValue({
+    stxValueRatio: BigInt(1),
+    minUstxRatioBps: BigInt(1),
+    earlyUnlockBytes: "aabb",
+  });
+  (minUstxForSatsAmount as jest.Mock)
+    .mockReset()
+    .mockReturnValue(BigInt(1_000));
+  (fetchAccountStatus as jest.Mock)
+    .mockReset()
+    .mockResolvedValue({ balance: BigInt(1_000_000_000), locked: BigInt(0) });
+  (fetchEligibleRegisterForBond as jest.Mock)
+    .mockReset()
+    .mockResolvedValue({ ok: true });
+  (firstPox5RewardCycle as jest.Mock).mockReset().mockReturnValue(1);
+  (bondPeriodToRewardCycle as jest.Mock).mockReset().mockReturnValue(12);
+  (buildRegisterMetadata as jest.Mock).mockReset().mockReturnValue({
+    unlockBytes: new Uint8Array([1, 2, 3]),
+    lockAddress: LOCK_ADDRESS,
+    unlockHeight: 900,
+    outputScript: OUTPUT_SCRIPT,
+  });
+  (fetchCallReadOnlyFunction as jest.Mock).mockReset().mockResolvedValue({
+    type: "ok",
+    value: { type: "buffer", value: OUTPUT_SCRIPT_HEX },
+  });
+  (fetchConstructLockupOutputScript as jest.Mock)
+    .mockReset()
+    .mockResolvedValue(OUTPUT_SCRIPT);
+  (fetchBondMembership as jest.Mock).mockReset().mockResolvedValue(null);
+});
+
+describe("createBond — register-for-bond external id", () => {
+  it("derives an id instead of leaving Fireblocks to assign a random one", async () => {
+    const sdk = makeSdk();
+
+    await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect(registerIdFrom(sdk)).toEqual(
+      expect.stringMatching(/^bond-register-[0-9a-f]{40}$/),
+    );
+  });
+
+  it("derives the SAME id on a retry, so the outstanding request is re-polled", async () => {
+    const first = makeSdk();
+    await first.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+    const second = makeSdk();
+    await second.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect(registerIdFrom(second)).toBe(registerIdFrom(first));
+  });
+
+  it("derives a DIFFERENT id at a different nonce", async () => {
+    // The signature covers a nonce-dependent sighash, so reusing the id across nonces
+    // would resolve to a request whose signature does not authorize this transaction.
+    const atOne = makeSdk(1);
+    await atOne.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+    const atTwo = makeSdk(2);
+    await atTwo.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect(registerIdFrom(atTwo)).not.toBe(registerIdFrom(atOne));
+  });
+
+  it("derives a DIFFERENT id when the bytes change at the same nonce (review item 7)", async () => {
+    // A request opened over other bytes can never sign these. Resolving to it refuses
+    // as stale on every retry, and nothing the operator does in Fireblocks changes that.
+    const before = makeSdk();
+    await before.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+    const after = makeSdk();
+    after.custodyRefundPostConditions = jest
+      .fn()
+      .mockResolvedValue({ conditions: [{}], custodiedSats: BigInt(5) });
+    await after.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect(after.resolveNonce).toHaveBeenCalled();
+    expect(registerIdFrom(after)).not.toBe(registerIdFrom(before));
+  });
+
+  it("keeps a caller-supplied external id recognisable", async () => {
+    const sdk = makeSdk();
+
+    await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER, {
+      externalId: "mine",
+    });
+
+    expect(registerIdFrom(sdk)).toEqual(
+      expect.stringMatching(/^mine-register-[0-9a-f]{16}$/),
+    );
+  });
+
+  it("keeps a caller-supplied id stable for the same bytes", async () => {
+    const first = makeSdk();
+    await first.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER, { externalId: "mine" });
+    const second = makeSdk();
+    await second.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER, { externalId: "mine" });
+
+    expect(registerIdFrom(second)).toBe(registerIdFrom(first));
+  });
+
+  it("moves a caller-supplied id off a terminally failed request (review item 7)", async () => {
+    // The caller's id ignored the generation, so every retry after a rejection resolved
+    // to the same rejected request.
+    const failing = makeSdk();
+    failing.pox5SignAndBroadcast = jest
+      .fn()
+      .mockRejectedValue(terminalSigningError());
+    await failing.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER, { externalId: "mine" });
+    const consumedId = registerIdFrom(failing);
+
+    const retry = makeSdk();
+    retry.lockRecordStore = failing.lockRecordStore;
+    await retry.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER, { externalId: "mine" });
+
+    expect(registerIdFrom(retry)).not.toBe(consumedId);
+  });
+
+  it("moves a caller-supplied id off a request opened over other bytes (review item 7)", async () => {
+    const before = makeSdk();
+    await before.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER, { externalId: "mine" });
+    const after = makeSdk();
+    after.custodyRefundPostConditions = jest
+      .fn()
+      .mockResolvedValue({ conditions: [{}], custodiedSats: BigInt(5) });
+    await after.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER, { externalId: "mine" });
+
+    expect(registerIdFrom(after)).not.toBe(registerIdFrom(before));
+  });
+
+  it("advances the registration generation when the signing request terminally fails", async () => {
+    // A rejected request consumes its id permanently. Without a generation the derived id
+    // would resolve to that dead request on every retry — the #205 wedge, on the L2 leg.
+    const sdk = makeSdk();
+    sdk.pox5SignAndBroadcast = jest
+      .fn()
+      .mockRejectedValue(terminalSigningError());
+
+    const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect(res.success).toBe(false);
+    const after = await sdk.lockRecordStore.loadRecord(BOOT_ADDR, BOND_INDEX);
+    expect(after.registrationGeneration).toBe(1);
+    // The BTC is committed and must stay pointed at.
+    expect(res.btcTxid).toBe(BTC_TXID);
+  });
+
+  it("derives a fresh id once the generation advanced", async () => {
+    const failing = makeSdk();
+    failing.pox5SignAndBroadcast = jest
+      .fn()
+      .mockRejectedValue(terminalSigningError());
+    await failing.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+    const wedgedId = registerIdFrom(failing);
+
+    const retry = makeSdk();
+    retry.lockRecordStore = failing.lockRecordStore;
+    await retry.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect(registerIdFrom(retry)).not.toBe(wedgedId);
+  });
+
+  it("reports a register signing request awaiting approval as a field, keeping the BTC pointer", async () => {
+    // The Bitcoin is already locked when the register leg waits on approval, so the
+    // result must say both: pending (not failed) and where the BTC is.
+    const sdk = makeSdk();
+    sdk.pox5SignAndBroadcast = jest.fn().mockRejectedValue(
+      new FireblocksTransferError("Signing request fb-raw-9 timed out after 30m: still PENDING_AUTHORIZATION", {
+        operation: "RAW",
+        status: TransactionStateEnum.PendingAuthorization,
+        vendorId: "fb-raw-9",
+      }),
+    );
+
+    const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect(res.success).toBe(false);
+    expect(res.pendingApproval).toBe(true);
+    expect(res.pendingFireblocksId).toBe("fb-raw-9");
+    expect(res.btcTxid).toBe(BTC_TXID);
+  });
+
+  it("does not reuse a just-consumed id after a SECOND terminal failure in a row", async () => {
+    // The pre-funding save writes a lockRecord literal that replaces the stored record.
+    // If that literal omits registrationGeneration, a retry's own save silently resets
+    // the generation the PRIOR failure just advanced — so the second failure's abandon
+    // step re-derives the id the second attempt just consumed, instead of a fresh one.
+    const attempt1 = makeSdk();
+    attempt1.pox5SignAndBroadcast = jest
+      .fn()
+      .mockRejectedValue(terminalSigningError());
+    await attempt1.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    const attempt2 = makeSdk();
+    attempt2.lockRecordStore = attempt1.lockRecordStore;
+    attempt2.pox5SignAndBroadcast = jest
+      .fn()
+      .mockRejectedValue(terminalSigningError());
+    await attempt2.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+    const idConsumedByAttempt2 = registerIdFrom(attempt2);
+
+    const attempt3 = makeSdk();
+    attempt3.lockRecordStore = attempt1.lockRecordStore;
+    await attempt3.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect(registerIdFrom(attempt3)).not.toBe(idConsumedByAttempt2);
+  });
+});
