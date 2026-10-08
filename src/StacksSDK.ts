@@ -6260,7 +6260,7 @@ export class StacksSDK {
           rewardCycle: cycle,
           signerManager,
           signerAccruedSats: (b !== undefined ? (accruedByBond.get(b) ?? BigInt(0)) : noneAccrued).toString(),
-          stakerPaidSats: null,
+          stakerEntitlementSats: null,
           signerClaimTxid,
           stakerClaimTxid: null,
           status: unsettled ? 'unsettled' : 'failed',
@@ -6356,7 +6356,7 @@ export class StacksSDK {
           // paid nothing, so it must not carry the pre-claim entitlement. An unsettled
           // leg has paid an UNKNOWN amount, which is likewise not the entitlement.
           // The value is the entitlement the leg was bounded AT — the manager may pay less.
-          stakerPaidSats: status === 'claimed' ? stakerEntitlementSats?.toString() ?? null : null,
+          stakerEntitlementSats: status === 'claimed' ? stakerEntitlementSats?.toString() ?? null : null,
           signerClaimTxid,
           stakerClaimTxid,
           status: unsettled ? 'unsettled' : status,
