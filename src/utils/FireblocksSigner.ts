@@ -257,6 +257,12 @@ export class FireblocksSigner {
         response = await this.fireblocks.transactions.getTransaction({ txId });
         tx = response.data;
       } catch (pollError) {
+        // Authentication and authorization failures do not clear on retry.
+        const failed = (pollError as { response?: { statusCode?: number; status?: number } })?.response;
+        const code = failed?.statusCode ?? failed?.status;
+        if (code === 401 || code === 403) {
+          throw new Error(`Polling ${label.toLowerCase()} ${txId} failed with HTTP ${code} from Fireblocks — check the API key and its permissions: ${formatErrorMessage(pollError)}`);
+        }
         console.warn(`Transient error polling transaction ${txId}, will retry:`, pollError);
       }
     }
