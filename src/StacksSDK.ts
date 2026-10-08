@@ -399,6 +399,33 @@ export class StacksSDK {
             `The lock record no longer tracks it (now: ${stored.fireblocksId ?? "no transfer in flight"}) — a concurrent attempt already handled it, so nothing was abandoned. Retry createBond for this bond index to continue the current attempt.`,
         };
       }
+      // Fireblocks reports FAILED for some transfers that already reached the network
+      // (e.g. DROPPED_BY_BLOCKCHAIN, DOUBLE_SPENDING), and such a transaction can still
+      // confirm. The record is pointed at it instead of advancing the generation, so a
+      // retry resumes that transaction and never opens a second transfer to this lock.
+      const broadcastTxid = error instanceof FireblocksTransferError ? error.details.txHash : undefined;
+      if (stored && broadcastTxid) {
+        try {
+          await this.lockRecordStore.saveRecord(this.address!, bondIndex, {
+            ...stored,
+            btcTxid: broadcastTxid,
+            stage: laterStage(stored.stage, "btc-broadcast"),
+          });
+        } catch (e) {
+          return {
+            success: false,
+            error:
+              `The Fireblocks funding transfer ${stored.fireblocksId} for bond ${bondIndex} was broadcast as Bitcoin transaction ${broadcastTxid} and then reported failed: ${formatErrorMessage(error)}. ` +
+              `The lock record could NOT be updated to point at it (${formatErrorMessage(e)}). Do not fund this bond again; check ${broadcastTxid} on-chain first.`,
+          };
+        }
+        return {
+          success: false,
+          error:
+            `The Fireblocks funding transfer ${stored.fireblocksId} for bond ${bondIndex} was broadcast as Bitcoin transaction ${broadcastTxid} and then reported failed: ${formatErrorMessage(error)}. ` +
+            `A broadcast transaction can still confirm, so no new transfer will be opened for this bond. The lock record now points at ${broadcastTxid}; retry createBond for this bond index and it continues only once that transaction is visible on-chain. Do not fund this bond again.`,
+        };
+      }
       if (stored) {
         fireblocksId = stored.fireblocksId;
         // Single write: the generation advance, the id clear, and moving the dead id into
