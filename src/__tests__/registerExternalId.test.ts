@@ -8,9 +8,9 @@
  * 1-of-N approval rule that is another item for a human to act on, and only one of the
  * two can ever be used.
  *
- * The id is keyed on the nonce because the signature covers a nonce-dependent sighash: a
- * different nonce is a genuinely different signing request and must not resolve to the
- * earlier one.
+ * The id is keyed on the pre-sign sighash (review item 7): a request can only sign the bytes
+ * it was opened over, so different bytes — a new nonce, fee or post-condition — must open a
+ * new request rather than resolve to one that will be refused as stale on every retry.
  */
 
 jest.mock("../services/fireblocks.service", () => {
@@ -140,7 +140,11 @@ function makeSdk(nonce = 1): any {
     .mockResolvedValue({ conditions: [], custodiedSats: BigInt(0) });
   sdk.runNonceExclusive = jest.fn(async (fn: any) => fn());
   sdk.resolveNonce = jest.fn().mockResolvedValue(BigInt(nonce));
-  sdk.buildRegisterForBondTx = jest.fn().mockResolvedValue({});
+  // Stands in for the transaction bytes: the nonce and post-conditions both feed the sighash.
+  sdk.buildRegisterForBondTx = jest.fn(async (a: any) => ({
+    bytes: `nonce:${a.nonce}|postConditions:${a.postConditions.length}`,
+  }));
+  sdk.preSignSigHashOf = jest.fn((tx: any) => tx.bytes);
   sdk.revalidateRegisterForBond = jest.fn().mockResolvedValue(undefined);
   sdk.pox5SignAndBroadcast = jest.fn().mockResolvedValue({ txid: "stx-tx" });
   sdk.waitForTxSettlement = jest
@@ -223,14 +227,69 @@ describe("createBond — register-for-bond external id", () => {
     expect(registerIdFrom(atTwo)).not.toBe(registerIdFrom(atOne));
   });
 
-  it("still honours a caller-supplied external id", async () => {
+  it("derives a DIFFERENT id when the bytes change at the same nonce (review item 7)", async () => {
+    // A request opened over other bytes can never sign these. Resolving to it refuses
+    // as stale on every retry, and nothing the operator does in Fireblocks changes that.
+    const before = makeSdk();
+    await before.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+    const after = makeSdk();
+    after.custodyRefundPostConditions = jest
+      .fn()
+      .mockResolvedValue({ conditions: [{}], custodiedSats: BigInt(5) });
+    await after.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect(after.resolveNonce).toHaveBeenCalled();
+    expect(registerIdFrom(after)).not.toBe(registerIdFrom(before));
+  });
+
+  it("keeps a caller-supplied external id recognisable", async () => {
     const sdk = makeSdk();
 
     await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER, {
       externalId: "mine",
     });
 
-    expect(registerIdFrom(sdk)).toBe("mine-register");
+    expect(registerIdFrom(sdk)).toEqual(
+      expect.stringMatching(/^mine-register-[0-9a-f]{16}$/),
+    );
+  });
+
+  it("keeps a caller-supplied id stable for the same bytes", async () => {
+    const first = makeSdk();
+    await first.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER, { externalId: "mine" });
+    const second = makeSdk();
+    await second.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER, { externalId: "mine" });
+
+    expect(registerIdFrom(second)).toBe(registerIdFrom(first));
+  });
+
+  it("moves a caller-supplied id off a terminally failed request (review item 7)", async () => {
+    // The caller's id ignored the generation, so every retry after a rejection resolved
+    // to the same rejected request.
+    const failing = makeSdk();
+    failing.pox5SignAndBroadcast = jest
+      .fn()
+      .mockRejectedValue(terminalSigningError());
+    await failing.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER, { externalId: "mine" });
+    const consumedId = registerIdFrom(failing);
+
+    const retry = makeSdk();
+    retry.lockRecordStore = failing.lockRecordStore;
+    await retry.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER, { externalId: "mine" });
+
+    expect(registerIdFrom(retry)).not.toBe(consumedId);
+  });
+
+  it("moves a caller-supplied id off a request opened over other bytes (review item 7)", async () => {
+    const before = makeSdk();
+    await before.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER, { externalId: "mine" });
+    const after = makeSdk();
+    after.custodyRefundPostConditions = jest
+      .fn()
+      .mockResolvedValue({ conditions: [{}], custodiedSats: BigInt(5) });
+    await after.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER, { externalId: "mine" });
+
+    expect(registerIdFrom(after)).not.toBe(registerIdFrom(before));
   });
 
   it("advances the registration generation when the signing request terminally fails", async () => {
