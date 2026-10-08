@@ -14,6 +14,7 @@ export declare const helperConstants: {
 export declare const RBF_MIN_FEE_MULTIPLIER = 1.25;
 export declare const MAX_FEE_STX = 10;
 export declare const DEFAULT_POX_FEE_USTX: bigint;
+export declare const FIREBLOCKS_REQUEST_TIMEOUT_MS = 30000;
 export declare const api_constants: {
     stacks_mainnet_rpc: string;
     stacks_testnet_rpc: string;
@@ -58,6 +59,7 @@ export declare const BTC_ESPLORA: {
 };
 export declare const PRIVATE1_HIRO_API_BASE = "https://api.private-1.hiro.so";
 export declare const PUBLIC_TESTNET_POX5_API = "https://api.testnet-pox5.hiro.so";
+export declare const HIRO_API_KEY_HEADER = "x-hiro-api-key";
 export declare const EARLY_EXIT_SIGNER: {
     mainnet: string;
     testnet: string;
@@ -68,11 +70,12 @@ export declare const EARLY_EXIT_SIGNER: {
  * (2026-08-29) alongside the connection values.
  *
  * PRESENTATION ONLY. This list does not gate anything, and must not be confused with the
- * two enforcement concepts it sits beside:
- *   - the signer-manager ALLOWLIST (`signerManagerAdapters`), which refuses managers when
- *     configured, and is deliberately left unconfigured so a staker can enter their own;
- *   - a manager's PAYOUT BOUND, required to claim rewards through it.
- * Featuring a manager here grants neither. A staker may still enrol with any manager.
+ * signer-manager ALLOWLIST (`signerManagerAdapters` / `SIGNER_MANAGER_ALLOWLIST`), which
+ * refuses managers when configured and is deliberately left unconfigured so a staker can
+ * enter their own. Featuring a manager here grants nothing.
+ *
+ * Reward claims need no per-manager configuration: pox-5 computes the staker's
+ * entitlement and the claim leg is bounded by that value read from chain.
  *
  * Third-party managers were removed from the list at the client's request after several
  * deployed ones turned out not to work; the entries below are the ones they support today.

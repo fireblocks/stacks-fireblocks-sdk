@@ -42,7 +42,7 @@ describe("SdkManager atomic instance acquisition (FBS-11)", () => {
 
   it("does not evict an instance a concurrent caller still holds", async () => {
     createMock.mockImplementation(async () => ({ tag: "sdk" }));
-    const mgr = new SdkManager(baseConfig, undefined, { maxPoolSize: 1 });
+    const mgr = new SdkManager(baseConfig, { maxPoolSize: 1 });
     try {
       // Two concurrent holders of vault 7 (refCount 2 → one active instance).
       await mgr.getSdk("7");

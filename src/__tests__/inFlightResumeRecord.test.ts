@@ -14,17 +14,20 @@
  * recovery that branch's own error message prescribes.
  */
 
-jest.mock("../services/fireblocks.service", () => ({
-  FireblocksService: Object.assign(
-    jest.fn().mockImplementation(() => ({})),
-    {
-      // Static helpers the funding branches call.
-      isTerminalTransferFailure: (e: unknown) =>
-        /terminally-failed/.test((e as Error)?.message ?? ""),
-      isDuplicateExternalIdError: () => false,
-    },
-  ),
-}));
+jest.mock("../services/fireblocks.service", () => {
+  // The REAL terminal classifier: it reads the typed vendor status, and the abandon path
+  // keys on the vendor id that only a typed error carries.
+  const actual = jest.requireActual("../services/fireblocks.service");
+  return {
+    FireblocksService: Object.assign(
+      jest.fn().mockImplementation(() => ({})),
+      {
+        isTerminalTransferFailure: actual.FireblocksService.isTerminalTransferFailure,
+        isDuplicateExternalIdError: () => false,
+      },
+    ),
+  };
+});
 
 jest.mock("@stacks/bitcoin-staking", () => {
   const actual = jest.requireActual("@stacks/bitcoin-staking");
@@ -49,7 +52,9 @@ jest.mock("@stacks/transactions", () => {
   return { ...actual, fetchCallReadOnlyFunction: jest.fn() };
 });
 
+import { TransactionStateEnum } from "@fireblocks/ts-sdk";
 import { StacksSDK } from "../StacksSDK";
+import { FireblocksTransferError } from "../utils/FireblocksSigner";
 import {
   fetchBondAllowance,
   fetchPoxInfo,
@@ -76,6 +81,14 @@ const LOCK_ADDRESS = "lock-address-under-test";
 const OUTPUT_SCRIPT = new Uint8Array([0x00, 0x20, ...new Array(32).fill(0xab)]);
 const OUTPUT_SCRIPT_HEX = Buffer.from(OUTPUT_SCRIPT).toString("hex");
 const FB_ID = "fireblocks-tx-id-1";
+
+/** The in-flight transfer reaching a terminal status, as Fireblocks reports it. */
+const inFlightRejected = () =>
+  new FireblocksTransferError(`Transfer ${FB_ID} reached terminal status REJECTED`, {
+    operation: "TRANSFER",
+    status: TransactionStateEnum.Rejected,
+    vendorId: FB_ID,
+  });
 const AMOUNT_SATS = BigInt(100_000);
 const GOOD_TXID = "ab".repeat(32);
 
@@ -185,6 +198,91 @@ describe("renewBond — reward carry-forward must fail closed", () => {
     // irrelevant and must not produce the fail-closed refusal.
     expect(res.error ?? "").not.toMatch(/could not be read/i);
   });
+
+  it("keeps the generation fields and abandoned ids when it rewrites the next bond's record", async () => {
+    // Review item 10. A record already exists for the next bond — e.g. an earlier createBond
+    // whose funding was abandoned. renewBond rebuilt it from scratch, so the generations reset
+    // to 0 (a later createBond re-derives a consumed external id) and the abandoned ids —
+    // the operator's only pointer to the dead transfers — were lost.
+    const sdk = makeSdk();
+    await sdk.lockRecordStore.saveRecord(sdk.address, NEXT_BOND, {
+      bondIndex: NEXT_BOND,
+      unlockBytes: new Uint8Array([1, 2, 3]),
+      lockAddress: LOCK_ADDRESS,
+      unlockHeight: 900,
+      amountSats: AMOUNT_SATS,
+      isL1Lock: true,
+      btcTxid: GOOD_TXID,
+      fundingGeneration: 2,
+      registrationGeneration: 1,
+      abandonedFireblocksIds: ["fb-dead-1", "fb-dead-2"],
+    });
+    // Resume path: the recorded re-lock still exists, so no BTC is spent.
+    sdk.getBtcTxStatus = jest.fn().mockResolvedValue({ success: true, data: { found: true } });
+    sdk.waitForBtcConfirmations = jest.fn().mockResolvedValue({ blockHash: "bh" });
+    sdk.assembleLockupProof = jest.fn().mockResolvedValue({ outputIndex: 0 });
+    // Stop right after the record write: the proof preflight refuses.
+    (fetchEligibleRegisterForBond as jest.Mock).mockResolvedValue({ ok: false, reasons: [] });
+
+    await sdk.renewBond(NEXT_BOND, MANAGER, {
+      rewardBtcAddress: "bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080",
+      rewardMaxFeeSats: BigInt(5_000),
+    });
+
+    expect(sdk.assembleLockupProof).toHaveBeenCalled();
+    const after = await sdk.lockRecordStore.loadRecord(sdk.address, NEXT_BOND);
+    expect(after.fundingGeneration).toBe(2);
+    expect(after.registrationGeneration).toBe(1);
+    expect(after.abandonedFireblocksIds).toEqual(["fb-dead-1", "fb-dead-2"]);
+  });
+});
+
+/**
+ * Review item 9. When the recorded funding tx is not visible on Esplora, the error told the
+ * operator to "retry with opts.btcTxid set to the actual funding txid" — and createBond
+ * refuses any btcTxid that differs from the recorded one. Following the advice was a
+ * guaranteed refusal. The refusal is deliberate (overwriting the recorded pointer can strand
+ * already-committed Bitcoin); the advice was what was wrong.
+ */
+describe("createBond — a recorded funding tx that is not visible", () => {
+  const seedRecordedFunding = (sdk: any) =>
+    sdk.lockRecordStore.saveRecord(sdk.address, BOND_INDEX, {
+      bondIndex: BOND_INDEX,
+      unlockBytes: new Uint8Array([1, 2, 3]),
+      lockAddress: LOCK_ADDRESS,
+      unlockHeight: 900,
+      amountSats: AMOUNT_SATS,
+      isL1Lock: true,
+      btcTxid: GOOD_TXID,
+      stage: "btc-broadcast",
+    });
+
+  it("does not prescribe the btcTxid retry that createBond refuses", async () => {
+    const sdk = makeSdk();
+    await seedRecordedFunding(sdk);
+    sdk.getBtcTxStatus = jest.fn().mockResolvedValue({ success: true, data: { found: false } });
+
+    const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, `${BOOT_ADDR}.signer-manager`);
+
+    expect(res.success).toBe(false);
+    expect(res.error).not.toMatch(/retry with opts\.btcTxid/i);
+    // What is true: a later retry without btcTxid covers indexer lag, and funding again is
+    // never the answer.
+    expect(res.error).toMatch(/without opts\.btcTxid/i);
+    expect(res.error).toMatch(/do not fund/i);
+  });
+
+  it("refuses a btcTxid that differs from the recorded one — the refusal the old advice ran into", async () => {
+    const sdk = makeSdk();
+    await seedRecordedFunding(sdk);
+
+    const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, `${BOOT_ADDR}.signer-manager`, {
+      btcTxid: "cd".repeat(32),
+    });
+
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/refusing to replace it/i);
+  });
 });
 
 describe("createBond — in-flight Fireblocks funding resume", () => {
@@ -227,14 +325,12 @@ describe("createBond — in-flight Fireblocks funding resume", () => {
   it("drops fireblocksId on a TERMINAL failure so the btcTxid recovery path stays open", async () => {
     const sdk = makeSdk();
     await seedInFlightRecord(sdk);
-    sdk.fireblocksService.awaitBitcoinTransaction.mockRejectedValue(
-      new Error("transfer terminally-failed: REJECTED"),
-    );
+    sdk.fireblocksService.awaitBitcoinTransaction.mockRejectedValue(inFlightRejected());
 
     const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, `${BOOT_ADDR}.signer-manager`);
     expect(res.success).toBe(false);
     expect(res.error).toMatch(/terminally failed/i);
-    expect(res.error).toMatch(/opts\.btcTxid/);
+    expect(res.error).toMatch(/retry createBond/i);
 
     const after = await readRecord(sdk);
     // The external id is kept for diagnostics. It is DERIVED from (vault, network, bond,
@@ -243,16 +339,14 @@ describe("createBond — in-flight Fireblocks funding resume", () => {
     expect(after.fundingExternalId).toEqual(expect.stringContaining("bond-fund-"));
     expect(after.lockAddress).toBe(LOCK_ADDRESS);
     // ...but the Fireblocks id must be gone, or hasInFlightFireblocks stays true and the
-    // caller-btcTxid guard blocks the recovery this branch's error message prescribes.
+    // prescribed retry awaits the dead transfer again instead of re-funding.
     expect(after.fireblocksId).toBeUndefined();
   });
 
   it("after a terminal failure, a retry WITH opts.btcTxid is accepted (not refused as in-flight)", async () => {
     const sdk = makeSdk();
     await seedInFlightRecord(sdk);
-    sdk.fireblocksService.awaitBitcoinTransaction.mockRejectedValue(
-      new Error("transfer terminally-failed: REJECTED"),
-    );
+    sdk.fireblocksService.awaitBitcoinTransaction.mockRejectedValue(inFlightRejected());
     await sdk.createBond(BOND_INDEX, AMOUNT_SATS, `${BOOT_ADDR}.signer-manager`);
 
     // The operator resolves the transfer in Fireblocks and retries with the real txid.

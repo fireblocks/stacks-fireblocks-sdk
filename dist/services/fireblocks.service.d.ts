@@ -67,15 +67,14 @@ export declare class FireblocksService {
      */
     awaitBitcoinTransaction: (fireblocksId: string) => Promise<string>;
     /**
-     * Looks up a prior BTC transfer by its external id (the deterministic funding id) and
-     * awaits its Bitcoin txid. Used when a retry's re-submit is rejected as a duplicate
-     * external id (Fireblocks error 1438): the transfer already exists, so resolve it
-     * rather than failing. Returns null when Fireblocks has no transaction for the id.
+     * Lookup ONLY — returns the Fireblocks id for an external id without polling it.
+     *
+     * Deliberately does not poll: a combined lookup-and-await loses the id when the
+     * transfer is already terminal, because the await throws before the caller can persist
+     * what the lookup just found. The record then keeps no pointer to the dead transfer and
+     * every retry repeats the same generic error. Callers persist between the two steps.
      */
-    resolveBitcoinTransactionByExternalId: (externalId: string) => Promise<{
-        fireblocksId: string;
-        btcTxid: string;
-    } | null>;
+    findBitcoinTransactionByExternalId: (externalId: string) => Promise<string | null>;
     /**
      * True when an error is Fireblocks' duplicate-external-id rejection (code 1438). The
      * message match requires 1438 as a standalone token AND a duplicate/external cue, so an

@@ -1,6 +1,8 @@
 import { BasePath } from "@fireblocks/ts-sdk";
 import { StacksSDK } from "../StacksSDK";
 import { LockRecordStore } from "../staking/bonds/unlock-bytes-store";
+import { SignerManagerAdapter } from "../staking/signer-manager-adapter";
+import type { PollConfig } from "../utils/FireblocksSigner";
 export interface PoolConfig {
     maxPoolSize: number;
     idleTimeoutMs: number;
@@ -30,8 +32,6 @@ export interface ApiServiceConfig {
     basePath: BasePath | string;
     poolConfig?: Partial<PoolConfig>;
     testnet?: boolean;
-    /** Optional Hiro API key, sent as `x-hiro-api-key` on StacksService requests. */
-    chainApiKey?: string;
     /**
      * When true, every pooled SDK verifies the committed early-exit cosigner key at bond
      * FUNDING time (not just at announce). Threaded through to each per-vault StacksSDK's
@@ -39,6 +39,25 @@ export interface ApiServiceConfig {
      * pool boundary and the funding-time check could never be enabled through the pool.
      */
     verifyEarlyExitCosignerAtFunding?: boolean;
+    /**
+     * Hiro API key forwarded to every pooled SDK instance. Must be added to the
+     * `FireblocksConfig` that `ApiService` hand-builds, or it never reaches the SDK.
+     */
+    chainApiKey?: string;
+    /**
+     * Signer-manager adapters forwarded to every pooled SDK. A non-empty list is an
+     * ALLOWLIST: managers absent from it are refused. An empty or absent list imposes no
+     * allowlist, so this must not be defaulted to `[]`.
+     *
+     * Payout amounts are not configured here — pox-5 computes the staker's entitlement and
+     * the claim leg is bounded by that value read from chain.
+     */
+    signerManagerAdapters?: SignerManagerAdapter[];
+    /**
+     * Fireblocks request polling budgets forwarded to every pooled SDK. Must be added to
+     * the `FireblocksConfig` built at this boundary, or it never reaches the signer.
+     */
+    poll?: PollConfig;
 }
 export declare enum ActionType {
     CREATE_NATIVE_TRANSACTION = "createNativeTransaction",
@@ -84,6 +103,7 @@ export declare enum ActionType {
     UNLOCK_BTC = "unlockMaturedBond",
     REPLACE_BTC_RECOVERY_FEE = "replaceBtcRecoveryFee",
     RENEW_BOND = "renewBond",
+    RESUME_BOND_REGISTRATION = "resumeBondRegistration",
     GET_COMMITTED_REWARD_ADDRESS = "getCommittedRewardAddress",
     GET_SIGNER_MANAGER_FEE_BIPS = "getSignerManagerFeeBips",
     GET_NATIVE_REWARD_THRESHOLD = "getNativeRewardThreshold",
@@ -94,6 +114,8 @@ export declare enum ActionType {
     GET_BOND_LOCK_ADDRESS = "getBondLockAddress",
     FUND_BOND_LOCK_ADDRESS = "fundBondLockAddress",
     FUND_VAULT = "fundVault",
+    LIST_BOND_LOCK_RECORDS = "listBondLockRecords",
+    HAS_ANNOUNCED_EARLY_EXIT = "hasAnnouncedEarlyExit",
     ESTIMATE_FEE = "estimateFee",
     GET_CONTRACT_CALL_HISTORY = "getContractCallHistory",
     MAKE_CONTRACT_CALL = "makeContractCall",
