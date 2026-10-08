@@ -13798,6 +13798,7 @@ __export(index_exports, {
   DEFAULT_SCHEDULE_BOND_INDICES: () => DEFAULT_SCHEDULE_BOND_INDICES,
   EARLY_EXIT_SIGNER: () => EARLY_EXIT_SIGNER,
   FEATURED_SIGNER_MANAGERS: () => FEATURED_SIGNER_MANAGERS,
+  FIREBLOCKS_REQUEST_TIMEOUT_MS: () => FIREBLOCKS_REQUEST_TIMEOUT_MS,
   FileLockRecordStore: () => FileLockRecordStore,
   HIRO_API_KEY_HEADER: () => HIRO_API_KEY_HEADER,
   InMemoryLockRecordStore: () => InMemoryLockRecordStore,
@@ -13939,6 +13940,7 @@ var helperConstants = {
 var RBF_MIN_FEE_MULTIPLIER = 1.25;
 var MAX_FEE_STX = 10;
 var DEFAULT_POX_FEE_USTX = BigInt(1e4);
+var FIREBLOCKS_REQUEST_TIMEOUT_MS = 3e4;
 var api_constants = {
   stacks_mainnet_rpc: "https://api.hiro.so",
   stacks_testnet_rpc: "https://api.testnet.hiro.so"
@@ -14708,7 +14710,7 @@ function withChainApiKey(init, apiKey, requestUrl, allowedOrigin) {
   }
   const headers = new Headers(init?.headers ?? {});
   headers.set(HIRO_API_KEY_HEADER, apiKey);
-  return { ...init ?? {}, headers };
+  return { ...init ?? {}, headers, redirect: "error" };
 }
 var ERROR_BODY_EXCERPT_CHARS = 200;
 async function assertErrorBodyIsReadable(res, url) {
@@ -15939,6 +15941,7 @@ var StacksService = class {
         const target = originOf(new URL(String(config2.url), baseUrl));
         if (allowedOrigin !== void 0 && target === allowedOrigin) {
           config2.headers.set(HIRO_API_KEY_HEADER, chainApiKey);
+          config2.maxRedirects = 0;
         }
         return config2;
       });
@@ -16187,6 +16190,11 @@ var FireblocksSigner = class {
           response = await this.fireblocks.transactions.getTransaction({ txId });
           tx = response.data;
         } catch (pollError) {
+          const failed = pollError?.response;
+          const code = failed?.statusCode ?? failed?.status;
+          if (code === 401 || code === 403) {
+            throw new Error(`Polling ${label.toLowerCase()} ${txId} failed with HTTP ${code} from Fireblocks \u2014 check the API key and its permissions: ${formatErrorMessage(pollError)}`);
+          }
           console.warn(`Transient error polling transaction ${txId}, will retry:`, pollError);
         }
       }
@@ -16223,6 +16231,18 @@ var FireblocksSigner = class {
         throw new StaleRawSignError(
           `External id ${externalId} belongs to a ${tx.operation} transaction (${vendorId}), not a signing request; refusing to read a signature from it.`,
           vendorId
+        );
+      }
+      if (tx.status !== void 0 && TERMINAL_TRANSACTION_STATES.has(tx.status)) {
+        throw new FireblocksTransferError(
+          `Signing request ${vendorId} holding external id ${externalId} reached terminal status ${tx.status}${tx.subStatus ? ` (${tx.subStatus})` : ""}`,
+          {
+            operation: tx.operation ?? import_ts_sdk2.TransactionOperation.Raw,
+            status: tx.status,
+            subStatus: tx.subStatus,
+            errorDescription: tx.errorDescription,
+            vendorId
+          }
         );
       }
       const existingContent = rawRequestContent(tx);
@@ -16500,7 +16520,10 @@ var FireblocksService = class {
     this.fireblocksSDK = new import_ts_sdk3.Fireblocks({
       apiKey: fireblocksConfig ? fireblocksConfig.apiKey : config.fireblocks.API_KEY,
       secretKey: privateKey,
-      basePath: fireblocksConfig && fireblocksConfig.basePath ? fireblocksConfig.basePath : basePath
+      basePath: fireblocksConfig && fireblocksConfig.basePath ? fireblocksConfig.basePath : basePath,
+      additionalOptions: {
+        baseOptions: { timeout: FIREBLOCKS_REQUEST_TIMEOUT_MS }
+      }
     });
     this.fireblocksSigner = new FireblocksSigner(this.fireblocksSDK, fireblocksConfig?.poll);
   }
@@ -17079,18 +17102,24 @@ var StacksSDK = class _StacksSDK {
     /**
      * Deterministic Fireblocks external id for a bond's `register-for-bond` signing request.
      *
-     * Keyed on the NONCE as well as the enrollment: the signature covers a nonce-dependent
-     * sighash, so a retry at a different nonce is a different signing request and must not
-     * resolve to the earlier one. At the same nonce the id is stable, so a retry re-polls
-     * the outstanding request instead of opening a second one for a human to approve.
+     * Keyed on the pre-sign sighash: a request can only ever sign the bytes it was opened
+     * over, so the same bytes resolve to the outstanding request and any change (nonce,
+     * fee, post-conditions) opens a new one.
      *
      * `generation` escapes a request that reached a terminal state — its id is consumed
-     * permanently, so without this the derived id would resolve to that dead request on
-     * every subsequent attempt.
+     * permanently, so without this the id would resolve to that dead request on every
+     * subsequent attempt.
+     *
+     * A caller-supplied id is kept as a recognisable prefix, with the same sighash and
+     * generation folded into a fixed-length suffix.
      */
-    this.deriveRegisterExternalId = (bondIndex, lockAddress, nonce, generation = 0) => {
-      const base = `${this.vaultAccountId}:${this.networkProfile.name}:bond:${bondIndex}:${lockAddress}:nonce:${nonce}`;
-      const material = generation > 0 ? `${base}:gen:${generation}` : base;
+    this.deriveRegisterExternalId = (bondIndex, lockAddress, preSignSigHash, generation = 0, callerExternalId) => {
+      const keyed = `sighash:${preSignSigHash}:gen:${generation}`;
+      if (callerExternalId) {
+        const suffix = (0, import_crypto2.createHash)("sha256").update(keyed).digest("hex").slice(0, 16);
+        return `${callerExternalId}-register-${suffix}`;
+      }
+      const material = `${this.vaultAccountId}:${this.networkProfile.name}:bond:${bondIndex}:${lockAddress}:${keyed}`;
       const digest = (0, import_crypto2.createHash)("sha256").update(material).digest("hex").slice(0, 40);
       return `bond-register-${digest}`;
     };
@@ -17841,14 +17870,15 @@ var StacksSDK = class _StacksSDK {
         );
       }
     };
+    /** The hash a single-sig origin signs for `tx`; covers the payload, post-conditions, fee and nonce. */
+    this.preSignSigHashOf = (tx) => (0, import_transactions4.sigHashPreSign)(
+      tx.signBegin(),
+      tx.auth.authType,
+      tx.auth.spendingCondition.fee,
+      tx.auth.spendingCondition.nonce
+    );
     this.pox5SignAndBroadcast = async (tx, note, externalId, revalidate) => {
-      const sigHash = tx.signBegin();
-      const preSignSigHash = (0, import_transactions4.sigHashPreSign)(
-        sigHash,
-        tx.auth.authType,
-        tx.auth.spendingCondition.fee,
-        tx.auth.spendingCondition.nonce
-      );
+      const preSignSigHash = this.preSignSigHashOf(tx);
       const rawSignature = await this.fireblocksService.signTransaction(
         preSignSigHash,
         this.vaultAccountId.toString(),
@@ -19464,7 +19494,7 @@ var StacksSDK = class _StacksSDK {
           if (!recordedTx.data.found) {
             return {
               success: false,
-              error: `Recorded funding tx ${priorRecord.btcTxid} for bond ${bondIndex} is not visible on the configured Esplora \u2014 it may have been RBF-bumped by Fireblocks (new txid) or evicted. Look up the transfer by external id ${fundingExternalId} in Fireblocks and retry with opts.btcTxid set to the actual funding txid.`,
+              error: `Recorded funding tx ${priorRecord.btcTxid} for bond ${bondIndex} is not visible on the configured Esplora. If that is indexer lag, retry createBond later without opts.btcTxid. If Fireblocks replaced the transaction (new txid) or it was evicted, the lock record still points at the old txid and cannot be repointed through createBond \u2014 a different opts.btcTxid is refused. Do not fund this bond again; the record has to be corrected before it can resume. The transfer's external id is ${fundingExternalId}.`,
               btcTxid: priorRecord.btcTxid,
               vout: priorRecord.vout
             };
@@ -19623,11 +19653,12 @@ var StacksSDK = class _StacksSDK {
             postConditionMode: import_transactions4.PostConditionMode.Deny,
             postConditions: [import_transactions4.Pc.origin().willSendEq(amountUstx).ustxToLock(), ...custodyRefund.conditions]
           });
-          registerExternalId = opts?.externalId ? `${opts.externalId}-register` : this.deriveRegisterExternalId(
+          registerExternalId = this.deriveRegisterExternalId(
             bondIndex,
             metadata.lockAddress,
-            resolvedNonce,
-            priorRecord?.registrationGeneration ?? 0
+            this.preSignSigHashOf(tx),
+            priorRecord?.registrationGeneration ?? 0,
+            opts?.externalId
           );
           return this.pox5SignAndBroadcast(
             tx,
@@ -21139,6 +21170,12 @@ var StacksSDK = class _StacksSDK {
           // Carry the reward destination onto the new position's record.
           ...rewardBtcAddress !== void 0 ? { rewardBtcAddress } : {},
           ...rewardMaxFeeSats !== void 0 ? { rewardMaxFeeSats } : {},
+          // This literal replaces any record already at nextBondIndex. The generations keep a
+          // later createBond off already-consumed external ids, and the abandoned ids are the
+          // only pointer to dead funding transfers, so neither may be reset here.
+          ...priorNextRecord?.fundingGeneration !== void 0 ? { fundingGeneration: priorNextRecord.fundingGeneration } : {},
+          ...priorNextRecord?.registrationGeneration !== void 0 ? { registrationGeneration: priorNextRecord.registrationGeneration } : {},
+          ...priorNextRecord?.abandonedFireblocksIds !== void 0 ? { abandonedFireblocksIds: priorNextRecord.abandonedFireblocksIds } : {},
           ...extra
         });
         const requiredUstx = (sats) => (0, import_bitcoin_staking2.minUstxForSatsAmount)({
@@ -23725,6 +23762,7 @@ var FileLockRecordStore = class {
   DEFAULT_SCHEDULE_BOND_INDICES,
   EARLY_EXIT_SIGNER,
   FEATURED_SIGNER_MANAGERS,
+  FIREBLOCKS_REQUEST_TIMEOUT_MS,
   FileLockRecordStore,
   HIRO_API_KEY_HEADER,
   InMemoryLockRecordStore,

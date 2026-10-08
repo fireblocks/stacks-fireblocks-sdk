@@ -68,14 +68,16 @@ export declare class StacksSDK {
     /**
      * Deterministic Fireblocks external id for a bond's `register-for-bond` signing request.
      *
-     * Keyed on the NONCE as well as the enrollment: the signature covers a nonce-dependent
-     * sighash, so a retry at a different nonce is a different signing request and must not
-     * resolve to the earlier one. At the same nonce the id is stable, so a retry re-polls
-     * the outstanding request instead of opening a second one for a human to approve.
+     * Keyed on the pre-sign sighash: a request can only ever sign the bytes it was opened
+     * over, so the same bytes resolve to the outstanding request and any change (nonce,
+     * fee, post-conditions) opens a new one.
      *
      * `generation` escapes a request that reached a terminal state — its id is consumed
-     * permanently, so without this the derived id would resolve to that dead request on
-     * every subsequent attempt.
+     * permanently, so without this the id would resolve to that dead request on every
+     * subsequent attempt.
+     *
+     * A caller-supplied id is kept as a recognisable prefix, with the same sighash and
+     * generation folded into a fixed-length suffix.
      */
     private deriveRegisterExternalId;
     /**
@@ -227,6 +229,8 @@ export declare class StacksSDK {
      */
     private buildSignSendTransfer;
     private buildSignSendContractCall;
+    /** The hash a single-sig origin signs for `tx`; covers the payload, post-conditions, fee and nonce. */
+    private preSignSigHashOf;
     private pox5SignAndBroadcast;
     private get pox5Network();
     /**

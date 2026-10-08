@@ -14,6 +14,7 @@ export declare const helperConstants: {
 export declare const RBF_MIN_FEE_MULTIPLIER = 1.25;
 export declare const MAX_FEE_STX = 10;
 export declare const DEFAULT_POX_FEE_USTX: bigint;
+export declare const FIREBLOCKS_REQUEST_TIMEOUT_MS = 30000;
 export declare const api_constants: {
     stacks_mainnet_rpc: string;
     stacks_testnet_rpc: string;
