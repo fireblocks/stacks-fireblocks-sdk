@@ -526,8 +526,11 @@ export type ClaimResultItem = {
     signerManager: string;
     /** Signer-cohort accrual for this bond+cycle (get-earned) — NOT the vault's payout. */
     signerAccruedSats: string;
-    /** This staker's own entitlement (get-earned-staker-rewards); null if unread. */
-    stakerPaidSats: string | null;
+    /**
+     * This staker's own entitlement (get-earned-staker-rewards) — the amount the claim leg
+     * was bounded at; a manager that charges a fee pays less. null if unread or not claimed.
+     */
+    stakerEntitlementSats: string | null;
     /** signer-manager `claim-rewards` transaction id (shared across the cycle's bonds). */
     signerClaimTxid: string | null;
     /** `claim-staker-rewards` transaction id for this bond. */

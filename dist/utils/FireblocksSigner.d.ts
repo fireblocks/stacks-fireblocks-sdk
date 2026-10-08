@@ -12,6 +12,8 @@ export interface FireblocksTransferFailure {
     errorDescription?: string;
     /** The Fireblocks transaction id. */
     vendorId: string;
+    /** The on-chain transaction hash. Present once Fireblocks has broadcast the transaction. */
+    txHash?: string;
 }
 export declare class FireblocksTransferError extends Error {
     readonly details: FireblocksTransferFailure;
