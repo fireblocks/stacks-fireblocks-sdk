@@ -197,6 +197,54 @@ beforeEach(() => {
   (fetchBondMembership as jest.Mock).mockReset().mockResolvedValue(null);
 });
 
+describe("createBond — a funding transfer that FAILED after it was broadcast", () => {
+  // Fireblocks reports FAILED for transfers that reached the network, e.g.
+  // DROPPED_BY_BLOCKCHAIN or DOUBLE_SPENDING. Such a transaction can still confirm.
+  const BROADCAST_TXID = "cd".repeat(32);
+  const failedAfterBroadcast = () =>
+    new FireblocksTransferError(`Transfer ${FB_ID} reached terminal status FAILED (DOUBLE_SPENDING)`, {
+      operation: "TRANSFER",
+      status: TransactionStateEnum.Failed,
+      subStatus: "DOUBLE_SPENDING",
+      vendorId: FB_ID,
+      txHash: BROADCAST_TXID,
+    });
+
+  it("does not advance the funding generation", async () => {
+    const sdk = makeSdk();
+    sdk.fireblocksService.createBitcoinTransaction = acceptThenFail(failedAfterBroadcast());
+
+    const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect(res.success).toBe(false);
+    expect((await readRecord(sdk)).fundingGeneration ?? 0).toBe(0);
+  });
+
+  it("points the record at the broadcast transaction and names it", async () => {
+    const sdk = makeSdk();
+    sdk.fireblocksService.createBitcoinTransaction = acceptThenFail(failedAfterBroadcast());
+
+    const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect((await readRecord(sdk)).btcTxid).toBe(BROADCAST_TXID);
+    expect(res.error).toContain(BROADCAST_TXID);
+    expect(res.error).not.toMatch(/re-fund/i);
+  });
+
+  it("does not open a second transfer on retry", async () => {
+    const sdk = makeSdk();
+    sdk.fireblocksService.createBitcoinTransaction = acceptThenFail(failedAfterBroadcast());
+    await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+    // The broadcast transaction is not (yet) visible on-chain.
+    sdk.getBtcTxStatus = jest.fn().mockResolvedValue({ success: true, data: { found: false } });
+
+    const retry = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect(retry.success).toBe(false);
+    expect(sdk.fireblocksService.createBitcoinTransaction).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("createBond — terminal failure on the FRESH funding path", () => {
   it("returns the structured dead-end instead of rethrowing opaquely", async () => {
     const sdk = makeSdk();

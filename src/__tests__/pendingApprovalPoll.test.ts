@@ -125,6 +125,28 @@ describe("FireblocksSigner.getTxStatus — approval-pending deadlines", () => {
     expect(FireblocksService.isTerminalTransferFailure(err)).toBe(false);
   });
 
+  it("carries the broadcast tx hash on a terminal failure", async () => {
+    const fireblocks = {
+      transactions: {
+        getTransaction: async () => ({
+          data: {
+            id: "fb-tx-dropped",
+            status: TransactionStateEnum.Failed,
+            subStatus: "DROPPED_BY_BLOCKCHAIN",
+            txHash: "ef".repeat(32),
+            operation: TransactionOperation.Transfer,
+          },
+        }),
+      },
+    } as unknown as Fireblocks;
+    const signer = new FireblocksSigner(fireblocks, { initialMs: 1, ceilingMs: 1 });
+
+    const err = await signer.getTxStatus("fb-tx-dropped").catch((e) => e);
+
+    expect(err).toBeInstanceOf(FireblocksTransferError);
+    expect(err.details.txHash).toBe("ef".repeat(32));
+  });
+
   describe("a failed status read during the poll (review item 8)", () => {
     /** First read reports a pending transfer; every later read fails with `err`. */
     const signerFailingWith = (err: unknown, then?: () => unknown) => {

@@ -44,6 +44,8 @@ export interface FireblocksTransferFailure {
   errorDescription?: string;
   /** The Fireblocks transaction id. */
   vendorId: string;
+  /** The on-chain transaction hash. Present once Fireblocks has broadcast the transaction. */
+  txHash?: string;
 }
 
 export class FireblocksTransferError extends Error {
@@ -215,6 +217,7 @@ export class FireblocksSigner {
         subStatus: tx.subStatus,
         errorDescription: (tx as { errorDescription?: string }).errorDescription,
         vendorId: tx.id ?? txId,
+        ...(tx.txHash ? { txHash: tx.txHash } : {}),
       });
 
       if (TERMINAL_TRANSACTION_STATES.has(tx.status)) {
