@@ -173,6 +173,13 @@ import { Signature as Secp256k1Signature } from '@noble/secp256k1';
 import { hexToBytes, bytesToHex, signatureVrsToRsv } from "@stacks/common";
 import { toDerSignature } from "./utils/der";
 
+/**
+ * Retry note for a pending request on a call that takes no externalId, so its request id
+ * is random and a retry cannot rejoin it.
+ */
+const RETRY_NOTE_NO_EXTERNAL_ID =
+  "Nothing was broadcast. A retry opens a new signing request: reject this one in Fireblocks first.";
+
 /** Satoshis in a BTC decimal string such as "0.001" or "1.00000000"; undefined if malformed. */
 const btcDecimalToSats = (btc: string): bigint | undefined => {
   const m = /^(\d+)(?:\.(\d{1,8}))?$/.exec(btc.trim());
@@ -5629,7 +5636,7 @@ export class StacksSDK {
       const btcTxid = await this.broadcastBtc(rawHex);
       return { success: true, btcTxid };
     } catch (error) {
-      const pending = this.pendingFireblocksResult(error);
+      const pending = this.pendingFireblocksResult(error, RETRY_NOTE_NO_EXTERNAL_ID);
       if (pending) return pending;
       return { success: false, error: `Failed to unlock matured bond: ${formatErrorMessage(error)}` };
     }
@@ -5714,7 +5721,7 @@ export class StacksSDK {
       const btcTxid = await this.broadcastBtc(bytesToHex(tx.extract()));
       return { success: true, btcTxid };
     } catch (error) {
-      const pending = this.pendingFireblocksResult(error);
+      const pending = this.pendingFireblocksResult(error, RETRY_NOTE_NO_EXTERNAL_ID);
       if (pending) return pending;
       return { success: false, error: `Failed to spend early exit UTXO: ${formatErrorMessage(error)}` };
     }
@@ -5849,7 +5856,7 @@ export class StacksSDK {
         },
       };
     } catch (error) {
-      const pending = this.pendingFireblocksResult(error);
+      const pending = this.pendingFireblocksResult(error, RETRY_NOTE_NO_EXTERNAL_ID);
       if (pending) return pending;
       return { success: false, error: `Failed to replace recovery fee: ${formatErrorMessage(error)}` };
     }
@@ -6305,7 +6312,16 @@ export class StacksSDK {
         amountUstx: amountUstx.toString(),
       };
     } catch (error) {
-      const pending = this.pendingFireblocksResult(error);
+      // committedBtc.btcTxid is set once the BTC re-lock is signed, so a pending request after
+      // it is the register leg: the Bitcoin is re-locked and the request id follows the
+      // transaction bytes, so a retry rejoins it. Before it, the request is the re-lock's own
+      // signature, whose id is random.
+      const pending = this.pendingFireblocksResult(
+        error,
+        committedBtc.btcTxid !== undefined
+          ? `The Bitcoin is re-locked (${committedBtc.btcTxid}). Retry renewBond for bond ${nextBondIndex} to keep waiting on the same signing request while the transaction is unchanged; a retry at a different nonce, fee or post-condition opens a new signing request.`
+          : RETRY_NOTE_NO_EXTERNAL_ID,
+      );
       if (pending) return { ...pending, ...committedBtc };
       return { success: false, error: `Failed to renew bond: ${formatErrorMessage(error)}`, ...committedBtc };
     }

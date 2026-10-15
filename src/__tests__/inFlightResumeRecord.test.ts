@@ -53,6 +53,8 @@ jest.mock("@stacks/transactions", () => {
 });
 
 import { TransactionStateEnum } from "@fireblocks/ts-sdk";
+import { getPublicKey } from "@noble/secp256k1";
+import * as btc from "@scure/btc-signer";
 import { StacksSDK } from "../StacksSDK";
 import { FireblocksTransferError } from "../utils/FireblocksSigner";
 import {
@@ -637,6 +639,64 @@ describe("renewBond — register leg external id", () => {
     expect(res.success).toBe(false);
     expect(res.btcTxid).toBe(GOOD_TXID);
     expect((await sdk.lockRecordStore.loadRecord(sdk.address, NEXT_BOND)).registrationGeneration).toBe(1);
+  });
+
+  it("tells the operator the Bitcoin is re-locked and a retry keeps the same signing request", async () => {
+    // The re-lock is already broadcast, and the register id follows the transaction bytes, so
+    // a plain retry resumes this request. "Nothing was broadcast" and "reject this one first"
+    // would send the operator to open a second approval.
+    const sdk = await sdkAtRegisterLeg();
+    sdk.pox5SignAndBroadcast = jest.fn().mockRejectedValue(
+      new FireblocksTransferError("Signing request fb-raw-7 timed out after 30m: still PENDING_AUTHORIZATION", {
+        operation: "RAW",
+        status: TransactionStateEnum.PendingAuthorization,
+        vendorId: "fb-raw-7",
+      }),
+    );
+
+    const res = await sdk.renewBond(NEXT_BOND, MANAGER, REWARD);
+
+    expect(res.pendingFireblocksId).toBe("fb-raw-7");
+    expect(res.btcTxid).toBe(GOOD_TXID);
+    expect(res.error).not.toMatch(/nothing was broadcast/i);
+    expect(res.error).not.toMatch(/reject this one/i);
+    expect(res.error).toMatch(/re-locked/i);
+    expect(res.error).toMatch(/retry renewBond/i);
+    expect(res.error).toMatch(/same signing request/i);
+  });
+
+  it("does not claim the Bitcoin is re-locked, nor offer an externalId, when the re-lock's own signature is pending", async () => {
+    // The BTC re-lock is signed with a random request id, so a retry cannot rejoin it.
+    const sdk = makeSdk();
+    sdk.runNonceExclusive = jest.fn(async (fn: any) => fn());
+    const sk = Uint8Array.from({ length: 32 }, (_, i) => (i === 31 ? 1 : 0));
+    const nextLockAddress = btc.p2wpkh(getPublicKey(sk, true), sdk.btcNetwork).address!;
+    (buildRegisterMetadata as jest.Mock).mockReturnValue({
+      unlockBytes: new Uint8Array([1, 2, 3]),
+      lockAddress: nextLockAddress,
+      unlockHeight: 900,
+      outputScript: OUTPUT_SCRIPT,
+    });
+    sdk.deriveLock = jest.fn().mockResolvedValue({
+      bondIndex: 4, unlockHeight: 100, lockScript: new Uint8Array([0x51]), lockingAddress: nextLockAddress,
+    });
+    sdk.readBtcTipHeight = jest.fn().mockResolvedValue(200);
+    sdk.findLockUtxo = jest.fn().mockResolvedValue({ txid: GOOD_TXID, vout: 0, value: 100_000 });
+    sdk.signBtcSighash = jest.fn().mockRejectedValue(
+      new FireblocksTransferError("Signing request fb-raw-8 timed out after 30m: still PENDING_AUTHORIZATION", {
+        operation: "RAW",
+        status: TransactionStateEnum.PendingAuthorization,
+        vendorId: "fb-raw-8",
+      }),
+    );
+
+    const res = await sdk.renewBond(NEXT_BOND, MANAGER, { ...REWARD, feeSats: BigInt(1_000) });
+
+    expect(res.pendingFireblocksId).toBe("fb-raw-8");
+    expect(res.btcTxid).toBeUndefined();
+    expect(res.error).toMatch(/nothing was broadcast/i);
+    expect(res.error).not.toMatch(/re-locked/i);
+    expect(res.error).not.toMatch(/externalId/);
   });
 
   it("derives a fresh id after a rejection", async () => {
