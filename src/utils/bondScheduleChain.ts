@@ -39,8 +39,9 @@ export interface BondScheduleValidation {
 export async function validateBondScheduleAgainstChain(opts: {
   profile: NetworkProfile;
   bondIndices?: number[];
+  chainApiKey?: string;
 }): Promise<BondScheduleValidation> {
-  const network = stacksNetworkFromProfile(opts.profile);
+  const network = stacksNetworkFromProfile(opts.profile, opts.chainApiKey);
   const indices = opts.bondIndices ?? DEFAULT_SCHEDULE_BOND_INDICES;
   try {
     const poxInfo = await fetchPox5Info({ network });

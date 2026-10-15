@@ -43,6 +43,10 @@ interface SerializedRecord {
   rewardBtcAddress?: string;
   rewardMaxFeeSats?: string;
   stage?: EnrollmentStage;
+  fundingGeneration?: number;
+  abandonedFireblocksIds?: string[];
+  registrationGeneration?: number;
+  callerExternalId?: string;
 }
 
 interface StoreFile {
@@ -81,6 +85,14 @@ const serializeRecord = (r: BondLockRecord): SerializedRecord => ({
   ...(r.rewardBtcAddress !== undefined ? { rewardBtcAddress: r.rewardBtcAddress } : {}),
   ...(r.rewardMaxFeeSats !== undefined ? { rewardMaxFeeSats: r.rewardMaxFeeSats.toString() } : {}),
   ...(r.stage !== undefined ? { stage: r.stage } : {}),
+  ...(r.fundingGeneration !== undefined ? { fundingGeneration: r.fundingGeneration } : {}),
+  ...(r.abandonedFireblocksIds !== undefined
+    ? { abandonedFireblocksIds: [...r.abandonedFireblocksIds] }
+    : {}),
+  ...(r.registrationGeneration !== undefined
+    ? { registrationGeneration: r.registrationGeneration }
+    : {}),
+  ...(r.callerExternalId !== undefined ? { callerExternalId: r.callerExternalId } : {}),
 });
 
 const deserializeRecord = (s: SerializedRecord): BondLockRecord => ({
@@ -99,6 +111,11 @@ const deserializeRecord = (s: SerializedRecord): BondLockRecord => ({
   rewardBtcAddress: s.rewardBtcAddress,
   rewardMaxFeeSats: s.rewardMaxFeeSats !== undefined ? BigInt(s.rewardMaxFeeSats) : undefined,
   stage: s.stage,
+  fundingGeneration: s.fundingGeneration,
+  abandonedFireblocksIds:
+    s.abandonedFireblocksIds !== undefined ? [...s.abandonedFireblocksIds] : undefined,
+  registrationGeneration: s.registrationGeneration,
+  callerExternalId: s.callerExternalId,
 });
 
 /** Deterministic JSON so the checksum is stable regardless of key insertion order. */
@@ -337,6 +354,24 @@ export class FileLockRecordStore implements LockRecordStore {
     });
   }
 
+  async updateRecord(
+    stxAddress: string,
+    bondIndex: number,
+    update: (current: BondLockRecord | null) => BondLockRecord | undefined,
+  ): Promise<BondLockRecord | null> {
+    await fs.mkdir(this.dir, { recursive: true });
+    return this.withLock(async () => {
+      const records = await this.loadAll();
+      const key = this.key(stxAddress, bondIndex);
+      const current = records[key] ? deserializeRecord(records[key]) : null;
+      const next = update(current);
+      if (next === undefined) return current;
+      records[key] = serializeRecord(next);
+      await this.writeAll(records);
+      return next;
+    });
+  }
+
   async loadRecord(
     stxAddress: string,
     bondIndex: number,
@@ -344,6 +379,16 @@ export class FileLockRecordStore implements LockRecordStore {
     const records = await this.loadAll();
     const s = records[this.key(stxAddress, bondIndex)];
     return s ? deserializeRecord(s) : null;
+  }
+
+  async listRecords(stxAddress: string): Promise<BondLockRecord[]> {
+    const records = await this.loadAll();
+    // Keys are `${stxAddress}:${bondIndex}` and a Stacks address contains no colon,
+    // so the prefix cannot match a different staker.
+    const prefix = `${stxAddress}:`;
+    return Object.entries(records)
+      .filter(([k]) => k.startsWith(prefix))
+      .map(([, s]) => deserializeRecord(s));
   }
 
   /**

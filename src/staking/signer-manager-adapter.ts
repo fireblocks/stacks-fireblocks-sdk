@@ -3,31 +3,33 @@
  * rather than assumed.
  *
  * PoX-5 has no pool logic of its own: sBTC reward custody and the staker payout live
- * in the caller-selected signer-manager contract, and each manager defines its own
- * payout behavior. A correct Deny-mode post-condition for the `claim-staker-rewards`
- * leg is therefore manager-specific and must be supplied per manager. A manager
- * without a registered payout policy is REFUSED rather than signed with a permissive
- * (Allow-mode) post-condition — under Fireblocks RAW signing the payload is opaque,
- * so an unbounded sBTC payout is not acceptable.
+ * in the caller-selected signer-manager contract. The payout AMOUNT needs no per-manager
+ * configuration — pox-5's `settle-staker-rewards` computes
+ * `get-earned-staker-rewards(manager, cycle, bond, staker)` and the manager may pay that
+ * or less, so the `claim-staker-rewards` post-condition is bounded by that value read
+ * from chain after the first leg settles. A manager the deployment has never heard of is
+ * bounded exactly as tightly as a registered one.
+ *
+ * Two things remain per-manager, and both are optional:
+ * an allowlist (a non-empty registry refuses managers absent from it), and the payout
+ * ASSET, when a manager does not pay in the sBTC asset pox-5 settles in.
  */
 
 export interface SignerManagerPayoutPolicy {
-  /** The sBTC-equivalent fungible token the manager pays the staker in. */
-  asset: { contractAddress: string; contractName: string; assetName: string };
   /**
-   * Upper bound (in sats) the manager may send the staker in a single
-   * `claim-staker-rewards` call. The staker payout leg is bounded with an
-   * at-most (SentLte) FT post-condition on the manager principal using this value.
+   * The fungible token this manager pays the staker in, when it is NOT the sBTC asset
+   * resolved from chain. Only narrows which token the post-condition names; the amount
+   * comes from the contract. A wrong value aborts the call under Deny mode.
    */
-  maxPayoutSats: bigint;
+  asset: { contractAddress: string; contractName: string; assetName: string };
 }
 
 export interface SignerManagerAdapter {
   /** The signer-manager contract principal (e.g. `ST….my-manager`) this describes. */
   contractPrincipal: string;
   /**
-   * Payout policy for `claim-staker-rewards`. When absent, staker reward claims
-   * through this manager are refused (there is no safe generic bound).
+   * Payout asset override for `claim-staker-rewards`. Absent means the chain-resolved
+   * sBTC asset is used — absence does not refuse the claim.
    */
   payoutPolicy?: SignerManagerPayoutPolicy;
 }
