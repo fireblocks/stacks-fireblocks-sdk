@@ -74,6 +74,14 @@ describe("FileLockRecordStore (FBS-35/52 durable store)", () => {
     expect(loaded!.registrationGeneration).toBe(3);
   });
 
+  it("persists the caller's external id across reload", async () => {
+    const rec: BondLockRecord = { ...makeRecord(8), callerExternalId: "mine" };
+    await new FileLockRecordStore(file).saveRecord("STADDR", 8, rec);
+
+    const loaded = await new FileLockRecordStore(file).loadRecord("STADDR", 8);
+    expect(loaded!.callerExternalId).toBe("mine");
+  });
+
   it("does not clobber the verified backup with a corrupt primary on the next save", async () => {
     const store = new FileLockRecordStore(file);
     await store.saveRecord("STADDR", 1, makeRecord(1)); // primary={1}, no bak

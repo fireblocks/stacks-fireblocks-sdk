@@ -105,6 +105,12 @@ export interface BondLockRecord {
    */
   registrationGeneration?: number;
   /**
+   * The caller-supplied `externalId` from the createBond that funded this bond. A resume
+   * passes none, and derives the register external id from this so it resolves to the
+   * same signing request.
+   */
+  callerExternalId?: string;
+  /**
    * The Fireblocks transaction id of the BTC funding transfer, persisted as soon as
    * Fireblocks accepts the request — BEFORE the (long, throwable) confirmation poll. A
    * retry after a poll timeout / crash uses it to await or resolve the SAME transfer

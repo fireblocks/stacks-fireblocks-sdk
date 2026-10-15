@@ -21,6 +21,7 @@
 import { StacksService } from "./services/stacks.service";
 import { type StacksNetwork } from "@stacks/network";
 import { FireblocksService } from "./services/fireblocks.service";
+import { TransactionOperation } from "@fireblocks/ts-sdk";
 import { APPROVAL_PENDING_STATES, FireblocksTransferError, TERMINAL_TRANSACTION_STATES } from "./utils/FireblocksSigner";
 import { CosignerService, resolveCosignerUrl } from "./services/cosigner.service";
 import {
@@ -350,15 +351,26 @@ export class StacksSDK {
    * reached a terminal Fireblocks state, so the next attempt derives an id Fireblocks
    * has not already consumed. The Bitcoin stays committed and the record keeps pointing
    * at it — only the L2 leg is retried.
+   *
+   * Advances only from the generation the failed id was derived from. Overlapping attempts
+   * share a request; once one has advanced past it, a late report of the same rejection
+   * must not advance again and orphan the request opened under the newer generation.
    */
   private abandonTerminalRegistration = async (
     bondIndex: number,
     registerExternalId: string,
     error: unknown,
+    derivedGeneration: number,
   ): Promise<string> => {
     let advanceFailure = "";
     try {
       const stored = await this.lockRecordStore.loadRecord(this.address!, bondIndex);
+      if (stored && (stored.registrationGeneration ?? 0) !== derivedGeneration) {
+        return (
+          `The register-for-bond signing request for bond ${bondIndex} terminally failed: ${formatErrorMessage(error)}. ` +
+          `A concurrent attempt already moved past its external id ${registerExternalId}, so nothing was advanced. The Bitcoin is locked and remains recoverable; retry createBond or resumeBondRegistration(${bondIndex}).`
+        );
+      }
       if (stored) {
         await this.lockRecordStore.saveRecord(this.address!, bondIndex, {
           ...stored,
@@ -3629,6 +3641,8 @@ export class StacksSDK {
       // failure supersedes its consumed id instead of re-deriving it forever.
       const fundingGeneration = priorRecord?.fundingGeneration ?? 0;
       const fundingExternalId = this.deriveFundingExternalId(bondIndex, metadata.lockAddress, fundingGeneration);
+      const callerExternalId = opts?.externalId ?? priorRecord?.callerExternalId;
+      const registrationGeneration = priorRecord?.registrationGeneration ?? 0;
       const priorAtThisLock = priorRecord?.lockAddress === metadata.lockAddress;
 
       // Resume-safe reward destination: a crash between funding and register-for-bond leaves
@@ -3750,6 +3764,7 @@ export class StacksSDK {
         firstRewardCycle: bondPeriodToRewardCycle({ bondIndex, poxInfo: pox }),
         fundingExternalId,
         fundingGeneration,
+        ...(callerExternalId !== undefined ? { callerExternalId } : {}),
         // Carried forward explicitly: this literal replaces the stored record, so an
         // omitted field erases the history of abandoned transfers on the next attempt.
         ...(priorRecord?.abandonedFireblocksIds !== undefined
@@ -3943,8 +3958,8 @@ export class StacksSDK {
           bondIndex,
           metadata.lockAddress,
           this.preSignSigHashOf(tx),
-          priorRecord?.registrationGeneration ?? 0,
-          opts?.externalId,
+          registrationGeneration,
+          callerExternalId,
         );
         return this.pox5SignAndBroadcast(
           tx,
@@ -3971,7 +3986,7 @@ export class StacksSDK {
         if (!FireblocksService.isTerminalTransferFailure(registerErr)) throw registerErr;
         return {
           success: false,
-          error: await this.abandonTerminalRegistration(bondIndex, registerExternalId, registerErr),
+          error: await this.abandonTerminalRegistration(bondIndex, registerExternalId, registerErr, registrationGeneration),
           btcTxid,
           vout: lockupProof.outputIndex,
         };
@@ -4015,9 +4030,14 @@ export class StacksSDK {
       // register id is derived — so it is reported as pending, not as a failure.
       if (error instanceof FireblocksTransferError && !TERMINAL_TRANSACTION_STATES.has(error.details.status)) {
         const awaitingApproval = APPROVAL_PENDING_STATES.has(error.details.status);
+        // The funding id is fixed per generation; the register id follows the transaction
+        // bytes, which a retry can change.
+        const retryNote = error.details.operation === TransactionOperation.Raw
+          ? `Retry createBond or resumeBondRegistration(${bondIndex}) to keep waiting on the same signing request while the transaction is unchanged; a retry at a different nonce, fee or post-condition opens a new signing request. The Bitcoin stays locked either way.`
+          : `Retry createBond for bond ${bondIndex} to keep waiting on the same transfer; no new Bitcoin is sent.`;
         return {
           success: false,
-          error: `Fireblocks request ${error.details.vendorId} is still ${error.details.status}${awaitingApproval ? " (awaiting approval)" : ""} — not failed. Retry createBond for bond ${bondIndex} to keep waiting on the same request; nothing new is sent.`,
+          error: `Fireblocks request ${error.details.vendorId} is still ${error.details.status}${awaitingApproval ? " (awaiting approval)" : ""} — not failed. ${retryNote}`,
           pendingFireblocksId: error.details.vendorId,
           pendingFireblocksStatus: error.details.status,
           ...(awaitingApproval ? { pendingApproval: true } : {}),
