@@ -70,6 +70,8 @@ const makeSdk = async (record: Record<string, unknown>): Promise<any> => {
   sdk.address = BOOT_ADDR;
   sdk.publicKey = `02${"a".repeat(64)}`;
   sdk.readBtcTipHeight = jest.fn().mockResolvedValue(800);
+  // A recorded funding tx is known to the indexer unless a test says otherwise.
+  sdk.getBtcTxStatus = jest.fn().mockResolvedValue({ success: true, data: { found: true } });
   sdk.setLockRecordStore(new InMemoryLockRecordStore());
   await sdk.lockRecordStore.saveRecord(BOOT_ADDR, BOND_INDEX, record);
   return sdk;
@@ -137,5 +139,71 @@ describe("getHistoricalBondPosition — a funding transfer still in flight", () 
 
     expect(res.data.still_locked).toBe(true);
     expect(res.data.recovered).toBe(false);
+  });
+});
+
+describe("getHistoricalBondPosition — committed Bitcoin with no visible pointer", () => {
+  it("is not recovered when funding was requested but the transfer id was never saved", async () => {
+    // Fireblocks accepted the create, but the response was lost or timed out before the id
+    // was written. The transfer can still land.
+    const sdk = await makeSdk(baseRecord({ stage: "funding-requested" }));
+    esploraReturns([]);
+
+    const res = await sdk.getHistoricalBondPosition(BOND_INDEX);
+
+    expect(res.data.recovered).toBeNull();
+  });
+
+  it("is not recovered when the recorded funding tx is unknown to the indexer", async () => {
+    const sdk = await makeSdk(
+      baseRecord({ btcTxid: "ab".repeat(32), vout: 0, fireblocksId: "fb-failed", stage: "btc-broadcast" }),
+    );
+    sdk.getBtcTxStatus = jest.fn().mockResolvedValue({ success: true, data: { found: false } });
+    esploraReturns([]);
+
+    const res = await sdk.getHistoricalBondPosition(BOND_INDEX);
+
+    expect(res.data.recovered).toBeNull();
+  });
+
+  it("is not recovered when the recorded funding tx cannot be looked up", async () => {
+    const sdk = await makeSdk(baseRecord({ btcTxid: "ab".repeat(32), vout: 0 }));
+    sdk.getBtcTxStatus = jest.fn().mockResolvedValue({ success: false, error: "esplora 503" });
+    esploraReturns([]);
+
+    const res = await sdk.getHistoricalBondPosition(BOND_INDEX);
+
+    expect(res.data.recovered).toBeNull();
+  });
+
+  it("stays in getBondPosition's historical fallback", async () => {
+    const sdk = await makeSdk(baseRecord({ stage: "funding-requested" }));
+    esploraReturns([]);
+
+    const out = await sdk.unrecoveredHistoricalBonds();
+
+    expect(out.historical_bonds?.map((b: any) => b.bond_index)).toEqual([BOND_INDEX]);
+  });
+});
+
+describe("resumeBondRegistration — funding requested, transfer id never saved", () => {
+  it("resumes through createBond instead of reporting that no Bitcoin is committed", async () => {
+    const sdk = await makeSdk(baseRecord({ stage: "funding-requested", signerManager: "SP000.manager" }));
+    sdk.createBond = jest.fn().mockResolvedValue({ success: true });
+
+    const res = await sdk.resumeBondRegistration(BOND_INDEX);
+
+    expect(res.error ?? "").not.toMatch(/no Bitcoin is committed/i);
+    expect(sdk.createBond).toHaveBeenCalledWith(BOND_INDEX, BigInt(120_000), "SP000.manager", undefined);
+  });
+
+  it("still refuses a record that never requested funding", async () => {
+    const sdk = await makeSdk(baseRecord({ stage: "lock-fixed", signerManager: "SP000.manager" }));
+    sdk.createBond = jest.fn();
+
+    const res = await sdk.resumeBondRegistration(BOND_INDEX);
+
+    expect(res.success).toBe(false);
+    expect(sdk.createBond).not.toHaveBeenCalled();
   });
 });
