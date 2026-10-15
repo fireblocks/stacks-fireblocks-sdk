@@ -23,31 +23,57 @@ import { createHash, timingSafeEqual } from "crypto";
 export interface AuthConfig {
   /** Shared bearer token required on every request. Empty = not configured. */
   token: string;
-  /** Explicit, loudly-warned opt-out for local development only. */
+  /** Explicit, loudly-warned opt-out. Honoured only outside production. */
   allowUnauthenticated: boolean;
+  /**
+   * Whether this deployment is production. Mainnet counts, and `NETWORK` defaults to
+   * mainnet when unset, so an unconfigured deployment is production and the opt-out
+   * cannot apply to it.
+   */
+  production: boolean;
 }
 
-export const loadAuthConfig = (): AuthConfig => ({
-  token: process.env.API_AUTH_TOKEN || "",
-  allowUnauthenticated: process.env.ALLOW_UNAUTHENTICATED === "true",
+export const loadAuthConfig = (
+  env: NodeJS.ProcessEnv = process.env,
+): AuthConfig => ({
+  token: env.API_AUTH_TOKEN || "",
+  allowUnauthenticated: env.ALLOW_UNAUTHENTICATED === "true",
+  production:
+    (env.NETWORK ?? "").toLowerCase() !== "testnet" ||
+    (env.NODE_ENV ?? "").toLowerCase() === "production",
 });
+
+const UNCONFIGURED =
+  "Server authentication is not configured. Set API_AUTH_TOKEN (or ALLOW_UNAUTHENTICATED=true for local dev only).";
+
+const REFUSED_IN_PRODUCTION =
+  "ALLOW_UNAUTHENTICATED is not honoured in production (mainnet, or NODE_ENV=production). " +
+  "The process holds a signing credential and would accept every caller that reaches the port. " +
+  "Set API_AUTH_TOKEN.";
+
+/** The opt-out applies only to a non-production deployment. */
+const optOutApplies = (config: AuthConfig): boolean =>
+  config.allowUnauthenticated && !config.production;
 
 /**
  * Fails server startup when authentication is not configured. Called at boot (not on
- * import), so the process refuses to run as an open signing proxy. An explicit
- * `ALLOW_UNAUTHENTICATED=true` opt-out is honored for local development only.
+ * import), so the process refuses to run as an open signing proxy.
+ *
+ * The opt-out is refused outright in production rather than warned about: a warning in a
+ * boot log does not stop the process, and the failure mode is an open signing proxy.
  */
 export const assertAuthConfigured = (config: AuthConfig): void => {
   if (config.token) return;
+  if (config.allowUnauthenticated && config.production) {
+    throw new Error(REFUSED_IN_PRODUCTION);
+  }
   if (config.allowUnauthenticated) {
     console.warn(
-      "[SECURITY] API auth disabled (ALLOW_UNAUTHENTICATED=true) — do NOT use in production.",
+      "[SECURITY] API auth disabled (ALLOW_UNAUTHENTICATED=true) — non-production only.",
     );
     return;
   }
-  throw new Error(
-    "Server authentication is not configured. Set API_AUTH_TOKEN (or ALLOW_UNAUTHENTICATED=true for local dev only).",
-  );
+  throw new Error(UNCONFIGURED);
 };
 
 const sha256 = (s: string): Buffer => createHash("sha256").update(s).digest();
@@ -61,13 +87,14 @@ export const requireAuth = (config: AuthConfig) => {
 
   return (req: Request, res: Response, next: NextFunction): void => {
     if (!expectedDigest) {
-      if (config.allowUnauthenticated) {
+      // Re-checked per request rather than trusting the boot gate: the middleware can be
+      // constructed without it, and the failure mode is an open signing proxy.
+      if (optOutApplies(config)) {
         next();
         return;
       }
       res.status(503).json({
-        error:
-          "Server authentication is not configured. Set API_AUTH_TOKEN (or ALLOW_UNAUTHENTICATED=true for local dev only).",
+        error: config.allowUnauthenticated ? REFUSED_IN_PRODUCTION : UNCONFIGURED,
       });
       return;
     }

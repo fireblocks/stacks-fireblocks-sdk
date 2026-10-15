@@ -81,6 +81,36 @@ export interface BondLockRecord {
    */
   fundingExternalId?: string;
   /**
+   * Number of funding attempts abandoned after a TERMINAL Fireblocks failure. Mixed into
+   * the derived external id so a dead attempt's consumed id can be superseded. Advances
+   * only on a typed terminal status, and only in the write that clears `fireblocksId` —
+   * an advance while a transfer may still land would escape Fireblocks' de-duplication
+   * and fund the same lock twice. Absent means 0, which derives the pre-generation id.
+   */
+  fundingGeneration?: number;
+  /**
+   * Fireblocks ids of funding transfers abandoned after a TERMINAL vendor status, kept
+   * separately from the active `fireblocksId` slot. The slot must be cleared so the
+   * caller-btcTxid recovery is not refused as in-flight, but the ids themselves stay
+   * durable: they are the operator's only handle for looking the dead transfers up in
+   * Fireblocks. Append-only, oldest first.
+   */
+  abandonedFireblocksIds?: string[];
+  /**
+   * Number of `register-for-bond` signing requests abandoned after a TERMINAL Fireblocks
+   * status. Mixed into the derived register external id so a rejected request's consumed
+   * id can be superseded; without it the id would resolve to that dead request on every
+   * retry. Independent of `fundingGeneration` — the Bitcoin stays committed when only the
+   * L2 leg fails. Absent means 0.
+   */
+  registrationGeneration?: number;
+  /**
+   * The caller-supplied `externalId` from the createBond that funded this bond. A resume
+   * passes none, and derives the register external id from this so it resolves to the
+   * same signing request.
+   */
+  callerExternalId?: string;
+  /**
    * The Fireblocks transaction id of the BTC funding transfer, persisted as soon as
    * Fireblocks accepts the request — BEFORE the (long, throwable) confirmation poll. A
    * retry after a poll timeout / crash uses it to await or resolve the SAME transfer
@@ -117,6 +147,30 @@ export interface LockRecordStore {
    * as non-durable.
    */
   checkHealth?(): Promise<void>;
+  /**
+   * Every record held for one staker, in unspecified order. Recovery needs discovery
+   * by address alone: a caller that has lost the bond index (or never had it) has no
+   * other way to learn what Bitcoin a lock address holds.
+   *
+   * Optional so a third-party store is not broken by its addition, but a store without
+   * it cannot support recovery discovery — callers refuse rather than treating an
+   * absent implementation as "no records".
+   */
+  listRecords?(stxAddress: string): Promise<BondLockRecord[]>;
+  /**
+   * Reads the record, passes it to `update`, and writes what `update` returns, with no
+   * other write to the store landing in between. `update` returns undefined to leave the
+   * record as it is. Resolves to the record the store holds afterwards.
+   *
+   * Optional so a third-party store is not broken by its addition. Without it, callers
+   * fall back to a separate load and save, and a write from an overlapping call can land
+   * between the two.
+   */
+  updateRecord?(
+    stxAddress: string,
+    bondIndex: number,
+    update: (current: BondLockRecord | null) => BondLockRecord | undefined,
+  ): Promise<BondLockRecord | null>;
 }
 
 export class InMemoryLockRecordStore implements LockRecordStore {
@@ -139,5 +193,23 @@ export class InMemoryLockRecordStore implements LockRecordStore {
     bondIndex: number,
   ): Promise<BondLockRecord | null> {
     return this.store.get(this.key(stxAddress, bondIndex)) ?? null;
+  }
+
+  async updateRecord(
+    stxAddress: string,
+    bondIndex: number,
+    update: (current: BondLockRecord | null) => BondLockRecord | undefined,
+  ): Promise<BondLockRecord | null> {
+    const key = this.key(stxAddress, bondIndex);
+    const next = update(this.store.get(key) ?? null);
+    if (next !== undefined) this.store.set(key, next);
+    return this.store.get(key) ?? null;
+  }
+
+  async listRecords(stxAddress: string): Promise<BondLockRecord[]> {
+    const prefix = `${stxAddress}:`;
+    return [...this.store.entries()]
+      .filter(([k]) => k.startsWith(prefix))
+      .map(([, record]) => record);
   }
 }
