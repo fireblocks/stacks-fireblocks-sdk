@@ -465,12 +465,15 @@ export class StacksSDK {
           // the abandoned list are the same durable update. Split across two writes, a crash
           // between them leaves a record that derives a fresh external id while the dead
           // transfer still reads as in flight.
+          // The stage goes back to lock-fixed: no transfer is in flight, and the next attempt
+          // requests funding again under the new generation's external id.
           const abandoned: BondLockRecord = {
             ...stored,
             fundingGeneration: (stored.fundingGeneration ?? 0) + 1,
             ...(stored.fireblocksId !== undefined
               ? { abandonedFireblocksIds: [...(stored.abandonedFireblocksIds ?? []), stored.fireblocksId] }
               : {}),
+            stage: "lock-fixed",
           };
           delete abandoned.fireblocksId;
           return abandoned;
@@ -3382,8 +3385,11 @@ export class StacksSDK {
    *
    * Delegates to `createBond`, which owns the resume branch (recorded-txid verification,
    * funding skip, SPV rebuild, and the duplicate-outpoint preflight that catches a
-   * registration which did land). No Bitcoin is sent on this path: a record with no
-   * committed funding is refused rather than funded.
+   * registration which did land). A record with no funding requested is refused rather than
+   * funded. A record at `funding-requested` with no transfer id saved is handed to
+   * `createBond`, which finds the transfer already under the record's external id and waits
+   * on it; if Fireblocks never accepted the request, it is requested again, so on that one
+   * path Bitcoin can be sent.
    */
   public resumeBondRegistration = async (
     bondIndex: number,
@@ -6098,7 +6104,16 @@ export class StacksSDK {
       // live transfer drops its id, and one that later lands is locked for the term,
       // unregistered and untracked; resuming a funded one would register it in place of the
       // re-lock.
-      if (priorNextRecord && priorNextRecord.isL1Lock !== false && priorNextRecord.fundingExternalId !== undefined) {
+      // An abandoned funding keeps its fundingExternalId but commits nothing: it holds no txid
+      // and no transfer, and sits back at lock-fixed.
+      if (
+        priorNextRecord &&
+        priorNextRecord.isL1Lock !== false &&
+        priorNextRecord.fundingExternalId !== undefined &&
+        (priorNextRecord.btcTxid !== undefined ||
+          priorNextRecord.fireblocksId !== undefined ||
+          priorNextRecord.stage === "funding-requested")
+      ) {
         const transfer = priorNextRecord.fireblocksId
           ? `Fireblocks transfer ${priorNextRecord.fireblocksId}${priorNextRecord.btcTxid ? `, tx ${priorNextRecord.btcTxid}` : ""}`
           : priorNextRecord.btcTxid

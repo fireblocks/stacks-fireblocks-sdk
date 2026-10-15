@@ -321,6 +321,30 @@ describe("createBond — terminal failure on the FRESH funding path", () => {
     expect(res.error).not.toMatch(/retry createBond/i);
   });
 
+  it("resets the stage, so an abandoned record no longer reads as a funding in flight", async () => {
+    const sdk = makeSdk();
+    sdk.fireblocksService.createBitcoinTransaction = acceptThenFail(terminalError(TransactionStateEnum.Rejected));
+
+    await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect((await readRecord(sdk)).stage).toBe("lock-fixed");
+  });
+
+  it("does not let resumeBondRegistration open a new transfer for an abandoned record", async () => {
+    // resumeBondRegistration is documented to send no Bitcoin. With nothing pending, an
+    // abandoned record gives it nothing to resume.
+    const sdk = makeSdk();
+    sdk.fireblocksService.createBitcoinTransaction = acceptThenFail(terminalError(TransactionStateEnum.Rejected));
+    await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+    const create = jest.fn();
+    sdk.createBond = create;
+
+    const res = await sdk.resumeBondRegistration(BOND_INDEX);
+
+    expect(res.success).toBe(false);
+    expect(create).not.toHaveBeenCalled();
+  });
+
   it("drops the Fireblocks id so the btcTxid recovery path is not blocked", async () => {
     const sdk = makeSdk();
     sdk.fireblocksService.createBitcoinTransaction = acceptThenFail(

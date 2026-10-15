@@ -348,6 +348,17 @@ describe("renewBond — over a next-bond record whose createBond funding transfe
     expect(sdk.deriveLock).not.toHaveBeenCalled();
   });
 
+  it("does not refuse over a createBond record whose funding was abandoned", async () => {
+    // Nothing is pending and no Bitcoin was committed: the record only keeps the generation
+    // and the abandoned ids. Refusing here would be permanent.
+    const sdk = sdkWithSpendSpy();
+    await seed(sdk, { stage: "lock-fixed", fundingGeneration: 1, abandonedFireblocksIds: ["fb-dead"] });
+
+    await sdk.renewBond(NEXT_BOND, MANAGER, REWARD);
+
+    expect(sdk.deriveLock).toHaveBeenCalled();
+  });
+
   it("still rebuilds over a dead txid that came from an earlier renewBond", async () => {
     // renewBond records no Fireblocks transfer and no funding external id, so nothing live can
     // be dropped.
