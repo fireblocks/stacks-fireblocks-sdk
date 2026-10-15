@@ -3317,7 +3317,9 @@ export class StacksSDK {
       // confirmation poll never completed — Bitcoin may already sit at the lock address.
       // createBond's in-flight branch awaits that same transfer instead of funding again;
       // at a mismatched lock address nativeRecordOverwriteGuard refuses before funding.
-      if (!record.btcTxid && !opts?.btcTxid && !record.fireblocksId) {
+      // At funding-requested with no id saved, Fireblocks may still hold an accepted
+      // transfer under the record's deterministic external id; createBond resolves it.
+      if (!record.btcTxid && !opts?.btcTxid && !record.fireblocksId && record.stage !== "funding-requested") {
         return { success: false, error: `Lock record for bond ${bondIndex} records neither a funding transaction nor an in-flight Fireblocks transfer, so no Bitcoin is committed and there is nothing to resume. Use createBond to fund the enrollment.` };
       }
       if (!record.signerManager) {
@@ -5140,6 +5142,7 @@ export class StacksSDK {
       btcTxid: record?.btcTxid,
       fireblocksId: record?.fireblocksId,
       vout: record?.vout,
+      stage: record?.stage,
     };
   };
 
@@ -5333,10 +5336,23 @@ export class StacksSDK {
             ? utxos.some((u) => u.txid === lock.btcTxid && u.vout === lock.vout)
             : utxos.length > 0;
         still_locked = isUnspent;
-        // A funding transfer Fireblocks accepted but that has not landed has put nothing at
-        // the address yet, so an empty address is no evidence the Bitcoin was recovered.
-        const fundingInFlight = lock.btcTxid === undefined && lock.fireblocksId !== undefined;
-        recovered = isUnspent ? false : fundingInFlight ? null : true;
+        // A funding transfer that has not landed has put nothing at the address yet, so an
+        // empty address is no evidence the Bitcoin was recovered. Fireblocks may hold an
+        // accepted transfer whose id was never saved, so funding-requested counts too.
+        const fundingInFlight =
+          lock.btcTxid === undefined && (lock.fireblocksId !== undefined || lock.stage === "funding-requested");
+        if (isUnspent) {
+          recovered = false;
+        } else if (fundingInFlight) {
+          recovered = null;
+        } else if (lock.btcTxid !== undefined) {
+          // A spent outpoint proves recovery only if the funding tx itself is known; one the
+          // indexer has never seen may still confirm.
+          const fundingTx = await this.getBtcTxStatus(lock.btcTxid);
+          recovered = fundingTx.success && fundingTx.data?.found ? true : null;
+        } else {
+          recovered = true;
+        }
         matured = tipHeight !== null ? tipHeight >= lock.unlockHeight : null;
       } catch {
         // Bitcoin lookup failed — indeterminate, not "recovered".

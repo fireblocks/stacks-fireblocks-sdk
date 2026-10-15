@@ -1,6 +1,7 @@
 import { BasePath } from "@fireblocks/ts-sdk";
 import { SignerManagerAdapter } from "../staking/signer-manager-adapter";
 import type { PollConfig } from "../utils/FireblocksSigner";
+import type { EnrollmentStage } from "../staking/bonds/unlock-bytes-store";
 
 export type Network = "mainnet" | "testnet";
 
@@ -504,6 +505,8 @@ export type DerivedLock = {
   vout?: number;
   /** Fireblocks id of a funding transfer accepted but not yet recorded as broadcast. */
   fireblocksId?: string;
+  /** Enrollment stage from the durable record. */
+  stage?: EnrollmentStage;
 };
 
 export type UnlockBtcResponse = {
