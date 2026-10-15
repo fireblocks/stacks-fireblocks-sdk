@@ -21,6 +21,13 @@ const validateVaultId = (
 
 const router = Router();
 
+// Express 5 leaves req.body undefined when no body is sent; handlers read optional fields
+// from it directly.
+router.use((req, _res, next) => {
+  if (req.body === undefined) req.body = {};
+  next();
+});
+
 // Use JSON body parser in your app setup (e.g., app.use(express.json()))
 
 // Account endpoints
