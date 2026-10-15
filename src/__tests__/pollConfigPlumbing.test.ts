@@ -1,5 +1,6 @@
 import { FireblocksService } from "../services/fireblocks.service";
 import { ApiService } from "../api/api.service";
+import { FireblocksSigner } from "../utils/FireblocksSigner";
 
 /**
  * The poll budgets must be settable from configuration (review item 4).
@@ -52,5 +53,20 @@ describe("poll config reaches the signer", () => {
     } as any);
 
     expect(service.sdkManager.baseConfig.poll).toEqual({ approvalTimeoutMs: 123_000 });
+  });
+});
+
+describe("approval budget default", () => {
+  it("defaults approvalTimeoutMs to the configured timeoutMs", () => {
+    // The documented default; a fixed 30 minutes ignored a shorter or longer timeoutMs.
+    const signer: any = new FireblocksSigner({} as any, { timeoutMs: 5 * 60_000 });
+
+    expect(signer.poll.approvalTimeoutMs).toBe(5 * 60_000);
+  });
+
+  it("keeps an explicit approvalTimeoutMs", () => {
+    const signer: any = new FireblocksSigner({} as any, { timeoutMs: 5 * 60_000, approvalTimeoutMs: 60 * 60_000 });
+
+    expect(signer.poll.approvalTimeoutMs).toBe(60 * 60_000);
   });
 });

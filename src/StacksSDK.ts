@@ -5925,6 +5925,8 @@ export class StacksSDK {
         return { success: false, error: `Invalid reward/signer calldata (no BTC re-locked): ${formatErrorMessage(e)}` };
       }
 
+      // A resume passes no externalId; the stored one keeps the register id on the same request.
+      const callerExternalId = (): string | undefined => opts?.externalId ?? priorNextRecord?.callerExternalId;
       const nextRecordFor = (amountSats: bigint, extra: Partial<BondLockRecord> = {}): BondLockRecord => ({
         bondIndex: nextBondIndex,
         unlockBytes: nextMeta.unlockBytes,
@@ -5943,6 +5945,7 @@ export class StacksSDK {
         ...(priorNextRecord?.fundingGeneration !== undefined ? { fundingGeneration: priorNextRecord.fundingGeneration } : {}),
         ...(priorNextRecord?.registrationGeneration !== undefined ? { registrationGeneration: priorNextRecord.registrationGeneration } : {}),
         ...(priorNextRecord?.abandonedFireblocksIds !== undefined ? { abandonedFireblocksIds: priorNextRecord.abandonedFireblocksIds } : {}),
+        ...(callerExternalId() !== undefined ? { callerExternalId: callerExternalId() } : {}),
         ...extra,
       });
 
@@ -6169,7 +6172,9 @@ export class StacksSDK {
 
       // Register on L2. Only the nonce→sign→broadcast is serialized; the Bitcoin
       // confirmation waits above ran outside the lock.
-      const result = await this.runNonceExclusive(async () => {
+      const registrationGeneration = priorNextRecord?.registrationGeneration ?? 0;
+      let registerExternalId = '';
+      const register = () => this.runNonceExclusive(async () => {
         // A native re-lock custodies no sBTC, so any custodied sBTC (e.g. an sBTC bond
         // registered since the prior native bond) is refunded from pox-5 here — cover it
         // or Deny mode aborts AFTER the BTC is already re-locked.
@@ -6187,10 +6192,17 @@ export class StacksSDK {
           postConditionMode: PostConditionMode.Deny,
           postConditions: [Pc.origin().willSendEq(amountUstx).ustxToLock(), ...custodyRefund.conditions],
         });
+        registerExternalId = this.deriveRegisterExternalId(
+          nextBondIndex,
+          nextMeta.lockAddress,
+          this.preSignSigHashOf(stacksTx),
+          registrationGeneration,
+          callerExternalId(),
+        );
         return this.pox5SignAndBroadcast(
           stacksTx,
           opts?.note ?? `renew-bond-${nextBondIndex}`,
-          opts?.externalId,
+          registerExternalId,
           // The BTC is already re-locked; a window/phase crossing or custody change
           // during Fireblocks approval must discard the tx, not broadcast a doomed one.
           () => this.revalidateRegisterForBond({
@@ -6199,6 +6211,18 @@ export class StacksSDK {
           }),
         );
       });
+      let result: Awaited<ReturnType<typeof register>>;
+      try {
+        result = await register();
+      } catch (registerErr) {
+        if (!FireblocksService.isTerminalTransferFailure(registerErr)) throw registerErr;
+        return {
+          success: false,
+          error: await this.abandonTerminalRegistration(nextBondIndex, registerExternalId, registerErr, registrationGeneration),
+          btcTxid,
+          vout: lockupProof.outputIndex,
+        };
+      }
       if (!result?.txid || result.error || result.reason) {
         return { success: false, error: result?.error ?? result?.reason ?? 'broadcast failed', btcTxid, vout: lockupProof.outputIndex };
       }
