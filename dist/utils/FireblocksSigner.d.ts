@@ -35,13 +35,15 @@ export declare class StaleRawSignError extends Error {
  */
 export declare const TERMINAL_TRANSACTION_STATES: ReadonlySet<string>;
 /**
- * Non-terminal states that wait on a person rather than on the platform. A deadline
- * sized for machine-paced work reports these as failures while the approval is still
+ * Non-terminal states that may wait on a person rather than on the platform. A deadline
+ * sized for machine-paced work reports these as failures while the request is still
  * legitimately outstanding.
  *
- * `PENDING_SIGNATURE` is deliberately excluded — that is MPC signing, not a human.
- * `PENDING_AML_SCREENING` and `PENDING_3RD_PARTY` are also excluded: whether either
- * blocks on a person is a Fireblocks semantic this codebase has not confirmed.
+ * `PENDING_SIGNATURE` is included: per Fireblocks' transaction-timeout documentation it
+ * waits for a signature "either by a person in the Console or mobile app, or
+ * automatically by an API Co-Signer", and the SDK cannot tell which.
+ * `PENDING_AML_SCREENING` and `PENDING_3RD_PARTY` are excluded: whether either blocks on
+ * a person is a Fireblocks semantic this codebase has not confirmed.
  */
 export declare const APPROVAL_PENDING_STATES: ReadonlySet<string>;
 /**

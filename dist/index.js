@@ -16081,7 +16081,6 @@ var import_ts_sdk2 = require("@fireblocks/ts-sdk");
 var POLL_INITIAL_MS = 3e3;
 var POLL_CEILING_MS = 3e4;
 var POLL_TIMEOUT_MS = 30 * 60 * 1e3;
-var APPROVAL_POLL_TIMEOUT_MS = POLL_TIMEOUT_MS;
 var FireblocksTransferError = class extends Error {
   constructor(message, details) {
     super(message);
@@ -16104,7 +16103,8 @@ var TERMINAL_TRANSACTION_STATES = /* @__PURE__ */ new Set([
 ]);
 var APPROVAL_PENDING_STATES = /* @__PURE__ */ new Set([
   import_ts_sdk2.TransactionStateEnum.PendingAuthorization,
-  import_ts_sdk2.TransactionStateEnum.Pending3RdPartyManualApproval
+  import_ts_sdk2.TransactionStateEnum.Pending3RdPartyManualApproval,
+  import_ts_sdk2.TransactionStateEnum.PendingSignature
 ]);
 var describeOperation = (operation) => operation === import_ts_sdk2.TransactionOperation.Raw ? "Signing request" : "Transfer";
 var isDuplicateExternalId = (error) => {
@@ -16316,11 +16316,26 @@ var FireblocksSigner = class {
         throw new Error(`Error in rawSign: ${formatErrorMessage(error)}`);
       }
     };
+    const timeoutMs = poll.timeoutMs ?? POLL_TIMEOUT_MS;
     this.poll = {
       initialMs: poll.initialMs ?? POLL_INITIAL_MS,
       ceilingMs: poll.ceilingMs ?? POLL_CEILING_MS,
-      timeoutMs: poll.timeoutMs ?? POLL_TIMEOUT_MS,
-      approvalTimeoutMs: poll.approvalTimeoutMs ?? APPROVAL_POLL_TIMEOUT_MS
+      timeoutMs,
+      /**
+       * The approval budget equals the machine budget unless set — extending is opt-in per call site.
+       *
+       * This deadline also bounds how stale a preflight can be when the transaction finally
+       * broadcasts. FBS-19: three lifecycle calls (`unstakeSbtc`, `updateBondRegistration`,
+       * `renewBond`) re-validate nothing before broadcast, and the re-checks that do exist
+       * carry no safety margin. A longer wait therefore lets an approval straddle the
+       * prepare-phase boundary — ~17 hours of every two-week mainnet cycle — and the contract
+       * rejects the transaction after the fee and nonce are spent.
+       *
+       * Raise this only for a caller that re-validates with a margin immediately before
+       * broadcast. The typed timeout error already lets a caller distinguish an outstanding
+       * approval from a stall without waiting longer.
+       */
+      approvalTimeoutMs: poll.approvalTimeoutMs ?? timeoutMs
     };
   }
 };
@@ -16472,6 +16487,15 @@ var FireblocksService = class {
       if (!btcTxid) throw new Error(`BTC transaction ${fireblocksId} completed but has no txHash`);
       return btcTxid;
     };
+    /** A single status read of a Fireblocks transfer, without polling. */
+    this.getTransferState = async (fireblocksId) => {
+      const { data } = await this.fireblocksSDK.transactions.getTransaction({ txId: fireblocksId });
+      return {
+        status: data.status,
+        ...data.subStatus ? { subStatus: data.subStatus } : {},
+        ...data.txHash ? { txHash: data.txHash } : {}
+      };
+    };
     /**
      * Lookup ONLY — returns the Fireblocks id for an external id without polling it.
      *
@@ -16545,6 +16569,9 @@ var FireblocksService = class {
     this.isTerminalTransferFailure = (error) => error instanceof FireblocksTransferError && TERMINAL_TRANSACTION_STATES.has(error.details.status);
   }
 };
+
+// src/StacksSDK.ts
+var import_ts_sdk4 = require("@fireblocks/ts-sdk");
 
 // src/services/cosigner.service.ts
 var import_common = __toESM(require_dist());
@@ -17111,7 +17138,7 @@ var StacksSDK = class _StacksSDK {
      * permanently, so without this the id would resolve to that dead request on every
      * subsequent attempt.
      *
-     * A caller-supplied id is kept as a recognisable prefix, with the same sighash and
+     * A caller-supplied id is kept as a recognizable prefix, with the same sighash and
      * generation folded into a fixed-length suffix.
      */
     this.deriveRegisterExternalId = (bondIndex, lockAddress, preSignSigHash, generation = 0, callerExternalId) => {
@@ -17129,11 +17156,18 @@ var StacksSDK = class _StacksSDK {
      * reached a terminal Fireblocks state, so the next attempt derives an id Fireblocks
      * has not already consumed. The Bitcoin stays committed and the record keeps pointing
      * at it — only the L2 leg is retried.
+     *
+     * Advances only from the generation the failed id was derived from. Overlapping attempts
+     * share a request; once one has advanced past it, a late report of the same rejection
+     * must not advance again and orphan the request opened under the newer generation.
      */
-    this.abandonTerminalRegistration = async (bondIndex, registerExternalId, error) => {
+    this.abandonTerminalRegistration = async (bondIndex, registerExternalId, error, derivedGeneration) => {
       let advanceFailure = "";
       try {
         const stored = await this.lockRecordStore.loadRecord(this.address, bondIndex);
+        if (stored && (stored.registrationGeneration ?? 0) !== derivedGeneration) {
+          return `The register-for-bond signing request for bond ${bondIndex} terminally failed: ${formatErrorMessage(error)}. A concurrent attempt already moved past its external id ${registerExternalId}, so nothing was advanced. The Bitcoin is locked and remains recoverable; retry createBond or resumeBondRegistration(${bondIndex}).`;
+        }
         if (stored) {
           await this.lockRecordStore.saveRecord(this.address, bondIndex, {
             ...stored,
@@ -17182,12 +17216,14 @@ var StacksSDK = class _StacksSDK {
           } catch (e) {
             return {
               success: false,
-              error: `The Fireblocks funding transfer ${stored.fireblocksId} for bond ${bondIndex} was broadcast as Bitcoin transaction ${broadcastTxid} and then reported failed: ${formatErrorMessage(error)}. The lock record could NOT be updated to point at it (${formatErrorMessage(e)}). Do not fund this bond again; check ${broadcastTxid} on-chain first.`
+              error: `The Fireblocks funding transfer ${stored.fireblocksId} for bond ${bondIndex} was broadcast as Bitcoin transaction ${broadcastTxid} and then reported failed: ${formatErrorMessage(error)}. The lock record could NOT be updated to point at it (${formatErrorMessage(e)}). Do not fund this bond again; check ${broadcastTxid} on-chain first.`,
+              btcTxid: broadcastTxid
             };
           }
           return {
             success: false,
-            error: `The Fireblocks funding transfer ${stored.fireblocksId} for bond ${bondIndex} was broadcast as Bitcoin transaction ${broadcastTxid} and then reported failed: ${formatErrorMessage(error)}. A broadcast transaction can still confirm, so no new transfer will be opened for this bond. The lock record now points at ${broadcastTxid}; retry createBond for this bond index and it continues only once that transaction is visible on-chain. Do not fund this bond again.`
+            error: `The Fireblocks funding transfer ${stored.fireblocksId} for bond ${bondIndex} was broadcast as Bitcoin transaction ${broadcastTxid} and then reported failed: ${formatErrorMessage(error)}. A broadcast transaction may still confirm, so no new transfer will be opened for this bond. The lock record now points at ${broadcastTxid}; retry createBond for this bond index and it continues only once that transaction is visible on-chain. Do not fund this bond again. If ${broadcastTxid} never confirms, call abandonBroadcastFunding(${bondIndex}) to clear the record so the bond can be funded again.`,
+            btcTxid: broadcastTxid
           };
         }
         if (stored) {
@@ -17885,10 +17921,29 @@ var StacksSDK = class _StacksSDK {
         });
       } catch (error) {
         if (error instanceof ValidationError) return { success: false, error: error.message };
+        if (error instanceof FireblocksTransferError) throw error;
         throw new Error(
           `Failed to build, sign or send contract call transaction: ${formatErrorMessage(error)}`
         );
       }
+    };
+    /**
+     * The result for a Fireblocks request the poll gave up on while it was still outstanding.
+     * Undefined for any other error, including a terminal status. `retryNote` says what a
+     * retry does; by default the request id is random unless the caller supplied one.
+     */
+    this.pendingFireblocksResult = (error, retryNote = "Nothing was broadcast. A retry opens a new signing request: reject this one in Fireblocks first, or retry with the same externalId to keep waiting on it while the transaction is unchanged.") => {
+      if (!(error instanceof FireblocksTransferError) || TERMINAL_TRANSACTION_STATES.has(error.details.status)) {
+        return void 0;
+      }
+      const awaitingApproval = APPROVAL_PENDING_STATES.has(error.details.status);
+      return {
+        success: false,
+        error: `Fireblocks request ${error.details.vendorId} is still ${error.details.status}${awaitingApproval ? " (awaiting approval)" : ""} \u2014 not failed. ${retryNote}`,
+        pendingFireblocksId: error.details.vendorId,
+        pendingFireblocksStatus: error.details.status,
+        ...awaitingApproval ? { pendingApproval: true } : {}
+      };
     };
     /** The hash a single-sig origin signs for `tx`; covers the payload, post-conditions, fee and nonce. */
     this.preSignSigHashOf = (tx) => (0, import_transactions4.sigHashPreSign)(
@@ -18211,6 +18266,8 @@ var StacksSDK = class _StacksSDK {
         }
         return { success: true, txHash: result.txid };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error);
+        if (pending) return pending;
         return { success: false, error: `Failed to stake: ${formatErrorMessage(error)}` };
       }
     };
@@ -18304,6 +18361,8 @@ var StacksSDK = class _StacksSDK {
         }
         return { success: true, txHash: result.txid };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error);
+        if (pending) return pending;
         return { success: false, error: `Failed to update stake: ${formatErrorMessage(error)}` };
       }
     };
@@ -18364,6 +18423,8 @@ var StacksSDK = class _StacksSDK {
         }
         return { success: true, txHash: result.txid };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error);
+        if (pending) return pending;
         return { success: false, error: `Failed to unstake: ${formatErrorMessage(error)}` };
       }
     };
@@ -18452,6 +18513,8 @@ var StacksSDK = class _StacksSDK {
         }
         return { success: true, txHash: result.txid };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error);
+        if (pending) return pending;
         return { success: false, error: `Failed to register signer key: ${formatErrorMessage(error)}` };
       }
     };
@@ -18499,6 +18562,8 @@ var StacksSDK = class _StacksSDK {
         }
         return { success: true, txHash: result.txid };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error);
+        if (pending) return pending;
         return { success: false, error: `Failed to revoke signer grant: ${formatErrorMessage(error)}` };
       }
     };
@@ -18834,6 +18899,8 @@ var StacksSDK = class _StacksSDK {
           txHash: delegateResult.txid
         };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error);
+        if (pending) return pending;
         console.error(`Error delegating to pool: ${formatErrorMessage(error)}`);
         return {
           success: false,
@@ -18886,6 +18953,8 @@ var StacksSDK = class _StacksSDK {
           txHash: allowCallerResult.txid
         };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error);
+        if (pending) return pending;
         console.error(
           `Error allowing contract caller: ${formatErrorMessage(error)}`
         );
@@ -18934,6 +19003,8 @@ var StacksSDK = class _StacksSDK {
           txHash: revokeResult.txid
         };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error);
+        if (pending) return pending;
         console.error(`Error revoking delegation: ${formatErrorMessage(error)}`);
         return {
           success: false,
@@ -19309,6 +19380,8 @@ var StacksSDK = class _StacksSDK {
         await this.lockRecordStore.saveRecord(this.address, derivedBondIndex, rotatedRecord);
         return { success: true, txHash: result.txid };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error);
+        if (pending) return pending;
         return { success: false, error: `Failed to update bond registration: ${formatErrorMessage(error)}` };
       }
     };
@@ -19340,7 +19413,7 @@ var StacksSDK = class _StacksSDK {
         if (!record.isL1Lock) {
           return { success: false, error: `Bond ${bondIndex} is sBTC-backed, which commits no Bitcoin before registering \u2014 nothing to resume. Use createSbtcBond.` };
         }
-        if (!record.btcTxid && !opts?.btcTxid && !record.fireblocksId) {
+        if (!record.btcTxid && !opts?.btcTxid && !record.fireblocksId && record.stage !== "funding-requested") {
           return { success: false, error: `Lock record for bond ${bondIndex} records neither a funding transaction nor an in-flight Fireblocks transfer, so no Bitcoin is committed and there is nothing to resume. Use createBond to fund the enrollment.` };
         }
         if (!record.signerManager) {
@@ -19349,6 +19422,83 @@ var StacksSDK = class _StacksSDK {
         return this.createBond(bondIndex, record.amountSats, record.signerManager, opts);
       } catch (error) {
         return { success: false, error: `Failed to resume bond registration: ${formatErrorMessage(error)}` };
+      }
+    };
+    /**
+     * Clears a native bond's record whose funding transfer Fireblocks reported failed after
+     * broadcast, and whose transaction never reached the chain, so createBond can fund the
+     * same lock again.
+     *
+     * Acts only when Fireblocks still reports the transfer terminal, the indexer does not know
+     * the recorded txid, and nothing sits at the lock address. Any unreadable check refuses.
+     * The pointer is cleared, the transfer recorded as abandoned and the funding generation
+     * advanced in a single write.
+     */
+    this.abandonBroadcastFunding = async (bondIndex) => {
+      try {
+        if (!this.address) throw new Error("Address is not set");
+        let record;
+        try {
+          record = await this.lockRecordStore.loadRecord(this.address, bondIndex);
+        } catch (e) {
+          return { success: false, error: `Lock-record store unreadable for bond ${bondIndex} (UNKNOWN) \u2014 refusing to clear it: ${formatErrorMessage(e)}` };
+        }
+        if (!record || !record.isL1Lock) {
+          return { success: false, error: `No native-BTC lock record for bond ${bondIndex}; nothing to abandon.` };
+        }
+        const { btcTxid, fireblocksId } = record;
+        if (btcTxid === void 0 || fireblocksId === void 0) {
+          return {
+            success: false,
+            btcTxid,
+            error: `Bond ${bondIndex}'s record does not hold both a funding txid and the Fireblocks transfer that produced it, so it is not a broadcast funding to abandon.`
+          };
+        }
+        let transfer;
+        try {
+          transfer = await this.fireblocksService.getTransferState(fireblocksId);
+        } catch (e) {
+          return { success: false, btcTxid, error: `Could not read Fireblocks transfer ${fireblocksId} (UNKNOWN) \u2014 refusing to abandon it: ${formatErrorMessage(e)}` };
+        }
+        if (!TERMINAL_TRANSACTION_STATES.has(transfer.status)) {
+          return { success: false, btcTxid, error: `Fireblocks reports transfer ${fireblocksId} as ${transfer.status}, not terminal \u2014 refusing to abandon it. Retry createBond or resumeBondRegistration(${bondIndex}).` };
+        }
+        const fundingTx = await this.getBtcTxStatus(btcTxid);
+        if (!fundingTx.success) {
+          return { success: false, btcTxid, error: `Could not look up funding tx ${btcTxid} (UNKNOWN) \u2014 refusing to abandon it: ${fundingTx.error ?? ""}` };
+        }
+        if (fundingTx.data.found) {
+          return { success: false, btcTxid, error: `Funding tx ${btcTxid} is visible on-chain, so it is not abandoned. Continue the enrollment with resumeBondRegistration(${bondIndex}).` };
+        }
+        let utxos;
+        try {
+          const res = await fetch(`${this.esploraBase()}/address/${record.lockAddress}/utxo`);
+          if (!res.ok) throw new Error(`Esplora HTTP ${res.status}`);
+          utxos = await res.json();
+        } catch (e) {
+          return { success: false, btcTxid, error: `Could not read lock address ${record.lockAddress} (UNKNOWN) \u2014 refusing to abandon: ${formatErrorMessage(e)}` };
+        }
+        if (utxos.length > 0) {
+          return { success: false, btcTxid, error: `Lock address ${record.lockAddress} holds ${utxos.length} output(s), so Bitcoin is committed there. Not abandoned; recover or resume instead.` };
+        }
+        const fundingGeneration = (record.fundingGeneration ?? 0) + 1;
+        const cleared = {
+          ...record,
+          fundingGeneration,
+          abandonedFireblocksIds: [...record.abandonedFireblocksIds ?? [], fireblocksId],
+          stage: "lock-fixed"
+        };
+        delete cleared.btcTxid;
+        delete cleared.vout;
+        delete cleared.fireblocksId;
+        try {
+          await this.lockRecordStore.saveRecord(this.address, bondIndex, cleared);
+        } catch (e) {
+          return { success: false, btcTxid, error: `Could not write bond ${bondIndex}'s record (${formatErrorMessage(e)}); nothing was abandoned.` };
+        }
+        return { success: true, btcTxid, abandonedFireblocksId: fireblocksId, fundingGeneration };
+      } catch (error) {
+        return { success: false, error: `Failed to abandon broadcast funding: ${formatErrorMessage(error)}` };
       }
     };
     /**
@@ -19382,31 +19532,47 @@ var StacksSDK = class _StacksSDK {
         if (storeError) return { success: false, error: storeError };
         const smAllowError = this.signerManagerAllowedError(signerManager);
         if (smAllowError) return { success: false, error: smAllowError };
+        let priorRecord;
+        try {
+          priorRecord = await this.lockRecordStore.loadRecord(this.address, bondIndex);
+        } catch (e) {
+          return { success: false, error: `Lock-record store unreadable for bond ${bondIndex} (UNKNOWN, not "no prior attempt") \u2014 refusing to fund: ${formatErrorMessage(e)}` };
+        }
+        const recordedFunding = priorRecord && priorRecord.isL1Lock !== false ? priorRecord.btcTxid !== void 0 ? `funding tx ${priorRecord.btcTxid}` : priorRecord.fireblocksId !== void 0 ? `Fireblocks funding transfer ${priorRecord.fireblocksId}` : priorRecord.stage === "funding-requested" ? `a funding request under external id ${priorRecord.fundingExternalId ?? "unknown"}` : void 0 : void 0;
+        if (recordedFunding && priorRecord.btcTxid !== void 0) {
+          committedBtc.btcTxid = priorRecord.btcTxid;
+          committedBtc.vout = priorRecord.vout;
+        }
+        const gateRefusal = (reason, uncommittedError = reason) => recordedFunding ? {
+          success: false,
+          error: `Bond ${bondIndex} already has ${recordedFunding} on record, so Bitcoin may already be committed; no new Bitcoin was sent. The enrollment cannot continue: ${reason}. Check getBondPosition: a registration that already landed shows there. Otherwise the Bitcoin stays locked until recovered with unlockMaturedBond or spendEarlyExitUtxo.`,
+          ...committedBtc
+        } : { success: false, error: uncommittedError };
         const allowance = await (0, import_bitcoin_staking2.fetchBondAllowance)({ bondIndex, address: this.address, network: this.pox5Network });
         if (allowance < btcAmountSats) {
-          return { success: false, error: `Not allowlisted for ${btcAmountSats} sats on bond ${bondIndex} (cap: ${allowance} sats)` };
+          return gateRefusal(`Not allowlisted for ${btcAmountSats} sats on bond ${bondIndex} (cap: ${allowance} sats)`);
         }
         const [pox, bond] = await Promise.all([
           (0, import_bitcoin_staking2.fetchPoxInfo)({ network: this.pox5Network }),
           (0, import_bitcoin_staking2.fetchBond)({ bondIndex, network: this.pox5Network })
         ]);
-        if (!bond) return { success: false, error: `Bond ${bondIndex} not found` };
+        if (!bond) return gateRefusal(`Bond ${bondIndex} not found`);
         const contractMinUstx = (0, import_bitcoin_staking2.minUstxForSatsAmount)({
           sats: btcAmountSats,
           stxValueRatio: bond.stxValueRatio,
           minUstxRatioBps: bond.minUstxRatioBps
         });
         const amountResolution = this.resolveBondStxAmount(contractMinUstx, opts?.amountUstxOverride);
-        if ("error" in amountResolution) return { success: false, error: amountResolution.error };
+        if ("error" in amountResolution) return gateRefusal(amountResolution.error);
         const amountUstx = amountResolution.amountUstx;
         const accountStatus = await (0, import_bitcoin_staking2.fetchAccountStatus)({ address: this.address, network: this.pox5Network });
         const unlockedStx = accountStatus.balance;
         const lockedStx = accountStatus.locked ?? BigInt(0);
         if (unlockedStx < DEFAULT_POX_FEE_USTX) {
-          return { success: false, error: `Insufficient unlocked STX for the transaction fee: need ${microToStx(DEFAULT_POX_FEE_USTX)} STX unlocked but only ${microToStx(unlockedStx)} available` };
+          return gateRefusal(`Insufficient unlocked STX for the transaction fee: need ${microToStx(DEFAULT_POX_FEE_USTX)} STX unlocked but only ${microToStx(unlockedStx)} available`);
         }
         if (unlockedStx - DEFAULT_POX_FEE_USTX + lockedStx < amountUstx) {
-          return { success: false, error: `Insufficient STX to lock ${microToStx(amountUstx)} STX: unlocked-after-fee ${microToStx(unlockedStx - DEFAULT_POX_FEE_USTX)} + locked ${microToStx(lockedStx)} is short` };
+          return gateRefusal(`Insufficient STX to lock ${microToStx(amountUstx)} STX: unlocked-after-fee ${microToStx(unlockedStx - DEFAULT_POX_FEE_USTX)} + locked ${microToStx(lockedStx)} is short`);
         }
         const preflight = await (0, import_bitcoin_staking2.fetchEligibleRegisterForBond)({
           bondIndex,
@@ -19419,7 +19585,11 @@ var StacksSDK = class _StacksSDK {
         });
         if (!preflight.ok) {
           const reasons = preflight.reasons ?? [];
-          return { success: false, error: `Not eligible to register for bond ${bondIndex} (no BTC committed): ${this.describeBondReasons(reasons)}` };
+          const why = this.describeBondReasons(reasons);
+          return gateRefusal(
+            `Not eligible to register for bond ${bondIndex}: ${why}`,
+            `Not eligible to register for bond ${bondIndex} (no BTC committed): ${why}`
+          );
         }
         const firstBondCycle = (0, import_bitcoin_staking2.firstPox5RewardCycle)(pox);
         if (firstBondCycle === void 0) return { success: false, error: "pox-5 not yet configured on this network" };
@@ -19463,14 +19633,10 @@ var StacksSDK = class _StacksSDK {
             return { success: false, error: `Early-exit cosigner preflight failed (no BTC committed): ${formatErrorMessage(error)}` };
           }
         }
-        let priorRecord;
-        try {
-          priorRecord = await this.lockRecordStore.loadRecord(this.address, bondIndex);
-        } catch (e) {
-          return { success: false, error: `Lock-record store unreadable for bond ${bondIndex} (UNKNOWN, not "no prior attempt") \u2014 refusing to fund: ${formatErrorMessage(e)}` };
-        }
         const fundingGeneration = priorRecord?.fundingGeneration ?? 0;
         const fundingExternalId = this.deriveFundingExternalId(bondIndex, metadata.lockAddress, fundingGeneration);
+        const callerExternalId = opts?.externalId ?? priorRecord?.callerExternalId;
+        const registrationGeneration = priorRecord?.registrationGeneration ?? 0;
         const priorAtThisLock = priorRecord?.lockAddress === metadata.lockAddress;
         const callerSuppliedRawCalldata = opts?.signerCalldata !== void 0;
         const clearRewardDestination = opts?.rewardBtcAddress === null;
@@ -19514,7 +19680,7 @@ var StacksSDK = class _StacksSDK {
           if (!recordedTx.data.found) {
             return {
               success: false,
-              error: `Recorded funding tx ${priorRecord.btcTxid} for bond ${bondIndex} is not visible on the configured Esplora. If that is indexer lag, retry createBond later without opts.btcTxid. If Fireblocks replaced the transaction (new txid) or it was evicted, the lock record still points at the old txid and cannot be repointed through createBond \u2014 a different opts.btcTxid is refused. Do not fund this bond again; the record has to be corrected before it can resume. The transfer's external id is ${fundingExternalId}.`,
+              error: `Recorded funding tx ${priorRecord.btcTxid} for bond ${bondIndex} is not visible on the configured Esplora. If that is indexer lag, retry createBond later without opts.btcTxid. If Fireblocks replaced the transaction (new txid) or it was evicted, the lock record still points at the old txid and cannot be repointed through createBond \u2014 a different opts.btcTxid is refused. Do not fund this bond again. If the transaction never confirms, abandonBroadcastFunding(${bondIndex}) clears the record once Fireblocks reports the transfer terminal and the lock address is empty. The transfer's external id is ${fundingExternalId}.`,
               btcTxid: priorRecord.btcTxid,
               vout: priorRecord.vout
             };
@@ -19539,6 +19705,7 @@ var StacksSDK = class _StacksSDK {
           firstRewardCycle: (0, import_bitcoin_staking2.bondPeriodToRewardCycle)({ bondIndex, poxInfo: pox }),
           fundingExternalId,
           fundingGeneration,
+          ...callerExternalId !== void 0 ? { callerExternalId } : {},
           // Carried forward explicitly: this literal replaces the stored record, so an
           // omitted field erases the history of abandoned transfers on the next attempt.
           ...priorRecord?.abandonedFireblocksIds !== void 0 ? { abandonedFireblocksIds: priorRecord.abandonedFireblocksIds } : {},
@@ -19677,8 +19844,8 @@ var StacksSDK = class _StacksSDK {
             bondIndex,
             metadata.lockAddress,
             this.preSignSigHashOf(tx),
-            priorRecord?.registrationGeneration ?? 0,
-            opts?.externalId
+            registrationGeneration,
+            callerExternalId
           );
           return this.pox5SignAndBroadcast(
             tx,
@@ -19705,7 +19872,7 @@ var StacksSDK = class _StacksSDK {
           if (!FireblocksService.isTerminalTransferFailure(registerErr)) throw registerErr;
           return {
             success: false,
-            error: await this.abandonTerminalRegistration(bondIndex, registerExternalId, registerErr),
+            error: await this.abandonTerminalRegistration(bondIndex, registerExternalId, registerErr, registrationGeneration),
             btcTxid,
             vout: lockupProof.outputIndex
           };
@@ -19744,17 +19911,11 @@ var StacksSDK = class _StacksSDK {
           amountUstx: amountUstx.toString()
         };
       } catch (error) {
-        if (error instanceof FireblocksTransferError && !TERMINAL_TRANSACTION_STATES.has(error.details.status)) {
-          const awaitingApproval = APPROVAL_PENDING_STATES.has(error.details.status);
-          return {
-            success: false,
-            error: `Fireblocks request ${error.details.vendorId} is still ${error.details.status}${awaitingApproval ? " (awaiting approval)" : ""} \u2014 not failed. Retry createBond for bond ${bondIndex} to keep waiting on the same request; nothing new is sent.`,
-            pendingFireblocksId: error.details.vendorId,
-            pendingFireblocksStatus: error.details.status,
-            ...awaitingApproval ? { pendingApproval: true } : {},
-            ...committedBtc
-          };
-        }
+        const pending = this.pendingFireblocksResult(
+          error,
+          error instanceof FireblocksTransferError && error.details.operation === import_ts_sdk4.TransactionOperation.Raw ? `Retry createBond or resumeBondRegistration(${bondIndex}) to keep waiting on the same signing request while the transaction is unchanged; a retry at a different nonce, fee or post-condition opens a new signing request. The Bitcoin stays locked either way.` : `Retry createBond for bond ${bondIndex} to keep waiting on the same transfer; no new Bitcoin is sent.`
+        );
+        if (pending) return { ...pending, ...committedBtc };
         console.error("createBond error:", error);
         return { success: false, error: `Failed to create bond: ${formatErrorMessage(error)}`, ...committedBtc };
       }
@@ -19986,6 +20147,8 @@ var StacksSDK = class _StacksSDK {
         }
         return { success: true, txHash: result.txid };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error);
+        if (pending) return pending;
         return { success: false, error: `Failed to create sBTC bond: ${formatErrorMessage(error)}` };
       }
     };
@@ -20107,6 +20270,8 @@ var StacksSDK = class _StacksSDK {
         }
         return { success: true, txHash: result.txid };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error);
+        if (pending) return pending;
         return { success: false, error: `Failed to roll sBTC bond: ${formatErrorMessage(error)}` };
       }
     };
@@ -20165,6 +20330,8 @@ var StacksSDK = class _StacksSDK {
         }
         return { success: true, txHash: result.txid };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error);
+        if (pending) return pending;
         return { success: false, error: `Failed to unstake sBTC: ${formatErrorMessage(error)}` };
       }
     };
@@ -20423,6 +20590,8 @@ var StacksSDK = class _StacksSDK {
           ...settledBondIndex !== void 0 ? { bondIndex: settledBondIndex } : { bondIndexLookupFailed: true }
         };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error);
+        if (pending) return pending;
         return { success: false, error: `Failed to announce early exit: ${formatErrorMessage(error)}` };
       }
     };
@@ -20705,7 +20874,8 @@ var StacksSDK = class _StacksSDK {
         isL1Lock: record?.isL1Lock ?? true,
         btcTxid: record?.btcTxid,
         fireblocksId: record?.fireblocksId,
-        vout: record?.vout
+        vout: record?.vout,
+        stage: record?.stage
       };
     };
     /**
@@ -20855,8 +21025,17 @@ var StacksSDK = class _StacksSDK {
           const utxos = await utxosRes.json();
           const isUnspent = lock.btcTxid !== void 0 && lock.vout !== void 0 ? utxos.some((u) => u.txid === lock.btcTxid && u.vout === lock.vout) : utxos.length > 0;
           still_locked = isUnspent;
-          const fundingInFlight = lock.btcTxid === void 0 && lock.fireblocksId !== void 0;
-          recovered = isUnspent ? false : fundingInFlight ? null : true;
+          const fundingInFlight = lock.btcTxid === void 0 && (lock.fireblocksId !== void 0 || lock.stage === "funding-requested");
+          if (isUnspent) {
+            recovered = false;
+          } else if (fundingInFlight) {
+            recovered = null;
+          } else if (lock.btcTxid !== void 0) {
+            const fundingTx = await this.getBtcTxStatus(lock.btcTxid);
+            recovered = fundingTx.success && fundingTx.data?.found ? true : null;
+          } else {
+            recovered = true;
+          }
           matured = tipHeight !== null ? tipHeight >= lock.unlockHeight : null;
         } catch {
           still_locked = null;
@@ -20925,6 +21104,8 @@ var StacksSDK = class _StacksSDK {
         const btcTxid = await this.broadcastBtc(rawHex);
         return { success: true, btcTxid };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error);
+        if (pending) return pending;
         return { success: false, error: `Failed to unlock matured bond: ${formatErrorMessage(error)}` };
       }
     };
@@ -20985,6 +21166,8 @@ var StacksSDK = class _StacksSDK {
         const btcTxid = await this.broadcastBtc((0, import_common2.bytesToHex)(tx.extract()));
         return { success: true, btcTxid };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error);
+        if (pending) return pending;
         return { success: false, error: `Failed to spend early exit UTXO: ${formatErrorMessage(error)}` };
       }
     };
@@ -21091,6 +21274,8 @@ var StacksSDK = class _StacksSDK {
           }
         };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error);
+        if (pending) return pending;
         return { success: false, error: `Failed to replace recovery fee: ${formatErrorMessage(error)}` };
       }
     };
@@ -21178,6 +21363,7 @@ var StacksSDK = class _StacksSDK {
         } catch (e) {
           return { success: false, error: `Invalid reward/signer calldata (no BTC re-locked): ${formatErrorMessage(e)}` };
         }
+        const callerExternalId = () => opts?.externalId ?? priorNextRecord?.callerExternalId;
         const nextRecordFor = (amountSats, extra = {}) => ({
           bondIndex: nextBondIndex,
           unlockBytes: nextMeta.unlockBytes,
@@ -21196,6 +21382,7 @@ var StacksSDK = class _StacksSDK {
           ...priorNextRecord?.fundingGeneration !== void 0 ? { fundingGeneration: priorNextRecord.fundingGeneration } : {},
           ...priorNextRecord?.registrationGeneration !== void 0 ? { registrationGeneration: priorNextRecord.registrationGeneration } : {},
           ...priorNextRecord?.abandonedFireblocksIds !== void 0 ? { abandonedFireblocksIds: priorNextRecord.abandonedFireblocksIds } : {},
+          ...callerExternalId() !== void 0 ? { callerExternalId: callerExternalId() } : {},
           ...extra
         });
         const requiredUstx = (sats) => (0, import_bitcoin_staking2.minUstxForSatsAmount)({
@@ -21210,6 +21397,13 @@ var StacksSDK = class _StacksSDK {
           priorNextRecord = await this.lockRecordStore.loadRecord(this.address, nextBondIndex);
         } catch (e) {
           return { success: false, error: `Lock-record store unreadable for bond ${nextBondIndex} (UNKNOWN, not "no prior attempt") \u2014 refusing to re-lock: ${formatErrorMessage(e)}` };
+        }
+        if (priorNextRecord && (priorNextRecord.fireblocksId !== void 0 || priorNextRecord.btcTxid === void 0 && priorNextRecord.stage === "funding-requested")) {
+          const transfer = priorNextRecord.fireblocksId ? `Fireblocks transfer ${priorNextRecord.fireblocksId}${priorNextRecord.btcTxid ? `, tx ${priorNextRecord.btcTxid}` : ""}` : `external id ${priorNextRecord.fundingExternalId ?? "unknown"}, transfer id not recorded`;
+          return {
+            success: false,
+            error: `Bond ${nextBondIndex} already has a createBond funding (${transfer}). No Bitcoin was re-locked. Finish that enrollment with resumeBondRegistration(${nextBondIndex}) instead of renewing into it.`
+          };
         }
         let resumeRelock = priorNextRecord?.btcTxid !== void 0 && priorNextRecord.lockAddress === nextMeta.lockAddress;
         let rebuildingOverDeadTxid = false;
@@ -21322,7 +21516,9 @@ var StacksSDK = class _StacksSDK {
           const reasons = proofPreflight.reasons ?? [];
           return { success: false, error: `SPV proof preflight failed for bond ${nextBondIndex} (BTC re-locked; recover via unlockMaturedBond/spendEarlyExitUtxo): ${this.describeBondReasons(reasons)}`, btcTxid, vout: lockupProof.outputIndex };
         }
-        const result = await this.runNonceExclusive(async () => {
+        const registrationGeneration = priorNextRecord?.registrationGeneration ?? 0;
+        let registerExternalId = "";
+        const register = () => this.runNonceExclusive(async () => {
           const custodyRefund = await this.custodyRefundPostConditions();
           const resolvedNonce = await this.resolveNonce(opts?.nonce);
           const stacksTx = await this.buildRegisterForBondTx({
@@ -21337,10 +21533,17 @@ var StacksSDK = class _StacksSDK {
             postConditionMode: import_transactions4.PostConditionMode.Deny,
             postConditions: [import_transactions4.Pc.origin().willSendEq(amountUstx).ustxToLock(), ...custodyRefund.conditions]
           });
+          registerExternalId = this.deriveRegisterExternalId(
+            nextBondIndex,
+            nextMeta.lockAddress,
+            this.preSignSigHashOf(stacksTx),
+            registrationGeneration,
+            callerExternalId()
+          );
           return this.pox5SignAndBroadcast(
             stacksTx,
             opts?.note ?? `renew-bond-${nextBondIndex}`,
-            opts?.externalId,
+            registerExternalId,
             // The BTC is already re-locked; a window/phase crossing or custody change
             // during Fireblocks approval must discard the tx, not broadcast a doomed one.
             () => this.revalidateRegisterForBond({
@@ -21353,6 +21556,18 @@ var StacksSDK = class _StacksSDK {
             })
           );
         });
+        let result;
+        try {
+          result = await register();
+        } catch (registerErr) {
+          if (!FireblocksService.isTerminalTransferFailure(registerErr)) throw registerErr;
+          return {
+            success: false,
+            error: await this.abandonTerminalRegistration(nextBondIndex, registerExternalId, registerErr, registrationGeneration),
+            btcTxid,
+            vout: lockupProof.outputIndex
+          };
+        }
         if (!result?.txid || result.error || result.reason) {
           return { success: false, error: result?.error ?? result?.reason ?? "broadcast failed", btcTxid, vout: lockupProof.outputIndex };
         }
@@ -21371,6 +21586,8 @@ var StacksSDK = class _StacksSDK {
           amountUstx: amountUstx.toString()
         };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error);
+        if (pending) return { ...pending, ...committedBtc };
         return { success: false, error: `Failed to renew bond: ${formatErrorMessage(error)}`, ...committedBtc };
       }
     };
@@ -21628,7 +21845,7 @@ var StacksSDK = class _StacksSDK {
           // paid nothing, so it must not carry the pre-claim entitlement. An unsettled
           // leg has paid an UNKNOWN amount, which is likewise not the entitlement.
           // The value is the entitlement the leg was bounded AT — the manager may pay less.
-          stakerEntitlementSats: status === "claimed" ? stakerEntitlementSats?.toString() ?? null : null,
+          stakerEntitlementSats: status === "claimed" || status === "skipped" ? stakerEntitlementSats?.toString() ?? null : null,
           signerClaimTxid,
           stakerClaimTxid,
           status: unsettled ? "unsettled" : status,
@@ -21649,7 +21866,10 @@ var StacksSDK = class _StacksSDK {
           recordResult("failed", null, msg);
           return { error: msg };
         }
-        if (stakerEntitlementSats === BigInt(0)) continue;
+        if (stakerEntitlementSats === BigInt(0)) {
+          recordResult("skipped", null);
+          continue;
+        }
         const smStaker = await broadcastLeg(
           (n) => (0, import_transactions4.makeUnsignedContractCall)({
             contractAddress: signerContractAddress,
@@ -22173,6 +22393,8 @@ var StacksSDK = class _StacksSDK {
           txHash: result.txid
         };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error);
+        if (pending) return pending;
         console.error(`Error solo stacking: ${formatErrorMessage(error)}`);
         return {
           success: false,
@@ -22229,6 +22451,8 @@ var StacksSDK = class _StacksSDK {
           txHash: result.txid
         };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error);
+        if (pending) return pending;
         console.error(`Error increasing stacked amount: ${formatErrorMessage(error)}`);
         return {
           success: false,
@@ -22285,6 +22509,8 @@ var StacksSDK = class _StacksSDK {
           txHash: result.txid
         };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error);
+        if (pending) return pending;
         console.error(`Error extending stacking period: ${formatErrorMessage(error)}`);
         return {
           success: false,
@@ -22540,6 +22766,8 @@ var StacksSDK = class _StacksSDK {
         console.log(`Replaced transaction ${originalTxId} with ${result.txid}`);
         return { success: true, txHash: result.txid };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error);
+        if (pending) return pending;
         if (error instanceof ValidationError) {
           return { success: false, error: error.message };
         }
@@ -22896,6 +23124,7 @@ var ActionType = /* @__PURE__ */ ((ActionType2) => {
   ActionType2["REPLACE_BTC_RECOVERY_FEE"] = "replaceBtcRecoveryFee";
   ActionType2["RENEW_BOND"] = "renewBond";
   ActionType2["RESUME_BOND_REGISTRATION"] = "resumeBondRegistration";
+  ActionType2["ABANDON_BROADCAST_FUNDING"] = "abandonBroadcastFunding";
   ActionType2["GET_COMMITTED_REWARD_ADDRESS"] = "getCommittedRewardAddress";
   ActionType2["GET_SIGNER_MANAGER_FEE_BIPS"] = "getSignerManagerFeeBips";
   ActionType2["GET_NATIVE_REWARD_THRESHOLD"] = "getNativeRewardThreshold";
@@ -22918,7 +23147,7 @@ var ActionType = /* @__PURE__ */ ((ActionType2) => {
 })(ActionType || {});
 
 // src/api/api.service.ts
-var import_ts_sdk4 = require("@fireblocks/ts-sdk");
+var import_ts_sdk5 = require("@fireblocks/ts-sdk");
 
 // src/pool/errors.ts
 var PoolError = class extends Error {
@@ -23392,6 +23621,9 @@ var ApiService = class {
           case "resumeBondRegistration" /* RESUME_BOND_REGISTRATION */:
             result = await sdk.resumeBondRegistration(params.bondIndex, { note: params.note, nonce: params.nonce, confirmations: params.confirmations, btcTxid: params.btcTxid });
             break;
+          case "abandonBroadcastFunding" /* ABANDON_BROADCAST_FUNDING */:
+            result = await sdk.abandonBroadcastFunding(params.bondIndex);
+            break;
           case "updateBondRegistration" /* UPDATE_BOND_REGISTRATION */:
             result = await sdk.updateBondRegistration(params.signerManager, params.oldSignerManager, { note: params.note, nonce: params.nonce, externalId: params.externalId, signerCalldata: params.signerCalldata, rewardBtcAddress: params.rewardBtcAddress, rewardMaxFeeSats: params.rewardMaxFeeSats });
             break;
@@ -23493,7 +23725,7 @@ var ApiService = class {
     const baseConfig = {
       apiKey: config2.apiKey,
       apiSecret: config2.apiSecret,
-      basePath: config2.basePath || import_ts_sdk4.BasePath.US,
+      basePath: config2.basePath || import_ts_sdk5.BasePath.US,
       testnet: !!config2.testnet,
       verifyEarlyExitCosignerAtFunding: !!config2.verifyEarlyExitCosignerAtFunding,
       // Every option belongs on the config object, not a positional parameter: a
@@ -23540,7 +23772,8 @@ var serializeRecord = (r) => ({
   ...r.stage !== void 0 ? { stage: r.stage } : {},
   ...r.fundingGeneration !== void 0 ? { fundingGeneration: r.fundingGeneration } : {},
   ...r.abandonedFireblocksIds !== void 0 ? { abandonedFireblocksIds: [...r.abandonedFireblocksIds] } : {},
-  ...r.registrationGeneration !== void 0 ? { registrationGeneration: r.registrationGeneration } : {}
+  ...r.registrationGeneration !== void 0 ? { registrationGeneration: r.registrationGeneration } : {},
+  ...r.callerExternalId !== void 0 ? { callerExternalId: r.callerExternalId } : {}
 });
 var deserializeRecord = (s) => ({
   bondIndex: s.bondIndex,
@@ -23560,7 +23793,8 @@ var deserializeRecord = (s) => ({
   stage: s.stage,
   fundingGeneration: s.fundingGeneration,
   abandonedFireblocksIds: s.abandonedFireblocksIds !== void 0 ? [...s.abandonedFireblocksIds] : void 0,
-  registrationGeneration: s.registrationGeneration
+  registrationGeneration: s.registrationGeneration,
+  callerExternalId: s.callerExternalId
 });
 var stableStringify = (records) => {
   const sortedKeys = Object.keys(records).sort();

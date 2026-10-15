@@ -1,4 +1,4 @@
-import { AnnounceEarlyExitResponse, BondPositionResponse, HistoricalBondPositionResponse, HasAnnouncedEarlyExitResponse, RequirementsResponse, CheckStatusResponse, CreateBondResult, GetContractCallHistoryResponse, CreateTransactionResponse, UnlockBtcResponse, SpendEarlyExitResponse, BtcFeeReplacementResponse, RenewBondResult, CalculateRewardsResponse, ClaimRewardsResponse, EarnedRewardsResponse, BondLockAddressResponse, FundBondLockResponse, FundVaultResponse, FireblocksConfig, GetAccountNonceResponse, GetFtBalancesResponse, GetNativeBalanceResponse, GetPoxInfoResponse, GetTransactionHistoryResponse, GetTransactionStatusResponse, BtcTxStatusResponse, StakerInfoResponse, VerifySignerGrantResponse, TokenType, TransactionType } from "./services/types";
+import { AnnounceEarlyExitResponse, BondPositionResponse, HistoricalBondPositionResponse, HasAnnouncedEarlyExitResponse, RequirementsResponse, CheckStatusResponse, CreateBondResult, GetContractCallHistoryResponse, AbandonBroadcastFundingResult, CreateTransactionResponse, UnlockBtcResponse, SpendEarlyExitResponse, BtcFeeReplacementResponse, RenewBondResult, CalculateRewardsResponse, ClaimRewardsResponse, EarnedRewardsResponse, BondLockAddressResponse, FundBondLockResponse, FundVaultResponse, FireblocksConfig, GetAccountNonceResponse, GetFtBalancesResponse, GetNativeBalanceResponse, GetPoxInfoResponse, GetTransactionHistoryResponse, GetTransactionStatusResponse, BtcTxStatusResponse, StakerInfoResponse, VerifySignerGrantResponse, TokenType, TransactionType } from "./services/types";
 import { BondLockRecord, LockRecordStore } from "./staking/bonds/unlock-bytes-store";
 import { BondScheduleValidation } from "./utils/bondScheduleChain";
 import { type PoxInfo } from "./utils/helpers";
@@ -76,7 +76,7 @@ export declare class StacksSDK {
      * permanently, so without this the id would resolve to that dead request on every
      * subsequent attempt.
      *
-     * A caller-supplied id is kept as a recognisable prefix, with the same sighash and
+     * A caller-supplied id is kept as a recognizable prefix, with the same sighash and
      * generation folded into a fixed-length suffix.
      */
     private deriveRegisterExternalId;
@@ -85,6 +85,10 @@ export declare class StacksSDK {
      * reached a terminal Fireblocks state, so the next attempt derives an id Fireblocks
      * has not already consumed. The Bitcoin stays committed and the record keeps pointing
      * at it — only the L2 leg is retried.
+     *
+     * Advances only from the generation the failed id was derived from. Overlapping attempts
+     * share a request; once one has advanced past it, a late report of the same rejection
+     * must not advance again and orphan the request opened under the newer generation.
      */
     private abandonTerminalRegistration;
     /**
@@ -229,6 +233,12 @@ export declare class StacksSDK {
      */
     private buildSignSendTransfer;
     private buildSignSendContractCall;
+    /**
+     * The result for a Fireblocks request the poll gave up on while it was still outstanding.
+     * Undefined for any other error, including a terminal status. `retryNote` says what a
+     * retry does; by default the request id is random unless the caller supplied one.
+     */
+    private pendingFireblocksResult;
     /** The hash a single-sig origin signs for `tx`; covers the payload, post-conditions, fee and nonce. */
     private preSignSigHashOf;
     private pox5SignAndBroadcast;
@@ -594,6 +604,17 @@ export declare class StacksSDK {
         confirmations?: number;
         btcTxid?: string;
     }) => Promise<CreateBondResult>;
+    /**
+     * Clears a native bond's record whose funding transfer Fireblocks reported failed after
+     * broadcast, and whose transaction never reached the chain, so createBond can fund the
+     * same lock again.
+     *
+     * Acts only when Fireblocks still reports the transfer terminal, the indexer does not know
+     * the recorded txid, and nothing sits at the lock address. Any unreadable check refuses.
+     * The pointer is cleared, the transfer recorded as abandoned and the funding generation
+     * advanced in a single write.
+     */
+    abandonBroadcastFunding: (bondIndex: number) => Promise<AbandonBroadcastFundingResult>;
     /**
      * Creates a native-BTC PoX-5 bond: locks BTC on L1 via Fireblocks and registers
      * the paired STX position on L2 with a full SPV proof.

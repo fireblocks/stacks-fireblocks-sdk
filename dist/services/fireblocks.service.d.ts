@@ -66,6 +66,12 @@ export declare class FireblocksService {
      * confirmation poll timed out or crashed after the transfer was accepted.
      */
     awaitBitcoinTransaction: (fireblocksId: string) => Promise<string>;
+    /** A single status read of a Fireblocks transfer, without polling. */
+    getTransferState: (fireblocksId: string) => Promise<{
+        status: string;
+        subStatus?: string;
+        txHash?: string;
+    }>;
     /**
      * Lookup ONLY — returns the Fireblocks id for an external id without polling it.
      *
