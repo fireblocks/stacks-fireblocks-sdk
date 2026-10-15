@@ -104,6 +104,12 @@ export declare class StacksSDK {
      * transfer, and a late failure of the old one must not clear the new one — that would
      * advance the generation again and let a third transfer fund the same lock.
      */
+    /**
+     * Applies `update` to bond `bondIndex`'s lock record as one step when the store supports
+     * it, and as a load followed by a save when it does not. `update` returns undefined to
+     * leave the record as it is.
+     */
+    private updateLockRecord;
     private abandonTerminalFunding;
     private constructor();
     /**

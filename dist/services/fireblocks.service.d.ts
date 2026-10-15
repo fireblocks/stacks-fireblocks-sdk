@@ -71,6 +71,8 @@ export declare class FireblocksService {
         status: string;
         subStatus?: string;
         txHash?: string;
+        requestedAmount?: string;
+        destinationAddress?: string;
     }>;
     /**
      * Lookup ONLY — returns the Fireblocks id for an external id without polling it.

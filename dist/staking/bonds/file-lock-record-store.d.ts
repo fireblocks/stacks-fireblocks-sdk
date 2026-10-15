@@ -30,6 +30,7 @@ export declare class FileLockRecordStore implements LockRecordStore {
     private releaseLock;
     private withLock;
     saveRecord(stxAddress: string, bondIndex: number, record: BondLockRecord): Promise<void>;
+    updateRecord(stxAddress: string, bondIndex: number, update: (current: BondLockRecord | null) => BondLockRecord | undefined): Promise<BondLockRecord | null>;
     loadRecord(stxAddress: string, bondIndex: number): Promise<BondLockRecord | null>;
     listRecords(stxAddress: string): Promise<BondLockRecord[]>;
     /**
