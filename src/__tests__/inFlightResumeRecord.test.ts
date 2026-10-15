@@ -323,10 +323,36 @@ describe("renewBond — over a next-bond record whose createBond funding transfe
     expect(sdk.deriveLock).not.toHaveBeenCalled();
   });
 
-  it("still rebuilds over a dead txid that came from an earlier renewBond", async () => {
-    // A re-lock by renewBond records no Fireblocks transfer, so nothing live can be dropped.
+  it.each([
+    ["confirmed", "btc-confirmed"],
+    ["registration submitted", "registration-submitted"],
+    ["registration confirmed", "registration-confirmed"],
+  ])("refuses over a createBond funding that is %s, where the record no longer names its transfer", async (_label, stage) => {
+    // createBond writes fireblocksId only until the Bitcoin confirms; from then on the record
+    // carries the txid and fundingExternalId alone. Resuming it would register createBond's
+    // output in place of the re-lock and leave the current lock unspent.
     const sdk = sdkWithSpendSpy();
-    await seed(sdk, { btcTxid: GOOD_TXID, stage: "btc-broadcast" });
+    await seed(sdk, { btcTxid: GOOD_TXID, vout: 0, stage });
+    sdk.getBtcTxStatus = jest.fn().mockResolvedValue({ success: true, data: { found: true } });
+    sdk.waitForBtcConfirmations = jest.fn();
+    sdk.assembleLockupProof = jest.fn();
+
+    const res = await sdk.renewBond(NEXT_BOND, MANAGER, REWARD);
+
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/resumeBondRegistration/);
+    expect(res.error).toContain(GOOD_TXID);
+    expect(res.error).not.toMatch(/transfer id not recorded/);
+    expect(sdk.waitForBtcConfirmations).not.toHaveBeenCalled();
+    expect(sdk.assembleLockupProof).not.toHaveBeenCalled();
+    expect(sdk.deriveLock).not.toHaveBeenCalled();
+  });
+
+  it("still rebuilds over a dead txid that came from an earlier renewBond", async () => {
+    // renewBond records no Fireblocks transfer and no funding external id, so nothing live can
+    // be dropped.
+    const sdk = sdkWithSpendSpy();
+    await seed(sdk, { btcTxid: GOOD_TXID, stage: "btc-broadcast", fundingExternalId: undefined });
     sdk.getBtcTxStatus = jest.fn().mockResolvedValue({ success: true, data: { found: false } });
 
     await sdk.renewBond(NEXT_BOND, MANAGER, REWARD);
