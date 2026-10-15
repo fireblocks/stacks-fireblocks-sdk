@@ -6023,18 +6023,18 @@ export class StacksSDK {
       } catch (e) {
         return { success: false, error: `Lock-record store unreadable for bond ${nextBondIndex} (UNKNOWN, not "no prior attempt") — refusing to re-lock: ${formatErrorMessage(e)}` };
       }
-      // A record funded by createBond is an enrollment, not a renewBond re-lock (renewBond
-      // records no Fireblocks transfer). Re-locking over a live transfer drops its id, and
-      // one that later lands is locked for the term, unregistered and untracked; resuming
-      // a visible one would register it in place of the re-lock.
-      if (
-        priorNextRecord &&
-        (priorNextRecord.fireblocksId !== undefined ||
-          (priorNextRecord.btcTxid === undefined && priorNextRecord.stage === "funding-requested"))
-      ) {
+      // A record funded by createBond is an enrollment, not a renewBond re-lock. createBond
+      // sets fundingExternalId on every record it writes and renewBond never does, whereas
+      // fireblocksId is dropped from the record once the Bitcoin confirms. Re-locking over a
+      // live transfer drops its id, and one that later lands is locked for the term,
+      // unregistered and untracked; resuming a funded one would register it in place of the
+      // re-lock.
+      if (priorNextRecord && priorNextRecord.isL1Lock !== false && priorNextRecord.fundingExternalId !== undefined) {
         const transfer = priorNextRecord.fireblocksId
           ? `Fireblocks transfer ${priorNextRecord.fireblocksId}${priorNextRecord.btcTxid ? `, tx ${priorNextRecord.btcTxid}` : ""}`
-          : `external id ${priorNextRecord.fundingExternalId ?? "unknown"}, transfer id not recorded`;
+          : priorNextRecord.btcTxid
+            ? `funding tx ${priorNextRecord.btcTxid}`
+            : `external id ${priorNextRecord.fundingExternalId}, transfer id not recorded`;
         return {
           success: false,
           error: `Bond ${nextBondIndex} already has a createBond funding (${transfer}). No Bitcoin was re-locked. Finish that enrollment with resumeBondRegistration(${nextBondIndex}) instead of renewing into it.`,
@@ -6190,9 +6190,7 @@ export class StacksSDK {
       await this.lockRecordStore.saveRecord(this.address, nextBondIndex, nextRecordFor(outputAmount, {
         btcTxid,
         vout: lockupProof.outputIndex,
-        ...(resumeRelock && priorNextRecord
-          ? { stage: priorNextRecord.stage, fundingExternalId: priorNextRecord.fundingExternalId }
-          : {}),
+        ...(resumeRelock && priorNextRecord ? { stage: priorNextRecord.stage } : {}),
       }));
 
       // Re-run eligibility with the SPV proof before spending the L2 signature — with a
