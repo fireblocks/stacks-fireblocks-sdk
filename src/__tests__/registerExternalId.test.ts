@@ -370,3 +370,59 @@ describe("createBond — register-for-bond external id", () => {
     expect(registerIdFrom(attempt3)).not.toBe(idConsumedByAttempt2);
   });
 });
+
+describe("createBond — register leg retries", () => {
+  const pendingSigningError = () =>
+    new FireblocksTransferError("Signing request fb-raw-9 timed out after 30m: still PENDING_AUTHORIZATION", {
+      operation: "RAW",
+      status: TransactionStateEnum.PendingAuthorization,
+      vendorId: "fb-raw-9",
+    });
+
+  it("resume reuses the caller's external id from the first attempt", async () => {
+    // Resume passes no externalId. Deriving the default id instead opened a second
+    // signing request over the same bytes.
+    const first = makeSdk();
+    first.pox5SignAndBroadcast = jest.fn().mockRejectedValue(pendingSigningError());
+    await first.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER, { externalId: "mine" });
+    const firstId = registerIdFrom(first);
+
+    const resumed = makeSdk();
+    resumed.lockRecordStore = first.lockRecordStore;
+    await resumed.resumeBondRegistration(BOND_INDEX);
+
+    expect(registerIdFrom(resumed)).toBe(firstId);
+  });
+
+  it("a late rejection of an older request does not advance past a newer generation", async () => {
+    // Two overlapping attempts derived their id at generation 0. The first rejection
+    // advanced the generation to 1 and a retry opened a new request under it. When the
+    // second attempt then sees the same old rejection, advancing again would orphan that
+    // pending request and open a third.
+    const sdk = makeSdk();
+    sdk.pox5SignAndBroadcast = jest.fn().mockImplementation(async () => {
+      const stored = await sdk.lockRecordStore.loadRecord(BOOT_ADDR, BOND_INDEX);
+      await sdk.lockRecordStore.saveRecord(BOOT_ADDR, BOND_INDEX, { ...stored, registrationGeneration: 1 });
+      throw terminalSigningError();
+    });
+
+    const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect(res.success).toBe(false);
+    const after = await sdk.lockRecordStore.loadRecord(BOOT_ADDR, BOND_INDEX);
+    expect(after.registrationGeneration).toBe(1);
+  });
+
+  it("does not promise that nothing new is sent when the pending request is the register leg", async () => {
+    // The register id follows the transaction bytes: a retry at a different nonce, fee or
+    // post-condition opens a new signing request.
+    const sdk = makeSdk();
+    sdk.pox5SignAndBroadcast = jest.fn().mockRejectedValue(pendingSigningError());
+
+    const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect(res.pendingApproval).toBe(true);
+    expect(res.error).not.toMatch(/nothing new is sent/i);
+    expect(res.error).toMatch(/new signing request/i);
+  });
+});
