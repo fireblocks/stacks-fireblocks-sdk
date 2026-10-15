@@ -462,3 +462,71 @@ describe("createBond — in-flight Fireblocks funding resume", () => {
     expect(after.btcTxid).toBe(GOOD_TXID);
   });
 });
+
+describe("createBond — eligibility gates after Bitcoin is committed", () => {
+  const MANAGER = `${BOOT_ADDR}.signer-manager`;
+  const seedFunded = (sdk: any) =>
+    sdk.lockRecordStore.saveRecord(sdk.address, BOND_INDEX, {
+      bondIndex: BOND_INDEX,
+      unlockBytes: new Uint8Array([1, 2, 3]),
+      lockAddress: LOCK_ADDRESS,
+      unlockHeight: 900,
+      amountSats: AMOUNT_SATS,
+      isL1Lock: true,
+      fundingExternalId: "ext-id-1",
+      signerManager: MANAGER,
+      btcTxid: GOOD_TXID,
+      vout: 0,
+      stage: "registration-submitted",
+    });
+
+  it("does not say no Bitcoin is committed when the contract gate refuses a funded bond", async () => {
+    // e.g. an unsettled register that later landed: resume now meets the account already
+    // registered, and must still point at the locked Bitcoin.
+    const sdk = makeSdk();
+    await seedFunded(sdk);
+    (fetchEligibleRegisterForBond as jest.Mock).mockResolvedValue({ ok: false, reasons: [19] });
+
+    const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect(res.success).toBe(false);
+    expect(res.error).not.toMatch(/no BTC committed/i);
+    expect(res.error).toMatch(/may already be committed/i);
+    expect(res.error).toMatch(/getBondPosition/);
+    expect(res.btcTxid).toBe(GOOD_TXID);
+    expect(res.vout).toBe(0);
+  });
+
+  it("carries the funding pointer when the allowance gate refuses a funded bond", async () => {
+    const sdk = makeSdk();
+    await seedFunded(sdk);
+    (fetchBondAllowance as jest.Mock).mockResolvedValue(BigInt(0));
+
+    const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/may already be committed/i);
+    expect(res.btcTxid).toBe(GOOD_TXID);
+  });
+
+  it("names a recorded funding transfer when no txid is recorded yet", async () => {
+    const sdk = makeSdk();
+    await seedInFlightRecord(sdk);
+    (fetchEligibleRegisterForBond as jest.Mock).mockResolvedValue({ ok: false, reasons: [19] });
+
+    const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect(res.error).not.toMatch(/no BTC committed/i);
+    expect(res.error).toContain(FB_ID);
+  });
+
+  it("still says no Bitcoin is committed when there is no funding on record", async () => {
+    const sdk = makeSdk();
+    (fetchEligibleRegisterForBond as jest.Mock).mockResolvedValue({ ok: false, reasons: [19] });
+
+    const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect(res.error).toMatch(/no BTC committed/i);
+    expect(res.btcTxid).toBeUndefined();
+  });
+});

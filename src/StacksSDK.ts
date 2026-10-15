@@ -3468,10 +3468,43 @@ export class StacksSDK {
       const smAllowError = this.signerManagerAllowedError(signerManager);
       if (smAllowError) return { success: false, error: smAllowError };
 
+      // Loaded before the eligibility gates: a resume of a funded bond meets the same gates
+      // (e.g. after a registration that landed late), and its refusal must still point at
+      // the committed Bitcoin. It is also the resume-vs-fund decision below, so a store
+      // read failure fails CLOSED rather than reading as "no prior attempt".
+      let priorRecord: BondLockRecord | null;
+      try {
+        priorRecord = await this.lockRecordStore.loadRecord(this.address, bondIndex);
+      } catch (e) {
+        return { success: false, error: `Lock-record store unreadable for bond ${bondIndex} (UNKNOWN, not "no prior attempt") — refusing to fund: ${formatErrorMessage(e)}` };
+      }
+      const recordedFunding =
+        priorRecord && priorRecord.isL1Lock !== false
+          ? priorRecord.btcTxid !== undefined
+            ? `funding tx ${priorRecord.btcTxid}`
+            : priorRecord.fireblocksId !== undefined
+              ? `Fireblocks funding transfer ${priorRecord.fireblocksId}`
+              : priorRecord.stage === "funding-requested"
+                ? `a funding request under external id ${priorRecord.fundingExternalId ?? "unknown"}`
+                : undefined
+          : undefined;
+      if (recordedFunding && priorRecord!.btcTxid !== undefined) {
+        committedBtc.btcTxid = priorRecord!.btcTxid;
+        committedBtc.vout = priorRecord!.vout;
+      }
+      const gateRefusal = (reason: string, uncommittedError = reason): CreateBondResult =>
+        recordedFunding
+          ? {
+              success: false,
+              error: `Bond ${bondIndex} already has ${recordedFunding} on record, so Bitcoin may already be committed; no new Bitcoin was sent. The enrollment cannot continue: ${reason}. Check getBondPosition: a registration that already landed shows there. Otherwise the Bitcoin stays locked until recovered with unlockMaturedBond or spendEarlyExitUtxo.`,
+              ...committedBtc,
+            }
+          : { success: false, error: uncommittedError };
+
       // Step 1 — allowlist check
       const allowance = await fetchBondAllowance({ bondIndex, address: this.address, network: this.pox5Network });
       if (allowance < btcAmountSats) {
-        return { success: false, error: `Not allowlisted for ${btcAmountSats} sats on bond ${bondIndex} (cap: ${allowance} sats)` };
+        return gateRefusal(`Not allowlisted for ${btcAmountSats} sats on bond ${bondIndex} (cap: ${allowance} sats)`);
       }
 
       // Step 2 — fetch bond params + pox info in parallel
@@ -3479,7 +3512,7 @@ export class StacksSDK {
         fetchPox5Info({ network: this.pox5Network }),
         fetchBond({ bondIndex, network: this.pox5Network }),
       ]);
-      if (!bond) return { success: false, error: `Bond ${bondIndex} not found` };
+      if (!bond) return gateRefusal(`Bond ${bondIndex} not found`);
 
       // Step 3 — required paired STX. The amount is derived from the bond's sats
       // value; any override is bounded by the SDK's maxBondStxUstx policy.
@@ -3489,7 +3522,7 @@ export class StacksSDK {
         minUstxRatioBps: bond.minUstxRatioBps,
       });
       const amountResolution = this.resolveBondStxAmount(contractMinUstx, opts?.amountUstxOverride);
-      if ("error" in amountResolution) return { success: false, error: amountResolution.error };
+      if ("error" in amountResolution) return gateRefusal(amountResolution.error);
       const amountUstx = amountResolution.amountUstx;
 
       const accountStatus = await fetchAccountStatus({ address: this.address, network: this.pox5Network });
@@ -3501,10 +3534,10 @@ export class StacksSDK {
       const unlockedStx = accountStatus.balance;
       const lockedStx = accountStatus.locked ?? BigInt(0);
       if (unlockedStx < DEFAULT_POX_FEE_USTX) {
-        return { success: false, error: `Insufficient unlocked STX for the transaction fee: need ${microToStx(DEFAULT_POX_FEE_USTX)} STX unlocked but only ${microToStx(unlockedStx)} available` };
+        return gateRefusal(`Insufficient unlocked STX for the transaction fee: need ${microToStx(DEFAULT_POX_FEE_USTX)} STX unlocked but only ${microToStx(unlockedStx)} available`);
       }
       if ((unlockedStx - DEFAULT_POX_FEE_USTX) + lockedStx < amountUstx) {
-        return { success: false, error: `Insufficient STX to lock ${microToStx(amountUstx)} STX: unlocked-after-fee ${microToStx(unlockedStx - DEFAULT_POX_FEE_USTX)} + locked ${microToStx(lockedStx)} is short` };
+        return gateRefusal(`Insufficient STX to lock ${microToStx(amountUstx)} STX: unlocked-after-fee ${microToStx(unlockedStx - DEFAULT_POX_FEE_USTX)} + locked ${microToStx(lockedStx)} is short`);
       }
 
       // Step 3b — evaluate every deterministic contract gate BEFORE moving any
@@ -3523,7 +3556,11 @@ export class StacksSDK {
       });
       if (!preflight.ok) {
         const reasons = (preflight as { reasons?: number[] }).reasons ?? [];
-        return { success: false, error: `Not eligible to register for bond ${bondIndex} (no BTC committed): ${this.describeBondReasons(reasons)}` };
+        const why = this.describeBondReasons(reasons);
+        return gateRefusal(
+          `Not eligible to register for bond ${bondIndex}: ${why}`,
+          `Not eligible to register for bond ${bondIndex} (no BTC committed): ${why}`,
+        );
       }
 
       // Step 4 — compute unlock height
@@ -3588,12 +3625,6 @@ export class StacksSDK {
       // Fail CLOSED on a store read failure: resume detection decides whether Bitcoin
       // gets funded again, so proceeding on an unreadable store (as if no prior attempt
       // existed) is exactly the wrong default on a money-moving path.
-      let priorRecord: BondLockRecord | null;
-      try {
-        priorRecord = await this.lockRecordStore.loadRecord(this.address, bondIndex);
-      } catch (e) {
-        return { success: false, error: `Lock-record store unreadable for bond ${bondIndex} (UNKNOWN, not "no prior attempt") — refusing to fund: ${formatErrorMessage(e)}` };
-      }
       // Derived from the record's generation, so an attempt abandoned after a terminal
       // failure supersedes its consumed id instead of re-deriving it forever.
       const fundingGeneration = priorRecord?.fundingGeneration ?? 0;
