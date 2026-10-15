@@ -92,7 +92,7 @@ const inFlightRejected = () =>
 const AMOUNT_SATS = BigInt(100_000);
 const GOOD_TXID = "ab".repeat(32);
 
-function makeSdk(): any {
+function makeSdk(opts: { realOverwriteGuard?: boolean } = {}): any {
   const sdk: any = new (StacksSDK as any)("7", {
     apiKey: "12345678-1234-4123-8123-123456789012",
     apiSecret: FAKE_INLINE_PEM,
@@ -104,7 +104,7 @@ function makeSdk(): any {
   // Gates that reach the network or policy config, and are not what these tests exercise.
   sdk.assertDurableLockStore = jest.fn().mockResolvedValue(undefined);
   sdk.signerManagerAllowedError = jest.fn().mockReturnValue(undefined);
-  sdk.nativeRecordOverwriteGuard = jest.fn().mockResolvedValue(undefined);
+  if (!opts.realOverwriteGuard) sdk.nativeRecordOverwriteGuard = jest.fn().mockResolvedValue(undefined);
   sdk.resolveBondStxAmount = jest.fn().mockReturnValue({ amountUstx: BigInt(1_000) });
   sdk.fireblocksService = { awaitBitcoinTransaction: jest.fn() };
   sdk.setLockRecordStore(new InMemoryLockRecordStore());
@@ -234,6 +234,104 @@ describe("renewBond — reward carry-forward must fail closed", () => {
     expect(after.fundingGeneration).toBe(2);
     expect(after.registrationGeneration).toBe(1);
     expect(after.abandonedFireblocksIds).toEqual(["fb-dead-1", "fb-dead-2"]);
+  });
+});
+
+describe("renewBond — over a next-bond record whose createBond funding transfer is live", () => {
+  const NEXT_BOND = 5;
+  const MANAGER = `${BOOT_ADDR}.signer-manager`;
+  const REWARD = {
+    rewardBtcAddress: "bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080",
+    rewardMaxFeeSats: BigInt(5_000),
+  };
+
+  const seed = (sdk: any, over: Record<string, unknown>) =>
+    sdk.lockRecordStore.saveRecord(sdk.address, NEXT_BOND, {
+      bondIndex: NEXT_BOND,
+      unlockBytes: new Uint8Array([1, 2, 3]),
+      lockAddress: LOCK_ADDRESS,
+      unlockHeight: 900,
+      amountSats: AMOUNT_SATS,
+      isL1Lock: true,
+      fundingExternalId: "ext-id-next",
+      ...over,
+    });
+
+  // renewBond spends the current lock into the next one. A refusal must happen before that.
+  const sdkWithSpendSpy = (opts: { realOverwriteGuard?: boolean } = {}) => {
+    const sdk = makeSdk(opts);
+    sdk.deriveLock = jest.fn().mockResolvedValue(null);
+    return sdk;
+  };
+
+  it.each([
+    ["a transfer awaiting approval", { fireblocksId: FB_ID, stage: "funding-requested" }],
+    ["a funding request whose transfer id was never saved", { stage: "funding-requested" }],
+  ])("refuses over %s and points at resumeBondRegistration", async (_label, over) => {
+    const sdk = sdkWithSpendSpy();
+    await seed(sdk, over);
+
+    const res = await sdk.renewBond(NEXT_BOND, MANAGER, REWARD);
+
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/resumeBondRegistration/);
+    expect(sdk.deriveLock).not.toHaveBeenCalled();
+    const after = await sdk.lockRecordStore.loadRecord(sdk.address, NEXT_BOND);
+    expect(after.fireblocksId).toBe((over as any).fireblocksId);
+    expect(after.stage).toBe("funding-requested");
+  });
+
+  it("refuses to rebuild over a recorded funding tx that is not visible while its transfer id is on the record", async () => {
+    // A transfer broadcast and then reported failed leaves its txid and Fireblocks id on the
+    // record. Rebuilding over the txid would drop the id of a transfer that can still land.
+    const sdk = sdkWithSpendSpy();
+    await seed(sdk, { btcTxid: GOOD_TXID, fireblocksId: FB_ID, stage: "btc-broadcast" });
+    sdk.getBtcTxStatus = jest.fn().mockResolvedValue({ success: true, data: { found: false } });
+
+    const res = await sdk.renewBond(NEXT_BOND, MANAGER, REWARD);
+
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/resumeBondRegistration/);
+    expect(sdk.deriveLock).not.toHaveBeenCalled();
+    expect((await sdk.lockRecordStore.loadRecord(sdk.address, NEXT_BOND)).fireblocksId).toBe(FB_ID);
+  });
+
+  it("refuses over a visible funding tx whose record names its createBond transfer", async () => {
+    // Resuming it would register createBond's output for the next bond in place of the
+    // re-lock, leaving the current lock unspent.
+    const sdk = sdkWithSpendSpy();
+    await seed(sdk, { btcTxid: GOOD_TXID, fireblocksId: FB_ID, stage: "btc-broadcast" });
+    sdk.getBtcTxStatus = jest.fn().mockResolvedValue({ success: true, data: { found: true } });
+    sdk.waitForBtcConfirmations = jest.fn();
+
+    const res = await sdk.renewBond(NEXT_BOND, MANAGER, REWARD);
+
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/resumeBondRegistration/);
+    expect(sdk.waitForBtcConfirmations).not.toHaveBeenCalled();
+    expect(sdk.deriveLock).not.toHaveBeenCalled();
+  });
+
+  it("refuses through the real overwrite guard, which exempts the same lock address", async () => {
+    const sdk = sdkWithSpendSpy({ realOverwriteGuard: true });
+    await seed(sdk, { fireblocksId: FB_ID, stage: "funding-requested" });
+
+    const res = await sdk.renewBond(NEXT_BOND, MANAGER, REWARD);
+
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/resumeBondRegistration/);
+    expect(sdk.deriveLock).not.toHaveBeenCalled();
+  });
+
+  it("still rebuilds over a dead txid that came from an earlier renewBond", async () => {
+    // A re-lock by renewBond records no Fireblocks transfer, so nothing live can be dropped.
+    const sdk = sdkWithSpendSpy();
+    await seed(sdk, { btcTxid: GOOD_TXID, stage: "btc-broadcast" });
+    sdk.getBtcTxStatus = jest.fn().mockResolvedValue({ success: true, data: { found: false } });
+
+    await sdk.renewBond(NEXT_BOND, MANAGER, REWARD);
+
+    expect(sdk.deriveLock).toHaveBeenCalled();
   });
 });
 
