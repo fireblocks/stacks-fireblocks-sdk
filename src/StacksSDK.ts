@@ -6581,7 +6581,7 @@ export class StacksSDK {
       const bondSuffix = bondIndex !== undefined ? ` bond ${bondIndex}` : '';
 
       const recordResult = (
-        status: 'claimed' | 'failed',
+        status: 'claimed' | 'failed' | 'skipped',
         stakerClaimTxid: string | null,
         error?: string,
         unsettled = false,
@@ -6595,7 +6595,7 @@ export class StacksSDK {
           // paid nothing, so it must not carry the pre-claim entitlement. An unsettled
           // leg has paid an UNKNOWN amount, which is likewise not the entitlement.
           // The value is the entitlement the leg was bounded AT — the manager may pay less.
-          stakerEntitlementSats: status === 'claimed' ? stakerEntitlementSats?.toString() ?? null : null,
+          stakerEntitlementSats: status === 'claimed' || status === 'skipped' ? stakerEntitlementSats?.toString() ?? null : null,
           signerClaimTxid,
           stakerClaimTxid,
           status: unsettled ? 'unsettled' : status,
@@ -6620,7 +6620,10 @@ export class StacksSDK {
       // The manager aborts claim-staker-rewards on (asserts! (> earned u0)), and an aborted
       // transaction is still mined and charged. A zero entitlement while the cohort accrual
       // is positive is normal — e.g. a bond that announced early exit.
-      if (stakerEntitlementSats === BigInt(0)) continue;
+      if (stakerEntitlementSats === BigInt(0)) {
+        recordResult('skipped', null);
+        continue;
+      }
 
       const smStaker = await broadcastLeg(
         (n) => makeUnsignedContractCall({

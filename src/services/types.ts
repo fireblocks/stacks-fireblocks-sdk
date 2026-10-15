@@ -600,8 +600,11 @@ export type ClaimResultItem = {
    * alone — without also checking `unsettled` — cannot read it as a confirmed failure.
    * Both claim legs are contract-idempotent, so re-claiming the cycle is the correct
    * response to `"unsettled"`; recording the cycle as failed is not.
+   *
+   * `"skipped"` is a bond and cycle where this staker's entitlement read as zero, so no
+   * `claim-staker-rewards` was sent (`stakerEntitlementSats` is `"0"`).
    */
-  status: "claimed" | "failed" | "unsettled";
+  status: "claimed" | "failed" | "unsettled" | "skipped";
   /** Kept alongside `status: "unsettled"` for callers already checking this flag. */
   unsettled?: boolean;
   error?: string;
