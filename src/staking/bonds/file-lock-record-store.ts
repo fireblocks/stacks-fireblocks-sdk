@@ -354,6 +354,24 @@ export class FileLockRecordStore implements LockRecordStore {
     });
   }
 
+  async updateRecord(
+    stxAddress: string,
+    bondIndex: number,
+    update: (current: BondLockRecord | null) => BondLockRecord | undefined,
+  ): Promise<BondLockRecord | null> {
+    await fs.mkdir(this.dir, { recursive: true });
+    return this.withLock(async () => {
+      const records = await this.loadAll();
+      const key = this.key(stxAddress, bondIndex);
+      const current = records[key] ? deserializeRecord(records[key]) : null;
+      const next = update(current);
+      if (next === undefined) return current;
+      records[key] = serializeRecord(next);
+      await this.writeAll(records);
+      return next;
+    });
+  }
+
   async loadRecord(
     stxAddress: string,
     bondIndex: number,

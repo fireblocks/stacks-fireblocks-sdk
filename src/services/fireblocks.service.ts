@@ -257,12 +257,16 @@ export class FireblocksService {
   /** A single status read of a Fireblocks transfer, without polling. */
   public getTransferState = async (
     fireblocksId: string,
-  ): Promise<{ status: string; subStatus?: string; txHash?: string }> => {
+  ): Promise<{ status: string; subStatus?: string; txHash?: string; requestedAmount?: string; destinationAddress?: string }> => {
     const { data } = await this.fireblocksSDK.transactions.getTransaction({ txId: fireblocksId });
     return {
       status: data.status as string,
       ...(data.subStatus ? { subStatus: data.subStatus } : {}),
       ...(data.txHash ? { txHash: data.txHash } : {}),
+      // In the asset's units (BTC), as sent on createTransaction.
+      ...(data.amountInfo?.requestedAmount ? { requestedAmount: data.amountInfo.requestedAmount } : {}),
+      // Fireblocks fills this in only from CONFIRMING onwards.
+      ...(data.destinationAddress ? { destinationAddress: data.destinationAddress } : {}),
     };
   };
 
