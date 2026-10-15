@@ -404,19 +404,6 @@ export class StacksSDK {
   };
 
   /**
-   * Common outcome for a funding transfer that reached a terminal Fireblocks state, on
-   * either the fresh or the resume path. The Fireblocks id must not stay in the record:
-   * a terminally failed transfer can never yield a txid, and while the id is present
-   * `hasInFlightFireblocks` stays true, so the caller-btcTxid guard would refuse exactly
-   * the recovery this error prescribes. The lock parameters and the (consumed) external
-   * id are kept for diagnostics.
-   *
-   * Acts only on the transfer that failed. Overlapping createBond calls for one bond all
-   * await the same transfer; once one of them has abandoned it, a retry can open a new
-   * transfer, and a late failure of the old one must not clear the new one — that would
-   * advance the generation again and let a third transfer fund the same lock.
-   */
-  /**
    * Applies `update` to bond `bondIndex`'s lock record as one step when the store supports
    * it, and as a load followed by a save when it does not. `update` returns undefined to
    * leave the record as it is.
@@ -436,6 +423,19 @@ export class StacksSDK {
     return next;
   };
 
+  /**
+   * Common outcome for a funding transfer that reached a terminal Fireblocks state, on
+   * either the fresh or the resume path. The Fireblocks id must not stay in the record:
+   * a terminally failed transfer can never yield a txid, and while the id is present
+   * `hasInFlightFireblocks` stays true, so the caller-btcTxid guard would refuse exactly
+   * the recovery this error prescribes. The lock parameters and the (consumed) external
+   * id are kept for diagnostics.
+   *
+   * Acts only on the transfer that failed. Overlapping createBond calls for one bond all
+   * await the same transfer; once one of them has abandoned it, a retry can open a new
+   * transfer, and a late failure of the old one must not clear the new one — that would
+   * advance the generation again and let a third transfer fund the same lock.
+   */
   private abandonTerminalFunding = async (
     bondIndex: number,
     fundingExternalId: string,
@@ -3675,7 +3675,7 @@ export class StacksSDK {
 
       // Step 4 — compute unlock height
       const firstBondCycle = firstPox5RewardCycle(pox);
-      if (firstBondCycle === undefined) return { success: false, error: 'pox-5 not yet configured on this network' };
+      if (firstBondCycle === undefined) return gateRefusal('pox-5 not yet configured on this network');
 
       // Step 5 — build lock script + derive P2WSH address
       const metadata = buildRegisterMetadata({
@@ -3707,13 +3707,13 @@ export class StacksSDK {
           network: this.pox5Network,
         });
         if (rawResult.type === ClarityType.ResponseErr) {
-          return { success: false, error: `construct-lockup-output-script contract error: ${Cl.prettyPrint((rawResult as any).value)}` };
+          return gateRefusal(`construct-lockup-output-script contract error: ${Cl.prettyPrint((rawResult as any).value)}`);
         }
         // Unwrap (ok (buff N)) or plain (buff N)
         const inner = rawResult.type === ClarityType.ResponseOk ? (rawResult as any).value : rawResult;
         const onchainScriptHex: string = inner.value;
         if (bytesToHex(metadata.outputScript) !== onchainScriptHex.replace(/^0x/, '')) {
-          return { success: false, error: `Lockup script mismatch — SDK: ${bytesToHex(metadata.outputScript)}, contract: ${onchainScriptHex}` };
+          return gateRefusal(`Lockup script mismatch — SDK: ${bytesToHex(metadata.outputScript)}, contract: ${onchainScriptHex}`);
         }
       }
 
@@ -3725,7 +3725,11 @@ export class StacksSDK {
         try {
           await this.verifyCommittedCosignerKey(bond);
         } catch (error) {
-          return { success: false, error: `Early-exit cosigner preflight failed (no BTC committed): ${formatErrorMessage(error)}` };
+          const why = formatErrorMessage(error);
+          return gateRefusal(
+            `Early-exit cosigner preflight failed: ${why}`,
+            `Early-exit cosigner preflight failed (no BTC committed): ${why}`,
+          );
         }
       }
 
@@ -3970,10 +3974,18 @@ export class StacksSDK {
             if (!priorFireblocksId) throw fundErr;
             // The external id is derived from this lock, so the transfer belongs to this
             // enrollment; an earlier attempt may still have asked for another amount. Fields
-            // Fireblocks has not filled in, or an unreadable status, leave nothing to compare.
-            const existing = await this.fireblocksService
-              .getTransferState(priorFireblocksId)
-              .catch(() => ({} as { requestedAmount?: string; destinationAddress?: string }));
+            // Fireblocks has not filled in leave nothing to compare.
+            let existing: { requestedAmount?: string; destinationAddress?: string };
+            try {
+              existing = await this.fireblocksService.getTransferState(priorFireblocksId);
+            } catch (e) {
+              // Nothing is lost by stopping: the record stays at funding-requested under the
+              // deterministic external id, so the next call repeats this lookup.
+              return {
+                success: false,
+                error: `Could not read Fireblocks transfer ${priorFireblocksId}, which holds bond ${bondIndex}'s funding external id ${fundingExternalId} (UNKNOWN) — refusing to adopt it: ${formatErrorMessage(e)}. No new Bitcoin was sent. Retry createBond.`,
+              };
+            }
             if (existing.destinationAddress !== undefined && existing.destinationAddress !== metadata.lockAddress) {
               return {
                 success: false,
