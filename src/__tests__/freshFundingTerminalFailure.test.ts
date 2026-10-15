@@ -476,14 +476,14 @@ describe("createBond — terminal failure on the FRESH funding path", () => {
   it("reports a machine-paced stall with its id, but not as an approval", async () => {
     const sdk = makeSdk();
     sdk.fireblocksService.createBitcoinTransaction = acceptThenFail(
-      terminalErrorFor(FB_ID, TransactionStateEnum.PendingSignature),
+      terminalErrorFor(FB_ID, TransactionStateEnum.Queued),
     );
 
     const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
 
     expect(res.pendingApproval).toBeUndefined();
     expect(res.pendingFireblocksId).toBe(FB_ID);
-    expect(res.pendingFireblocksStatus).toBe(TransactionStateEnum.PendingSignature);
+    expect(res.pendingFireblocksStatus).toBe(TransactionStateEnum.Queued);
   });
 
   it("does not report a terminal failure as pending", async () => {

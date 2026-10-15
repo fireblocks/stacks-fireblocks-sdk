@@ -36,6 +36,7 @@ import {
   CreateBondResult,
   GetContractCallHistoryResponse,
   AbandonBroadcastFundingResult,
+  PendingFireblocksFields,
   CreateTransactionResponse,
   DerivedLock,
   UnlockBtcResponse,
@@ -1428,10 +1429,33 @@ export class StacksSDK {
       });
     } catch (error) {
       if (error instanceof ValidationError) return { success: false, error: error.message };
+      if (error instanceof FireblocksTransferError) throw error;
       throw new Error(
         `Failed to build, sign or send contract call transaction: ${formatErrorMessage(error)}`,
       );
     }
+  };
+
+  /**
+   * The result for a Fireblocks request the poll gave up on while it was still outstanding.
+   * Undefined for any other error, including a terminal status. `retryNote` says what a
+   * retry does; by default the request id is random unless the caller supplied one.
+   */
+  private pendingFireblocksResult = (
+    error: unknown,
+    retryNote = "Nothing was broadcast. A retry opens a new signing request: reject this one in Fireblocks first, or retry with the same externalId to keep waiting on it while the transaction is unchanged.",
+  ): (PendingFireblocksFields & { success: false; error: string }) | undefined => {
+    if (!(error instanceof FireblocksTransferError) || TERMINAL_TRANSACTION_STATES.has(error.details.status)) {
+      return undefined;
+    }
+    const awaitingApproval = APPROVAL_PENDING_STATES.has(error.details.status);
+    return {
+      success: false,
+      error: `Fireblocks request ${error.details.vendorId} is still ${error.details.status}${awaitingApproval ? " (awaiting approval)" : ""} — not failed. ${retryNote}`,
+      pendingFireblocksId: error.details.vendorId,
+      pendingFireblocksStatus: error.details.status,
+      ...(awaitingApproval ? { pendingApproval: true } : {}),
+    };
   };
 
   /** The hash a single-sig origin signs for `tx`; covers the payload, post-conditions, fee and nonce. */
@@ -1847,6 +1871,8 @@ export class StacksSDK {
 
       return { success: true, txHash: result.txid };
     } catch (error) {
+      const pending = this.pendingFireblocksResult(error);
+      if (pending) return pending;
       return { success: false, error: `Failed to stake: ${formatErrorMessage(error)}` };
     }
   };
@@ -1975,6 +2001,8 @@ export class StacksSDK {
 
       return { success: true, txHash: result.txid };
     } catch (error) {
+      const pending = this.pendingFireblocksResult(error);
+      if (pending) return pending;
       return { success: false, error: `Failed to update stake: ${formatErrorMessage(error)}` };
     }
   };
@@ -2052,6 +2080,8 @@ export class StacksSDK {
 
       return { success: true, txHash: result.txid };
     } catch (error) {
+      const pending = this.pendingFireblocksResult(error);
+      if (pending) return pending;
       return { success: false, error: `Failed to unstake: ${formatErrorMessage(error)}` };
     }
   };
@@ -2166,6 +2196,8 @@ export class StacksSDK {
 
       return { success: true, txHash: result.txid };
     } catch (error) {
+      const pending = this.pendingFireblocksResult(error);
+      if (pending) return pending;
       return { success: false, error: `Failed to register signer key: ${formatErrorMessage(error)}` };
     }
   };
@@ -2224,6 +2256,8 @@ export class StacksSDK {
 
       return { success: true, txHash: result.txid };
     } catch (error) {
+      const pending = this.pendingFireblocksResult(error);
+      if (pending) return pending;
       return { success: false, error: `Failed to revoke signer grant: ${formatErrorMessage(error)}` };
     }
   };
@@ -2645,6 +2679,8 @@ export class StacksSDK {
         txHash: delegateResult.txid,
       };
     } catch (error: any) {
+      const pending = this.pendingFireblocksResult(error);
+      if (pending) return pending;
       console.error(`Error delegating to pool: ${formatErrorMessage(error)}`);
       return {
         success: false,
@@ -2711,6 +2747,8 @@ export class StacksSDK {
         txHash: allowCallerResult.txid,
       };
     } catch (error: any) {
+      const pending = this.pendingFireblocksResult(error);
+      if (pending) return pending;
       console.error(
         `Error allowing contract caller: ${formatErrorMessage(error)}`,
       );
@@ -2767,6 +2805,8 @@ export class StacksSDK {
         txHash: revokeResult.txid,
       };
     } catch (error: any) {
+      const pending = this.pendingFireblocksResult(error);
+      if (pending) return pending;
       console.error(`Error revoking delegation: ${formatErrorMessage(error)}`);
       return {
         success: false,
@@ -3291,6 +3331,8 @@ export class StacksSDK {
 
       return { success: true, txHash: result.txid };
     } catch (error) {
+      const pending = this.pendingFireblocksResult(error);
+      if (pending) return pending;
       return { success: false, error: `Failed to update bond registration: ${formatErrorMessage(error)}` };
     }
   };
@@ -4028,22 +4070,15 @@ export class StacksSDK {
       // A non-terminal typed failure is the poll giving up on a request that is still
       // outstanding. Retrying resumes it — the funding id is in the record and the
       // register id is derived — so it is reported as pending, not as a failure.
-      if (error instanceof FireblocksTransferError && !TERMINAL_TRANSACTION_STATES.has(error.details.status)) {
-        const awaitingApproval = APPROVAL_PENDING_STATES.has(error.details.status);
-        // The funding id is fixed per generation; the register id follows the transaction
-        // bytes, which a retry can change.
-        const retryNote = error.details.operation === TransactionOperation.Raw
+      // The funding id is fixed per generation; the register id follows the transaction
+      // bytes, which a retry can change.
+      const pending = this.pendingFireblocksResult(
+        error,
+        error instanceof FireblocksTransferError && error.details.operation === TransactionOperation.Raw
           ? `Retry createBond or resumeBondRegistration(${bondIndex}) to keep waiting on the same signing request while the transaction is unchanged; a retry at a different nonce, fee or post-condition opens a new signing request. The Bitcoin stays locked either way.`
-          : `Retry createBond for bond ${bondIndex} to keep waiting on the same transfer; no new Bitcoin is sent.`;
-        return {
-          success: false,
-          error: `Fireblocks request ${error.details.vendorId} is still ${error.details.status}${awaitingApproval ? " (awaiting approval)" : ""} — not failed. ${retryNote}`,
-          pendingFireblocksId: error.details.vendorId,
-          pendingFireblocksStatus: error.details.status,
-          ...(awaitingApproval ? { pendingApproval: true } : {}),
-          ...committedBtc,
-        };
-      }
+          : `Retry createBond for bond ${bondIndex} to keep waiting on the same transfer; no new Bitcoin is sent.`,
+      );
+      if (pending) return { ...pending, ...committedBtc };
       console.error('createBond error:', error);
       return { success: false, error: `Failed to create bond: ${formatErrorMessage(error)}`, ...committedBtc };
     }
@@ -4328,6 +4363,8 @@ export class StacksSDK {
 
       return { success: true, txHash: result.txid };
     } catch (error) {
+      const pending = this.pendingFireblocksResult(error);
+      if (pending) return pending;
       return { success: false, error: `Failed to create sBTC bond: ${formatErrorMessage(error)}` };
     }
   };
@@ -4480,6 +4517,8 @@ export class StacksSDK {
 
       return { success: true, txHash: result.txid };
     } catch (error) {
+      const pending = this.pendingFireblocksResult(error);
+      if (pending) return pending;
       return { success: false, error: `Failed to roll sBTC bond: ${formatErrorMessage(error)}` };
     }
   };
@@ -4557,6 +4596,8 @@ export class StacksSDK {
       }
       return { success: true, txHash: result.txid };
     } catch (error) {
+      const pending = this.pendingFireblocksResult(error);
+      if (pending) return pending;
       return { success: false, error: `Failed to unstake sBTC: ${formatErrorMessage(error)}` };
     }
   };
@@ -4909,6 +4950,8 @@ export class StacksSDK {
         ...(settledBondIndex !== undefined ? { bondIndex: settledBondIndex } : { bondIndexLookupFailed: true }),
       };
     } catch (error) {
+      const pending = this.pendingFireblocksResult(error);
+      if (pending) return pending;
       return { success: false, error: `Failed to announce early exit: ${formatErrorMessage(error)}` };
     }
   };
@@ -5582,6 +5625,8 @@ export class StacksSDK {
       const btcTxid = await this.broadcastBtc(rawHex);
       return { success: true, btcTxid };
     } catch (error) {
+      const pending = this.pendingFireblocksResult(error);
+      if (pending) return pending;
       return { success: false, error: `Failed to unlock matured bond: ${formatErrorMessage(error)}` };
     }
   };
@@ -5665,6 +5710,8 @@ export class StacksSDK {
       const btcTxid = await this.broadcastBtc(bytesToHex(tx.extract()));
       return { success: true, btcTxid };
     } catch (error) {
+      const pending = this.pendingFireblocksResult(error);
+      if (pending) return pending;
       return { success: false, error: `Failed to spend early exit UTXO: ${formatErrorMessage(error)}` };
     }
   };
@@ -5798,6 +5845,8 @@ export class StacksSDK {
         },
       };
     } catch (error) {
+      const pending = this.pendingFireblocksResult(error);
+      if (pending) return pending;
       return { success: false, error: `Failed to replace recovery fee: ${formatErrorMessage(error)}` };
     }
   };
@@ -6245,6 +6294,8 @@ export class StacksSDK {
         amountUstx: amountUstx.toString(),
       };
     } catch (error) {
+      const pending = this.pendingFireblocksResult(error);
+      if (pending) return { ...pending, ...committedBtc };
       return { success: false, error: `Failed to renew bond: ${formatErrorMessage(error)}`, ...committedBtc };
     }
   };
@@ -7340,6 +7391,8 @@ export class StacksSDK {
         txHash: result.txid,
       };
     } catch (error) {
+      const pending = this.pendingFireblocksResult(error);
+      if (pending) return pending;
       console.error(`Error solo stacking: ${formatErrorMessage(error)}`);
       return {
         success: false,
@@ -7411,6 +7464,8 @@ export class StacksSDK {
         txHash: result.txid,
       };
     } catch (error) {
+      const pending = this.pendingFireblocksResult(error);
+      if (pending) return pending;
       console.error(`Error increasing stacked amount: ${formatErrorMessage(error)}`);
       return {
         success: false,
@@ -7482,6 +7537,8 @@ export class StacksSDK {
         txHash: result.txid,
       };
     } catch (error) {
+      const pending = this.pendingFireblocksResult(error);
+      if (pending) return pending;
       console.error(`Error extending stacking period: ${formatErrorMessage(error)}`);
       return {
         success: false,
@@ -7760,6 +7817,8 @@ export class StacksSDK {
       console.log(`Replaced transaction ${originalTxId} with ${result.txid}`);
       return { success: true, txHash: result.txid };
     } catch (error) {
+      const pending = this.pendingFireblocksResult(error);
+      if (pending) return pending;
       if (error instanceof ValidationError) {
         return { success: false, error: error.message };
       }

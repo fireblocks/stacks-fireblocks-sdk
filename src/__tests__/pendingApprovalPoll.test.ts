@@ -86,8 +86,8 @@ describe("FireblocksSigner.getTxStatus — approval-pending deadlines", () => {
   });
 
   it("still applies the machine-paced deadline to a machine-paced status", async () => {
-    // PENDING_SIGNATURE is MPC signing, not a person — it must not get the long budget.
-    const signer = signerFor([TransactionStateEnum.PendingSignature], {
+    // QUEUED waits behind other transactions on the wallet, not on a person.
+    const signer = signerFor([TransactionStateEnum.Queued], {
       timeoutMs: 0,
       approvalTimeoutMs: 60_000,
     });
@@ -195,7 +195,7 @@ describe("FireblocksSigner.getTxStatus — approval-pending deadlines", () => {
 
     it("does not inherit elapsed approval time when transitioning to a machine-paced status", async () => {
       // 40 minutes in PendingAuthorization (within the 60-minute approval budget), then a
-      // transition to PendingSignature (machine-paced, 30-minute budget). Sharing one
+      // transition to Queued (machine-paced, 30-minute budget). Sharing one
       // clock from the start means the 40 already-spent minutes immediately exceed the
       // 30-minute machine budget the instant machine processing begins.
       let mockedNow = Date.now();
@@ -204,7 +204,7 @@ describe("FireblocksSigner.getTxStatus — approval-pending deadlines", () => {
       let call = 0;
       const statuses = [
         TransactionStateEnum.PendingAuthorization,
-        TransactionStateEnum.PendingSignature,
+        TransactionStateEnum.Queued,
         TransactionStateEnum.Completed,
       ];
       const fireblocks = {
@@ -262,7 +262,7 @@ describe("FireblocksSigner.getTxStatus — approval-pending deadlines", () => {
                 ? TransactionStateEnum.Completed
                 : flapIndex % 2 === 0
                   ? TransactionStateEnum.PendingAuthorization
-                  : TransactionStateEnum.PendingSignature;
+                  : TransactionStateEnum.Queued;
             return {
               data: {
                 id: "fb-tx-flap",
@@ -295,8 +295,8 @@ describe("FireblocksSigner.getTxStatus — approval-pending deadlines", () => {
       let call = 0;
       const statuses = [
         TransactionStateEnum.PendingAuthorization,
-        TransactionStateEnum.PendingSignature,
-        TransactionStateEnum.PendingSignature,
+        TransactionStateEnum.Queued,
+        TransactionStateEnum.Queued,
       ];
       const fireblocks = {
         transactions: {

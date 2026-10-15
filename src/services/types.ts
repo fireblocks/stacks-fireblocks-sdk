@@ -82,7 +82,20 @@ export type FireblocksConfig = {
   chainApiKey?: string;
 };
 
-export type CreateTransactionResponse = {
+/**
+ * Set when a call ended while its Fireblocks request was still outstanding — not failed.
+ * The request is still open in Fireblocks; nothing was broadcast for it.
+ */
+export type PendingFireblocksFields = {
+  /** The outstanding request's Fireblocks id. */
+  pendingFireblocksId?: string;
+  /** The outstanding request's Fireblocks status when the wait ended. */
+  pendingFireblocksStatus?: string;
+  /** The request may be waiting on a person: an approval or a designated signer. */
+  pendingApproval?: boolean;
+};
+
+export type CreateTransactionResponse = PendingFireblocksFields & {
   success: boolean;
   txHash?: string;
   /** The serialized signed transaction (populated by the generic contract-call path). */
@@ -321,12 +334,13 @@ export type CreateBondResult = {
   /**
    * The wait ended while a Fireblocks request (the BTC funding transfer or the
    * register-for-bond signing request) was still outstanding — not failed. Retrying
-   * createBond resumes the same request; it never opens a second one.
+   * createBond resumes the same funding transfer, and the same signing request while
+   * the register transaction's bytes are unchanged.
    */
   pendingFireblocksId?: string;
   /** The outstanding request's Fireblocks status when the wait ended. */
   pendingFireblocksStatus?: string;
-  /** The outstanding request is waiting on a person to approve it in Fireblocks. */
+  /** The request may be waiting on a person: an approval or a designated signer. */
   pendingApproval?: boolean;
 };
 
@@ -414,7 +428,7 @@ export type HasAnnouncedEarlyExitResponse = {
   error?: string;
 };
 
-export type AnnounceEarlyExitResponse = {
+export type AnnounceEarlyExitResponse = PendingFireblocksFields & {
   success: boolean;
   txHash?: string;
   error?: string;
@@ -520,13 +534,13 @@ export type DerivedLock = {
   stage?: EnrollmentStage;
 };
 
-export type UnlockBtcResponse = {
+export type UnlockBtcResponse = PendingFireblocksFields & {
   success: boolean;
   btcTxid?: string;
   error?: string;
 };
 
-export type SpendEarlyExitResponse = {
+export type SpendEarlyExitResponse = PendingFireblocksFields & {
   success: boolean;
   btcTxid?: string;
   error?: string;
@@ -539,7 +553,7 @@ export type SpendEarlyExitResponse = {
  * spend has a single output, so the fee increase is taken from the destination amount),
  * and the corresponding fee rates.
  */
-export type BtcFeeReplacementResponse = {
+export type BtcFeeReplacementResponse = PendingFireblocksFields & {
   success: boolean;
   btcTxid?: string;
   error?: string;
@@ -555,7 +569,7 @@ export type BtcFeeReplacementResponse = {
   };
 };
 
-export type RenewBondResult = {
+export type RenewBondResult = PendingFireblocksFields & {
   success: boolean;
   btcTxid?: string;
   vout?: number;
