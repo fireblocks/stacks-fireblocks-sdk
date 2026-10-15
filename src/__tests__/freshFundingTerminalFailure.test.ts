@@ -626,6 +626,22 @@ describe("createBond — adopting an existing transfer by its external id", () =
     expect(after.amountSats).toBe(BigInt(50_000));
   });
 
+  it("refuses to adopt a transfer it cannot read, and records nothing", async () => {
+    // A transient read error is not evidence the transfer matches this enrollment. Nothing is
+    // lost by stopping: the record stays at funding-requested under the deterministic external
+    // id, so the next call repeats the lookup.
+    const sdk = sdkWithExisting({ status: TransactionStateEnum.Completed });
+    sdk.fireblocksService.getTransferState = jest.fn().mockRejectedValue(new Error("fireblocks 503"));
+
+    const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/UNKNOWN/);
+    expect(res.error).toMatch(/retry/i);
+    expect(sdk.fireblocksService.awaitBitcoinTransaction).not.toHaveBeenCalled();
+    expect((await readRecord(sdk)).fireblocksId).toBeUndefined();
+  });
+
   it("refuses an existing transfer that pays a different address, and does not record it", async () => {
     const sdk = sdkWithExisting({
       status: TransactionStateEnum.Completed,

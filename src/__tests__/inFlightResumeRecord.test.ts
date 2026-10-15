@@ -70,7 +70,7 @@ import {
   fetchConstructLockupOutputScript,
   fetchBondMembership,
 } from "@stacks/bitcoin-staking";
-import { fetchCallReadOnlyFunction } from "@stacks/transactions";
+import { fetchCallReadOnlyFunction, ClarityType, Cl } from "@stacks/transactions";
 
 const { InMemoryLockRecordStore } = jest.requireActual("../staking/bonds/unlock-bytes-store");
 
@@ -557,6 +557,58 @@ describe("createBond — eligibility gates after Bitcoin is committed", () => {
 
     expect(res.error).not.toMatch(/no BTC committed/i);
     expect(res.error).toContain(FB_ID);
+  });
+
+  it.each([
+    [
+      "the cosigner preflight",
+      (sdk: any) => {
+        sdk.verifyEarlyExitCosignerAtFunding = true;
+        sdk.verifyCommittedCosignerKey = jest.fn().mockRejectedValue(new Error("cosigner unreachable"));
+      },
+    ],
+    [
+      "pox-5 not being configured",
+      () => (firstPox5RewardCycle as jest.Mock).mockReturnValue(undefined),
+    ],
+    [
+      "the lockup-script contract call erroring",
+      () =>
+        (fetchCallReadOnlyFunction as jest.Mock).mockResolvedValue({
+          type: ClarityType.ResponseErr,
+          value: Cl.uint(1),
+        }),
+    ],
+    [
+      "the lockup script not matching the contract's",
+      () =>
+        (fetchCallReadOnlyFunction as jest.Mock).mockResolvedValue({
+          type: "ok",
+          value: { type: "buffer", value: "00".repeat(34) },
+        }),
+    ],
+  ])("keeps the funding pointer when %s refuses a funded bond", async (_label, arrange) => {
+    const sdk = makeSdk();
+    await seedFunded(sdk);
+    arrange(sdk);
+
+    const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect(res.success).toBe(false);
+    expect(res.error).not.toMatch(/no BTC committed/i);
+    expect(res.error).toMatch(/may already be committed/i);
+    expect(res.btcTxid).toBe(GOOD_TXID);
+  });
+
+  it("still says no BTC is committed when the cosigner preflight refuses with no funding on record", async () => {
+    const sdk = makeSdk();
+    sdk.verifyEarlyExitCosignerAtFunding = true;
+    sdk.verifyCommittedCosignerKey = jest.fn().mockRejectedValue(new Error("cosigner unreachable"));
+
+    const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect(res.error).toMatch(/no BTC committed/i);
+    expect(res.btcTxid).toBeUndefined();
   });
 
   it("still says no Bitcoin is committed when there is no funding on record", async () => {
