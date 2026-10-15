@@ -231,6 +231,28 @@ describe("createBond — a funding transfer that FAILED after it was broadcast",
     expect(res.error).not.toMatch(/re-fund/i);
   });
 
+  it("returns the txid on the result and names the exit if it never confirms", async () => {
+    const sdk = makeSdk();
+    sdk.fireblocksService.createBitcoinTransaction = acceptThenFail(failedAfterBroadcast());
+
+    const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect(res.btcTxid).toBe(BROADCAST_TXID);
+    expect(res.error).toMatch(/abandonBroadcastFunding/);
+  });
+
+  it("names the exit when a resume finds the recorded txid unknown to the indexer", async () => {
+    const sdk = makeSdk();
+    sdk.fireblocksService.createBitcoinTransaction = acceptThenFail(failedAfterBroadcast());
+    await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+    sdk.getBtcTxStatus = jest.fn().mockResolvedValue({ success: true, data: { found: false } });
+
+    const retry = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect(retry.btcTxid).toBe(BROADCAST_TXID);
+    expect(retry.error).toMatch(/abandonBroadcastFunding/);
+  });
+
   it("does not open a second transfer on retry", async () => {
     const sdk = makeSdk();
     sdk.fireblocksService.createBitcoinTransaction = acceptThenFail(failedAfterBroadcast());

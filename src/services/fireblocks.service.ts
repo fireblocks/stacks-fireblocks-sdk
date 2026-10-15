@@ -254,6 +254,18 @@ export class FireblocksService {
     return btcTxid;
   };
 
+  /** A single status read of a Fireblocks transfer, without polling. */
+  public getTransferState = async (
+    fireblocksId: string,
+  ): Promise<{ status: string; subStatus?: string; txHash?: string }> => {
+    const { data } = await this.fireblocksSDK.transactions.getTransaction({ txId: fireblocksId });
+    return {
+      status: data.status as string,
+      ...(data.subStatus ? { subStatus: data.subStatus } : {}),
+      ...(data.txHash ? { txHash: data.txHash } : {}),
+    };
+  };
+
   /**
    * Lookup ONLY — returns the Fireblocks id for an external id without polling it.
    *

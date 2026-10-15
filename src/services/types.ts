@@ -296,6 +296,17 @@ export type VerifySignerGrantResponse = {
   error?: string;
 };
 
+export type AbandonBroadcastFundingResult = {
+  success: boolean;
+  error?: string;
+  /** The funding txid the record pointed at. */
+  btcTxid?: string;
+  /** The Fireblocks transfer moved to `abandonedFireblocksIds`. */
+  abandonedFireblocksId?: string;
+  /** The funding generation after the advance; the next createBond derives a new external id from it. */
+  fundingGeneration?: number;
+};
+
 export type CreateBondResult = {
   success: boolean;
   btcTxid?: string;
