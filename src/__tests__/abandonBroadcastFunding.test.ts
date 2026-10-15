@@ -93,7 +93,7 @@ afterEach(() => {
 describe("abandonBroadcastFunding — all three checks hold", () => {
   it("clears the pointer, records the transfer as abandoned and advances the generation in one write", async () => {
     const sdk = await makeSdk();
-    const saves = jest.spyOn(sdk.lockRecordStore, "saveRecord");
+    const saves = jest.spyOn(sdk.lockRecordStore, "updateRecord");
 
     const res = await sdk.abandonBroadcastFunding(BOND_INDEX);
 

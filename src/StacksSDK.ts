@@ -179,6 +179,13 @@ import { Signature as Secp256k1Signature } from '@noble/secp256k1';
 import { hexToBytes, bytesToHex, signatureVrsToRsv } from "@stacks/common";
 import { toDerSignature } from "./utils/der";
 
+/** Satoshis in a BTC decimal string such as "0.001" or "1.00000000"; undefined if malformed. */
+const btcDecimalToSats = (btc: string): bigint | undefined => {
+  const m = /^(\d+)(?:\.(\d{1,8}))?$/.exec(btc.trim());
+  if (!m) return undefined;
+  return BigInt(m[1]) * BigInt(100_000_000) + BigInt((m[2] ?? "").padEnd(8, "0"));
+};
+
 /**
  * The bond index an `announce-l1-early-exit` acted on, from its settled result
  * `(ok { staker, signer, bond-index, amount-sats-released })`. Undefined when the result
@@ -364,19 +371,21 @@ export class StacksSDK {
     derivedGeneration: number,
   ): Promise<string> => {
     let advanceFailure = "";
+    let movedOn = false;
     try {
-      const stored = await this.lockRecordStore.loadRecord(this.address!, bondIndex);
-      if (stored && (stored.registrationGeneration ?? 0) !== derivedGeneration) {
+      await this.updateLockRecord(bondIndex, (stored) => {
+        if (!stored) return undefined;
+        if ((stored.registrationGeneration ?? 0) !== derivedGeneration) {
+          movedOn = true;
+          return undefined;
+        }
+        return { ...stored, registrationGeneration: (stored.registrationGeneration ?? 0) + 1 };
+      });
+      if (movedOn) {
         return (
           `The register-for-bond signing request for bond ${bondIndex} terminally failed: ${formatErrorMessage(error)}. ` +
           `A concurrent attempt already moved past its external id ${registerExternalId}, so nothing was advanced. The Bitcoin is locked and remains recoverable; retry createBond or resumeBondRegistration(${bondIndex}).`
         );
-      }
-      if (stored) {
-        await this.lockRecordStore.saveRecord(this.address!, bondIndex, {
-          ...stored,
-          registrationGeneration: (stored.registrationGeneration ?? 0) + 1,
-        });
       }
     } catch (e) {
       advanceFailure = ` The registration generation could NOT be advanced (${formatErrorMessage(e)}); a retry would derive the same consumed id — resolve the signing request in Fireblocks before retrying.`;
@@ -400,79 +409,104 @@ export class StacksSDK {
    * transfer, and a late failure of the old one must not clear the new one — that would
    * advance the generation again and let a third transfer fund the same lock.
    */
+  /**
+   * Applies `update` to bond `bondIndex`'s lock record as one step when the store supports
+   * it, and as a load followed by a save when it does not. `update` returns undefined to
+   * leave the record as it is.
+   */
+  private updateLockRecord = async (
+    bondIndex: number,
+    update: (current: BondLockRecord | null) => BondLockRecord | undefined,
+  ): Promise<BondLockRecord | null> => {
+    const store = this.lockRecordStore;
+    if (typeof store.updateRecord === "function") {
+      return store.updateRecord(this.address!, bondIndex, update);
+    }
+    const current = await store.loadRecord(this.address!, bondIndex);
+    const next = update(current);
+    if (next === undefined) return current;
+    await store.saveRecord(this.address!, bondIndex, next);
+    return next;
+  };
+
   private abandonTerminalFunding = async (
     bondIndex: number,
     fundingExternalId: string,
     error: unknown,
   ): Promise<{ success: false; error: string; btcTxid?: string }> => {
     const failedId = error instanceof FireblocksTransferError ? error.details.vendorId : undefined;
-    let fireblocksId: string | undefined;
-    let stripFailure = "";
-    let generationAdvanced = false;
+    // Fireblocks reports FAILED for some transfers that already reached the network
+    // (e.g. DROPPED_BY_BLOCKCHAIN, DOUBLE_SPENDING), and such a transaction may still
+    // confirm. The record is pointed at it instead of advancing the generation, so a
+    // retry resumes that transaction and never opens a second transfer to this lock.
+    const broadcastTxid = error instanceof FireblocksTransferError ? error.details.txHash : undefined;
+    // Decided against the record as it is at write time: a check made on an earlier read
+    // could act on a transfer an overlapping call has already replaced.
+    type Outcome =
+      | { kind: "stale"; current?: string }
+      | { kind: "pointed"; fireblocksId?: string }
+      | { kind: "abandoned"; fireblocksId?: string }
+      | { kind: "none" };
+    let outcome = { kind: "none" } as Outcome;
+    let writeFailure: unknown;
     try {
-      const stored = await this.lockRecordStore.loadRecord(this.address!, bondIndex);
-      if (stored && (failedId === undefined || stored.fireblocksId !== failedId)) {
-        return {
-          success: false,
-          error:
-            `The Fireblocks funding transfer${failedId ? ` (id ${failedId})` : ""} for bond ${bondIndex} terminally failed: ${formatErrorMessage(error)}. ` +
-            `The lock record no longer tracks it (now: ${stored.fireblocksId ?? "no transfer in flight"}) — a concurrent attempt already handled it, so nothing was abandoned. Retry createBond for this bond index to continue the current attempt.`,
-        };
-      }
-      // Fireblocks reports FAILED for some transfers that already reached the network
-      // (e.g. DROPPED_BY_BLOCKCHAIN, DOUBLE_SPENDING), and such a transaction may still
-      // confirm. The record is pointed at it instead of advancing the generation, so a
-      // retry resumes that transaction and never opens a second transfer to this lock.
-      const broadcastTxid = error instanceof FireblocksTransferError ? error.details.txHash : undefined;
-      if (stored && broadcastTxid) {
-        try {
-          await this.lockRecordStore.saveRecord(this.address!, bondIndex, {
-            ...stored,
-            btcTxid: broadcastTxid,
-            stage: laterStage(stored.stage, "btc-broadcast"),
-          });
-        } catch (e) {
-          return {
-            success: false,
-            error:
-              `The Fireblocks funding transfer ${stored.fireblocksId} for bond ${bondIndex} was broadcast as Bitcoin transaction ${broadcastTxid} and then reported failed: ${formatErrorMessage(error)}. ` +
-              `The lock record could NOT be updated to point at it (${formatErrorMessage(e)}). Do not fund this bond again; check ${broadcastTxid} on-chain first.`,
-            btcTxid: broadcastTxid,
-          };
+      await this.updateLockRecord(bondIndex, (stored) => {
+        if (stored && (failedId === undefined || stored.fireblocksId !== failedId)) {
+          outcome = { kind: "stale", current: stored.fireblocksId };
+          return undefined;
         }
-        return {
-          success: false,
-          error:
-            `The Fireblocks funding transfer ${stored.fireblocksId} for bond ${bondIndex} was broadcast as Bitcoin transaction ${broadcastTxid} and then reported failed: ${formatErrorMessage(error)}. ` +
-            `A broadcast transaction may still confirm, so no new transfer will be opened for this bond. The lock record now points at ${broadcastTxid}; retry createBond for this bond index and it continues only once that transaction is visible on-chain. Do not fund this bond again. If ${broadcastTxid} never confirms, call abandonBroadcastFunding(${bondIndex}) to clear the record so the bond can be funded again.`,
-          btcTxid: broadcastTxid,
-        };
-      }
-      if (stored) {
-        fireblocksId = stored.fireblocksId;
-        // Single write: the generation advance, the id clear, and moving the dead id into
-        // the abandoned list are the same durable update. Split across two writes, a crash
-        // between them leaves a record that derives a fresh external id while the dead
-        // transfer still reads as in flight.
-        const abandoned: BondLockRecord = {
-          ...stored,
-          fundingGeneration: (stored.fundingGeneration ?? 0) + 1,
-          ...(fireblocksId !== undefined
-            ? {
-                abandonedFireblocksIds: [
-                  ...(stored.abandonedFireblocksIds ?? []),
-                  fireblocksId,
-                ],
-              }
-            : {}),
-        };
-        delete abandoned.fireblocksId;
-        await this.lockRecordStore.saveRecord(this.address!, bondIndex, abandoned);
-        generationAdvanced = true;
-      }
+        if (stored && broadcastTxid) {
+          outcome = { kind: "pointed", fireblocksId: stored.fireblocksId };
+          return { ...stored, btcTxid: broadcastTxid, stage: laterStage(stored.stage, "btc-broadcast") };
+        }
+        if (stored) {
+          outcome = { kind: "abandoned", fireblocksId: stored.fireblocksId };
+          // Single write: the generation advance, the id clear, and moving the dead id into
+          // the abandoned list are the same durable update. Split across two writes, a crash
+          // between them leaves a record that derives a fresh external id while the dead
+          // transfer still reads as in flight.
+          const abandoned: BondLockRecord = {
+            ...stored,
+            fundingGeneration: (stored.fundingGeneration ?? 0) + 1,
+            ...(stored.fireblocksId !== undefined
+              ? { abandonedFireblocksIds: [...(stored.abandonedFireblocksIds ?? []), stored.fireblocksId] }
+              : {}),
+          };
+          delete abandoned.fireblocksId;
+          return abandoned;
+        }
+        outcome = { kind: "none" };
+        return undefined;
+      });
     } catch (e) {
-      stripFailure = ` The Fireblocks id could NOT be cleared from the lock record (${formatErrorMessage(e)}); clear it before retrying with opts.btcTxid, which will otherwise be refused as an in-flight transfer.`;
+      writeFailure = e;
     }
+
+    const failed: Outcome = outcome;
+    if (failed.kind === "stale") {
+      return {
+        success: false,
+        error:
+          `The Fireblocks funding transfer${failedId ? ` (id ${failedId})` : ""} for bond ${bondIndex} terminally failed: ${formatErrorMessage(error)}. ` +
+          `The lock record no longer tracks it (now: ${failed.current ?? "no transfer in flight"}) — a concurrent attempt already handled it, so nothing was abandoned. Retry createBond for this bond index to continue the current attempt.`,
+      };
+    }
+    if (failed.kind === "pointed") {
+      return {
+        success: false,
+        error:
+          `The Fireblocks funding transfer ${failed.fireblocksId} for bond ${bondIndex} was broadcast as Bitcoin transaction ${broadcastTxid} and then reported failed: ${formatErrorMessage(error)}. ` +
+          (writeFailure !== undefined
+            ? `The lock record could NOT be updated to point at it (${formatErrorMessage(writeFailure)}). Do not fund this bond again; check ${broadcastTxid} on-chain first.`
+            : `A broadcast transaction may still confirm, so no new transfer will be opened for this bond. The lock record now points at ${broadcastTxid}; retry createBond for this bond index and it continues only once that transaction is visible on-chain. Do not fund this bond again. If ${broadcastTxid} never confirms, call abandonBroadcastFunding(${bondIndex}) to clear the record so the bond can be funded again.`),
+        btcTxid: broadcastTxid,
+      };
+    }
+    const fireblocksId = failed.kind === "abandoned" ? failed.fireblocksId : undefined;
+    const generationAdvanced = failed.kind === "abandoned" && writeFailure === undefined;
+    const stripFailure = writeFailure !== undefined
+      ? ` The Fireblocks id could NOT be cleared from the lock record (${formatErrorMessage(writeFailure)}); clear it before retrying with opts.btcTxid, which will otherwise be refused as an in-flight transfer.`
+      : "";
     // The recovery advice turns on whether the generation advance reached the store. It
     // did: the next attempt derives a NEW external id and re-funds this same lock. It did
     // not: the id stays consumed, so re-funding this lock is impossible without operator
@@ -3451,20 +3485,29 @@ export class StacksSDK {
         return { success: false, btcTxid, error: `Lock address ${record.lockAddress} holds ${utxos.length} output(s), so Bitcoin is committed there. Not abandoned; recover or resume instead.` };
       }
 
-      const fundingGeneration = (record.fundingGeneration ?? 0) + 1;
-      const cleared: BondLockRecord = {
-        ...record,
-        fundingGeneration,
-        abandonedFireblocksIds: [...(record.abandonedFireblocksIds ?? []), fireblocksId],
-        stage: "lock-fixed",
-      };
-      delete cleared.btcTxid;
-      delete cleared.vout;
-      delete cleared.fireblocksId;
+      // The checks above took network round-trips; the record is cleared only if it is still
+      // the one they were made against.
+      let fundingGeneration: number | undefined;
       try {
-        await this.lockRecordStore.saveRecord(this.address, bondIndex, cleared);
+        await this.updateLockRecord(bondIndex, (current) => {
+          if (!current || current.btcTxid !== btcTxid || current.fireblocksId !== fireblocksId) return undefined;
+          fundingGeneration = (current.fundingGeneration ?? 0) + 1;
+          const cleared: BondLockRecord = {
+            ...current,
+            fundingGeneration,
+            abandonedFireblocksIds: [...(current.abandonedFireblocksIds ?? []), fireblocksId],
+            stage: "lock-fixed",
+          };
+          delete cleared.btcTxid;
+          delete cleared.vout;
+          delete cleared.fireblocksId;
+          return cleared;
+        });
       } catch (e) {
         return { success: false, btcTxid, error: `Could not write bond ${bondIndex}'s record (${formatErrorMessage(e)}); nothing was abandoned.` };
+      }
+      if (fundingGeneration === undefined) {
+        return { success: false, btcTxid, error: `Bond ${bondIndex}'s record changed while it was being checked; nothing was abandoned. Call abandonBroadcastFunding(${bondIndex}) again to re-check.` };
       }
       return { success: true, btcTxid, abandonedFireblocksId: fireblocksId, fundingGeneration };
     } catch (error) {
@@ -3909,6 +3952,27 @@ export class StacksSDK {
             const priorFireblocksId =
               await this.fireblocksService.findBitcoinTransactionByExternalId(fundingExternalId);
             if (!priorFireblocksId) throw fundErr;
+            // The external id is derived from this lock, so the transfer belongs to this
+            // enrollment; an earlier attempt may still have asked for another amount. Fields
+            // Fireblocks has not filled in, or an unreadable status, leave nothing to compare.
+            const existing = await this.fireblocksService
+              .getTransferState(priorFireblocksId)
+              .catch(() => ({} as { requestedAmount?: string; destinationAddress?: string }));
+            if (existing.destinationAddress !== undefined && existing.destinationAddress !== metadata.lockAddress) {
+              return {
+                success: false,
+                error: `Fireblocks transfer ${priorFireblocksId} holds bond ${bondIndex}'s funding external id ${fundingExternalId} but pays ${existing.destinationAddress}, not lock address ${metadata.lockAddress}. It was not adopted or recorded; resolve it in Fireblocks before retrying.`,
+              };
+            }
+            const existingSats = existing.requestedAmount !== undefined ? btcDecimalToSats(existing.requestedAmount) : undefined;
+            if (existingSats !== undefined && existingSats !== BigInt(btcAmountSats)) {
+              // Recorded at its own amount: its Bitcoin lands at this lock address either way.
+              await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, amountSats: existingSats, fireblocksId: priorFireblocksId, stage: laterStage(lockRecord.stage, "funding-requested") });
+              return {
+                success: false,
+                error: `Fireblocks transfer ${priorFireblocksId} already funds bond ${bondIndex}'s lock with ${existingSats} sats under external id ${fundingExternalId}; this call asked for ${btcAmountSats} sats. No new Bitcoin was sent. The transfer is recorded at ${existingSats} sats; continue it with resumeBondRegistration(${bondIndex}) or createBond at ${existingSats} sats.`,
+              };
+            }
             await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, fireblocksId: priorFireblocksId, stage: laterStage(lockRecord.stage, "funding-requested") });
             let priorBtcTxid: string;
             try {

@@ -117,6 +117,8 @@ function makeSdk(): any {
     createBitcoinTransaction: jest.fn(),
     awaitBitcoinTransaction: jest.fn(),
     findBitcoinTransactionByExternalId: jest.fn(),
+    // Fields Fireblocks has not filled in are absent, so nothing can be compared.
+    getTransferState: jest.fn().mockResolvedValue({ status: TransactionStateEnum.Submitted }),
   };
   sdk.setLockRecordStore(new InMemoryLockRecordStore());
   return sdk;
@@ -302,13 +304,16 @@ describe("createBond — terminal failure on the FRESH funding path", () => {
       terminalError(TransactionStateEnum.Rejected, "REJECTED_BY_POLICY"),
     );
     const store = sdk.lockRecordStore;
-    const realSave = store.saveRecord.bind(store);
-    // Fails only the abandon write (the sole save that advances past generation 0): the
+    const realUpdate = store.updateRecord.bind(store);
+    // Fails only the abandon write (the sole write that advances past generation 0): the
     // funding-intent saves that precede it must land, or the terminal path is never reached.
-    store.saveRecord = jest.fn(async (addr: string, idx: number, rec: any) => {
-      if ((rec.fundingGeneration ?? 0) > 0) throw new Error("disk full");
-      return realSave(addr, idx, rec);
-    });
+    store.updateRecord = jest.fn(async (addr: string, idx: number, fn: any) =>
+      realUpdate(addr, idx, (cur: any) => {
+        const next = fn(cur);
+        if ((next?.fundingGeneration ?? 0) > 0) throw new Error("disk full");
+        return next;
+      }),
+    );
 
     const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
 
@@ -537,5 +542,61 @@ describe("createBond — terminal failure on the FRESH funding path", () => {
     // The transfer may still land, so the pointer to it must survive.
     const after = await readRecord(sdk);
     expect(after.fireblocksId).toBe(FB_ID);
+  });
+});
+
+describe("createBond — adopting an existing transfer by its external id", () => {
+  const duplicate = () => Object.assign(new Error("code 1438: duplicate externalTxId"), { code: 1438 });
+
+  const sdkWithExisting = (state: Record<string, unknown>) => {
+    const sdk = makeSdk();
+    sdk.fireblocksService.createBitcoinTransaction = jest.fn().mockRejectedValue(duplicate());
+    sdk.fireblocksService.findBitcoinTransactionByExternalId = jest.fn().mockResolvedValue(FB_ID);
+    sdk.fireblocksService.getTransferState = jest.fn().mockResolvedValue(state);
+    sdk.fireblocksService.awaitBitcoinTransaction = jest.fn().mockRejectedValue(new Error("stop-after-adoption"));
+    return sdk;
+  };
+
+  it("records an existing transfer at its own amount and refuses to continue at a different one", async () => {
+    // The id is ours (derived from this lock), so its Bitcoin lands at this lock address.
+    // Leaving it unrecorded would strand it; continuing would register the wrong amount.
+    const sdk = sdkWithExisting({ status: TransactionStateEnum.PendingAuthorization, requestedAmount: "0.00050000" });
+
+    const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect(res.success).toBe(false);
+    expect(res.error).toContain("50000");
+    expect(res.error).toContain(AMOUNT_SATS.toString());
+    expect(sdk.fireblocksService.awaitBitcoinTransaction).not.toHaveBeenCalled();
+    const after = await readRecord(sdk);
+    expect(after.fireblocksId).toBe(FB_ID);
+    expect(after.amountSats).toBe(BigInt(50_000));
+  });
+
+  it("refuses an existing transfer that pays a different address, and does not record it", async () => {
+    const sdk = sdkWithExisting({
+      status: TransactionStateEnum.Completed,
+      requestedAmount: "0.00100000",
+      destinationAddress: "bcrt1qsomewhereelse",
+    });
+
+    const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect(res.success).toBe(false);
+    expect(res.error).toContain("bcrt1qsomewhereelse");
+    expect(sdk.fireblocksService.awaitBitcoinTransaction).not.toHaveBeenCalled();
+    expect((await readRecord(sdk)).fireblocksId).toBeUndefined();
+  });
+
+  it("adopts a matching transfer and waits on it", async () => {
+    const sdk = sdkWithExisting({
+      status: TransactionStateEnum.Completed,
+      requestedAmount: "0.001",
+      destinationAddress: LOCK_ADDRESS,
+    });
+
+    await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect(sdk.fireblocksService.awaitBitcoinTransaction).toHaveBeenCalledWith(FB_ID);
   });
 });

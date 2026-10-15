@@ -157,6 +157,20 @@ export interface LockRecordStore {
    * absent implementation as "no records".
    */
   listRecords?(stxAddress: string): Promise<BondLockRecord[]>;
+  /**
+   * Reads the record, passes it to `update`, and writes what `update` returns, with no
+   * other write to the store landing in between. `update` returns undefined to leave the
+   * record as it is. Resolves to the record the store holds afterwards.
+   *
+   * Optional so a third-party store is not broken by its addition. Without it, callers
+   * fall back to a separate load and save, and a write from an overlapping call can land
+   * between the two.
+   */
+  updateRecord?(
+    stxAddress: string,
+    bondIndex: number,
+    update: (current: BondLockRecord | null) => BondLockRecord | undefined,
+  ): Promise<BondLockRecord | null>;
 }
 
 export class InMemoryLockRecordStore implements LockRecordStore {
@@ -179,6 +193,17 @@ export class InMemoryLockRecordStore implements LockRecordStore {
     bondIndex: number,
   ): Promise<BondLockRecord | null> {
     return this.store.get(this.key(stxAddress, bondIndex)) ?? null;
+  }
+
+  async updateRecord(
+    stxAddress: string,
+    bondIndex: number,
+    update: (current: BondLockRecord | null) => BondLockRecord | undefined,
+  ): Promise<BondLockRecord | null> {
+    const key = this.key(stxAddress, bondIndex);
+    const next = update(this.store.get(key) ?? null);
+    if (next !== undefined) this.store.set(key, next);
+    return this.store.get(key) ?? null;
   }
 
   async listRecords(stxAddress: string): Promise<BondLockRecord[]> {
