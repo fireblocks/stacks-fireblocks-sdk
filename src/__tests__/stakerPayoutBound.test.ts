@@ -209,6 +209,26 @@ describe("claim-staker-rewards bound — from chain, not from a constant", () =>
     expect(results.find((r) => r.bondIndex === 4)?.status).toBe("claimed");
   });
 
+  it("records a skipped row for a zero entitlement, so the bond and cycle are accounted for", async () => {
+    // Without a row a caller cannot tell "nothing to claim" from "never reached".
+    const sdk = makeSdk();
+    (fetchEarnedStakerRewards as jest.Mock).mockResolvedValue(BigInt(0));
+
+    const { results } = await runClaimCycle(sdk);
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toEqual(
+      expect.objectContaining({
+        bondIndex: 3,
+        rewardCycle: 7,
+        status: "skipped",
+        stakerEntitlementSats: "0",
+        stakerClaimTxid: null,
+      }),
+    );
+    expect(results[0].error).toBeUndefined();
+  });
+
   it("defaults the payout asset to the chain-resolved sBTC asset", async () => {
     const sdk = makeSdk();
 
