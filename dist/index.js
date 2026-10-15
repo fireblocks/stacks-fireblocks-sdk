@@ -17038,6 +17038,7 @@ function toDerSignature(r, s, sighashType = 1) {
 }
 
 // src/StacksSDK.ts
+var RETRY_NOTE_NO_EXTERNAL_ID = "Nothing was broadcast. A retry opens a new signing request: reject this one in Fireblocks first.";
 var btcDecimalToSats = (btc) => {
   const m = /^(\d+)(?:\.(\d{1,8}))?$/.exec(btc.trim());
   if (!m) return void 0;
@@ -17197,19 +17198,6 @@ var StacksSDK = class _StacksSDK {
       return `The register-for-bond signing request for bond ${bondIndex} terminally failed: ${formatErrorMessage(error)}. The Bitcoin is locked and remains recoverable; its external id ${registerExternalId} is consumed, so the next attempt derives a fresh one.${advanceFailure}`;
     };
     /**
-     * Common outcome for a funding transfer that reached a terminal Fireblocks state, on
-     * either the fresh or the resume path. The Fireblocks id must not stay in the record:
-     * a terminally failed transfer can never yield a txid, and while the id is present
-     * `hasInFlightFireblocks` stays true, so the caller-btcTxid guard would refuse exactly
-     * the recovery this error prescribes. The lock parameters and the (consumed) external
-     * id are kept for diagnostics.
-     *
-     * Acts only on the transfer that failed. Overlapping createBond calls for one bond all
-     * await the same transfer; once one of them has abandoned it, a retry can open a new
-     * transfer, and a late failure of the old one must not clear the new one — that would
-     * advance the generation again and let a third transfer fund the same lock.
-     */
-    /**
      * Applies `update` to bond `bondIndex`'s lock record as one step when the store supports
      * it, and as a load followed by a save when it does not. `update` returns undefined to
      * leave the record as it is.
@@ -17225,6 +17213,19 @@ var StacksSDK = class _StacksSDK {
       await store.saveRecord(this.address, bondIndex, next);
       return next;
     };
+    /**
+     * Common outcome for a funding transfer that reached a terminal Fireblocks state, on
+     * either the fresh or the resume path. The Fireblocks id must not stay in the record:
+     * a terminally failed transfer can never yield a txid, and while the id is present
+     * `hasInFlightFireblocks` stays true, so the caller-btcTxid guard would refuse exactly
+     * the recovery this error prescribes. The lock parameters and the (consumed) external
+     * id are kept for diagnostics.
+     *
+     * Acts only on the transfer that failed. Overlapping createBond calls for one bond all
+     * await the same transfer; once one of them has abandoned it, a retry can open a new
+     * transfer, and a late failure of the old one must not clear the new one — that would
+     * advance the generation again and let a third transfer fund the same lock.
+     */
     this.abandonTerminalFunding = async (bondIndex, fundingExternalId, error) => {
       const failedId = error instanceof FireblocksTransferError ? error.details.vendorId : void 0;
       const broadcastTxid = error instanceof FireblocksTransferError ? error.details.txHash : void 0;
@@ -17245,7 +17246,8 @@ var StacksSDK = class _StacksSDK {
             const abandoned = {
               ...stored,
               fundingGeneration: (stored.fundingGeneration ?? 0) + 1,
-              ...stored.fireblocksId !== void 0 ? { abandonedFireblocksIds: [...stored.abandonedFireblocksIds ?? [], stored.fireblocksId] } : {}
+              ...stored.fireblocksId !== void 0 ? { abandonedFireblocksIds: [...stored.abandonedFireblocksIds ?? [], stored.fireblocksId] } : {},
+              stage: "lock-fixed"
             };
             delete abandoned.fireblocksId;
             return abandoned;
@@ -19423,8 +19425,11 @@ var StacksSDK = class _StacksSDK {
      *
      * Delegates to `createBond`, which owns the resume branch (recorded-txid verification,
      * funding skip, SPV rebuild, and the duplicate-outpoint preflight that catches a
-     * registration which did land). No Bitcoin is sent on this path: a record with no
-     * committed funding is refused rather than funded.
+     * registration which did land). A record with no funding requested is refused rather than
+     * funded. A record at `funding-requested` with no transfer id saved is handed to
+     * `createBond`, which finds the transfer already under the record's external id and waits
+     * on it; if Fireblocks never accepted the request, it is requested again, so on that one
+     * path Bitcoin can be sent.
      */
     this.resumeBondRegistration = async (bondIndex, opts) => {
       try {
@@ -19627,7 +19632,7 @@ var StacksSDK = class _StacksSDK {
           );
         }
         const firstBondCycle = (0, import_bitcoin_staking2.firstPox5RewardCycle)(pox);
-        if (firstBondCycle === void 0) return { success: false, error: "pox-5 not yet configured on this network" };
+        if (firstBondCycle === void 0) return gateRefusal("pox-5 not yet configured on this network");
         const metadata = (0, import_bitcoin_staking2.buildRegisterMetadata)({
           bondIndex,
           poxInfo: pox,
@@ -19653,19 +19658,23 @@ var StacksSDK = class _StacksSDK {
             network: this.pox5Network
           });
           if (rawResult.type === import_transactions4.ClarityType.ResponseErr) {
-            return { success: false, error: `construct-lockup-output-script contract error: ${import_transactions4.Cl.prettyPrint(rawResult.value)}` };
+            return gateRefusal(`construct-lockup-output-script contract error: ${import_transactions4.Cl.prettyPrint(rawResult.value)}`);
           }
           const inner = rawResult.type === import_transactions4.ClarityType.ResponseOk ? rawResult.value : rawResult;
           const onchainScriptHex = inner.value;
           if ((0, import_common2.bytesToHex)(metadata.outputScript) !== onchainScriptHex.replace(/^0x/, "")) {
-            return { success: false, error: `Lockup script mismatch \u2014 SDK: ${(0, import_common2.bytesToHex)(metadata.outputScript)}, contract: ${onchainScriptHex}` };
+            return gateRefusal(`Lockup script mismatch \u2014 SDK: ${(0, import_common2.bytesToHex)(metadata.outputScript)}, contract: ${onchainScriptHex}`);
           }
         }
         if (this.verifyEarlyExitCosignerAtFunding) {
           try {
             await this.verifyCommittedCosignerKey(bond);
           } catch (error) {
-            return { success: false, error: `Early-exit cosigner preflight failed (no BTC committed): ${formatErrorMessage(error)}` };
+            const why = formatErrorMessage(error);
+            return gateRefusal(
+              `Early-exit cosigner preflight failed: ${why}`,
+              `Early-exit cosigner preflight failed (no BTC committed): ${why}`
+            );
           }
         }
         const fundingGeneration = priorRecord?.fundingGeneration ?? 0;
@@ -19757,7 +19766,10 @@ var StacksSDK = class _StacksSDK {
             btcTxid: priorRecord.btcTxid,
             vout: priorRecord.vout,
             amountSats: priorRecord.amountSats,
-            stage: priorRecord.stage ?? "btc-broadcast"
+            stage: priorRecord.stage ?? "btc-broadcast",
+            // The transfer that produced the txid stays named: if the txid is later evicted,
+            // abandonBroadcastFunding needs both to clear the record.
+            ...priorRecord.fireblocksId !== void 0 ? { fireblocksId: priorRecord.fireblocksId } : {}
           } : {},
           // A transfer Fireblocks already ACCEPTED but whose txid was never recorded must keep
           // its id and its reached stage across this pre-funding save. Without this the save
@@ -19809,7 +19821,15 @@ var StacksSDK = class _StacksSDK {
             if (FireblocksService.isDuplicateExternalIdError(fundErr)) {
               const priorFireblocksId = await this.fireblocksService.findBitcoinTransactionByExternalId(fundingExternalId);
               if (!priorFireblocksId) throw fundErr;
-              const existing = await this.fireblocksService.getTransferState(priorFireblocksId).catch(() => ({}));
+              let existing;
+              try {
+                existing = await this.fireblocksService.getTransferState(priorFireblocksId);
+              } catch (e) {
+                return {
+                  success: false,
+                  error: `Could not read Fireblocks transfer ${priorFireblocksId}, which holds bond ${bondIndex}'s funding external id ${fundingExternalId} (UNKNOWN) \u2014 refusing to adopt it: ${formatErrorMessage(e)}. No new Bitcoin was sent. Retry createBond.`
+                };
+              }
               if (existing.destinationAddress !== void 0 && existing.destinationAddress !== metadata.lockAddress) {
                 return {
                   success: false,
@@ -21154,7 +21174,7 @@ var StacksSDK = class _StacksSDK {
         const btcTxid = await this.broadcastBtc(rawHex);
         return { success: true, btcTxid };
       } catch (error) {
-        const pending = this.pendingFireblocksResult(error);
+        const pending = this.pendingFireblocksResult(error, RETRY_NOTE_NO_EXTERNAL_ID);
         if (pending) return pending;
         return { success: false, error: `Failed to unlock matured bond: ${formatErrorMessage(error)}` };
       }
@@ -21216,7 +21236,7 @@ var StacksSDK = class _StacksSDK {
         const btcTxid = await this.broadcastBtc((0, import_common2.bytesToHex)(tx.extract()));
         return { success: true, btcTxid };
       } catch (error) {
-        const pending = this.pendingFireblocksResult(error);
+        const pending = this.pendingFireblocksResult(error, RETRY_NOTE_NO_EXTERNAL_ID);
         if (pending) return pending;
         return { success: false, error: `Failed to spend early exit UTXO: ${formatErrorMessage(error)}` };
       }
@@ -21324,7 +21344,7 @@ var StacksSDK = class _StacksSDK {
           }
         };
       } catch (error) {
-        const pending = this.pendingFireblocksResult(error);
+        const pending = this.pendingFireblocksResult(error, RETRY_NOTE_NO_EXTERNAL_ID);
         if (pending) return pending;
         return { success: false, error: `Failed to replace recovery fee: ${formatErrorMessage(error)}` };
       }
@@ -21448,8 +21468,8 @@ var StacksSDK = class _StacksSDK {
         } catch (e) {
           return { success: false, error: `Lock-record store unreadable for bond ${nextBondIndex} (UNKNOWN, not "no prior attempt") \u2014 refusing to re-lock: ${formatErrorMessage(e)}` };
         }
-        if (priorNextRecord && (priorNextRecord.fireblocksId !== void 0 || priorNextRecord.btcTxid === void 0 && priorNextRecord.stage === "funding-requested")) {
-          const transfer = priorNextRecord.fireblocksId ? `Fireblocks transfer ${priorNextRecord.fireblocksId}${priorNextRecord.btcTxid ? `, tx ${priorNextRecord.btcTxid}` : ""}` : `external id ${priorNextRecord.fundingExternalId ?? "unknown"}, transfer id not recorded`;
+        if (priorNextRecord && priorNextRecord.isL1Lock !== false && priorNextRecord.fundingExternalId !== void 0 && (priorNextRecord.btcTxid !== void 0 || priorNextRecord.fireblocksId !== void 0 || priorNextRecord.stage === "funding-requested")) {
+          const transfer = priorNextRecord.fireblocksId ? `Fireblocks transfer ${priorNextRecord.fireblocksId}${priorNextRecord.btcTxid ? `, tx ${priorNextRecord.btcTxid}` : ""}` : priorNextRecord.btcTxid ? `funding tx ${priorNextRecord.btcTxid}` : `external id ${priorNextRecord.fundingExternalId}, transfer id not recorded`;
           return {
             success: false,
             error: `Bond ${nextBondIndex} already has a createBond funding (${transfer}). No Bitcoin was re-locked. Finish that enrollment with resumeBondRegistration(${nextBondIndex}) instead of renewing into it.`
@@ -21549,7 +21569,7 @@ var StacksSDK = class _StacksSDK {
         await this.lockRecordStore.saveRecord(this.address, nextBondIndex, nextRecordFor(outputAmount, {
           btcTxid,
           vout: lockupProof.outputIndex,
-          ...resumeRelock && priorNextRecord ? { stage: priorNextRecord.stage, fundingExternalId: priorNextRecord.fundingExternalId } : {}
+          ...resumeRelock && priorNextRecord ? { stage: priorNextRecord.stage } : {}
         }));
         const proofPox = await (0, import_bitcoin_staking2.fetchPoxInfo)({ network: this.pox5Network });
         const proofPreflight = await (0, import_bitcoin_staking2.fetchEligibleRegisterForBond)({
@@ -21636,7 +21656,10 @@ var StacksSDK = class _StacksSDK {
           amountUstx: amountUstx.toString()
         };
       } catch (error) {
-        const pending = this.pendingFireblocksResult(error);
+        const pending = this.pendingFireblocksResult(
+          error,
+          committedBtc.btcTxid !== void 0 ? `The Bitcoin is re-locked (${committedBtc.btcTxid}). Retry renewBond for bond ${nextBondIndex} to keep waiting on the same signing request while the transaction is unchanged; a retry at a different nonce, fee or post-condition opens a new signing request.` : RETRY_NOTE_NO_EXTERNAL_ID
+        );
         if (pending) return { ...pending, ...committedBtc };
         return { success: false, error: `Failed to renew bond: ${formatErrorMessage(error)}`, ...committedBtc };
       }

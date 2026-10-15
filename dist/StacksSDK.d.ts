@@ -92,6 +92,12 @@ export declare class StacksSDK {
      */
     private abandonTerminalRegistration;
     /**
+     * Applies `update` to bond `bondIndex`'s lock record as one step when the store supports
+     * it, and as a load followed by a save when it does not. `update` returns undefined to
+     * leave the record as it is.
+     */
+    private updateLockRecord;
+    /**
      * Common outcome for a funding transfer that reached a terminal Fireblocks state, on
      * either the fresh or the resume path. The Fireblocks id must not stay in the record:
      * a terminally failed transfer can never yield a txid, and while the id is present
@@ -104,12 +110,6 @@ export declare class StacksSDK {
      * transfer, and a late failure of the old one must not clear the new one — that would
      * advance the generation again and let a third transfer fund the same lock.
      */
-    /**
-     * Applies `update` to bond `bondIndex`'s lock record as one step when the store supports
-     * it, and as a load followed by a save when it does not. `update` returns undefined to
-     * leave the record as it is.
-     */
-    private updateLockRecord;
     private abandonTerminalFunding;
     private constructor();
     /**
@@ -601,8 +601,11 @@ export declare class StacksSDK {
      *
      * Delegates to `createBond`, which owns the resume branch (recorded-txid verification,
      * funding skip, SPV rebuild, and the duplicate-outpoint preflight that catches a
-     * registration which did land). No Bitcoin is sent on this path: a record with no
-     * committed funding is refused rather than funded.
+     * registration which did land). A record with no funding requested is refused rather than
+     * funded. A record at `funding-requested` with no transfer id saved is handed to
+     * `createBond`, which finds the transfer already under the record's external id and waits
+     * on it; if Fireblocks never accepted the request, it is requested again, so on that one
+     * path Bitcoin can be sent.
      */
     resumeBondRegistration: (bondIndex: number, opts?: {
         note?: string;
