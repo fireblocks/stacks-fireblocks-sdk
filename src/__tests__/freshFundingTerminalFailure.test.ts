@@ -255,6 +255,35 @@ describe("createBond — a funding transfer that FAILED after it was broadcast",
     expect(retry.error).toMatch(/abandonBroadcastFunding/);
   });
 
+  it("keeps the transfer id through a retry that resumes the visible txid, so the exit stays available", async () => {
+    // The record points at the broadcast txid and still names its transfer. A retry that finds
+    // the txid visible resumes it and rewrites the record; if the rewrite dropped the transfer
+    // id and the txid was then evicted, createBond would refuse and abandonBroadcastFunding
+    // could not act: no way out.
+    const sdk = makeSdk();
+    sdk.fireblocksService.createBitcoinTransaction = acceptThenFail(failedAfterBroadcast());
+    await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+    sdk.getBtcTxStatus = jest.fn().mockResolvedValue({ success: true, data: { found: true } });
+    sdk.waitForBtcConfirmations = jest.fn().mockRejectedValue(new Error("did not reach 3 confirmations"));
+
+    await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect((await readRecord(sdk)).fireblocksId).toBe(FB_ID);
+
+    // The transaction is then evicted; Fireblocks still reports the transfer failed.
+    sdk.getBtcTxStatus = jest.fn().mockResolvedValue({ success: true, data: { found: false } });
+    sdk.fireblocksService.getTransferState = jest.fn().mockResolvedValue({ status: TransactionStateEnum.Failed });
+    const realFetch = global.fetch;
+    global.fetch = (async () => new Response("[]", { status: 200 })) as unknown as typeof fetch;
+    try {
+      const res = await sdk.abandonBroadcastFunding(BOND_INDEX);
+
+      expect(res.success).toBe(true);
+    } finally {
+      global.fetch = realFetch;
+    }
+  });
+
   it("does not open a second transfer on retry", async () => {
     const sdk = makeSdk();
     sdk.fireblocksService.createBitcoinTransaction = acceptThenFail(failedAfterBroadcast());

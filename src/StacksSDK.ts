@@ -3848,6 +3848,9 @@ export class StacksSDK {
               vout: priorRecord!.vout,
               amountSats: priorRecord!.amountSats,
               stage: priorRecord!.stage ?? "btc-broadcast",
+              // The transfer that produced the txid stays named: if the txid is later evicted,
+              // abandonBroadcastFunding needs both to clear the record.
+              ...(priorRecord!.fireblocksId !== undefined ? { fireblocksId: priorRecord!.fireblocksId } : {}),
             }
           : {}),
         // A transfer Fireblocks already ACCEPTED but whose txid was never recorded must keep
