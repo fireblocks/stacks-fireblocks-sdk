@@ -1304,6 +1304,41 @@ router.post("/:vaultId/stacking/pox5/bond/:bondIndex/resume", validateVaultId, c
 
 /**
  * @openapi
+ * /{vaultId}/stacking/pox5/bond/{bondIndex}/abandon-broadcast-funding:
+ *   post:
+ *     tags: [PoX-5 BTC Bonds]
+ *     summary: Clear a funding transfer that failed after broadcast and never confirmed
+ *     description: >
+ *       For a native bond whose funding transfer Fireblocks reported failed after it was
+ *       broadcast. bond/create refuses to fund that bond again while the record points at
+ *       the broadcast txid. This clears the record so bond/create can fund the same lock,
+ *       but only when Fireblocks still reports the transfer terminal, the indexer does not
+ *       know the txid, and nothing sits at the lock address. Any check that cannot be read
+ *       refuses. Sends nothing; takes no body.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *       - in: path
+ *         name: bondIndex
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           minimum: 0
+ *         description: Index of the bond whose funding is abandoned.
+ *     responses:
+ *       200:
+ *         description: >
+ *           Inspect `success`. On success the body carries `abandonedFireblocksId`,
+ *           `btcTxid` and the new `fundingGeneration`; on refusal, `error` names the check
+ *           that failed.
+ *       400:
+ *         description: Invalid bondIndex.
+ *       500:
+ *         description: Internal server error
+ */
+router.post("/:vaultId/stacking/pox5/bond/:bondIndex/abandon-broadcast-funding", validateVaultId, controller.abandonBroadcastFunding);
+
+/**
+ * @openapi
  * /{vaultId}/stacking/pox5/bond/sbtc/create:
  *   post:
  *     summary: Register an sBTC-backed bond (locks paired STX and transfers sBTC)

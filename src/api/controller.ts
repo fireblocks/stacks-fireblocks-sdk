@@ -1395,6 +1395,22 @@ export const resumeBondRegistration: Handler = async (req, res, next) => {
   }
 };
 
+// POST /:vaultId/stacking/pox5/bond/:bondIndex/abandon-broadcast-funding
+export const abandonBroadcastFunding: Handler = async (req, res, next) => {
+  try {
+    const vaultId = getVaultId(req);
+    const bondIndex = Number(req.params.bondIndex);
+    if (!Number.isInteger(bondIndex) || bondIndex < 0) {
+      res.status(400).json({ error: "Bad Request: bondIndex must be a non-negative integer" });
+      return;
+    }
+    const result = await apiService.executeAction(vaultId, ActionType.ABANDON_BROADCAST_FUNDING, { bondIndex });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
 // POST /:vaultId/stacking/pox5/bond/renew
 export const renewBond: Handler = async (req, res, next) => {
   try {
