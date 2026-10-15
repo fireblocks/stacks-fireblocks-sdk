@@ -2,6 +2,7 @@ import { BasePath } from "@fireblocks/ts-sdk";
 import { FireblocksConfig } from "../services/types";
 import { ApiServiceConfig } from "./types";
 import { SignerManagerAdapter } from "../staking/signer-manager-adapter";
+import type { PollConfig } from "../utils/FireblocksSigner";
 
 /**
  * Maps the REST layer's `ApiServiceConfig` onto the `FireblocksConfig` every pooled SDK
@@ -60,6 +61,26 @@ export const signerManagerAllowlistFromEnv = (
   return entries.map((contractPrincipal) => ({ contractPrincipal }));
 };
 
+/** A positive integer number of milliseconds from the environment, or undefined when unset. */
+const positiveMsFromEnv = (name: string, raw: string | undefined): number | undefined => {
+  if (raw === undefined || raw === "") return undefined;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`${name} must be a positive integer number of milliseconds, got "${raw}"`);
+  }
+  return value;
+};
+
+const pollConfigFromEnv = (env: NodeJS.ProcessEnv): PollConfig | undefined => {
+  const timeoutMs = positiveMsFromEnv("FIREBLOCKS_POLL_TIMEOUT_MS", env.FIREBLOCKS_POLL_TIMEOUT_MS);
+  const approvalTimeoutMs = positiveMsFromEnv("FIREBLOCKS_APPROVAL_TIMEOUT_MS", env.FIREBLOCKS_APPROVAL_TIMEOUT_MS);
+  if (timeoutMs === undefined && approvalTimeoutMs === undefined) return undefined;
+  return {
+    ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+    ...(approvalTimeoutMs !== undefined ? { approvalTimeoutMs } : {}),
+  };
+};
+
 /**
  * Builds the REST layer's `ApiServiceConfig` from the process environment.
  *
@@ -80,6 +101,7 @@ export const apiServiceConfigFromEnv = (
   signerManagerAdapters: signerManagerAllowlistFromEnv(
     env.SIGNER_MANAGER_ALLOWLIST,
   ),
+  ...((poll) => (poll !== undefined ? { poll } : {}))(pollConfigFromEnv(env)),
   poolConfig: {
     maxPoolSize: parseInt(env.POOL_MAX_SIZE || "100"),
     idleTimeoutMs: parseInt(env.POOL_IDLE_TIMEOUT_MS || "1800000"),

@@ -530,3 +530,88 @@ describe("createBond — eligibility gates after Bitcoin is committed", () => {
     expect(res.btcTxid).toBeUndefined();
   });
 });
+
+describe("renewBond — register leg external id", () => {
+  const NEXT_BOND = 5;
+  const MANAGER = `${BOOT_ADDR}.signer-manager`;
+  const REWARD = {
+    rewardBtcAddress: "bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080",
+    rewardMaxFeeSats: BigInt(5_000),
+  };
+  const rejected = () =>
+    new FireblocksTransferError("Signing request fb-raw-1 reached terminal status REJECTED", {
+      operation: "RAW",
+      status: TransactionStateEnum.Rejected,
+      vendorId: "fb-raw-1",
+    });
+
+  /** An earlier renewBond already re-locked; this run resumes straight to the register leg. */
+  const sdkAtRegisterLeg = async (over: Record<string, unknown> = {}) => {
+    const sdk = makeSdk();
+    await sdk.lockRecordStore.saveRecord(sdk.address, NEXT_BOND, {
+      bondIndex: NEXT_BOND,
+      unlockBytes: new Uint8Array([1, 2, 3]),
+      lockAddress: LOCK_ADDRESS,
+      unlockHeight: 900,
+      amountSats: AMOUNT_SATS,
+      isL1Lock: true,
+      btcTxid: GOOD_TXID,
+      stage: "btc-broadcast",
+      ...over,
+    });
+    sdk.getBtcTxStatus = jest.fn().mockResolvedValue({ success: true, data: { found: true } });
+    sdk.waitForBtcConfirmations = jest.fn().mockResolvedValue({ blockHash: "bh" });
+    sdk.assembleLockupProof = jest.fn().mockResolvedValue({ outputIndex: 0 });
+    sdk.custodyRefundPostConditions = jest.fn().mockResolvedValue({ conditions: [], custodiedSats: BigInt(0) });
+    sdk.runNonceExclusive = jest.fn(async (fn: any) => fn());
+    sdk.resolveNonce = jest.fn().mockResolvedValue(BigInt(3));
+    sdk.buildRegisterForBondTx = jest.fn(async (a: any) => ({ bytes: `nonce:${a.nonce}` }));
+    sdk.preSignSigHashOf = jest.fn((tx: any) => tx.bytes);
+    sdk.revalidateRegisterForBond = jest.fn().mockResolvedValue(undefined);
+    sdk.pox5SignAndBroadcast = jest.fn().mockResolvedValue({ txid: "stx-tx" });
+    sdk.waitForTxSettlement = jest.fn().mockResolvedValue({ success: true, data: { tx_status: "success" } });
+    return sdk;
+  };
+  const registerIdFrom = (sdk: any): string | undefined => sdk.pox5SignAndBroadcast.mock.calls[0]?.[2];
+
+  it("derives an id instead of leaving Fireblocks to assign a random one", async () => {
+    const sdk = await sdkAtRegisterLeg();
+
+    await sdk.renewBond(NEXT_BOND, MANAGER, REWARD);
+
+    expect(registerIdFrom(sdk)).toEqual(expect.stringMatching(/^bond-register-[0-9a-f]{40}$/));
+  });
+
+  it("derives a caller's id with the sighash and generation suffix, and stores the caller id", async () => {
+    const sdk = await sdkAtRegisterLeg();
+
+    await sdk.renewBond(NEXT_BOND, MANAGER, { ...REWARD, externalId: "mine" });
+
+    expect(registerIdFrom(sdk)).toEqual(expect.stringMatching(/^mine-register-[0-9a-f]{16}$/));
+    expect((await sdk.lockRecordStore.loadRecord(sdk.address, NEXT_BOND)).callerExternalId).toBe("mine");
+  });
+
+  it("advances the registration generation when the signing request is rejected", async () => {
+    const sdk = await sdkAtRegisterLeg();
+    sdk.pox5SignAndBroadcast = jest.fn().mockRejectedValue(rejected());
+
+    const res = await sdk.renewBond(NEXT_BOND, MANAGER, REWARD);
+
+    expect(res.success).toBe(false);
+    expect(res.btcTxid).toBe(GOOD_TXID);
+    expect((await sdk.lockRecordStore.loadRecord(sdk.address, NEXT_BOND)).registrationGeneration).toBe(1);
+  });
+
+  it("derives a fresh id after a rejection", async () => {
+    const first = await sdkAtRegisterLeg();
+    first.pox5SignAndBroadcast = jest.fn().mockRejectedValue(rejected());
+    await first.renewBond(NEXT_BOND, MANAGER, REWARD);
+    const consumed = registerIdFrom(first);
+
+    const retry = await sdkAtRegisterLeg();
+    retry.lockRecordStore = first.lockRecordStore;
+    await retry.renewBond(NEXT_BOND, MANAGER, REWARD);
+
+    expect(registerIdFrom(retry)).not.toBe(consumed);
+  });
+});

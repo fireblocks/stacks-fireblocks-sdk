@@ -1,5 +1,6 @@
 import { FireblocksService } from "../services/fireblocks.service";
-import { toFireblocksConfig } from "../pool/config";
+import { apiServiceConfigFromEnv, toFireblocksConfig } from "../pool/config";
+import { FireblocksSigner } from "../utils/FireblocksSigner";
 
 /**
  * The poll budgets must be settable from configuration (review item 4).
@@ -52,5 +53,39 @@ describe("poll config reaches the signer", () => {
     } as any);
 
     expect((out as any).poll).toEqual({ approvalTimeoutMs: 123_000 });
+  });
+});
+
+describe("approval budget default", () => {
+  it("defaults approvalTimeoutMs to the configured timeoutMs", () => {
+    // The documented default; a fixed 30 minutes ignored a shorter or longer timeoutMs.
+    const signer: any = new FireblocksSigner({} as any, { timeoutMs: 5 * 60_000 });
+
+    expect(signer.poll.approvalTimeoutMs).toBe(5 * 60_000);
+  });
+
+  it("keeps an explicit approvalTimeoutMs", () => {
+    const signer: any = new FireblocksSigner({} as any, { timeoutMs: 5 * 60_000, approvalTimeoutMs: 60 * 60_000 });
+
+    expect(signer.poll.approvalTimeoutMs).toBe(60 * 60_000);
+  });
+});
+
+describe("poll budgets from the REST server's environment", () => {
+  it("reads FIREBLOCKS_POLL_TIMEOUT_MS and FIREBLOCKS_APPROVAL_TIMEOUT_MS", () => {
+    const config = apiServiceConfigFromEnv({
+      FIREBLOCKS_POLL_TIMEOUT_MS: "600000",
+      FIREBLOCKS_APPROVAL_TIMEOUT_MS: "14400000",
+    });
+
+    expect(config.poll).toEqual({ timeoutMs: 600_000, approvalTimeoutMs: 14_400_000 });
+  });
+
+  it("leaves poll unset when neither variable is set", () => {
+    expect(apiServiceConfigFromEnv({}).poll).toBeUndefined();
+  });
+
+  it.each([["abc"], ["0"], ["-5"], ["1.5"]])("refuses an invalid value (%p) at boot", (value) => {
+    expect(() => apiServiceConfigFromEnv({ FIREBLOCKS_POLL_TIMEOUT_MS: value })).toThrow(/FIREBLOCKS_POLL_TIMEOUT_MS/);
   });
 });
