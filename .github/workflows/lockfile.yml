@@ -33,6 +33,10 @@ jobs:
     env:
       HEAD_REF: ${{ github.event.pull_request.head.ref }}
       SCARF_ANALYTICS: "false"
+      # Internal registries that block recently published versions ("immature packages") refuse
+      # a lockfile that pins the newest releases. Regeneration only picks versions published at
+      # least this many days ago. Raise it if an install through such a registry is refused.
+      MIN_PACKAGE_AGE_DAYS: "45"
 
     steps:
       - uses: actions/checkout@v4
@@ -89,7 +93,9 @@ jobs:
         if: steps.check.outputs.fix == 'true'
         run: |
           rm -f package-lock.json
-          npm install --package-lock-only --ignore-scripts --registry https://registry.npmjs.org/
+          before=$(node -e 'console.log(new Date(Date.now() - Number(process.env.MIN_PACKAGE_AGE_DAYS) * 864e5).toISOString().slice(0, 10))')
+          echo "Resolving versions published before $before ($MIN_PACKAGE_AGE_DAYS days ago)"
+          npm install --package-lock-only --ignore-scripts --registry https://registry.npmjs.org/ --before="$before"
           node -e '
             const lock = require("./package-lock.json");
             const bad = Object.entries(lock.packages).filter(([n, p]) => n !== "" && !p.link && (!p.resolved || !p.resolved.startsWith("https://registry.npmjs.org/") || !p.integrity));
