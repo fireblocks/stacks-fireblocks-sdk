@@ -534,6 +534,8 @@ export type DerivedLock = {
   fireblocksId?: string;
   /** Enrollment stage from the durable record. */
   stage?: EnrollmentStage;
+  /** Funding txids abandoned after broadcast, from the durable record. */
+  abandonedBtcTxids?: string[];
 };
 
 export type UnlockBtcResponse = PendingFireblocksFields & {

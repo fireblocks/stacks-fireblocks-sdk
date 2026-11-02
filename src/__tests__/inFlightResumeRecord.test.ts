@@ -218,7 +218,6 @@ describe("renewBond — reward carry-forward must fail closed", () => {
       fundingGeneration: 2,
       registrationGeneration: 1,
       abandonedFireblocksIds: ["fb-dead-1", "fb-dead-2"],
-      abandonedBtcTxids: ["ee".repeat(32)],
     });
     // Resume path: the recorded re-lock still exists, so no BTC is spent.
     sdk.getBtcTxStatus = jest.fn().mockResolvedValue({ success: true, data: { found: true } });
@@ -237,7 +236,6 @@ describe("renewBond — reward carry-forward must fail closed", () => {
     expect(after.fundingGeneration).toBe(2);
     expect(after.registrationGeneration).toBe(1);
     expect(after.abandonedFireblocksIds).toEqual(["fb-dead-1", "fb-dead-2"]);
-    expect(after.abandonedBtcTxids).toEqual(["ee".repeat(32)]);
   });
 });
 
@@ -349,6 +347,20 @@ describe("renewBond — over a next-bond record whose createBond funding transfe
     expect(res.error).not.toMatch(/transfer id not recorded/);
     expect(sdk.waitForBtcConfirmations).not.toHaveBeenCalled();
     expect(sdk.assembleLockupProof).not.toHaveBeenCalled();
+    expect(sdk.deriveLock).not.toHaveBeenCalled();
+  });
+
+  it("refuses over a bond whose abandoned funding was broadcast, since it could still confirm", async () => {
+    // renewBond's re-lock spends the previous bond's coin, not the abandoned funding's, so the
+    // two would not conflict and both could land at this lock.
+    const sdk = sdkWithSpendSpy();
+    await seed(sdk, { stage: "lock-fixed", fundingGeneration: 1, abandonedBtcTxids: ["ee".repeat(32)] });
+
+    const res = await sdk.renewBond(NEXT_BOND, MANAGER, REWARD);
+
+    expect(res.success).toBe(false);
+    expect(res.error).toContain("ee".repeat(32));
+    expect(res.error).toMatch(/createBond/);
     expect(sdk.deriveLock).not.toHaveBeenCalled();
   });
 

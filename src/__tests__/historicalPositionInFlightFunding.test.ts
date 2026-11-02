@@ -207,3 +207,14 @@ describe("resumeBondRegistration — funding requested, transfer id never saved"
     expect(sdk.createBond).not.toHaveBeenCalled();
   });
 });
+
+describe("getHistoricalBondPosition — an abandoned funding that was broadcast", () => {
+  it("is not recovered while an abandoned txid could still land and the lock is empty", async () => {
+    const sdk = await makeSdk(baseRecord({ stage: "lock-fixed", fundingGeneration: 1, abandonedBtcTxids: ["ee".repeat(32)] }));
+    esploraReturns([]);
+
+    const res = await sdk.getHistoricalBondPosition(BOND_INDEX);
+
+    expect(res.data.recovered).toBeNull();
+  });
+});
