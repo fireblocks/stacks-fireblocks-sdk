@@ -29,6 +29,11 @@ export const RBF_MIN_FEE_MULTIPLIER = 1.25;
 export const MAX_FEE_STX = 10;
 export const DEFAULT_POX_FEE_USTX = BigInt(10000);
 
+// Blocks a funding txid must stay unknown to the indexer before abandonBroadcastFunding
+// treats it as dead: about two weeks at ten-minute blocks. A heuristic, not proof — a
+// transaction one indexer has dropped can still be relayed by other nodes and confirm.
+export const ABANDON_MISSING_WAIT_BLOCKS = 2016;
+
 // Per-request timeout for Fireblocks API calls. The client's axios default is none.
 export const FIREBLOCKS_REQUEST_TIMEOUT_MS = 30_000;
 

@@ -218,6 +218,7 @@ describe("renewBond — reward carry-forward must fail closed", () => {
       fundingGeneration: 2,
       registrationGeneration: 1,
       abandonedFireblocksIds: ["fb-dead-1", "fb-dead-2"],
+      abandonedBtcTxids: ["ee".repeat(32)],
     });
     // Resume path: the recorded re-lock still exists, so no BTC is spent.
     sdk.getBtcTxStatus = jest.fn().mockResolvedValue({ success: true, data: { found: true } });
@@ -236,6 +237,7 @@ describe("renewBond — reward carry-forward must fail closed", () => {
     expect(after.fundingGeneration).toBe(2);
     expect(after.registrationGeneration).toBe(1);
     expect(after.abandonedFireblocksIds).toEqual(["fb-dead-1", "fb-dead-2"]);
+    expect(after.abandonedBtcTxids).toEqual(["ee".repeat(32)]);
   });
 });
 

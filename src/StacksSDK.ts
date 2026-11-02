@@ -63,7 +63,7 @@ import {
   TransactionDetails,
   TransactionType,
 } from "./services/types";
-import { DEFAULT_POX_FEE_USTX, helperConstants, pagination_defaults, POX4_ERRORS, RBF_MIN_FEE_MULTIPLIER, stacks_info } from "./utils/constants";
+import { ABANDON_MISSING_WAIT_BLOCKS, DEFAULT_POX_FEE_USTX, helperConstants, pagination_defaults, POX4_ERRORS, RBF_MIN_FEE_MULTIPLIER, stacks_info } from "./utils/constants";
 import {
   NetworkProfile,
   resolveNetworkProfile,
@@ -437,15 +437,35 @@ export class StacksSDK {
   ): Promise<{ success: false; error: string; btcTxid?: string }> => {
     const failedId = error instanceof FireblocksTransferError ? error.details.vendorId : undefined;
     // Fireblocks reports FAILED for some transfers that already reached the network
-    // (e.g. DROPPED_BY_BLOCKCHAIN, DOUBLE_SPENDING), and such a transaction may still
-    // confirm. The record is pointed at it instead of advancing the generation, so a
-    // retry resumes that transaction and never opens a second transfer to this lock.
+    // (e.g. DROPPED_BY_BLOCKCHAIN), and such a transaction may still confirm. The record is
+    // pointed at it instead of advancing the generation, so a retry resumes that transaction
+    // and never opens a second transfer to this lock.
     const broadcastTxid = error instanceof FireblocksTransferError ? error.details.txHash : undefined;
+    // DOUBLE_SPENDING: another transaction spent the same coins first, so this transfer's own
+    // txid will not confirm and the record must not point at it. The winner can be an earlier,
+    // abandoned funding of this lock; if one has come back, the record points at it instead.
+    const lostDoubleSpend =
+      broadcastTxid !== undefined &&
+      error instanceof FireblocksTransferError &&
+      error.details.subStatus === "DOUBLE_SPENDING";
+    let winner: string | undefined;
+    if (lostDoubleSpend) {
+      const prior = await this.lockRecordStore.loadRecord(this.address!, bondIndex).catch(() => null);
+      for (const txid of prior?.abandonedBtcTxids ?? []) {
+        const seen = await this.getBtcTxStatus(txid);
+        if (seen.success && seen.data?.found) {
+          winner = txid;
+          break;
+        }
+      }
+    }
     // Decided against the record as it is at write time: a check made on an earlier read
     // could act on a transfer an overlapping call has already replaced.
     type Outcome =
       | { kind: "stale"; current?: string }
       | { kind: "pointed"; fireblocksId?: string }
+      | { kind: "repointed"; fireblocksId?: string; winner: string }
+      | { kind: "lostRace"; fireblocksId?: string }
       | { kind: "abandoned"; fireblocksId?: string }
       | { kind: "none" };
     let outcome = { kind: "none" } as Outcome;
@@ -454,6 +474,25 @@ export class StacksSDK {
       await this.updateLockRecord(bondIndex, (stored) => {
         if (stored && (failedId === undefined || stored.fireblocksId !== failedId)) {
           outcome = { kind: "stale", current: stored.fireblocksId };
+          return undefined;
+        }
+        if (stored && lostDoubleSpend && winner !== undefined) {
+          outcome = { kind: "repointed", fireblocksId: stored.fireblocksId, winner };
+          const repointed: BondLockRecord = {
+            ...stored,
+            btcTxid: winner,
+            stage: laterStage(stored.stage, "btc-broadcast"),
+            abandonedBtcTxids: (stored.abandonedBtcTxids ?? []).filter((t) => t !== winner),
+            ...(stored.fireblocksId !== undefined
+              ? { abandonedFireblocksIds: [...(stored.abandonedFireblocksIds ?? []), stored.fireblocksId] }
+              : {}),
+          };
+          delete repointed.fireblocksId;
+          delete repointed.vout;
+          return repointed;
+        }
+        if (stored && lostDoubleSpend) {
+          outcome = { kind: "lostRace", fireblocksId: stored.fireblocksId };
           return undefined;
         }
         if (stored && broadcastTxid) {
@@ -487,6 +526,25 @@ export class StacksSDK {
     }
 
     const failed: Outcome = outcome;
+    if (failed.kind === "repointed") {
+      return {
+        success: false,
+        error:
+          `The Fireblocks funding transfer ${failed.fireblocksId} for bond ${bondIndex} failed as DOUBLE_SPENDING: an earlier funding of this lock, ${failed.winner}, spent the same coins first. ` +
+          (writeFailure !== undefined
+            ? `The lock record could NOT be updated to point at it (${formatErrorMessage(writeFailure)}). Do not fund this bond again; check ${failed.winner} on-chain first.`
+            : `The lock record now points at ${failed.winner}; retry createBond for this bond index to continue with it. No new transfer will be opened.`),
+        btcTxid: failed.winner,
+      };
+    }
+    if (failed.kind === "lostRace") {
+      return {
+        success: false,
+        error:
+          `The Fireblocks funding transfer ${failed.fireblocksId} for bond ${bondIndex} failed as DOUBLE_SPENDING: another transaction spent its coins first, so its own txid ${broadcastTxid} will not confirm. ` +
+          `That transaction may pay this lock, so the record was left as it is and no new transfer will be opened. Check the lock address before funding this bond again.`,
+      };
+    }
     if (failed.kind === "stale") {
       return {
         success: false,
@@ -3411,10 +3469,14 @@ export class StacksSDK {
    * broadcast, and whose transaction never reached the chain, so createBond can fund the
    * same lock again.
    *
-   * Acts only when Fireblocks still reports the transfer terminal, the indexer does not know
-   * the recorded txid, and nothing sits at the lock address. Any unreadable check refuses.
-   * The pointer is cleared, the transfer recorded as abandoned and the funding generation
-   * advanced in a single write.
+   * Acts only when the record has not reached btc-confirmed; Fireblocks reports the transfer
+   * terminal, with the recorded txid, and not as DOUBLE_SPENDING; the indexer has not known
+   * the txid for ABANDON_MISSING_WAIT_BLOCKS since it was first seen missing; and no output
+   * as large as the bond sits at the lock address. Any unreadable check refuses. The first
+   * call that finds the txid missing records the height and refuses.
+   *
+   * The pointer is cleared, the txid and transfer recorded as abandoned and the funding
+   * generation advanced in a single write.
    */
   public abandonBroadcastFunding = async (bondIndex: number): Promise<AbandonBroadcastFundingResult> => {
     try {
@@ -3438,7 +3500,12 @@ export class StacksSDK {
         };
       }
 
-      let transfer: { status: string; subStatus?: string };
+      // Past confirmation the Bitcoin is locked; clearing would erase a funded bond's outpoint.
+      if (record.stage !== undefined && laterStage(record.stage, "btc-confirmed") === record.stage) {
+        return { success: false, btcTxid, error: `Bond ${bondIndex}'s funding has reached ${record.stage}, so its Bitcoin is committed. Not abandoned; continue with resumeBondRegistration(${bondIndex}).` };
+      }
+
+      let transfer: { status: string; subStatus?: string; txHash?: string };
       try {
         transfer = await this.fireblocksService.getTransferState(fireblocksId);
       } catch (e) {
@@ -3447,16 +3514,31 @@ export class StacksSDK {
       if (!TERMINAL_TRANSACTION_STATES.has(transfer.status)) {
         return { success: false, btcTxid, error: `Fireblocks reports transfer ${fireblocksId} as ${transfer.status}, not terminal — refusing to abandon it. Retry createBond or resumeBondRegistration(${bondIndex}).` };
       }
+      if (transfer.txHash !== btcTxid) {
+        return { success: false, btcTxid, error: `Fireblocks transfer ${fireblocksId} reports txid ${transfer.txHash ?? "none"}, not the recorded ${btcTxid}; the record is cleared only for the transfer that produced its txid. Not abandoned.` };
+      }
+      // The transfer lost to another transaction spending the same coins. That winner can be
+      // one paying this lock, so re-funding before it is identified could double the bond.
+      if (transfer.subStatus === "DOUBLE_SPENDING") {
+        return { success: false, btcTxid, error: `Fireblocks transfer ${fireblocksId} failed as DOUBLE_SPENDING: another transaction spent its coins and may itself pay this lock. Not abandoned; check the lock address ${record.lockAddress} first.` };
+      }
 
       const fundingTx = await this.getBtcTxStatus(btcTxid);
       if (!fundingTx.success) {
         return { success: false, btcTxid, error: `Could not look up funding tx ${btcTxid} (UNKNOWN) — refusing to abandon it: ${fundingTx.error ?? ''}` };
       }
       if (fundingTx.data!.found) {
+        // Seen again, so any wait started earlier no longer applies.
+        await this.updateLockRecord(bondIndex, (current) => {
+          if (!current || current.fundingMissingSince === undefined) return undefined;
+          const next: BondLockRecord = { ...current };
+          delete next.fundingMissingSince;
+          return next;
+        }).catch(() => undefined);
         return { success: false, btcTxid, error: `Funding tx ${btcTxid} is visible on-chain, so it is not abandoned. Continue the enrollment with resumeBondRegistration(${bondIndex}).` };
       }
 
-      let utxos: unknown[];
+      let utxos: Array<{ value: number }>;
       try {
         const res = await fetch(`${this.esploraBase()}/address/${record.lockAddress}/utxo`);
         if (!res.ok) throw new Error(`Esplora HTTP ${res.status}`);
@@ -3464,8 +3546,37 @@ export class StacksSDK {
       } catch (e) {
         return { success: false, btcTxid, error: `Could not read lock address ${record.lockAddress} (UNKNOWN) — refusing to abandon: ${formatErrorMessage(e)}` };
       }
-      if (utxos.length > 0) {
-        return { success: false, btcTxid, error: `Lock address ${record.lockAddress} holds ${utxos.length} output(s), so Bitcoin is committed there. Not abandoned; recover or resume instead.` };
+      // Outputs smaller than the bond cannot be its funding; anyone can send dust to the address.
+      const bondSized = utxos.filter((u) => BigInt(u.value) >= record!.amountSats);
+      if (bondSized.length > 0) {
+        return { success: false, btcTxid, error: `Lock address ${record.lockAddress} holds ${bondSized.length} output(s) at least as large as the bond, so Bitcoin is committed there. Not abandoned; recover or resume instead.` };
+      }
+
+      const tipHeight = await this.readBtcTipHeight();
+      if (tipHeight === null) {
+        return { success: false, btcTxid, error: `Could not read the Bitcoin tip height (UNKNOWN) — refusing to abandon funding tx ${btcTxid}.` };
+      }
+      const missingSince = record.fundingMissingSince?.txid === btcTxid ? record.fundingMissingSince.height : undefined;
+      if (missingSince === undefined || tipHeight < missingSince + ABANDON_MISSING_WAIT_BLOCKS) {
+        const since = missingSince ?? tipHeight;
+        if (missingSince === undefined) {
+          try {
+            await this.updateLockRecord(bondIndex, (current) =>
+              current && current.btcTxid === btcTxid && current.fireblocksId === fireblocksId
+                ? { ...current, fundingMissingSince: { txid: btcTxid, height: tipHeight } }
+                : undefined,
+            );
+          } catch (e) {
+            return { success: false, btcTxid, error: `Could not record when funding tx ${btcTxid} was first found missing (${formatErrorMessage(e)}); nothing was abandoned.` };
+          }
+        }
+        const abandonableFromHeight = since + ABANDON_MISSING_WAIT_BLOCKS;
+        return {
+          success: false,
+          btcTxid,
+          abandonableFromHeight,
+          error: `Funding tx ${btcTxid} has been missing from the indexer since Bitcoin height ${since}. A missing transaction can still be relayed and confirm, so the record is cleared only from height ${abandonableFromHeight}; call abandonBroadcastFunding(${bondIndex}) again then. For an enrollment that cannot wait, use the next bond.`,
+        };
       }
 
       // The checks above took network round-trips; the record is cleared only if it is still
@@ -3474,16 +3585,19 @@ export class StacksSDK {
       try {
         await this.updateLockRecord(bondIndex, (current) => {
           if (!current || current.btcTxid !== btcTxid || current.fireblocksId !== fireblocksId) return undefined;
+          if (current.fundingMissingSince?.txid !== btcTxid) return undefined;
           fundingGeneration = (current.fundingGeneration ?? 0) + 1;
           const cleared: BondLockRecord = {
             ...current,
             fundingGeneration,
             abandonedFireblocksIds: [...(current.abandonedFireblocksIds ?? []), fireblocksId],
+            abandonedBtcTxids: [...(current.abandonedBtcTxids ?? []), btcTxid],
             stage: "lock-fixed",
           };
           delete cleared.btcTxid;
           delete cleared.vout;
           delete cleared.fireblocksId;
+          delete cleared.fundingMissingSince;
           return cleared;
         });
       } catch (e) {
@@ -3842,6 +3956,8 @@ export class StacksSDK {
         ...(priorRecord?.abandonedFireblocksIds !== undefined
           ? { abandonedFireblocksIds: priorRecord.abandonedFireblocksIds }
           : {}),
+        ...(priorRecord?.abandonedBtcTxids !== undefined ? { abandonedBtcTxids: priorRecord.abandonedBtcTxids } : {}),
+        ...(priorRecord?.fundingMissingSince !== undefined ? { fundingMissingSince: priorRecord.fundingMissingSince } : {}),
         // Carried forward for the same reason: omitting it resets the counter this
         // attempt's OWN register external id was just derived from, so a second terminal
         // signing failure in a row re-derives the id the first retry just consumed.
@@ -6017,6 +6133,7 @@ export class StacksSDK {
         ...(priorNextRecord?.fundingGeneration !== undefined ? { fundingGeneration: priorNextRecord.fundingGeneration } : {}),
         ...(priorNextRecord?.registrationGeneration !== undefined ? { registrationGeneration: priorNextRecord.registrationGeneration } : {}),
         ...(priorNextRecord?.abandonedFireblocksIds !== undefined ? { abandonedFireblocksIds: priorNextRecord.abandonedFireblocksIds } : {}),
+        ...(priorNextRecord?.abandonedBtcTxids !== undefined ? { abandonedBtcTxids: priorNextRecord.abandonedBtcTxids } : {}),
         ...(callerExternalId() !== undefined ? { callerExternalId: callerExternalId() } : {}),
         ...extra,
       });
