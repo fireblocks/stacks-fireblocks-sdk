@@ -1,0 +1,131 @@
+name: Lockfile
+
+# Keeps package-lock.json correct without anyone maintaining it by hand.
+#
+# On every pull request from this repository, this checks that the committed lockfile exists,
+# matches package.json, and is portable: every entry resolves to registry.npmjs.org and carries
+# an integrity hash. A lockfile written on a machine that installs through an internal registry
+# fails that last test, because it records the internal registry's URLs.
+#
+# When the check fails, the lockfile is regenerated from package.json alone against the public
+# registry, installed with `npm ci` (which verifies every hash), tested, and committed to the
+# pull request branch. Nothing is committed unless the tests pass.
+#
+# Pull requests from forks are skipped: this job pushes, and must never do that for a fork.
+
+on:
+  pull_request:
+    branches: [main, app-version]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lockfile-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  lockfile:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      HEAD_REF: ${{ github.event.pull_request.head.ref }}
+      SCARF_ANALYTICS: "false"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          # A commit pushed with the default token does not start other workflows. Setting the
+          # repository secret LOCKFILE_BOT_TOKEN (a token that can push to this repository)
+          # makes the pushed commit run the normal checks too.
+          token: ${{ secrets.LOCKFILE_BOT_TOKEN || github.token }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Check the lockfile
+        id: check
+        run: |
+          fix=false
+          reason=""
+          if [ ! -f package-lock.json ]; then
+            fix=true
+            reason="no lockfile is committed"
+          elif ! node -e '
+            const lock = require("./package-lock.json");
+            const bad = [];
+            for (const [name, pkg] of Object.entries(lock.packages)) {
+              if (name === "" || pkg.link) continue;
+              if (!pkg.resolved || !pkg.resolved.startsWith("https://registry.npmjs.org/")) bad.push(name + " resolved=" + pkg.resolved);
+              else if (!pkg.integrity) bad.push(name + " has no integrity");
+            }
+            if (bad.length) { console.error(bad.length + " lockfile entries are not on the public registry or not hashed:\n" + bad.slice(0, 10).join("\n")); process.exit(1); }
+          '; then
+            fix=true
+            reason="the lockfile has entries that are not on the public registry or not hashed"
+          elif ! node -e '
+            const lock = require("./package-lock.json").packages[""] || {};
+            const pkg = require("./package.json");
+            const out = [];
+            for (const s of ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"]) {
+              const a = JSON.stringify(Object.entries(pkg[s] || {}).sort());
+              const b = JSON.stringify(Object.entries(lock[s] || {}).sort());
+              if (a !== b) out.push(s);
+            }
+            if (out.length) { console.error("package.json and the lockfile disagree in: " + out.join(", ")); process.exit(1); }
+          '; then
+            fix=true
+            reason="the lockfile does not match package.json"
+          fi
+          echo "fix=$fix" >> "$GITHUB_OUTPUT"
+          echo "reason=$reason" >> "$GITHUB_OUTPUT"
+
+      - name: Regenerate the lockfile
+        if: steps.check.outputs.fix == 'true'
+        run: |
+          rm -f package-lock.json
+          npm install --package-lock-only --ignore-scripts --registry https://registry.npmjs.org/
+          node -e '
+            const lock = require("./package-lock.json");
+            const bad = Object.entries(lock.packages).filter(([n, p]) => n !== "" && !p.link && (!p.resolved || !p.resolved.startsWith("https://registry.npmjs.org/") || !p.integrity));
+            if (bad.length) { console.error(bad.length + " regenerated entries are not portable and hashed"); process.exit(1); }
+            console.log("regenerated", Object.keys(lock.packages).length - 1, "entries, all on the public registry and hashed");
+          '
+
+      # npm ci installs exactly the lockfile and fails if any download does not match its hash.
+      - name: Install from the lockfile
+        run: npm ci --ignore-scripts
+
+      - name: Type-check
+        run: npm run typecheck
+
+      # Build output is never committed here; only package-lock.json is.
+      - name: Build
+        run: npm run build
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test (unit + integration)
+        run: npm test
+
+      - name: Commit the regenerated lockfile
+        if: steps.check.outputs.fix == 'true'
+        env:
+          REASON: ${{ steps.check.outputs.reason }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "chore: regenerate package-lock.json" -m "Regenerated because $REASON. Installed with npm ci and tested before this commit."
+          git push origin "HEAD:refs/heads/${HEAD_REF}"
+          {
+            echo "### Lockfile regenerated"
+            echo "Reason: $REASON."
+            echo "Committed to \`${HEAD_REF}\`. Pull before pushing again."
+          } >> "$GITHUB_STEP_SUMMARY"
