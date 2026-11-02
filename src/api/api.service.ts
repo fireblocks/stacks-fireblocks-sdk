@@ -302,6 +302,9 @@ export class ApiService {
         case ActionType.RESUME_BOND_REGISTRATION:
           result = await sdk.resumeBondRegistration(params.bondIndex, { note: params.note, nonce: params.nonce, confirmations: params.confirmations, btcTxid: params.btcTxid });
           break;
+        case ActionType.REPOINT_BOND_FUNDING:
+          result = await sdk.repointBondFunding(params.bondIndex, params.btcTxid, { vout: params.vout });
+          break;
         case ActionType.ABANDON_BROADCAST_FUNDING:
           result = await sdk.abandonBroadcastFunding(params.bondIndex);
           break;

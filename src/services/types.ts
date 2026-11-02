@@ -320,6 +320,17 @@ export type AbandonBroadcastFundingResult = {
   abandonableFromHeight?: number;
 };
 
+export type RepointBondFundingResult = {
+  success: boolean;
+  error?: string;
+  /** The funding txid the record now points at. */
+  btcTxid?: string;
+  /** The output of `btcTxid` that pays the lock. */
+  vout?: number;
+  /** The txid the record pointed at before, now kept in `abandonedBtcTxids`. */
+  previousBtcTxid?: string;
+};
+
 export type CreateBondResult = {
   success: boolean;
   btcTxid?: string;

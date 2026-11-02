@@ -233,6 +233,7 @@ describe("createBond — a funding transfer that FAILED after it was broadcast",
 
       expect(res.success).toBe(false);
       expect(res.error).toMatch(/DOUBLE_SPENDING/);
+      expect(res.error).toMatch(/repointBondFunding/);
       const after = await readRecord(sdk);
       expect(after.btcTxid).toBeUndefined();
       expect(after.fireblocksId).toBe(FB_ID);
@@ -789,6 +790,7 @@ describe("createBond — re-funding a lock whose earlier funding was abandoned",
 
     expect(res.success).toBe(false);
     expect(res.error).toContain(ABANDONED);
+    expect(res.error).toMatch(/repointBondFunding/);
     expect(sdk.fireblocksService.createBitcoinTransaction).not.toHaveBeenCalled();
   });
 
@@ -799,6 +801,7 @@ describe("createBond — re-funding a lock whose earlier funding was abandoned",
     const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
 
     expect(res.success).toBe(false);
+    expect(res.error).toMatch(/repointBondFunding/);
     expect(sdk.fireblocksService.createBitcoinTransaction).not.toHaveBeenCalled();
   });
 

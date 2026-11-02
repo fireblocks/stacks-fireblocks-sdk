@@ -1346,6 +1346,56 @@ router.post("/:vaultId/stacking/pox5/bond/:bondIndex/abandon-broadcast-funding",
 
 /**
  * @openapi
+ * /{vaultId}/stacking/pox5/bond/{bondIndex}/repoint-funding:
+ *   post:
+ *     tags: [PoX-5 BTC Bonds]
+ *     summary: Point a bond's lock record at the transaction that funds its lock
+ *     description: >
+ *       For a native bond whose record has lost its funding pointer: the recorded txid was
+ *       replaced or evicted, an abandoned funding came back, or a caller-supplied txid
+ *       disappeared. Adopts `btcTxid` when it has exactly one output (or the output `vout`
+ *       names) paying the lock address the bond's recorded amount. Refuses if the record has
+ *       reached btc-confirmed, the recorded txid is still visible, or a Fireblocks transfer on
+ *       record has not reached a terminal state; any check that cannot be read refuses. Sends
+ *       nothing; bond/create or bond/{bondIndex}/resume then continues from it.
+ *     parameters:
+ *       - $ref: '#/components/parameters/vaultId'
+ *       - in: path
+ *         name: bondIndex
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           minimum: 0
+ *         description: Index of the bond whose funding pointer is repointed.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [btcTxid]
+ *             properties:
+ *               btcTxid:
+ *                 type: string
+ *                 description: Txid of the transaction paying the lock address (64 hex characters).
+ *               vout:
+ *                 type: integer
+ *                 minimum: 0
+ *                 description: The output to adopt, when more than one pays the lock the bond amount.
+ *     responses:
+ *       200:
+ *         description: >
+ *           Inspect `success`. On success the body carries `btcTxid`, `vout` and, when the
+ *           record held one, `previousBtcTxid`; on refusal, `error` names the check that failed.
+ *       400:
+ *         description: Invalid bondIndex, btcTxid or vout.
+ *       500:
+ *         description: Internal server error
+ */
+router.post("/:vaultId/stacking/pox5/bond/:bondIndex/repoint-funding", validateVaultId, controller.repointBondFunding);
+
+/**
+ * @openapi
  * /{vaultId}/stacking/pox5/bond/sbtc/create:
  *   post:
  *     summary: Register an sBTC-backed bond (locks paired STX and transfers sBTC)

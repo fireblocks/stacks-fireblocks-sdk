@@ -421,6 +421,10 @@ describe("createBond — a recorded funding tx that is not visible", () => {
     // never the answer.
     expect(res.error).toMatch(/without opts\.btcTxid/i);
     expect(res.error).toMatch(/do not fund/i);
+    // No Fireblocks transfer is on this record, so abandonBroadcastFunding cannot act on it;
+    // the way out is to adopt the transaction that actually pays the lock.
+    expect(res.error).toMatch(/repointBondFunding/);
+    expect(res.error).not.toMatch(/abandonBroadcastFunding/);
   });
 
   it("refuses a btcTxid that differs from the recorded one — the refusal the old advice ran into", async () => {
@@ -433,6 +437,7 @@ describe("createBond — a recorded funding tx that is not visible", () => {
 
     expect(res.success).toBe(false);
     expect(res.error).toMatch(/refusing to replace it/i);
+    expect(res.error).toMatch(/repointBondFunding/);
   });
 });
 

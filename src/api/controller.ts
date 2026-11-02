@@ -1395,6 +1395,37 @@ export const resumeBondRegistration: Handler = async (req, res, next) => {
   }
 };
 
+// POST /:vaultId/stacking/pox5/bond/:bondIndex/repoint-funding
+export const repointBondFunding: Handler = async (req, res, next) => {
+  try {
+    const vaultId = getVaultId(req);
+    const rawIndex = String(req.params.bondIndex);
+    const bondIndex = Number(rawIndex);
+    if (!/^\d+$/.test(rawIndex) || !Number.isSafeInteger(bondIndex)) {
+      res.status(400).json({ error: "Bad Request: bondIndex must be a non-negative integer" });
+      return;
+    }
+    const btcTxid = req.body.btcTxid !== undefined ? String(req.body.btcTxid).trim() : "";
+    if (!/^[0-9a-fA-F]{64}$/.test(btcTxid)) {
+      res.status(400).json({ error: "Bad Request: btcTxid must be 64 hex characters" });
+      return;
+    }
+    const vout = req.body.vout;
+    if (vout !== undefined && !(Number.isSafeInteger(vout) && vout >= 0)) {
+      res.status(400).json({ error: "Bad Request: vout must be a non-negative integer" });
+      return;
+    }
+    const result = await apiService.executeAction(vaultId, ActionType.REPOINT_BOND_FUNDING, {
+      bondIndex,
+      btcTxid,
+      ...(vout !== undefined ? { vout } : {}),
+    });
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
 // POST /:vaultId/stacking/pox5/bond/:bondIndex/abandon-broadcast-funding
 export const abandonBroadcastFunding: Handler = async (req, res, next) => {
   try {
