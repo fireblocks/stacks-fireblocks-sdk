@@ -105,6 +105,7 @@ export declare enum ActionType {
     RENEW_BOND = "renewBond",
     RESUME_BOND_REGISTRATION = "resumeBondRegistration",
     ABANDON_BROADCAST_FUNDING = "abandonBroadcastFunding",
+    REPOINT_BOND_FUNDING = "repointBondFunding",
     GET_COMMITTED_REWARD_ADDRESS = "getCommittedRewardAddress",
     GET_SIGNER_MANAGER_FEE_BIPS = "getSignerManagerFeeBips",
     GET_NATIVE_REWARD_THRESHOLD = "getNativeRewardThreshold",

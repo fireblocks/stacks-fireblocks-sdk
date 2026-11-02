@@ -88,6 +88,20 @@ export interface BondLockRecord {
      */
     callerExternalId?: string;
     /**
+     * Funding txids cleared by abandonBroadcastFunding. A cleared transaction was only
+     * unseen, not proven dead, so a later funding of this lock checks none of them has
+     * come back first.
+     */
+    abandonedBtcTxids?: string[];
+    /**
+     * The Bitcoin height at which `txid`, the recorded funding txid, was first found
+     * missing from the indexer. abandonBroadcastFunding waits from here before clearing it.
+     */
+    fundingMissingSince?: {
+        txid: string;
+        height: number;
+    };
+    /**
      * The Fireblocks transaction id of the BTC funding transfer, persisted as soon as
      * Fireblocks accepts the request — BEFORE the (long, throwable) confirmation poll. A
      * retry after a poll timeout / crash uses it to await or resolve the SAME transfer

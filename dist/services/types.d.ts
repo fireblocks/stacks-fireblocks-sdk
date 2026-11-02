@@ -292,6 +292,18 @@ export type AbandonBroadcastFundingResult = {
     abandonedFireblocksId?: string;
     /** The funding generation after the advance; the next createBond derives a new external id from it. */
     fundingGeneration?: number;
+    /** Set when refused because the txid has not been missing long enough: the first Bitcoin height a retry can clear it. */
+    abandonableFromHeight?: number;
+};
+export type RepointBondFundingResult = {
+    success: boolean;
+    error?: string;
+    /** The funding txid the record now points at. */
+    btcTxid?: string;
+    /** The output of `btcTxid` that pays the lock. */
+    vout?: number;
+    /** The txid the record pointed at before, now kept in `abandonedBtcTxids`. */
+    previousBtcTxid?: string;
 };
 export type CreateBondResult = {
     success: boolean;
@@ -492,6 +504,8 @@ export type DerivedLock = {
     fireblocksId?: string;
     /** Enrollment stage from the durable record. */
     stage?: EnrollmentStage;
+    /** Funding txids abandoned after broadcast, from the durable record. */
+    abandonedBtcTxids?: string[];
 };
 export type UnlockBtcResponse = PendingFireblocksFields & {
     success: boolean;

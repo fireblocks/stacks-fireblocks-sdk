@@ -1,4 +1,4 @@
-import { AnnounceEarlyExitResponse, BondPositionResponse, HistoricalBondPositionResponse, HasAnnouncedEarlyExitResponse, RequirementsResponse, CheckStatusResponse, CreateBondResult, GetContractCallHistoryResponse, AbandonBroadcastFundingResult, CreateTransactionResponse, UnlockBtcResponse, SpendEarlyExitResponse, BtcFeeReplacementResponse, RenewBondResult, CalculateRewardsResponse, ClaimRewardsResponse, EarnedRewardsResponse, BondLockAddressResponse, FundBondLockResponse, FundVaultResponse, FireblocksConfig, GetAccountNonceResponse, GetFtBalancesResponse, GetNativeBalanceResponse, GetPoxInfoResponse, GetTransactionHistoryResponse, GetTransactionStatusResponse, BtcTxStatusResponse, StakerInfoResponse, VerifySignerGrantResponse, TokenType, TransactionType } from "./services/types";
+import { AnnounceEarlyExitResponse, BondPositionResponse, HistoricalBondPositionResponse, HasAnnouncedEarlyExitResponse, RequirementsResponse, CheckStatusResponse, CreateBondResult, GetContractCallHistoryResponse, AbandonBroadcastFundingResult, RepointBondFundingResult, CreateTransactionResponse, UnlockBtcResponse, SpendEarlyExitResponse, BtcFeeReplacementResponse, RenewBondResult, CalculateRewardsResponse, ClaimRewardsResponse, EarnedRewardsResponse, BondLockAddressResponse, FundBondLockResponse, FundVaultResponse, FireblocksConfig, GetAccountNonceResponse, GetFtBalancesResponse, GetNativeBalanceResponse, GetPoxInfoResponse, GetTransactionHistoryResponse, GetTransactionStatusResponse, BtcTxStatusResponse, StakerInfoResponse, VerifySignerGrantResponse, TokenType, TransactionType } from "./services/types";
 import { BondLockRecord, LockRecordStore } from "./staking/bonds/unlock-bytes-store";
 import { BondScheduleValidation } from "./utils/bondScheduleChain";
 import { type PoxInfo } from "./utils/helpers";
@@ -98,6 +98,13 @@ export declare class StacksSDK {
      */
     private updateLockRecord;
     /**
+     * Why a lock whose earlier fundings were abandoned after broadcast must not be funded
+     * again, or undefined when it may be. An abandoned txid was only unseen, never proven
+     * dead, so each is looked up again; a bond-sized output at the lock means a funding has
+     * landed. Any check that cannot be read refuses.
+     */
+    private abandonedFundingBlock;
+    /**
      * Common outcome for a funding transfer that reached a terminal Fireblocks state, on
      * either the fresh or the resume path. The Fireblocks id must not stay in the record:
      * a terminally failed transfer can never yield a txid, and while the id is present
@@ -180,6 +187,11 @@ export declare class StacksSDK {
      * yet returns `found: false` (not an error); a transport failure returns `success:false`
      * (UNKNOWN, never silently "not confirmed").
      */
+    /**
+     * A Bitcoin transaction's outputs from the indexer, or `found: false` for a txid it does not
+     * know. Throws when the indexer cannot be read.
+     */
+    private readBtcTxOutputs;
     getBtcTxStatus: (btcTxid: string) => Promise<BtcTxStatusResponse>;
     /**
      * Waits for a transaction to be settled (either success or failure) by polling its status.
@@ -618,12 +630,31 @@ export declare class StacksSDK {
      * broadcast, and whose transaction never reached the chain, so createBond can fund the
      * same lock again.
      *
-     * Acts only when Fireblocks still reports the transfer terminal, the indexer does not know
-     * the recorded txid, and nothing sits at the lock address. Any unreadable check refuses.
-     * The pointer is cleared, the transfer recorded as abandoned and the funding generation
-     * advanced in a single write.
+     * Acts only when the record has not reached btc-confirmed; Fireblocks reports the transfer
+     * terminal, with the recorded txid, and not as DOUBLE_SPENDING; the indexer has not known
+     * the txid for ABANDON_MISSING_WAIT_BLOCKS since it was first seen missing; and no output
+     * as large as the bond sits at the lock address. Any unreadable check refuses. The first
+     * call that finds the txid missing records the height and refuses.
+     *
+     * The pointer is cleared, the txid and transfer recorded as abandoned and the funding
+     * generation advanced in a single write.
      */
     abandonBroadcastFunding: (bondIndex: number) => Promise<AbandonBroadcastFundingResult>;
+    /**
+     * Points a native bond's lock record at the Bitcoin transaction that funds its lock, when the
+     * record has lost that pointer: the recorded txid was replaced or evicted, an abandoned
+     * funding came back, or a caller-supplied txid disappeared. createBond or
+     * resumeBondRegistration then continues from it; nothing is sent.
+     *
+     * Acts only when the record has not reached btc-confirmed; the recorded txid, if any, is not
+     * visible; a Fireblocks transfer on record is terminal, since one still in flight could land
+     * as well; and `btcTxid` has exactly one output (or the output `opts.vout` names) paying the
+     * lock address the bond's recorded amount. Any unreadable check refuses. The replaced txid
+     * and transfer are kept as abandoned, in one write.
+     */
+    repointBondFunding: (bondIndex: number, btcTxid: string, opts?: {
+        vout?: number;
+    }) => Promise<RepointBondFundingResult>;
     /**
      * Creates a native-BTC PoX-5 bond: locks BTC on L1 via Fireblocks and registers
      * the paired STX position on L2 with a full SPV proof.
