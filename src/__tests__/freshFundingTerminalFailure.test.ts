@@ -254,10 +254,23 @@ describe("createBond — a funding transfer that FAILED after it was broadcast",
         abandonedBtcTxids: [ORIGINAL],
         stage: "lock-fixed",
       });
-      sdk.getBtcTxStatus = jest.fn(async (txid: string) => ({ success: true, data: { found: txid === ORIGINAL } }));
-      sdk.fireblocksService.createBitcoinTransaction = acceptThenFail(lostDoubleSpend());
+      // Unseen when the re-fund is checked and sent, then back once it has lost.
+      let sent = false;
+      sdk.getBtcTxStatus = jest.fn(async (txid: string) => ({ success: true, data: { found: sent && txid === ORIGINAL } }));
+      sdk.fireblocksService.createBitcoinTransaction = jest.fn(async (...a: any[]) => {
+        sent = true;
+        await a[5]?.(FB_ID);
+        throw lostDoubleSpend();
+      });
+      const realFetch = global.fetch;
+      global.fetch = (async () => new Response("[]", { status: 200 })) as unknown as typeof fetch;
 
-      const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+      let res: any;
+      try {
+        res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+      } finally {
+        global.fetch = realFetch;
+      }
 
       expect(res.success).toBe(false);
       expect(res.btcTxid).toBe(ORIGINAL);
@@ -732,5 +745,113 @@ describe("createBond — adopting an existing transfer by its external id", () =
     await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
 
     expect(sdk.fireblocksService.awaitBitcoinTransaction).toHaveBeenCalledWith(FB_ID);
+  });
+});
+
+describe("createBond — re-funding a lock whose earlier funding was abandoned", () => {
+  // An abandoned txid was only unseen, never proven dead. If it has come back, or a bond-sized
+  // output already sits at the lock, a new transfer would put a second output on the lock.
+  const ABANDONED = "ee".repeat(32);
+  const realFetch = global.fetch;
+  const lockHolds = (utxos: Array<{ value: number }>, status = 200) => {
+    global.fetch = (async () => new Response(JSON.stringify(utxos), { status })) as unknown as typeof fetch;
+  };
+
+  const sdkWithAbandoned = async () => {
+    const sdk = makeSdk();
+    await sdk.lockRecordStore.saveRecord(sdk.address, BOND_INDEX, {
+      bondIndex: BOND_INDEX,
+      unlockBytes: new Uint8Array([1, 2, 3]),
+      lockAddress: LOCK_ADDRESS,
+      unlockHeight: 900,
+      amountSats: AMOUNT_SATS,
+      isL1Lock: true,
+      fundingGeneration: 1,
+      abandonedFireblocksIds: ["fb-old"],
+      abandonedBtcTxids: [ABANDONED],
+      stage: "lock-fixed",
+    });
+    sdk.getBtcTxStatus = jest.fn().mockResolvedValue({ success: true, data: { found: false } });
+    sdk.fireblocksService.createBitcoinTransaction = jest.fn().mockRejectedValue(new Error("stop-after-funding-call"));
+    lockHolds([]);
+    return sdk;
+  };
+
+  afterEach(() => {
+    global.fetch = realFetch;
+  });
+
+  it("refuses when an abandoned funding txid has come back", async () => {
+    const sdk = await sdkWithAbandoned();
+    sdk.getBtcTxStatus = jest.fn(async (txid: string) => ({ success: true, data: { found: txid === ABANDONED } }));
+
+    const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect(res.success).toBe(false);
+    expect(res.error).toContain(ABANDONED);
+    expect(sdk.fireblocksService.createBitcoinTransaction).not.toHaveBeenCalled();
+  });
+
+  it("refuses when an output at least as large as the bond sits at the lock", async () => {
+    const sdk = await sdkWithAbandoned();
+    lockHolds([{ value: Number(AMOUNT_SATS) }]);
+
+    const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect(res.success).toBe(false);
+    expect(sdk.fireblocksService.createBitcoinTransaction).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["an abandoned txid cannot be looked up", (sdk: any) => (sdk.getBtcTxStatus = jest.fn().mockResolvedValue({ success: false, error: "esplora 503" }))],
+    ["the lock address cannot be read", () => lockHolds([], 503)],
+  ])("refuses when %s", async (_label, arrange) => {
+    const sdk = await sdkWithAbandoned();
+    arrange(sdk);
+
+    const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/UNKNOWN/);
+    expect(sdk.fireblocksService.createBitcoinTransaction).not.toHaveBeenCalled();
+  });
+
+  it("re-funds when nothing has come back and only dust sits at the lock", async () => {
+    const sdk = await sdkWithAbandoned();
+    lockHolds([{ value: 546 }]);
+
+    await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect(sdk.fireblocksService.createBitcoinTransaction).toHaveBeenCalled();
+  });
+});
+
+describe("createBond — once the funding confirms", () => {
+  it("drops the Fireblocks transfer id from the record", async () => {
+    // A confirmed funding is identified by its outpoint. A transfer id left on the record
+    // could later read as permanently FAILED next to a funded bond.
+    const sdk = makeSdk();
+    await sdk.lockRecordStore.saveRecord(sdk.address, BOND_INDEX, {
+      bondIndex: BOND_INDEX,
+      unlockBytes: new Uint8Array([1, 2, 3]),
+      lockAddress: LOCK_ADDRESS,
+      unlockHeight: 900,
+      amountSats: AMOUNT_SATS,
+      isL1Lock: true,
+      fundingExternalId: "bond-fund-x",
+      btcTxid: "ab".repeat(32),
+      vout: 0,
+      fireblocksId: FB_ID,
+      stage: "btc-broadcast",
+    });
+    sdk.getBtcTxStatus = jest.fn().mockResolvedValue({ success: true, data: { found: true } });
+    sdk.waitForBtcConfirmations = jest.fn().mockResolvedValue({ blockHash: "bh" });
+    sdk.assembleLockupProof = jest.fn().mockRejectedValue(new Error("stop-after-confirmation"));
+
+    await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    const after = await readRecord(sdk);
+    expect(after.stage).toBe("btc-confirmed");
+    expect(after.fireblocksId).toBeUndefined();
   });
 });

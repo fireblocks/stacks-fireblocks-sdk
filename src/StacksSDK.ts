@@ -418,6 +418,43 @@ export class StacksSDK {
   };
 
   /**
+   * Why a lock whose earlier fundings were abandoned after broadcast must not be funded
+   * again, or undefined when it may be. An abandoned txid was only unseen, never proven
+   * dead, so each is looked up again; a bond-sized output at the lock means a funding has
+   * landed. Any check that cannot be read refuses.
+   */
+  private abandonedFundingBlock = async (
+    bondIndex: number,
+    record: BondLockRecord | null,
+    lockAddress: string,
+    amountSats: bigint,
+  ): Promise<string | undefined> => {
+    const abandoned = record?.abandonedBtcTxids ?? [];
+    if (abandoned.length === 0) return undefined;
+    for (const txid of abandoned) {
+      const seen = await this.getBtcTxStatus(txid);
+      if (!seen.success) {
+        return `Could not look up abandoned funding tx ${txid} (UNKNOWN) — refusing to fund bond ${bondIndex} again: ${seen.error ?? ''}`;
+      }
+      if (seen.data?.found) {
+        return `Abandoned funding tx ${txid} for bond ${bondIndex} is visible again, so it may yet confirm at this lock. No new transfer was opened.`;
+      }
+    }
+    let utxos: Array<{ value: number }>;
+    try {
+      const res = await fetch(`${this.esploraBase()}/address/${lockAddress}/utxo`);
+      if (!res.ok) throw new Error(`Esplora HTTP ${res.status}`);
+      utxos = await res.json();
+    } catch (e) {
+      return `Could not read lock address ${lockAddress} (UNKNOWN) — refusing to fund bond ${bondIndex} again: ${formatErrorMessage(e)}`;
+    }
+    if (utxos.some((u) => BigInt(u.value) >= amountSats)) {
+      return `Lock address ${lockAddress} already holds an output at least as large as bond ${bondIndex}, so a funding has landed there. No new transfer was opened; recover or resume instead.`;
+    }
+    return undefined;
+  };
+
+  /**
    * Common outcome for a funding transfer that reached a terminal Fireblocks state, on
    * either the fresh or the resume path. The Fireblocks id must not stay in the record:
    * a terminally failed transfer can never yield a txid, and while the id is present
@@ -4032,6 +4069,13 @@ export class StacksSDK {
         }
         await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, btcTxid, fireblocksId: priorRecord!.fireblocksId, stage: laterStage(lockRecord.stage, "btc-broadcast") });
       } else {
+        const refundBlock = await this.abandonedFundingBlock(
+          bondIndex,
+          priorAtThisLock ? priorRecord : null,
+          metadata.lockAddress,
+          BigInt(btcAmountSats),
+        );
+        if (refundBlock) return { success: false, error: refundBlock };
         // Record intent (with the deterministic external id) before calling Fireblocks,
         // so a crash mid-send is recoverable and a retry reuses the same id — which
         // Fireblocks de-duplicates, preventing a double funding transfer.
@@ -4117,6 +4161,9 @@ export class StacksSDK {
 
       // Step 8 — wait for Bitcoin confirmations
       const { blockHash } = await this.waitForBtcConfirmations(btcTxid, opts?.confirmations ?? 3);
+      // A confirmed funding is identified by its outpoint; the transfer id is no longer needed
+      // and could later read as a failed transfer beside a funded bond.
+      delete lockRecord.fireblocksId;
       await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, btcTxid, stage: laterStage(lockRecord.stage, "btc-confirmed") });
 
       // Step 9 — assemble SPV proof
@@ -5462,6 +5509,7 @@ export class StacksSDK {
       fireblocksId: record?.fireblocksId,
       vout: record?.vout,
       stage: record?.stage,
+      abandonedBtcTxids: record?.abandonedBtcTxids,
     };
   };
 
@@ -5663,6 +5711,9 @@ export class StacksSDK {
         if (isUnspent) {
           recovered = false;
         } else if (fundingInFlight) {
+          recovered = null;
+        } else if (lock.btcTxid === undefined && (lock.abandonedBtcTxids?.length ?? 0) > 0) {
+          // An abandoned funding was only unseen; it can still land at this lock.
           recovered = null;
         } else if (lock.btcTxid !== undefined) {
           // A spent outpoint proves recovery only if the funding tx itself is known; one the
@@ -6133,7 +6184,6 @@ export class StacksSDK {
         ...(priorNextRecord?.fundingGeneration !== undefined ? { fundingGeneration: priorNextRecord.fundingGeneration } : {}),
         ...(priorNextRecord?.registrationGeneration !== undefined ? { registrationGeneration: priorNextRecord.registrationGeneration } : {}),
         ...(priorNextRecord?.abandonedFireblocksIds !== undefined ? { abandonedFireblocksIds: priorNextRecord.abandonedFireblocksIds } : {}),
-        ...(priorNextRecord?.abandonedBtcTxids !== undefined ? { abandonedBtcTxids: priorNextRecord.abandonedBtcTxids } : {}),
         ...(callerExternalId() !== undefined ? { callerExternalId: callerExternalId() } : {}),
         ...extra,
       });
@@ -6192,6 +6242,14 @@ export class StacksSDK {
         return {
           success: false,
           error: `Bond ${nextBondIndex} already has a createBond funding (${transfer}). No Bitcoin was re-locked. Finish that enrollment with resumeBondRegistration(${nextBondIndex}) instead of renewing into it.`,
+        };
+      }
+      // renewBond's re-lock spends the previous bond's coin, not an abandoned funding's, so the
+      // two would not conflict and both could land at this lock.
+      if (priorNextRecord?.abandonedBtcTxids?.length) {
+        return {
+          success: false,
+          error: `Bond ${nextBondIndex} has abandoned funding tx(s) ${priorNextRecord.abandonedBtcTxids.join(", ")} that were broadcast and may still confirm. No Bitcoin was re-locked: renewing into it could put a second output on its lock. Fund it with createBond, which checks those first, or renew into another bond.`,
         };
       }
       let resumeRelock =
