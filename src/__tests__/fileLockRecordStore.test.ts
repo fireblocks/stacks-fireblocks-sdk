@@ -82,6 +82,19 @@ describe("FileLockRecordStore (FBS-35/52 durable store)", () => {
     expect(loaded!.callerExternalId).toBe("mine");
   });
 
+  it("persists the abandoned funding txids and the missing-since marker across reload", async () => {
+    const rec: BondLockRecord = {
+      ...makeRecord(9),
+      abandonedBtcTxids: ["ab".repeat(32)],
+      fundingMissingSince: { txid: "cd".repeat(32), height: 1_234 },
+    };
+    await new FileLockRecordStore(file).saveRecord("STADDR", 9, rec);
+
+    const loaded = await new FileLockRecordStore(file).loadRecord("STADDR", 9);
+    expect(loaded!.abandonedBtcTxids).toEqual(["ab".repeat(32)]);
+    expect(loaded!.fundingMissingSince).toEqual({ txid: "cd".repeat(32), height: 1_234 });
+  });
+
   it("does not clobber the verified backup with a corrupt primary on the next save", async () => {
     const store = new FileLockRecordStore(file);
     await store.saveRecord("STADDR", 1, makeRecord(1)); // primary={1}, no bak

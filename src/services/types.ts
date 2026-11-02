@@ -318,6 +318,8 @@ export type AbandonBroadcastFundingResult = {
   abandonedFireblocksId?: string;
   /** The funding generation after the advance; the next createBond derives a new external id from it. */
   fundingGeneration?: number;
+  /** Set when refused because the txid has not been missing long enough: the first Bitcoin height a retry can clear it. */
+  abandonableFromHeight?: number;
 };
 
 export type CreateBondResult = {

@@ -213,13 +213,16 @@ describe("abandon paths do not overwrite a concurrent write", () => {
       fireblocksId: "fb-a",
       fundingGeneration: 1,
       stage: "btc-broadcast",
+      // Already missing long enough, so only the race can stop the clear.
+      fundingMissingSince: { txid: "cd".repeat(32), height: 0 },
     });
     await sdk.lockRecordStore.saveRecord(ADDR, BOND, failed);
     sdk.fireblocksService = {
       getTransferState: jest
         .fn()
-        .mockResolvedValue({ status: TransactionStateEnum.Failed }),
+        .mockResolvedValue({ status: TransactionStateEnum.Failed, txHash: "cd".repeat(32) }),
     };
+    sdk.readBtcTipHeight = jest.fn().mockResolvedValue(1_000_000);
     // The record moves on while the indexer is being read.
     const moved = {
       ...failed,

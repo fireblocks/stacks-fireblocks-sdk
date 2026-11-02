@@ -201,9 +201,18 @@ beforeEach(() => {
 
 describe("createBond — a funding transfer that FAILED after it was broadcast", () => {
   // Fireblocks reports FAILED for transfers that reached the network, e.g.
-  // DROPPED_BY_BLOCKCHAIN or DOUBLE_SPENDING. Such a transaction can still confirm.
+  // DROPPED_BY_BLOCKCHAIN. Such a transaction may still confirm.
   const BROADCAST_TXID = "cd".repeat(32);
   const failedAfterBroadcast = () =>
+    new FireblocksTransferError(`Transfer ${FB_ID} reached terminal status FAILED (DROPPED_BY_BLOCKCHAIN)`, {
+      operation: "TRANSFER",
+      status: TransactionStateEnum.Failed,
+      subStatus: "DROPPED_BY_BLOCKCHAIN",
+      vendorId: FB_ID,
+      txHash: BROADCAST_TXID,
+    });
+
+  const lostDoubleSpend = () =>
     new FireblocksTransferError(`Transfer ${FB_ID} reached terminal status FAILED (DOUBLE_SPENDING)`, {
       operation: "TRANSFER",
       status: TransactionStateEnum.Failed,
@@ -211,6 +220,54 @@ describe("createBond — a funding transfer that FAILED after it was broadcast",
       vendorId: FB_ID,
       txHash: BROADCAST_TXID,
     });
+
+  describe("that lost a double spend", () => {
+    // DOUBLE_SPENDING means another transaction spent the same coins first, so this
+    // transfer's own txid will not confirm. The record must not point at it, and nothing
+    // may be re-funded until the winner is known: it can be an earlier funding of this lock.
+    it("does not point the record at the losing txid, and changes nothing else", async () => {
+      const sdk = makeSdk();
+      sdk.fireblocksService.createBitcoinTransaction = acceptThenFail(lostDoubleSpend());
+
+      const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+      expect(res.success).toBe(false);
+      expect(res.error).toMatch(/DOUBLE_SPENDING/);
+      const after = await readRecord(sdk);
+      expect(after.btcTxid).toBeUndefined();
+      expect(after.fireblocksId).toBe(FB_ID);
+      expect(after.fundingGeneration ?? 0).toBe(0);
+    });
+
+    it("points the record at an earlier, abandoned funding of this lock that has come back", async () => {
+      // The re-fund lost to the original it replaced: the original is the winner.
+      const ORIGINAL = "ee".repeat(32);
+      const sdk = makeSdk();
+      await sdk.lockRecordStore.saveRecord(sdk.address, BOND_INDEX, {
+        bondIndex: BOND_INDEX,
+        unlockBytes: new Uint8Array([1, 2, 3]),
+        lockAddress: LOCK_ADDRESS,
+        unlockHeight: 900,
+        amountSats: AMOUNT_SATS,
+        isL1Lock: true,
+        fundingGeneration: 1,
+        abandonedBtcTxids: [ORIGINAL],
+        stage: "lock-fixed",
+      });
+      sdk.getBtcTxStatus = jest.fn(async (txid: string) => ({ success: true, data: { found: txid === ORIGINAL } }));
+      sdk.fireblocksService.createBitcoinTransaction = acceptThenFail(lostDoubleSpend());
+
+      const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+      expect(res.success).toBe(false);
+      expect(res.btcTxid).toBe(ORIGINAL);
+      const after = await readRecord(sdk);
+      expect(after.btcTxid).toBe(ORIGINAL);
+      expect(after.abandonedBtcTxids ?? []).not.toContain(ORIGINAL);
+      expect(after.abandonedFireblocksIds).toContain(FB_ID);
+      expect(after.fireblocksId).toBeUndefined();
+    });
+  });
 
   it("does not advance the funding generation", async () => {
     const sdk = makeSdk();
@@ -270,12 +327,20 @@ describe("createBond — a funding transfer that FAILED after it was broadcast",
 
     expect((await readRecord(sdk)).fireblocksId).toBe(FB_ID);
 
-    // The transaction is then evicted; Fireblocks still reports the transfer failed.
+    // The transaction is then evicted; Fireblocks still reports the transfer failed with it.
     sdk.getBtcTxStatus = jest.fn().mockResolvedValue({ success: true, data: { found: false } });
-    sdk.fireblocksService.getTransferState = jest.fn().mockResolvedValue({ status: TransactionStateEnum.Failed });
+    sdk.fireblocksService.getTransferState = jest
+      .fn()
+      .mockResolvedValue({ status: TransactionStateEnum.Failed, subStatus: "DROPPED_BY_BLOCKCHAIN", txHash: BROADCAST_TXID });
     const realFetch = global.fetch;
     global.fetch = (async () => new Response("[]", { status: 200 })) as unknown as typeof fetch;
     try {
+      // The first call records when the txid went missing; the clear waits from there.
+      sdk.readBtcTipHeight = jest.fn().mockResolvedValue(10_000);
+      const first = await sdk.abandonBroadcastFunding(BOND_INDEX);
+      expect(first.success).toBe(false);
+      sdk.readBtcTipHeight = jest.fn().mockResolvedValue(first.abandonableFromHeight);
+
       const res = await sdk.abandonBroadcastFunding(BOND_INDEX);
 
       expect(res.success).toBe(true);
