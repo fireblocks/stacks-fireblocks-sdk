@@ -15,7 +15,7 @@ name: Lockfile
 
 on:
   pull_request:
-    branches: [main, app-version]
+    branches: [main]
 
 permissions:
   contents: read
