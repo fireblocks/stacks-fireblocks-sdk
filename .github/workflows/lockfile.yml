@@ -2,7 +2,8 @@ name: Lockfile
 
 # Keeps package-lock.json correct without anyone maintaining it by hand.
 #
-# On every pull request from this repository, this checks that the committed lockfile exists,
+# On a pull request from this repository that changes package.json, package-lock.json or this
+# workflow, this checks that the committed lockfile exists,
 # matches package.json, and is portable: every entry resolves to registry.npmjs.org and carries
 # an integrity hash. A lockfile written on a machine that installs through an internal registry
 # fails that last test, because it records the internal registry's URLs.
@@ -16,6 +17,10 @@ name: Lockfile
 on:
   pull_request:
     branches: [main]
+    paths:
+      - package.json
+      - package-lock.json
+      - .github/workflows/lockfile.yml
 
 permissions:
   contents: read

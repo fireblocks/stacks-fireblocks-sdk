@@ -118,7 +118,7 @@ npm run build  # Build for production
 ```
 
 **Lockfile:** `package-lock.json` is committed and installed with `npm ci`. It is maintained by the
-[Lockfile workflow](.github/workflows/lockfile.yml): on a pull request, if the lockfile is missing,
+[Lockfile workflow](.github/workflows/lockfile.yml): on a pull request that changes `package.json` or the lockfile, if the lockfile is missing,
 disagrees with `package.json`, or records a non-public registry, the workflow regenerates it against
 `registry.npmjs.org`, tests it, and commits it to the branch. After changing dependencies, push and
 `git pull` the bot's commit; do not generate or edit the lockfile by hand.
