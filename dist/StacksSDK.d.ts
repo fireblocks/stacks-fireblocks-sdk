@@ -86,15 +86,45 @@ export declare class StacksSDK {
      * has not already consumed. The Bitcoin stays committed and the record keeps pointing
      * at it — only the L2 leg is retried.
      *
-     * Advances only from the generation the failed id was derived from. Overlapping attempts
-     * share a request; once one has advanced past it, a late report of the same rejection
-     * must not advance again and orphan the request opened under the newer generation.
+     * Advances only from the generation the failed id was derived from, and only when the
+     * failed request is the one the record names as outstanding. Overlapping attempts can open
+     * different requests at one generation; a rejection of one that is no longer outstanding
+     * must not advance and orphan the request opened after it.
      */
     private abandonTerminalRegistration;
     /**
-     * Applies `update` to bond `bondIndex`'s lock record as one step when the store supports
-     * it, and as a load followed by a save when it does not. `update` returns undefined to
-     * leave the record as it is.
+     * Success for a funded enrollment whose registration already settled, or undefined. Applies
+     * only when the contract refused with ERR_ALREADY_REGISTERED (u9) or ERR_ALREADY_STAKED (u19)
+     * and the staker's membership names this bond, as an L1 lock, at the recorded amount.
+     */
+    private landedRegistration;
+    /** Names `registerExternalId` as bond `bondIndex`'s outstanding register signing request. */
+    private markRegisterRequest;
+    /** Clears the outstanding register request once it was broadcast, if it is still `registerExternalId`. */
+    private clearRegisterRequest;
+    /**
+     * Refusal for an explicit `externalId` that differs from the one an outstanding register
+     * signing request was opened under, or undefined. Following it would open a second request
+     * for the same registration.
+     */
+    private registerExternalIdConflict;
+    /** Bond index → the operation holding it. */
+    private bondSlots;
+    /**
+     * Runs `fn` while holding bond `bondIndex`'s slot on this instance, or refuses when another
+     * operation holds it. The pool keeps one instance per vault, so this serializes funding and
+     * registration for one (vault, bond) within a process; it does not span processes.
+     */
+    private inBondSlot;
+    /**
+     * Wraps a bond operation so it runs inside its bond's slot. The wrapper has the type of the
+     * implementation, so the emitted declaration carries its real parameters and result; `impl`
+     * is read at call time.
+     */
+    private slotted;
+    /**
+     * Applies `update` to bond `bondIndex`'s lock record as one step. `update` returns
+     * undefined to leave the record as it is.
      */
     private updateLockRecord;
     /**
@@ -678,6 +708,8 @@ export declare class StacksSDK {
         rewardBtcAddress?: string | null;
         rewardMaxFeeSats?: bigint;
     }) => Promise<CreateBondResult>;
+    /** The body of `createBond`, run only while it holds the bond's slot. */
+    private createBondInSlot;
     /**
      * Post-signing re-check for a register-for-bond broadcast (createBond, createSbtcBond,
      * rollSbtcBond, renewBond). Re-runs the eligibility gate at the CURRENT tip — with a
@@ -759,6 +791,8 @@ export declare class StacksSDK {
         externalId?: string;
         signerCalldata?: Uint8Array | string;
     }) => Promise<CreateTransactionResponse>;
+    /** The body of `createSbtcBond`, run only while it holds the bond's slot. */
+    private createSbtcBondInSlot;
     /**
      * Rolls an existing sBTC-backed position into the next bond period at a (possibly)
      * different sBTC amount. Distinct from the native-BTC `renewBond` (which spends a
@@ -791,6 +825,8 @@ export declare class StacksSDK {
         externalId?: string;
         signerCalldata?: Uint8Array | string;
     }) => Promise<CreateTransactionResponse>;
+    /** The body of `rollSbtcBond`, run only while it holds the bond's slot. */
+    private rollSbtcBondInSlot;
     /**
      * Withdraws sBTC from an sBTC-backed membership (`unstake-sbtc`). The pox-5
      * contract transfers the requested sBTC back to the staker, so the call runs in
@@ -835,6 +871,7 @@ export declare class StacksSDK {
      * and the irreversible announce gate so both apply the identical check.
      */
     private verifyCommittedCosignerKey;
+    private announcePendingRefusal;
     /**
      * Whether `announce-l1-early-exit` has been recorded on chain for this staker's bond.
      *
@@ -1030,6 +1067,8 @@ export declare class StacksSDK {
         rewardBtcAddress?: string | null;
         rewardMaxFeeSats?: bigint;
     }) => Promise<RenewBondResult>;
+    /** The body of `renewBond`, run only while it holds the bond's slot. */
+    private renewBondInSlot;
     /**
      * Derives the bond-period indices that can be active at the current burn height
      * from the cycle, rather than scanning a fixed range from zero. Bond indices grow

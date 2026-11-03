@@ -307,6 +307,12 @@ export type RepointBondFundingResult = {
 };
 export type CreateBondResult = {
     success: boolean;
+    /**
+     * The registration from an earlier attempt had already settled: the contract refused this
+     * one as already registered and the staker's membership names this bond at the recorded
+     * amount. `stacksTxid` is absent; the funding outpoint is the recorded one.
+     */
+    alreadyRegistered?: boolean;
     btcTxid?: string;
     vout?: number;
     stacksTxid?: string;
@@ -551,7 +557,7 @@ export type RenewBondResult = PendingFireblocksFields & {
     /** Settlement timed out — state unknown, may still succeed (not a confirmed failure). */
     unsettled?: boolean;
 };
-export type CalculateRewardsResponse = {
+export type CalculateRewardsResponse = PendingFireblocksFields & {
     success: boolean;
     txHash?: string;
     error?: string;
@@ -591,7 +597,7 @@ export type ClaimResultItem = {
     unsettled?: boolean;
     error?: string;
 };
-export type ClaimRewardsResponse = {
+export type ClaimRewardsResponse = PendingFireblocksFields & {
     success: boolean;
     txHashes?: string[];
     /** Structured per-(bond,cycle) results — accrual, payout, both tx ids, and status. */

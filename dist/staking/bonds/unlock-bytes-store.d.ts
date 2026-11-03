@@ -88,6 +88,12 @@ export interface BondLockRecord {
      */
     callerExternalId?: string;
     /**
+     * External id of the `register-for-bond` signing request most recently opened for this
+     * bond, written before signing and cleared once it is broadcast or abandoned. A terminal
+     * failure advances `registrationGeneration` only when the failed request is this one.
+     */
+    pendingRegisterExternalId?: string;
+    /**
      * Funding txids cleared by abandonBroadcastFunding. A cleared transaction was only
      * unseen, not proven dead, so a later funding of this lock checks none of them has
      * come back first.
@@ -145,11 +151,10 @@ export interface LockRecordStore {
      * other write to the store landing in between. `update` returns undefined to leave the
      * record as it is. Resolves to the record the store holds afterwards.
      *
-     * Optional so a third-party store is not broken by its addition. Without it, callers
-     * fall back to a separate load and save, and a write from an overlapping call can land
-     * between the two.
+     * Required: a separate load and save lets a write from an overlapping call land between
+     * the two, so `StacksSDK.setLockRecordStore` refuses a store without it.
      */
-    updateRecord?(stxAddress: string, bondIndex: number, update: (current: BondLockRecord | null) => BondLockRecord | undefined): Promise<BondLockRecord | null>;
+    updateRecord(stxAddress: string, bondIndex: number, update: (current: BondLockRecord | null) => BondLockRecord | undefined): Promise<BondLockRecord | null>;
 }
 export declare class InMemoryLockRecordStore implements LockRecordStore {
     private store;
