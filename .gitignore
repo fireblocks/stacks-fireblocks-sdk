@@ -2,7 +2,6 @@ release
 scripts
 node_modules
 *.log
-package-lock.json
 dist
 src/tests
 secrets

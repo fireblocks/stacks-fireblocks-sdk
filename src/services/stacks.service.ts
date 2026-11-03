@@ -51,7 +51,9 @@ import {
   pagination_defaults,
   poxInfo,
   stacks_info,
+  HIRO_API_KEY_HEADER,
 } from "../utils/constants";
+import { originOf } from "../utils/network";
 
 export class StacksService {
   private axiosClient: AxiosInstance;
@@ -70,6 +72,7 @@ export class StacksService {
   constructor(
     testnet: boolean = false,
     profile?: { baseUrl: string; chainId: number; magicBytes: string },
+    chainApiKey?: string,
   ) {
     this.testnet = testnet;
     this.axiosClient = axios.create();
@@ -78,6 +81,24 @@ export class StacksService {
       || process.env.STACKS_API_URL
       || (testnet ? api_constants.stacks_testnet_rpc : api_constants.stacks_mainnet_rpc);
     this.stackBaseUrl = baseUrl;
+    // Attached per request against the destination rather than as a client-wide default:
+    // a default rides every request this client makes, so the credential staying on the
+    // Stacks API would rest on call-site discipline. An unparseable or foreign origin
+    // gets no header. Set only when a key is present — an empty header value is rejected
+    // by Hiro rather than treated as an anonymous request.
+    if (chainApiKey) {
+      const allowedOrigin = originOf(baseUrl);
+      this.axiosClient.interceptors.request.use((config) => {
+        const target = originOf(new URL(String(config.url), baseUrl));
+        if (allowedOrigin !== undefined && target === allowedOrigin) {
+          config.headers.set(HIRO_API_KEY_HEADER, chainApiKey);
+          // A followed redirect keeps custom headers, so the key would leave the origin
+          // checked above; a keyed request does not follow redirects.
+          config.maxRedirects = 0;
+        }
+        return config;
+      });
+    }
     const defaultNetwork = testnet ? STACKS_TESTNET : STACKS_MAINNET;
     this.network = {
       ...defaultNetwork,
