@@ -530,6 +530,17 @@ export class StacksSDK {
   };
 
   /**
+   * Wraps a bond operation so it runs inside its bond's slot. The wrapper has the type of the
+   * implementation, so the emitted declaration carries its real parameters and result; `impl`
+   * is read at call time.
+   */
+  private slotted = <F extends (bondIndex: number, ...rest: any[]) => Promise<any>>(
+    operation: string,
+    impl: () => F,
+  ): F =>
+    ((...args: Parameters<F>) => this.inBondSlot(args[0], operation, () => (impl() as (...a: unknown[]) => Promise<unknown>)(...args))) as F;
+
+  /**
    * Applies `update` to bond `bondIndex`'s lock record as one step. `update` returns
    * undefined to leave the record as it is.
    */
@@ -3932,8 +3943,7 @@ export class StacksSDK {
    * On an `unsettled` result the Bitcoin is locked and the registration outcome is
    * unknown — `resumeBondRegistration` continues it without re-funding.
    */
-  public createBond = (...args: Parameters<StacksSDK["createBondInSlot"]>): ReturnType<StacksSDK["createBondInSlot"]> =>
-    this.inBondSlot(args[0], "createBond", () => this.createBondInSlot(...args));
+  public createBond = this.slotted("createBond", () => this.createBondInSlot);
 
   /** The body of `createBond`, run only while it holds the bond's slot. */
   private createBondInSlot = async (
@@ -4775,8 +4785,7 @@ export class StacksSDK {
    * NOTE: sBTC paths are not yet exercised end-to-end on a live network; validate
    * before production use.
    */
-  public createSbtcBond = (...args: Parameters<StacksSDK["createSbtcBondInSlot"]>): ReturnType<StacksSDK["createSbtcBondInSlot"]> =>
-    this.inBondSlot(args[0], "createSbtcBond", () => this.createSbtcBondInSlot(...args));
+  public createSbtcBond = this.slotted("createSbtcBond", () => this.createSbtcBondInSlot);
 
   /** The body of `createSbtcBond`, run only while it holds the bond's slot. */
   private createSbtcBondInSlot = async (
@@ -4925,8 +4934,7 @@ export class StacksSDK {
    * @param newSbtcSats - The target sBTC amount (sats) for the new position.
    * @param signerManager - The signer-manager principal governing the new position.
    */
-  public rollSbtcBond = (...args: Parameters<StacksSDK["rollSbtcBondInSlot"]>): ReturnType<StacksSDK["rollSbtcBondInSlot"]> =>
-    this.inBondSlot(args[0], "rollSbtcBond", () => this.rollSbtcBondInSlot(...args));
+  public rollSbtcBond = this.slotted("rollSbtcBond", () => this.rollSbtcBondInSlot);
 
   /** The body of `rollSbtcBond`, run only while it holds the bond's slot. */
   private rollSbtcBondInSlot = async (
@@ -6391,8 +6399,7 @@ export class StacksSDK {
    *
    * Must be called inside the re-lock window (after prior unlockHeight, before next bond starts).
    */
-  public renewBond = (...args: Parameters<StacksSDK["renewBondInSlot"]>): ReturnType<StacksSDK["renewBondInSlot"]> =>
-    this.inBondSlot(args[0], "renewBond", () => this.renewBondInSlot(...args));
+  public renewBond = this.slotted("renewBond", () => this.renewBondInSlot);
 
   /** The body of `renewBond`, run only while it holds the bond's slot. */
   private renewBondInSlot = async (
