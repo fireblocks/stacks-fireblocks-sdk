@@ -187,6 +187,18 @@ import { toDerSignature } from "./utils/der";
 const RETRY_NOTE_NO_EXTERNAL_ID =
   "Nothing was broadcast. A retry opens a new signing request: reject this one in Fireblocks first.";
 
+/** True when two reads of a lock record describe the same funding state. */
+const sameLockRecordState = (a: BondLockRecord | null, b: BondLockRecord | null): boolean => {
+  if (a === null || b === null) return a === b;
+  return a.lockAddress === b.lockAddress
+    && a.btcTxid === b.btcTxid
+    && a.vout === b.vout
+    && a.amountSats === b.amountSats
+    && a.fireblocksId === b.fireblocksId
+    && a.fundingExternalId === b.fundingExternalId
+    && a.stage === b.stage;
+};
+
 /** Satoshis in a BTC decimal string such as "0.001" or "1.00000000"; undefined if malformed. */
 const btcDecimalToSats = (btc: string): bigint | undefined => {
   const m = /^(\d+)(?:\.(\d{1,8}))?$/.exec(btc.trim());
@@ -407,6 +419,30 @@ export class StacksSDK {
       `The register-for-bond signing request for bond ${bondIndex} terminally failed: ${formatErrorMessage(error)}. ` +
       `The Bitcoin is locked and remains recoverable; its external id ${registerExternalId} is consumed, so the next attempt derives a fresh one.${advanceFailure}`
     );
+  };
+
+  /** Bond index → the operation holding it. */
+  private bondSlots = new Map<number, string>();
+
+  /**
+   * Runs `fn` while holding bond `bondIndex`'s slot on this instance, or refuses when another
+   * operation holds it. The pool keeps one instance per vault, so this serializes funding and
+   * registration for one (vault, bond) within a process; it does not span processes.
+   */
+  private inBondSlot = async <R>(bondIndex: number, operation: string, fn: () => Promise<R>): Promise<R> => {
+    const holder = this.bondSlots.get(bondIndex);
+    if (holder !== undefined) {
+      return {
+        success: false,
+        error: `${holder} for bond ${bondIndex} is already running for this vault. Nothing was committed by this ${operation} call; retry once it finishes.`,
+      } as R;
+    }
+    this.bondSlots.set(bondIndex, operation);
+    try {
+      return await fn();
+    } finally {
+      this.bondSlots.delete(bondIndex);
+    }
   };
 
   /**
@@ -3831,7 +3867,11 @@ export class StacksSDK {
    * On an `unsettled` result the Bitcoin is locked and the registration outcome is
    * unknown — `resumeBondRegistration` continues it without re-funding.
    */
-  public createBond = async (
+  public createBond = (...args: Parameters<StacksSDK["createBondInSlot"]>): ReturnType<StacksSDK["createBondInSlot"]> =>
+    this.inBondSlot(args[0], "createBond", () => this.createBondInSlot(...args));
+
+  /** The body of `createBond`, run only while it holds the bond's slot. */
+  private createBondInSlot = async (
     bondIndex: number,
     btcAmountSats: bigint,
     signerManager: string,
@@ -4661,7 +4701,11 @@ export class StacksSDK {
    * NOTE: sBTC paths are not yet exercised end-to-end on a live network; validate
    * before production use.
    */
-  public createSbtcBond = async (
+  public createSbtcBond = (...args: Parameters<StacksSDK["createSbtcBondInSlot"]>): ReturnType<StacksSDK["createSbtcBondInSlot"]> =>
+    this.inBondSlot(args[0], "createSbtcBond", () => this.createSbtcBondInSlot(...args));
+
+  /** The body of `createSbtcBond`, run only while it holds the bond's slot. */
+  private createSbtcBondInSlot = async (
     bondIndex: number,
     sbtcSats: bigint,
     signerManager: string,
@@ -4807,7 +4851,11 @@ export class StacksSDK {
    * @param newSbtcSats - The target sBTC amount (sats) for the new position.
    * @param signerManager - The signer-manager principal governing the new position.
    */
-  public rollSbtcBond = async (
+  public rollSbtcBond = (...args: Parameters<StacksSDK["rollSbtcBondInSlot"]>): ReturnType<StacksSDK["rollSbtcBondInSlot"]> =>
+    this.inBondSlot(args[0], "rollSbtcBond", () => this.rollSbtcBondInSlot(...args));
+
+  /** The body of `rollSbtcBond`, run only while it holds the bond's slot. */
+  private rollSbtcBondInSlot = async (
     nextBondIndex: number,
     newSbtcSats: bigint,
     signerManager: string,
@@ -6308,7 +6356,11 @@ export class StacksSDK {
    *
    * Must be called inside the re-lock window (after prior unlockHeight, before next bond starts).
    */
-  public renewBond = async (
+  public renewBond = (...args: Parameters<StacksSDK["renewBondInSlot"]>): ReturnType<StacksSDK["renewBondInSlot"]> =>
+    this.inBondSlot(args[0], "renewBond", () => this.renewBondInSlot(...args));
+
+  /** The body of `renewBond`, run only while it holds the bond's slot. */
+  private renewBondInSlot = async (
     nextBondIndex: number,
     signerManager: string,
     opts?: { feeSats?: bigint; note?: string; nonce?: bigint; externalId?: string; confirmations?: number; signerCalldata?: Uint8Array | string; rewardBtcAddress?: string | null; rewardMaxFeeSats?: bigint },
@@ -6596,8 +6648,16 @@ export class StacksSDK {
         // but before (or during) the broadcast, the retry's resume branch verifies the
         // recorded txid on-chain: found → resume; not found → rebuild fresh.
         btcTxid = btcTx.id;
+        const reserved = await this.updateLockRecord(nextBondIndex, (current) =>
+          sameLockRecordState(current, priorNextRecord) ? nextRecordFor(outputAmount, { btcTxid }) : undefined,
+        );
+        if (reserved?.btcTxid !== btcTxid) {
+          return {
+            success: false,
+            error: `Bond ${nextBondIndex}'s lock record changed while the re-lock was being signed, so the signed re-lock was discarded. No Bitcoin was re-locked. Check the record (another createBond or renewBond may be funding this bond) and retry renewBond.`,
+          };
+        }
         committedBtc.btcTxid = btcTxid;
-        await this.lockRecordStore.saveRecord(this.address, nextBondIndex, nextRecordFor(outputAmount, { btcTxid }));
 
         let broadcastTxid: string;
         try {
