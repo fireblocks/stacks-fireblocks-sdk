@@ -467,6 +467,7 @@ describe("createBond — a recorded funding tx that is not visible", () => {
     // never the answer.
     expect(res.error).toMatch(/without opts\.btcTxid/i);
     expect(res.error).toMatch(/do not fund/i);
+    expect(res.fundingBlocked).toBe(true);
     // No Fireblocks transfer is on this record, so abandonBroadcastFunding cannot act on it;
     // the way out is to adopt the transaction that actually pays the lock.
     expect(res.error).toMatch(/repointBondFunding/);
@@ -484,6 +485,7 @@ describe("createBond — a recorded funding tx that is not visible", () => {
     expect(res.success).toBe(false);
     expect(res.error).toMatch(/refusing to replace it/i);
     expect(res.error).toMatch(/repointBondFunding/);
+    expect(res.fundingBlocked).toBe(true);
   });
 });
 
@@ -598,6 +600,7 @@ describe("createBond — eligibility gates after Bitcoin is committed", () => {
     expect(res.error).toMatch(/may already be committed/i);
     expect(res.error).toMatch(/getBondPosition/);
     expect(res.btcTxid).toBe(GOOD_TXID);
+    expect(res.fundingBlocked).toBe(true);
     expect(res.vout).toBe(0);
   });
 
@@ -699,6 +702,7 @@ describe("createBond — eligibility gates after Bitcoin is committed", () => {
     expect(res.success).toBe(false);
     expect(res.error).toMatch(/may already be committed/i);
     expect(res.btcTxid).toBe(GOOD_TXID);
+    expect(res.fundingBlocked).toBe(true);
   });
 
   it("names a recorded funding transfer when no txid is recorded yet", async () => {
@@ -751,6 +755,7 @@ describe("createBond — eligibility gates after Bitcoin is committed", () => {
     expect(res.error).not.toMatch(/no BTC committed/i);
     expect(res.error).toMatch(/may already be committed/i);
     expect(res.btcTxid).toBe(GOOD_TXID);
+    expect(res.fundingBlocked).toBe(true);
   });
 
   it("still says no BTC is committed when the cosigner preflight refuses with no funding on record", async () => {
@@ -762,6 +767,7 @@ describe("createBond — eligibility gates after Bitcoin is committed", () => {
 
     expect(res.error).toMatch(/no BTC committed/i);
     expect(res.btcTxid).toBeUndefined();
+    expect(res.fundingBlocked).toBeUndefined();
   });
 
   it("still says no Bitcoin is committed when there is no funding on record", async () => {
@@ -772,6 +778,7 @@ describe("createBond — eligibility gates after Bitcoin is committed", () => {
 
     expect(res.error).toMatch(/no BTC committed/i);
     expect(res.btcTxid).toBeUndefined();
+    expect(res.fundingBlocked).toBeUndefined();
   });
 });
 
