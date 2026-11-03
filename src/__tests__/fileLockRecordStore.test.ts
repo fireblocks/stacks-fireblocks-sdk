@@ -82,6 +82,14 @@ describe("FileLockRecordStore (FBS-35/52 durable store)", () => {
     expect(loaded!.callerExternalId).toBe("mine");
   });
 
+  it("persists the pending register request's external id across reload", async () => {
+    const rec: BondLockRecord = { ...makeRecord(10), pendingRegisterExternalId: "bond-register-abc" };
+    await new FileLockRecordStore(file).saveRecord("STADDR", 10, rec);
+
+    const loaded = await new FileLockRecordStore(file).loadRecord("STADDR", 10);
+    expect(loaded!.pendingRegisterExternalId).toBe("bond-register-abc");
+  });
+
   it("persists the abandoned funding txids and the missing-since marker across reload", async () => {
     const rec: BondLockRecord = {
       ...makeRecord(9),

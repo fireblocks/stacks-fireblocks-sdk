@@ -111,6 +111,12 @@ export interface BondLockRecord {
    */
   callerExternalId?: string;
   /**
+   * External id of the `register-for-bond` signing request most recently opened for this
+   * bond, written before signing and cleared once it is broadcast or abandoned. A terminal
+   * failure advances `registrationGeneration` only when the failed request is this one.
+   */
+  pendingRegisterExternalId?: string;
+  /**
    * Funding txids cleared by abandonBroadcastFunding. A cleared transaction was only
    * unseen, not proven dead, so a later funding of this lock checks none of them has
    * come back first.

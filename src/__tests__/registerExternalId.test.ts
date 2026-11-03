@@ -413,6 +413,93 @@ describe("createBond — register leg retries", () => {
     expect(after.registrationGeneration).toBe(1);
   });
 
+  describe("the abandon is keyed on the request (review item 6)", () => {
+    const stored = (sdk: any) => sdk.lockRecordStore.loadRecord(BOOT_ADDR, BOND_INDEX);
+
+    it("records the register request's external id before signing", async () => {
+      const sdk = makeSdk();
+      let atSigning: string | undefined;
+      sdk.pox5SignAndBroadcast = jest.fn(async () => {
+        atSigning = (await stored(sdk)).pendingRegisterExternalId;
+        return { txid: "stx-tx" };
+      });
+
+      await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+      expect(atSigning).toBe(registerIdFrom(sdk));
+    });
+
+    it("does not advance when another attempt's request is the outstanding one", async () => {
+      // Two callers at generation 0 derived different ids. B opened its request after A; A's
+      // rejection must not advance the generation, or B's retry derives a third id.
+      const sdk = makeSdk();
+      sdk.pox5SignAndBroadcast = jest.fn(async () => {
+        await sdk.lockRecordStore.saveRecord(BOOT_ADDR, BOND_INDEX, {
+          ...(await stored(sdk)),
+          pendingRegisterExternalId: "bond-register-request-b",
+        });
+        throw terminalSigningError();
+      });
+
+      const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+      expect(res.success).toBe(false);
+      const after = await stored(sdk);
+      expect(after.registrationGeneration ?? 0).toBe(0);
+      expect(after.pendingRegisterExternalId).toBe("bond-register-request-b");
+    });
+
+    it("advances and clears the stored id when the outstanding request fails", async () => {
+      const sdk = makeSdk();
+      sdk.pox5SignAndBroadcast = jest.fn().mockRejectedValue(terminalSigningError());
+
+      await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+      const after = await stored(sdk);
+      expect(after.registrationGeneration).toBe(1);
+      expect(after.pendingRegisterExternalId).toBeUndefined();
+    });
+
+    it("refuses an explicit externalId that differs from the one a pending request was opened under", async () => {
+      const sdk = makeSdk();
+      sdk.pox5SignAndBroadcast = jest.fn().mockRejectedValue(pendingSigningError());
+      await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER, { externalId: "mine" });
+      sdk.pox5SignAndBroadcast = jest.fn().mockResolvedValue({ txid: "stx-tx" });
+
+      const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER, { externalId: "other" });
+
+      expect(res.success).toBe(false);
+      expect(res.error).toMatch(/mine/);
+      expect(res.btcTxid).toBe(BTC_TXID);
+      expect(sdk.pox5SignAndBroadcast).not.toHaveBeenCalled();
+    });
+
+    it("accepts the same externalId, or none, while a request is pending", async () => {
+      const sdk = makeSdk();
+      sdk.pox5SignAndBroadcast = jest.fn().mockRejectedValue(pendingSigningError());
+      await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER, { externalId: "mine" });
+      const firstId = registerIdFrom(sdk);
+
+      for (const opts of [{ externalId: "mine" }, {}]) {
+        sdk.pox5SignAndBroadcast = jest.fn().mockRejectedValue(pendingSigningError());
+        await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER, opts);
+        expect(registerIdFrom(sdk)).toBe(firstId);
+      }
+    });
+
+    it("clears the stored id once the registration is broadcast", async () => {
+      const sdk = makeSdk();
+      sdk.pox5SignAndBroadcast = jest.fn().mockRejectedValue(pendingSigningError());
+      await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+      expect((await stored(sdk)).pendingRegisterExternalId).toBeDefined();
+      sdk.pox5SignAndBroadcast = jest.fn().mockResolvedValue({ txid: "stx-tx" });
+
+      await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+      expect((await stored(sdk)).pendingRegisterExternalId).toBeUndefined();
+    });
+  });
+
   it("does not promise that nothing new is sent when the pending request is the register leg", async () => {
     // The register id follows the transaction bytes: a retry at a different nonce, fee or
     // post-condition opens a new signing request.

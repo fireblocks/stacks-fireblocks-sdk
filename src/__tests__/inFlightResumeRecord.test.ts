@@ -904,6 +904,24 @@ describe("renewBond — register leg external id", () => {
     expect(res.error).not.toMatch(/externalId/);
   });
 
+  it("does not advance the generation when another attempt's request is the outstanding one (review item 6)", async () => {
+    const sdk = await sdkAtRegisterLeg();
+    sdk.pox5SignAndBroadcast = jest.fn(async () => {
+      const current = await sdk.lockRecordStore.loadRecord(sdk.address, NEXT_BOND);
+      await sdk.lockRecordStore.saveRecord(sdk.address, NEXT_BOND, {
+        ...current,
+        pendingRegisterExternalId: "bond-register-request-b",
+      });
+      throw rejected();
+    });
+
+    await sdk.renewBond(NEXT_BOND, MANAGER, REWARD);
+
+    const after = await sdk.lockRecordStore.loadRecord(sdk.address, NEXT_BOND);
+    expect(after.registrationGeneration ?? 0).toBe(0);
+    expect(after.pendingRegisterExternalId).toBe("bond-register-request-b");
+  });
+
   it("derives a fresh id after a rejection", async () => {
     const first = await sdkAtRegisterLeg();
     first.pox5SignAndBroadcast = jest.fn().mockRejectedValue(rejected());
