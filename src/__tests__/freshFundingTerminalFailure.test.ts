@@ -117,8 +117,11 @@ function makeSdk(): any {
     createBitcoinTransaction: jest.fn(),
     awaitBitcoinTransaction: jest.fn(),
     findBitcoinTransactionByExternalId: jest.fn(),
-    // Fields Fireblocks has not filled in are absent, so nothing can be compared.
-    getTransferState: jest.fn().mockResolvedValue({ status: TransactionStateEnum.Submitted }),
+    getTransferState: jest.fn().mockResolvedValue({
+      status: TransactionStateEnum.Submitted,
+      requestedAmount: "0.001",
+      destinationAddress: LOCK_ADDRESS,
+    }),
   };
   sdk.setLockRecordStore(new InMemoryLockRecordStore());
   return sdk;
@@ -692,7 +695,11 @@ describe("createBond — adopting an existing transfer by its external id", () =
   it("records an existing transfer at its own amount and refuses to continue at a different one", async () => {
     // The id is ours (derived from this lock), so its Bitcoin lands at this lock address.
     // Leaving it unrecorded would strand it; continuing would register the wrong amount.
-    const sdk = sdkWithExisting({ status: TransactionStateEnum.PendingAuthorization, requestedAmount: "0.00050000" });
+    const sdk = sdkWithExisting({
+      status: TransactionStateEnum.PendingAuthorization,
+      requestedAmount: "0.00050000",
+      destinationAddress: LOCK_ADDRESS,
+    });
 
     const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
 
@@ -734,6 +741,58 @@ describe("createBond — adopting an existing transfer by its external id", () =
     expect(res.error).toContain("bcrt1qsomewhereelse");
     expect(sdk.fireblocksService.awaitBitcoinTransaction).not.toHaveBeenCalled();
     expect((await readRecord(sdk)).fireblocksId).toBeUndefined();
+  });
+
+  it("refuses to adopt a transfer that does not yet report its destination", async () => {
+    // Fireblocks fills the destination in only from CONFIRMING onwards. Nothing is lost by
+    // stopping: the record stays at funding-requested and the next call repeats the lookup.
+    const sdk = sdkWithExisting({ status: TransactionStateEnum.PendingAuthorization, requestedAmount: "0.001" });
+
+    const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/destination/i);
+    expect(res.error).toMatch(/retry/i);
+    expect(sdk.fireblocksService.awaitBitcoinTransaction).not.toHaveBeenCalled();
+    expect((await readRecord(sdk)).fireblocksId).toBeUndefined();
+  });
+
+  it("refuses to adopt a transfer that does not report its amount", async () => {
+    const sdk = sdkWithExisting({ status: TransactionStateEnum.Completed, destinationAddress: LOCK_ADDRESS });
+
+    const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/amount/i);
+    expect(sdk.fireblocksService.awaitBitcoinTransaction).not.toHaveBeenCalled();
+    expect((await readRecord(sdk)).fireblocksId).toBeUndefined();
+  });
+
+  it("does not overwrite a record that moved on while the transfer was being read", async () => {
+    const sdk = sdkWithExisting({
+      status: TransactionStateEnum.Completed,
+      requestedAmount: "0.001",
+      destinationAddress: LOCK_ADDRESS,
+    });
+    const moved = "ab".repeat(32);
+    sdk.fireblocksService.getTransferState = jest.fn(async () => {
+      const current = await readRecord(sdk);
+      await sdk.lockRecordStore.saveRecord(sdk.address, BOND_INDEX, {
+        ...current,
+        btcTxid: moved,
+        fireblocksId: "fb-other",
+        stage: "btc-confirmed",
+      });
+      return { status: TransactionStateEnum.Completed, requestedAmount: "0.001", destinationAddress: LOCK_ADDRESS };
+    });
+
+    const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect(res.success).toBe(false);
+    expect(sdk.fireblocksService.awaitBitcoinTransaction).not.toHaveBeenCalled();
+    const after = await readRecord(sdk);
+    expect(after.btcTxid).toBe(moved);
+    expect(after.fireblocksId).toBe("fb-other");
   });
 
   it("adopts a matching transfer and waits on it", async () => {

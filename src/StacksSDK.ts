@@ -243,6 +243,11 @@ export class StacksSDK {
    * BTC bonds — losing a record for an unspent lock can strand BTC.
    */
   public setLockRecordStore = (store: LockRecordStore): void => {
+    if (typeof store.updateRecord !== "function") {
+      throw new Error(
+        "The lock-record store must implement updateRecord: without an atomic read-modify-write, two overlapping calls can overwrite each other's lock record. Both built-in stores implement it.",
+      );
+    }
     this.lockRecordStore = store;
     this.lockRecordStoreIsDurable = true;
   };
@@ -399,24 +404,14 @@ export class StacksSDK {
   };
 
   /**
-   * Applies `update` to bond `bondIndex`'s lock record as one step when the store supports
-   * it, and as a load followed by a save when it does not. `update` returns undefined to
-   * leave the record as it is.
+   * Applies `update` to bond `bondIndex`'s lock record as one step. `update` returns
+   * undefined to leave the record as it is.
    */
   private updateLockRecord = async (
     bondIndex: number,
     update: (current: BondLockRecord | null) => BondLockRecord | undefined,
-  ): Promise<BondLockRecord | null> => {
-    const store = this.lockRecordStore;
-    if (typeof store.updateRecord === "function") {
-      return store.updateRecord(this.address!, bondIndex, update);
-    }
-    const current = await store.loadRecord(this.address!, bondIndex);
-    const next = update(current);
-    if (next === undefined) return current;
-    await store.saveRecord(this.address!, bondIndex, next);
-    return next;
-  };
+  ): Promise<BondLockRecord | null> =>
+    this.lockRecordStore.updateRecord(this.address!, bondIndex, update);
 
   /**
    * Why a lock whose earlier fundings were abandoned after broadcast must not be funded
@@ -4248,8 +4243,8 @@ export class StacksSDK {
               await this.fireblocksService.findBitcoinTransactionByExternalId(fundingExternalId);
             if (!priorFireblocksId) throw fundErr;
             // The external id is derived from this lock, so the transfer belongs to this
-            // enrollment; an earlier attempt may still have asked for another amount. Fields
-            // Fireblocks has not filled in leave nothing to compare.
+            // enrollment; an earlier attempt may still have asked for another amount. Both
+            // fields are compared, so a transfer that has not reported one is not adopted yet.
             let existing: { requestedAmount?: string; destinationAddress?: string };
             try {
               existing = await this.fireblocksService.getTransferState(priorFireblocksId);
@@ -4261,22 +4256,45 @@ export class StacksSDK {
                 error: `Could not read Fireblocks transfer ${priorFireblocksId}, which holds bond ${bondIndex}'s funding external id ${fundingExternalId} (UNKNOWN) — refusing to adopt it: ${formatErrorMessage(e)}. No new Bitcoin was sent. Retry createBond.`,
               };
             }
-            if (existing.destinationAddress !== undefined && existing.destinationAddress !== metadata.lockAddress) {
+            const existingSats = existing.requestedAmount !== undefined ? btcDecimalToSats(existing.requestedAmount) : undefined;
+            if (existing.destinationAddress === undefined || existingSats === undefined) {
+              return {
+                success: false,
+                error: `Fireblocks transfer ${priorFireblocksId} holds bond ${bondIndex}'s funding external id ${fundingExternalId} but does not yet report its ${existing.destinationAddress === undefined ? "destination" : "amount"}, so it cannot be checked against lock address ${metadata.lockAddress} and ${btcAmountSats} sats. It was not adopted or recorded and no new Bitcoin was sent. Retry createBond once Fireblocks reports it.`,
+              };
+            }
+            if (existing.destinationAddress !== metadata.lockAddress) {
               return {
                 success: false,
                 error: `Fireblocks transfer ${priorFireblocksId} holds bond ${bondIndex}'s funding external id ${fundingExternalId} but pays ${existing.destinationAddress}, not lock address ${metadata.lockAddress}. It was not adopted or recorded; resolve it in Fireblocks before retrying.`,
               };
             }
-            const existingSats = existing.requestedAmount !== undefined ? btcDecimalToSats(existing.requestedAmount) : undefined;
-            if (existingSats !== undefined && existingSats !== BigInt(btcAmountSats)) {
-              // Recorded at its own amount: its Bitcoin lands at this lock address either way.
-              await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, amountSats: existingSats, fireblocksId: priorFireblocksId, stage: laterStage(lockRecord.stage, "funding-requested") });
+            const adoptedAt = existingSats !== BigInt(btcAmountSats) ? existingSats : undefined;
+            const adopted = await this.updateLockRecord(bondIndex, (current) => {
+              const unmoved = current !== null
+                && current.lockAddress === lockRecord.lockAddress
+                && current.btcTxid === undefined
+                && (current.fireblocksId === undefined || current.fireblocksId === priorFireblocksId);
+              if (!unmoved) return undefined;
+              return {
+                ...current,
+                ...(adoptedAt !== undefined ? { amountSats: adoptedAt } : {}),
+                fireblocksId: priorFireblocksId,
+                stage: laterStage(current.stage, "funding-requested"),
+              };
+            });
+            if (adopted?.fireblocksId !== priorFireblocksId) {
               return {
                 success: false,
-                error: `Fireblocks transfer ${priorFireblocksId} already funds bond ${bondIndex}'s lock with ${existingSats} sats under external id ${fundingExternalId}; this call asked for ${btcAmountSats} sats. No new Bitcoin was sent. The transfer is recorded at ${existingSats} sats; continue it with resumeBondRegistration(${bondIndex}) or createBond at ${existingSats} sats.`,
+                error: `Bond ${bondIndex}'s lock record changed while Fireblocks transfer ${priorFireblocksId} was being checked, so it was not adopted. No new Bitcoin was sent. Check the record and retry createBond.`,
               };
             }
-            await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, fireblocksId: priorFireblocksId, stage: laterStage(lockRecord.stage, "funding-requested") });
+            if (adoptedAt !== undefined) {
+              return {
+                success: false,
+                error: `Fireblocks transfer ${priorFireblocksId} already funds bond ${bondIndex}'s lock with ${adoptedAt} sats under external id ${fundingExternalId}; this call asked for ${btcAmountSats} sats. No new Bitcoin was sent. The transfer is recorded at ${adoptedAt} sats; continue it with resumeBondRegistration(${bondIndex}) or createBond at ${adoptedAt} sats.`,
+              };
+            }
             let priorBtcTxid: string;
             try {
               priorBtcTxid = await this.fireblocksService.awaitBitcoinTransaction(priorFireblocksId);
@@ -5174,6 +5192,9 @@ export class StacksSDK {
     await cosigner.verifyCommittedKey(earlyUnlockBytes);
   };
 
+  private announcePendingRefusal = (pendingTxCount: number): string =>
+    `${pendingTxCount} transaction(s) from this vault are pending in the mempool. The announce forfeits whichever bond the membership names when it executes, and a pending registration, stake or earlier announce runs first — call again once the vault has nothing pending.`;
+
   /**
    * Announces an L1 early exit for an active BTC-locked bond (L2 leg only).
    * Zeroes the L2 amountSats; paired STX remains locked through the bond's normal
@@ -5223,8 +5244,15 @@ export class StacksSDK {
         return { success: false, error: `Refusing to announce early exit — cannot confirm the cosigner holds this bond's committed key (early exit would be unspendable and its rewards forfeited): ${formatErrorMessage(error)}` };
       }
 
-      const result = await this.runNonceExclusive(async () => {
-        const resolvedNonce = await this.resolveNonce(opts?.nonce);
+      const result = await this.runNonceExclusive(async (): Promise<{ txid?: string; error?: string; reason?: string }> => {
+        const nonceState = await this.chainService.getAccountNonce(this.address!);
+        if (nonceState.pendingTxCount > 0) {
+          return { error: this.announcePendingRefusal(nonceState.pendingTxCount) };
+        }
+        const resolvedNonce = nonceState.confirmedNonce;
+        if (opts?.nonce !== undefined && opts.nonce !== resolvedNonce) {
+          return { error: `Refusing to announce early exit at nonce ${opts.nonce}: it must sign at the confirmed nonce (${resolvedNonce}) so that no earlier transaction can change the bond it forfeits.` };
+        }
         const tx = await this.buildPox5Call(
           "announce-l1-early-exit",
           [Cl.address(this.address!), Cl.address(membership.signer)],
@@ -5254,6 +5282,11 @@ export class StacksSDK {
           const current = await fetchBondMembership({ address: this.address!, network: this.pox5Network });
           if (!current || current.bondIndex !== membership.bondIndex) {
             return `the bond changed during approval (reviewed bond ${membership.bondIndex}, now ${current ? `bond ${current.bondIndex}` : "no membership"})`;
+          }
+          const nonceNow = await this.chainService.getAccountNonce(this.address!);
+          if (nonceNow.pendingTxCount > 0) return this.announcePendingRefusal(nonceNow.pendingTxCount);
+          if (nonceNow.confirmedNonce !== resolvedNonce) {
+            return `the confirmed nonce moved from ${resolvedNonce} to ${nonceNow.confirmedNonce} during approval`;
           }
           return undefined;
         });
