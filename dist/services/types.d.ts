@@ -308,6 +308,12 @@ export type RepointBondFundingResult = {
 export type CreateBondResult = {
     success: boolean;
     /**
+     * Bitcoin may already be committed to this bond's lock and the call refused to fund it
+     * again. Show a funding-blocked state; a plain retry must not start a new funding. Set
+     * only where the refusal says so; a failure whose retry is safe leaves it absent.
+     */
+    fundingBlocked?: true;
+    /**
      * The registration from an earlier attempt had already settled: the contract refused this
      * one as already registered and the staker's membership names this bond at the recorded
      * amount. `stacksTxid` is absent; the funding outpoint is the recorded one.
