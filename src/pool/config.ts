@@ -65,7 +65,7 @@ export const signerManagerAllowlistFromEnv = (
 const positiveMsFromEnv = (name: string, raw: string | undefined): number | undefined => {
   if (raw === undefined || raw === "") return undefined;
   const value = Number(raw);
-  if (!Number.isInteger(value) || value <= 0) {
+  if (!/^\d+$/.test(raw) || !Number.isSafeInteger(value) || value <= 0) {
     throw new Error(`${name} must be a positive integer number of milliseconds, got "${raw}"`);
   }
   return value;

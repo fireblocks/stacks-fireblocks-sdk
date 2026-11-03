@@ -587,7 +587,7 @@ export type RenewBondResult = PendingFireblocksFields & {
   unsettled?: boolean;
 };
 
-export type CalculateRewardsResponse = {
+export type CalculateRewardsResponse = PendingFireblocksFields & {
   success: boolean;
   txHash?: string;
   error?: string;
@@ -629,7 +629,7 @@ export type ClaimResultItem = {
   error?: string;
 };
 
-export type ClaimRewardsResponse = {
+export type ClaimRewardsResponse = PendingFireblocksFields & {
   success: boolean;
   txHashes?: string[];
   /** Structured per-(bond,cycle) results — accrual, payout, both tx ids, and status. */

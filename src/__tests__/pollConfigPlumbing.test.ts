@@ -85,7 +85,7 @@ describe("poll budgets from the REST server's environment", () => {
     expect(apiServiceConfigFromEnv({}).poll).toBeUndefined();
   });
 
-  it.each([["abc"], ["0"], ["-5"], ["1.5"]])("refuses an invalid value (%p) at boot", (value) => {
+  it.each([["abc"], ["0"], ["-5"], ["1.5"], ["0x10"], ["1e6"], [" 600000"], ["9007199254740993"]])("refuses an invalid value (%p) at boot", (value) => {
     expect(() => apiServiceConfigFromEnv({ FIREBLOCKS_POLL_TIMEOUT_MS: value })).toThrow(/FIREBLOCKS_POLL_TIMEOUT_MS/);
   });
 });

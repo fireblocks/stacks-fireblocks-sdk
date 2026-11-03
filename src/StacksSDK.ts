@@ -174,6 +174,18 @@ import { Signature as Secp256k1Signature } from '@noble/secp256k1';
 import { hexToBytes, bytesToHex, signatureVrsToRsv } from "@stacks/common";
 import { toDerSignature } from "./utils/der";
 
+/** Retry note for a claim leg whose signing request is still pending. */
+const claimRetryNote = (txHashes: string[]): string =>
+  txHashes.length > 0
+    ? `This leg was not broadcast; the legs in txHashes were. A retry resumes the claim and opens a new signing request for this leg: reject this one in Fireblocks first.`
+    : RETRY_NOTE_NO_EXTERNAL_ID;
+
+/** Retry note for a pending request on a call made with `externalId`, or without one. */
+const retryNoteFor = (externalId: string | undefined): string =>
+  externalId !== undefined
+    ? `Nothing was broadcast. Retry with externalId ${externalId} to keep waiting on this request while the transaction is unchanged; a retry without it opens a new signing request.`
+    : "Nothing was broadcast. A retry opens a new signing request: reject this one in Fireblocks first.";
+
 /**
  * Retry note for a pending request on a call that takes no externalId, so its request id
  * is random and a retry cannot rejoin it.
@@ -1537,6 +1549,7 @@ export class StacksSDK {
       });
     } catch (error) {
       if (error instanceof ValidationError) return { success: false, error: error.message };
+      if (error instanceof FireblocksTransferError) throw error;
       throw new Error(
         `Failed to build, sign or send transaction: ${formatErrorMessage(
           error,
@@ -1677,7 +1690,7 @@ export class StacksSDK {
    */
   private pendingFireblocksResult = (
     error: unknown,
-    retryNote = "Nothing was broadcast. A retry opens a new signing request: reject this one in Fireblocks first, or retry with the same externalId to keep waiting on it while the transaction is unchanged.",
+    retryNote = "Nothing was broadcast. A retry opens a new signing request: reject this one in Fireblocks first. A call made with an externalId keeps waiting on this request when retried with the same externalId while the transaction is unchanged.",
   ): (PendingFireblocksFields & { success: false; error: string }) | undefined => {
     if (!(error instanceof FireblocksTransferError) || TERMINAL_TRANSACTION_STATES.has(error.details.status)) {
       return undefined;
@@ -2730,6 +2743,8 @@ export class StacksSDK {
         txHash: result.txid,
       };
     } catch (error: any) {
+      const pending = this.pendingFireblocksResult(error, retryNoteFor(externalId));
+      if (pending) return pending;
       throw new Error(
         `Failed to create transaction: ${formatErrorMessage(error)}`,
       );
@@ -2829,6 +2844,8 @@ export class StacksSDK {
         txHash: result.txid,
       };
     } catch (error: any) {
+      const pending = this.pendingFireblocksResult(error, retryNoteFor(externalId));
+      if (pending) return pending;
       throw new Error(
         `Failed to create transaction: ${formatErrorMessage(error)}`,
       );
@@ -6989,6 +7006,8 @@ export class StacksSDK {
       }
       return { success: true, txHash: result.txid };
     } catch (error) {
+      const pending = this.pendingFireblocksResult(error, RETRY_NOTE_NO_EXTERNAL_ID);
+      if (pending) return pending;
       return { success: false, error: `Failed to calculate rewards: ${formatErrorMessage(error)}` };
     }
   };
@@ -7318,6 +7337,8 @@ export class StacksSDK {
     bondIndices: number[],
     opts?: { note?: string; nonce?: bigint },
   ): Promise<ClaimRewardsResponse> => {
+    const txHashes: string[] = [];
+    const results: ClaimResultItem[] = [];
     try {
       if (!this.publicKey || !this.vaultAccountId) throw new Error('SDK not initialized');
       if (!this.address) throw new Error('Address not set');
@@ -7402,8 +7423,6 @@ export class StacksSDK {
       // and polls settlement outside it (FBS-31), so a stalled multi-cycle claim does
       // not block other vault operations. Legs stay correctly ordered and nonces unique
       // via mempool-aware resolveNonce; each dependent leg waits for the prior to settle.
-      const txHashes: string[] = [];
-      const results: ClaimResultItem[] = [];
       // A caller-supplied nonce pins only the first leg; later legs auto-resolve.
       const nonceHolder = { value: opts?.nonce };
       for (const item of plan) {
@@ -7419,7 +7438,9 @@ export class StacksSDK {
       }
       return { success: true, txHashes, results };
     } catch (error) {
-      return { success: false, error: `Failed to claim rewards: ${formatErrorMessage(error)}` };
+      const pending = this.pendingFireblocksResult(error, claimRetryNote(txHashes));
+      if (pending) return { ...pending, txHashes, results };
+      return { success: false, error: `Failed to claim rewards: ${formatErrorMessage(error)}`, txHashes, results };
     }
   };
 
@@ -7439,6 +7460,8 @@ export class StacksSDK {
   public claimStxOnlyRewards = async (
     opts?: { note?: string; nonce?: bigint; fromCycle?: number; toCycle?: number },
   ): Promise<ClaimRewardsResponse> => {
+    const txHashes: string[] = [];
+    const results: ClaimResultItem[] = [];
     try {
       if (!this.publicKey || !this.vaultAccountId) throw new Error('SDK not initialized');
       if (!this.address) throw new Error('Address not set');
@@ -7529,8 +7552,6 @@ export class StacksSDK {
       // Execution: NO outer nonce lock — executeClaimCycle takes a SHORT lock per leg
       // and polls settlement outside it (FBS-31), so a stalled claim does not block
       // other vault operations. Nonces stay unique via mempool-aware resolveNonce.
-      const txHashes: string[] = [];
-      const results: ClaimResultItem[] = [];
       // A caller-supplied nonce pins only the first leg; later legs auto-resolve.
       const nonceHolder = { value: opts?.nonce };
       for (const item of plan) {
@@ -7542,7 +7563,9 @@ export class StacksSDK {
       }
       return { success: true, txHashes, results };
     } catch (error) {
-      return { success: false, error: `Failed to claim STX-only rewards: ${formatErrorMessage(error)}` };
+      const pending = this.pendingFireblocksResult(error, claimRetryNote(txHashes));
+      if (pending) return { ...pending, txHashes, results };
+      return { success: false, error: `Failed to claim STX-only rewards: ${formatErrorMessage(error)}`, txHashes, results };
     }
   };
 
