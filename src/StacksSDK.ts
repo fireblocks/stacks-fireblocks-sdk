@@ -610,7 +610,7 @@ export class StacksSDK {
     bondIndex: number,
     fundingExternalId: string,
     error: unknown,
-  ): Promise<{ success: false; error: string; btcTxid?: string }> => {
+  ): Promise<{ success: false; error: string; btcTxid?: string; fundingBlocked?: true }> => {
     const failedId = error instanceof FireblocksTransferError ? error.details.vendorId : undefined;
     // Fireblocks reports FAILED for some transfers that already reached the network
     // (e.g. DROPPED_BY_BLOCKCHAIN), and such a transaction may still confirm. The record is
@@ -711,6 +711,7 @@ export class StacksSDK {
             ? `The lock record could NOT be updated to point at it (${formatErrorMessage(writeFailure)}). Do not fund this bond again; check ${failed.winner} on-chain first.`
             : `The lock record now points at ${failed.winner}; retry createBond for this bond index to continue with it. No new transfer will be opened.`),
         btcTxid: failed.winner,
+        fundingBlocked: true,
       };
     }
     if (failed.kind === "lostRace") {
@@ -719,6 +720,7 @@ export class StacksSDK {
         error:
           `The Fireblocks funding transfer ${failed.fireblocksId} for bond ${bondIndex} failed as DOUBLE_SPENDING: another transaction spent its coins first, so its own txid ${broadcastTxid} will not confirm. ` +
           `That transaction may pay this lock, so the record was left as it is and no new transfer will be opened. Check the lock address: if a transaction there funds this bond, adopt it with repointBondFunding(${bondIndex}, <txid>).`,
+        fundingBlocked: true,
       };
     }
     if (failed.kind === "stale") {
@@ -738,6 +740,7 @@ export class StacksSDK {
             ? `The lock record could NOT be updated to point at it (${formatErrorMessage(writeFailure)}). Do not fund this bond again; check ${broadcastTxid} on-chain first.`
             : `A broadcast transaction may still confirm, so no new transfer will be opened for this bond. The lock record now points at ${broadcastTxid}; retry createBond for this bond index and it continues only once that transaction is visible on-chain. Do not fund this bond again. If ${broadcastTxid} never confirms, call abandonBroadcastFunding(${bondIndex}) to clear the record so the bond can be funded again.`),
         btcTxid: broadcastTxid,
+        fundingBlocked: true,
       };
     }
     const fireblocksId = failed.kind === "abandoned" ? failed.fireblocksId : undefined;
@@ -4043,6 +4046,7 @@ export class StacksSDK {
           ? {
               success: false,
               error: `Bond ${bondIndex} already has ${recordedFunding} on record, so Bitcoin may already be committed; no new Bitcoin was sent. The enrollment cannot continue: ${reason}. Check getBondPosition: a registration that already landed shows there. Otherwise the Bitcoin stays locked until recovered with unlockMaturedBond or spendEarlyExitUtxo.`,
+              fundingBlocked: true,
               ...committedBtc,
             }
           : { success: false, error: uncommittedError };
@@ -4231,6 +4235,7 @@ export class StacksSDK {
             error: `Bond ${bondIndex} already has a recorded funding tx ${priorRecord!.btcTxid} at this lock address; refusing to replace it with ${opts.btcTxid}. Omit btcTxid to resume the recorded funding. If the recorded transaction was replaced or evicted and ${opts.btcTxid} pays the lock, adopt it with repointBondFunding(${bondIndex}, "${opts.btcTxid}").`,
             btcTxid: priorRecord!.btcTxid,
             vout: priorRecord!.vout,
+            fundingBlocked: true,
           };
         }
         if (hasInFlightFireblocks) {
@@ -4268,6 +4273,7 @@ export class StacksSDK {
             error: `Recorded funding tx ${priorRecord!.btcTxid} for bond ${bondIndex} is not visible on the configured Esplora. If that is indexer lag, retry createBond later without opts.btcTxid. If it was replaced (new txid) or evicted, adopt the transaction that pays the lock with repointBondFunding(${bondIndex}, <txid>); a different opts.btcTxid on createBond is refused. Do not fund this bond again.${priorRecord!.fireblocksId !== undefined ? ` If the transaction never confirms, abandonBroadcastFunding(${bondIndex}) clears the record once Fireblocks reports the transfer terminal and the txid has stayed missing long enough.` : ""} The transfer's external id is ${fundingExternalId}.`,
             btcTxid: priorRecord!.btcTxid,
             vout: priorRecord!.vout,
+            fundingBlocked: true,
           };
         }
       }
@@ -4397,7 +4403,7 @@ export class StacksSDK {
           metadata.lockAddress,
           BigInt(btcAmountSats),
         );
-        if (refundBlock) return { success: false, error: refundBlock };
+        if (refundBlock) return { success: false, error: refundBlock, fundingBlocked: true };
         // Record intent (with the deterministic external id) before calling Fireblocks,
         // so a crash mid-send is recoverable and a retry reuses the same id — which
         // Fireblocks de-duplicates, preventing a double funding transfer.
@@ -4475,6 +4481,7 @@ export class StacksSDK {
               return {
                 success: false,
                 error: `Fireblocks transfer ${priorFireblocksId} already funds bond ${bondIndex}'s lock with ${adoptedAt} sats under external id ${fundingExternalId}; this call asked for ${btcAmountSats} sats. No new Bitcoin was sent. The transfer is recorded at ${adoptedAt} sats; continue it with resumeBondRegistration(${bondIndex}) or createBond at ${adoptedAt} sats.`,
+                fundingBlocked: true,
               };
             }
             let priorBtcTxid: string;

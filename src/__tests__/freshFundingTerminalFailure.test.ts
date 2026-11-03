@@ -237,6 +237,7 @@ describe("createBond — a funding transfer that FAILED after it was broadcast",
       expect(res.success).toBe(false);
       expect(res.error).toMatch(/DOUBLE_SPENDING/);
       expect(res.error).toMatch(/repointBondFunding/);
+      expect(res.fundingBlocked).toBe(true);
       const after = await readRecord(sdk);
       expect(after.btcTxid).toBeUndefined();
       expect(after.fireblocksId).toBe(FB_ID);
@@ -278,6 +279,7 @@ describe("createBond — a funding transfer that FAILED after it was broadcast",
 
       expect(res.success).toBe(false);
       expect(res.btcTxid).toBe(ORIGINAL);
+      expect(res.fundingBlocked).toBe(true);
       const after = await readRecord(sdk);
       expect(after.btcTxid).toBe(ORIGINAL);
       expect(after.abandonedBtcTxids ?? []).not.toContain(ORIGINAL);
@@ -305,6 +307,7 @@ describe("createBond — a funding transfer that FAILED after it was broadcast",
     expect((await readRecord(sdk)).btcTxid).toBe(BROADCAST_TXID);
     expect(res.error).toContain(BROADCAST_TXID);
     expect(res.error).not.toMatch(/re-fund/i);
+    expect(res.fundingBlocked).toBe(true);
   });
 
   it("returns the txid on the result and names the exit if it never confirms", async () => {
@@ -394,6 +397,8 @@ describe("createBond — terminal failure on the FRESH funding path", () => {
     // The operator needs to be told the id is spent and how to recover.
     expect(res.error).toMatch(/retry createBond/i);
     expect(res.error).toMatch(/bond-fund-/);
+    // The generation advanced: a retry opens a fresh transfer, so funding is not blocked.
+    expect(res.fundingBlocked).toBeUndefined();
   });
 
   it("directs the operator to retry this bond index once the generation advanced", async () => {
@@ -708,6 +713,7 @@ describe("createBond — adopting an existing transfer by its external id", () =
     expect(res.success).toBe(false);
     expect(res.error).toContain("50000");
     expect(res.error).toContain(AMOUNT_SATS.toString());
+    expect(res.fundingBlocked).toBe(true);
     expect(sdk.fireblocksService.awaitBitcoinTransaction).not.toHaveBeenCalled();
     const after = await readRecord(sdk);
     expect(after.fireblocksId).toBe(FB_ID);
@@ -741,6 +747,7 @@ describe("createBond — adopting an existing transfer by its external id", () =
 
     expect(res.success).toBe(false);
     expect(res.error).toContain("bcrt1qsomewhereelse");
+    expect(res.fundingBlocked).toBeUndefined();
     expect(sdk.fireblocksService.awaitBitcoinTransaction).not.toHaveBeenCalled();
     expect((await readRecord(sdk)).fireblocksId).toBeUndefined();
   });
@@ -852,6 +859,7 @@ describe("createBond — re-funding a lock whose earlier funding was abandoned",
     expect(res.success).toBe(false);
     expect(res.error).toContain(ABANDONED);
     expect(res.error).toMatch(/repointBondFunding/);
+    expect(res.fundingBlocked).toBe(true);
     expect(sdk.fireblocksService.createBitcoinTransaction).not.toHaveBeenCalled();
   });
 
@@ -863,6 +871,7 @@ describe("createBond — re-funding a lock whose earlier funding was abandoned",
 
     expect(res.success).toBe(false);
     expect(res.error).toMatch(/repointBondFunding/);
+    expect(res.fundingBlocked).toBe(true);
     expect(sdk.fireblocksService.createBitcoinTransaction).not.toHaveBeenCalled();
   });
 
@@ -877,6 +886,7 @@ describe("createBond — re-funding a lock whose earlier funding was abandoned",
 
     expect(res.success).toBe(false);
     expect(res.error).toMatch(/UNKNOWN/);
+    expect(res.fundingBlocked).toBe(true);
     expect(sdk.fireblocksService.createBitcoinTransaction).not.toHaveBeenCalled();
   });
 
