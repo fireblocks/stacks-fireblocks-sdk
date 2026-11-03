@@ -601,6 +601,94 @@ describe("createBond — eligibility gates after Bitcoin is committed", () => {
     expect(res.vout).toBe(0);
   });
 
+  describe("a registration that already landed (review item 5)", () => {
+    // The register-for-bond from an earlier attempt settled after that attempt gave up. The
+    // retry then meets the contract's own refusal; the chain's membership is the evidence.
+    const landed = (over: Record<string, unknown> = {}) => ({
+      bondIndex: BOND_INDEX,
+      amountUstx: BigInt(1_000),
+      signer: MANAGER,
+      isL1Lock: true,
+      amountSats: AMOUNT_SATS,
+      ...over,
+    });
+
+    it.each([[9], [19]])("reports success with the recorded outpoint on u%s when membership shows this bond", async (code) => {
+      const sdk = makeSdk();
+      await seedFunded(sdk);
+      (fetchEligibleRegisterForBond as jest.Mock).mockResolvedValue({ ok: false, reasons: [code] });
+      (fetchBondMembership as jest.Mock).mockResolvedValue(landed());
+
+      const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+      expect(res.success).toBe(true);
+      expect(res.alreadyRegistered).toBe(true);
+      expect(res.btcTxid).toBe(GOOD_TXID);
+      expect(res.vout).toBe(0);
+      expect((await readRecord(sdk)).stage).toBe("registration-confirmed");
+    });
+
+    it.each([
+      ["another bond", { bondIndex: BOND_INDEX + 1 }],
+      ["an sBTC position", { isL1Lock: false }],
+      ["a different amount", { amountSats: AMOUNT_SATS - BigInt(1) }],
+    ])("still refuses when membership shows %s", async (_label, over) => {
+      const sdk = makeSdk();
+      await seedFunded(sdk);
+      (fetchEligibleRegisterForBond as jest.Mock).mockResolvedValue({ ok: false, reasons: [9] });
+      (fetchBondMembership as jest.Mock).mockResolvedValue(landed(over));
+
+      const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+      expect(res.success).toBe(false);
+      expect(res.btcTxid).toBe(GOOD_TXID);
+      expect((await readRecord(sdk)).stage).toBe("registration-submitted");
+    });
+
+    it("still refuses when the membership read fails", async () => {
+      const sdk = makeSdk();
+      await seedFunded(sdk);
+      (fetchEligibleRegisterForBond as jest.Mock).mockResolvedValue({ ok: false, reasons: [9] });
+      (fetchBondMembership as jest.Mock).mockRejectedValue(new Error("hiro 503"));
+
+      const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+      expect(res.success).toBe(false);
+      expect(res.btcTxid).toBe(GOOD_TXID);
+    });
+
+    it("does not consult membership for an unrelated refusal", async () => {
+      const sdk = makeSdk();
+      await seedFunded(sdk);
+      (fetchEligibleRegisterForBond as jest.Mock).mockResolvedValue({ ok: false, reasons: [7] });
+      (fetchBondMembership as jest.Mock).mockResolvedValue(landed());
+
+      const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+      expect(res.success).toBe(false);
+    });
+
+    it("does not report success without a recorded funding", async () => {
+      const sdk = makeSdk();
+      await sdk.lockRecordStore.saveRecord(sdk.address, BOND_INDEX, {
+        bondIndex: BOND_INDEX,
+        unlockBytes: new Uint8Array([1, 2, 3]),
+        lockAddress: LOCK_ADDRESS,
+        unlockHeight: 900,
+        amountSats: AMOUNT_SATS,
+        isL1Lock: true,
+        signerManager: MANAGER,
+        stage: "lock-fixed",
+      });
+      (fetchEligibleRegisterForBond as jest.Mock).mockResolvedValue({ ok: false, reasons: [9] });
+      (fetchBondMembership as jest.Mock).mockResolvedValue(landed());
+
+      const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+      expect(res.success).toBe(false);
+    });
+  });
+
   it("carries the funding pointer when the allowance gate refuses a funded bond", async () => {
     const sdk = makeSdk();
     await seedFunded(sdk);

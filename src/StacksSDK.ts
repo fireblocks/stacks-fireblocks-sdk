@@ -415,6 +415,43 @@ export class StacksSDK {
     );
   };
 
+  /**
+   * Success for a funded enrollment whose registration already settled, or undefined. Applies
+   * only when the contract refused with ERR_ALREADY_REGISTERED (u9) or ERR_ALREADY_STAKED (u19)
+   * and the staker's membership names this bond, as an L1 lock, at the recorded amount.
+   */
+  private landedRegistration = async (
+    bondIndex: number,
+    record: BondLockRecord | null,
+    reasons: number[],
+  ): Promise<CreateBondResult | undefined> => {
+    if (!record?.btcTxid || record.isL1Lock === false) return undefined;
+    if (!reasons.some((r) => r === 9 || r === 19)) return undefined;
+    const membership = await fetchBondMembership({ address: this.address!, network: this.pox5Network }).catch(() => undefined);
+    if (
+      !membership ||
+      membership.bondIndex !== bondIndex ||
+      !membership.isL1Lock ||
+      membership.amountSats !== record.amountSats
+    ) {
+      return undefined;
+    }
+    // The membership is the evidence; the stage is bookkeeping and its write may fail.
+    await this.updateLockRecord(bondIndex, (current) =>
+      current?.btcTxid === record.btcTxid
+        ? { ...current, stage: laterStage(current.stage, "registration-confirmed") }
+        : undefined,
+    ).catch(() => undefined);
+    return {
+      success: true,
+      alreadyRegistered: true,
+      btcTxid: record.btcTxid,
+      ...(record.vout !== undefined ? { vout: record.vout } : {}),
+      lockingAddress: record.lockAddress,
+      unlockHeight: record.unlockHeight,
+    };
+  };
+
   /** Bond index → the operation holding it. */
   private bondSlots = new Map<number, string>();
 
@@ -3967,6 +4004,8 @@ export class StacksSDK {
       });
       if (!preflight.ok) {
         const reasons = (preflight as { reasons?: number[] }).reasons ?? [];
+        const landed = await this.landedRegistration(bondIndex, priorRecord, reasons);
+        if (landed) return landed;
         const why = this.describeBondReasons(reasons);
         return gateRefusal(
           `Not eligible to register for bond ${bondIndex}: ${why}`,

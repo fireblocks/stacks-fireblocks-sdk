@@ -333,6 +333,12 @@ export type RepointBondFundingResult = {
 
 export type CreateBondResult = {
   success: boolean;
+  /**
+   * The registration from an earlier attempt had already settled: the contract refused this
+   * one as already registered and the staker's membership names this bond at the recorded
+   * amount. `stacksTxid` is absent; the funding outpoint is the recorded one.
+   */
+  alreadyRegistered?: boolean;
   btcTxid?: string;
   vout?: number;
   stacksTxid?: string;
