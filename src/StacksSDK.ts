@@ -187,6 +187,13 @@ import { toDerSignature } from "./utils/der";
 const RETRY_NOTE_NO_EXTERNAL_ID =
   "Nothing was broadcast. A retry opens a new signing request: reject this one in Fireblocks first.";
 
+/** A copy of `record` without an outstanding register request. */
+const withoutPendingRegister = (record: BondLockRecord): BondLockRecord => {
+  const copy = { ...record };
+  delete copy.pendingRegisterExternalId;
+  return copy;
+};
+
 /** True when two reads of a lock record describe the same funding state. */
 const sameLockRecordState = (a: BondLockRecord | null, b: BondLockRecord | null): boolean => {
   if (a === null || b === null) return a === b;
@@ -385,9 +392,10 @@ export class StacksSDK {
    * has not already consumed. The Bitcoin stays committed and the record keeps pointing
    * at it — only the L2 leg is retried.
    *
-   * Advances only from the generation the failed id was derived from. Overlapping attempts
-   * share a request; once one has advanced past it, a late report of the same rejection
-   * must not advance again and orphan the request opened under the newer generation.
+   * Advances only from the generation the failed id was derived from, and only when the
+   * failed request is the one the record names as outstanding. Overlapping attempts can open
+   * different requests at one generation; a rejection of one that is no longer outstanding
+   * must not advance and orphan the request opened after it.
    */
   private abandonTerminalRegistration = async (
     bondIndex: number,
@@ -400,11 +408,14 @@ export class StacksSDK {
     try {
       await this.updateLockRecord(bondIndex, (stored) => {
         if (!stored) return undefined;
-        if ((stored.registrationGeneration ?? 0) !== derivedGeneration) {
+        if (
+          (stored.registrationGeneration ?? 0) !== derivedGeneration ||
+          (stored.pendingRegisterExternalId !== undefined && stored.pendingRegisterExternalId !== registerExternalId)
+        ) {
           movedOn = true;
           return undefined;
         }
-        return { ...stored, registrationGeneration: (stored.registrationGeneration ?? 0) + 1 };
+        return { ...withoutPendingRegister(stored), registrationGeneration: (stored.registrationGeneration ?? 0) + 1 };
       });
       if (movedOn) {
         return (
@@ -456,6 +467,36 @@ export class StacksSDK {
       lockingAddress: record.lockAddress,
       unlockHeight: record.unlockHeight,
     };
+  };
+
+  /** Names `registerExternalId` as bond `bondIndex`'s outstanding register signing request. */
+  private markRegisterRequest = async (bondIndex: number, registerExternalId: string): Promise<void> => {
+    await this.updateLockRecord(bondIndex, (current) =>
+      current ? { ...current, pendingRegisterExternalId: registerExternalId } : undefined,
+    );
+  };
+
+  /** Clears the outstanding register request once it was broadcast, if it is still `registerExternalId`. */
+  private clearRegisterRequest = async (bondIndex: number, registerExternalId: string): Promise<void> => {
+    await this.updateLockRecord(bondIndex, (current) => {
+      if (current?.pendingRegisterExternalId !== registerExternalId) return undefined;
+      return withoutPendingRegister(current);
+    });
+  };
+
+  /**
+   * Refusal for an explicit `externalId` that differs from the one an outstanding register
+   * signing request was opened under, or undefined. Following it would open a second request
+   * for the same registration.
+   */
+  private registerExternalIdConflict = (
+    bondIndex: number,
+    record: BondLockRecord | null,
+    externalId: string | undefined,
+  ): string | undefined => {
+    if (externalId === undefined || record?.pendingRegisterExternalId === undefined) return undefined;
+    if (record.callerExternalId === externalId) return undefined;
+    return `Bond ${bondIndex} has an outstanding register signing request ${record.pendingRegisterExternalId}, opened under ${record.callerExternalId !== undefined ? `externalId ${record.callerExternalId}` : "no externalId"}. A different externalId would open a second request for the same registration. Retry with ${record.callerExternalId !== undefined ? `externalId ${record.callerExternalId}` : "no externalId"}, or resolve that request in Fireblocks first.`;
   };
 
   /** Bond index → the operation holding it. */
@@ -4113,6 +4154,8 @@ export class StacksSDK {
       // failure supersedes its consumed id instead of re-deriving it forever.
       const fundingGeneration = priorRecord?.fundingGeneration ?? 0;
       const fundingExternalId = this.deriveFundingExternalId(bondIndex, metadata.lockAddress, fundingGeneration);
+      const externalIdConflict = this.registerExternalIdConflict(bondIndex, priorRecord, opts?.externalId);
+      if (externalIdConflict) return { success: false, error: externalIdConflict, ...committedBtc };
       const callerExternalId = opts?.externalId ?? priorRecord?.callerExternalId;
       const registrationGeneration = priorRecord?.registrationGeneration ?? 0;
       const priorAtThisLock = priorRecord?.lockAddress === metadata.lockAddress;
@@ -4249,6 +4292,9 @@ export class StacksSDK {
         // signing failure in a row re-derives the id the first retry just consumed.
         ...(priorRecord?.registrationGeneration !== undefined
           ? { registrationGeneration: priorRecord.registrationGeneration }
+          : {}),
+        ...(priorRecord?.pendingRegisterExternalId !== undefined
+          ? { pendingRegisterExternalId: priorRecord.pendingRegisterExternalId }
           : {}),
         // Persist the reward destination so renewBond / updateBondRegistration re-supply
         // the pox-addr calldata rather than dropping it (a `none` map-deletes it).
@@ -4500,6 +4546,7 @@ export class StacksSDK {
           registrationGeneration,
           callerExternalId,
         );
+        await this.markRegisterRequest(bondIndex, registerExternalId);
         return this.pox5SignAndBroadcast(
           tx,
           opts?.note ?? 'register-for-bond',
@@ -4537,8 +4584,9 @@ export class StacksSDK {
         return { success: false, error: errMsg, btcTxid, vout: lockupProof.outputIndex };
       }
 
+      const submitted = withoutPendingRegister(lockRecord);
       await this.lockRecordStore.saveRecord(this.address, bondIndex, {
-        ...lockRecord, btcTxid, vout: lockupProof.outputIndex, stage: "registration-submitted",
+        ...submitted, btcTxid, vout: lockupProof.outputIndex, stage: "registration-submitted",
       });
 
       const settled = await this.waitForTxSettlement(result.txid);
@@ -4551,7 +4599,7 @@ export class StacksSDK {
       }
 
       await this.lockRecordStore.saveRecord(this.address, bondIndex, {
-        ...lockRecord, btcTxid, vout: lockupProof.outputIndex, stage: "registration-confirmed",
+        ...submitted, btcTxid, vout: lockupProof.outputIndex, stage: "registration-confirmed",
       });
 
       return {
@@ -6521,6 +6569,7 @@ export class StacksSDK {
         // only pointer to dead funding transfers, so neither may be reset here.
         ...(priorNextRecord?.fundingGeneration !== undefined ? { fundingGeneration: priorNextRecord.fundingGeneration } : {}),
         ...(priorNextRecord?.registrationGeneration !== undefined ? { registrationGeneration: priorNextRecord.registrationGeneration } : {}),
+        ...(priorNextRecord?.pendingRegisterExternalId !== undefined ? { pendingRegisterExternalId: priorNextRecord.pendingRegisterExternalId } : {}),
         ...(priorNextRecord?.abandonedFireblocksIds !== undefined ? { abandonedFireblocksIds: priorNextRecord.abandonedFireblocksIds } : {}),
         ...(callerExternalId() !== undefined ? { callerExternalId: callerExternalId() } : {}),
         ...extra,
@@ -6588,6 +6637,15 @@ export class StacksSDK {
         return {
           success: false,
           error: `Bond ${nextBondIndex} has abandoned funding tx(s) ${priorNextRecord.abandonedBtcTxids.join(", ")} that were broadcast and may still confirm. No Bitcoin was re-locked: renewing into it could put a second output on its lock. Fund it with createBond, which checks those first, or renew into another bond.`,
+        };
+      }
+      const externalIdConflict = this.registerExternalIdConflict(nextBondIndex, priorNextRecord, opts?.externalId);
+      if (externalIdConflict) {
+        return {
+          success: false,
+          error: externalIdConflict,
+          ...(priorNextRecord?.btcTxid !== undefined ? { btcTxid: priorNextRecord.btcTxid } : {}),
+          ...(priorNextRecord?.vout !== undefined ? { vout: priorNextRecord.vout } : {}),
         };
       }
       let resumeRelock =
@@ -6799,6 +6857,7 @@ export class StacksSDK {
           registrationGeneration,
           callerExternalId(),
         );
+        await this.markRegisterRequest(nextBondIndex, registerExternalId);
         return this.pox5SignAndBroadcast(
           stacksTx,
           opts?.note ?? `renew-bond-${nextBondIndex}`,
@@ -6826,6 +6885,7 @@ export class StacksSDK {
       if (!result?.txid || result.error || result.reason) {
         return { success: false, error: result?.error ?? result?.reason ?? 'broadcast failed', btcTxid, vout: lockupProof.outputIndex };
       }
+      await this.clearRegisterRequest(nextBondIndex, registerExternalId);
 
       const settled = await this.waitForTxSettlement(result.txid);
       if (!settled.success || settled.data?.tx_status !== 'success') {

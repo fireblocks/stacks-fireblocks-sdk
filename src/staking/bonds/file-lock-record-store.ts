@@ -47,6 +47,7 @@ interface SerializedRecord {
   abandonedFireblocksIds?: string[];
   registrationGeneration?: number;
   callerExternalId?: string;
+  pendingRegisterExternalId?: string;
   abandonedBtcTxids?: string[];
   fundingMissingSince?: { txid: string; height: number };
 }
@@ -95,6 +96,9 @@ const serializeRecord = (r: BondLockRecord): SerializedRecord => ({
     ? { registrationGeneration: r.registrationGeneration }
     : {}),
   ...(r.callerExternalId !== undefined ? { callerExternalId: r.callerExternalId } : {}),
+  ...(r.pendingRegisterExternalId !== undefined
+    ? { pendingRegisterExternalId: r.pendingRegisterExternalId }
+    : {}),
   ...(r.abandonedBtcTxids !== undefined ? { abandonedBtcTxids: [...r.abandonedBtcTxids] } : {}),
   ...(r.fundingMissingSince !== undefined ? { fundingMissingSince: { ...r.fundingMissingSince } } : {}),
 });
@@ -120,6 +124,7 @@ const deserializeRecord = (s: SerializedRecord): BondLockRecord => ({
     s.abandonedFireblocksIds !== undefined ? [...s.abandonedFireblocksIds] : undefined,
   registrationGeneration: s.registrationGeneration,
   callerExternalId: s.callerExternalId,
+  pendingRegisterExternalId: s.pendingRegisterExternalId,
   abandonedBtcTxids: s.abandonedBtcTxids !== undefined ? [...s.abandonedBtcTxids] : undefined,
   fundingMissingSince: s.fundingMissingSince !== undefined ? { ...s.fundingMissingSince } : undefined,
 });
