@@ -173,11 +173,10 @@ export interface LockRecordStore {
    * other write to the store landing in between. `update` returns undefined to leave the
    * record as it is. Resolves to the record the store holds afterwards.
    *
-   * Optional so a third-party store is not broken by its addition. Without it, callers
-   * fall back to a separate load and save, and a write from an overlapping call can land
-   * between the two.
+   * Required: a separate load and save lets a write from an overlapping call land between
+   * the two, so `StacksSDK.setLockRecordStore` refuses a store without it.
    */
-  updateRecord?(
+  updateRecord(
     stxAddress: string,
     bondIndex: number,
     update: (current: BondLockRecord | null) => BondLockRecord | undefined,

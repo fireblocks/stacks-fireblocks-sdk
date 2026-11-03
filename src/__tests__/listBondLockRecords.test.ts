@@ -79,6 +79,7 @@ describe("StacksSDK.listBondLockRecords", () => {
     sdk.setLockRecordStore({
       saveRecord: async () => {},
       loadRecord: async () => null,
+      updateRecord: async () => null,
     });
 
     const res = await sdk.listBondLockRecords();
@@ -93,6 +94,7 @@ describe("StacksSDK.listBondLockRecords", () => {
     sdk.setLockRecordStore({
       saveRecord: async () => {},
       loadRecord: async () => null,
+      updateRecord: async () => null,
       listRecords: async () => {
         throw new Error("store unreadable");
       },

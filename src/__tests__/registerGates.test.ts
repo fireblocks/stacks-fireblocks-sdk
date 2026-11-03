@@ -237,6 +237,7 @@ describe("nativeRecordOverwriteGuard (record-slot protection)", () => {
     sdk.setLockRecordStore({
       saveRecord: async () => {},
       loadRecord: async () => { throw new Error("EIO"); },
+      updateRecord: async () => null,
     });
     expect(await sdk.nativeRecordOverwriteGuard(7)).toMatch(/store unreadable/);
   });

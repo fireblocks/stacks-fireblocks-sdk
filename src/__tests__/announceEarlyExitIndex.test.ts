@@ -68,7 +68,11 @@ const makeSdk = (txResult: unknown = REAL_RESULT_BOND_484): any => {
   sdk.vaultAccountId = "7";
   sdk.verifyCommittedCosignerKey = jest.fn().mockResolvedValue(undefined);
   sdk.runNonceExclusive = jest.fn(async (fn: any) => fn());
-  sdk.resolveNonce = jest.fn().mockResolvedValue(BigInt(1));
+  sdk.chainService = {
+    getAccountNonce: jest
+      .fn()
+      .mockResolvedValue({ confirmedNonce: BigInt(1), pendingTxCount: 0, nextAvailable: BigInt(1) }),
+  };
   sdk.buildPox5Call = jest.fn().mockResolvedValue({});
   // Mirrors the production contract: the post-signing revalidate runs before broadcast,
   // and a returned reason discards the signed transaction.
