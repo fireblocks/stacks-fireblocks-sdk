@@ -283,6 +283,52 @@ describe("renewBond — over a next-bond record whose createBond funding transfe
     expect(after.stage).toBe("funding-requested");
   });
 
+  it("does not broadcast the re-lock when the next bond's record changed while it was being signed", async () => {
+    // Review item 4: the record is read once, then the re-lock waits on a Fireblocks approval.
+    // A createBond for the same bond in another process can write its funding in that window.
+    const sdk = makeSdk();
+    sdk.runNonceExclusive = jest.fn(async (fn: any) => fn());
+    const sk = Uint8Array.from({ length: 32 }, (_, i) => (i === 31 ? 1 : 0));
+    const nextLockAddress = btc.p2wpkh(getPublicKey(sk, true), sdk.btcNetwork).address!;
+    (buildRegisterMetadata as jest.Mock).mockReturnValue({
+      unlockBytes: new Uint8Array([1, 2, 3]),
+      lockAddress: nextLockAddress,
+      unlockHeight: 900,
+      outputScript: OUTPUT_SCRIPT,
+    });
+    sdk.deriveLock = jest.fn().mockResolvedValue({
+      bondIndex: 4, unlockHeight: 100, lockScript: new Uint8Array([0x51]), lockingAddress: nextLockAddress,
+    });
+    sdk.readBtcTipHeight = jest.fn().mockResolvedValue(200);
+    sdk.findLockUtxo = jest.fn().mockResolvedValue({ txid: GOOD_TXID, vout: 0, value: 100_000 });
+    sdk.broadcastBtc = jest.fn();
+    const concurrent = {
+      bondIndex: NEXT_BOND,
+      unlockBytes: new Uint8Array([1, 2, 3]),
+      lockAddress: nextLockAddress,
+      unlockHeight: 900,
+      amountSats: AMOUNT_SATS,
+      isL1Lock: true,
+      fundingExternalId: "ext-id-concurrent",
+      fireblocksId: "fb-concurrent",
+      stage: "funding-requested",
+    };
+    sdk.signBtcSighash = jest.fn(async () => {
+      await sdk.lockRecordStore.saveRecord(sdk.address, NEXT_BOND, concurrent);
+      return new Uint8Array(72).fill(1);
+    });
+
+    const res = await sdk.renewBond(NEXT_BOND, MANAGER, { ...REWARD, feeSats: BigInt(1_000) });
+
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/changed/i);
+    expect(res.error).toMatch(/no bitcoin was re-locked/i);
+    expect(sdk.broadcastBtc).not.toHaveBeenCalled();
+    const after = await sdk.lockRecordStore.loadRecord(sdk.address, NEXT_BOND);
+    expect(after.fireblocksId).toBe("fb-concurrent");
+    expect(after.btcTxid).toBeUndefined();
+  });
+
   it("refuses to rebuild over a recorded funding tx that is not visible while its transfer id is on the record", async () => {
     // A transfer broadcast and then reported failed leaves its txid and Fireblocks id on the
     // record. Rebuilding over the txid would drop the id of a transfer that can still land.

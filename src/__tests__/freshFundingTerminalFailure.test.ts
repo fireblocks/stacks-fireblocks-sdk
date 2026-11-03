@@ -566,8 +566,10 @@ describe("createBond — terminal failure on the FRESH funding path", () => {
       .mockImplementationOnce(() => a1.promise)
       .mockImplementationOnce(() => a2.promise);
 
-    const call1 = sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
-    const call2 = sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+    // Within one process the bond slot refuses the second call; these model two processes
+    // sharing one store, so they run the slot-free body.
+    const call1 = sdk.createBondInSlot(BOND_INDEX, AMOUNT_SATS, MANAGER);
+    const call2 = sdk.createBondInSlot(BOND_INDEX, AMOUNT_SATS, MANAGER);
     await until(() => sdk.fireblocksService.awaitBitcoinTransaction.mock.calls.length === 2);
 
     a1.reject(terminalErrorFor(FB_ID, TransactionStateEnum.Rejected));
@@ -582,7 +584,7 @@ describe("createBond — terminal failure on the FRESH funding path", () => {
         bAccepted = true;
         return new Promise(() => {});
       });
-    void sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+    void sdk.createBondInSlot(BOND_INDEX, AMOUNT_SATS, MANAGER);
     await until(() => bAccepted);
 
     a2.reject(terminalErrorFor(FB_ID, TransactionStateEnum.Rejected));
