@@ -10,6 +10,7 @@ import {
   api_constants,
   BTC_ESPLORA,
   EARLY_EXIT_SIGNER,
+  HIRO_API_KEY_HEADER,
   PRIVATE1_HIRO_API_BASE,
   PUBLIC_TESTNET_POX5_API,
 } from "./constants";
@@ -39,17 +40,96 @@ export interface NetworkProfile {
   requirePox5Active?: boolean;
 }
 
+/** The origin of a URL, or undefined when it cannot be parsed. */
+export const originOf = (url: unknown): string | undefined => {
+  try {
+    return new URL(String(url)).origin;
+  } catch {
+    return undefined;
+  }
+};
+
+/**
+ * Adds the Hiro API key to a request's headers, but ONLY for the Stacks API origin.
+ *
+ * The credential must never reach a third party. Esplora and the early-exit cosigner are
+ * separate services reached over plain `fetch`, so today nothing carries the key to them
+ * — but an adapter that attaches a header regardless of destination makes that a matter
+ * of call-site discipline rather than construction. `allowedOrigin` makes it structural:
+ * point this adapter at Esplora and it sends no key.
+ *
+ * Omitted entirely when no key is configured — an empty header value is rejected by Hiro
+ * rather than treated as an anonymous request. Also omitted when either origin cannot be
+ * parsed, since an unverifiable destination is not a match.
+ */
+export function withChainApiKey(
+  init: RequestInit | undefined,
+  apiKey?: string,
+  requestUrl?: unknown,
+  allowedOrigin?: string,
+): RequestInit | undefined {
+  if (!apiKey) return init;
+  if (allowedOrigin !== undefined) {
+    const target = originOf(requestUrl);
+    if (target === undefined || target !== originOf(allowedOrigin)) return init;
+  }
+  const headers = new Headers(init?.headers ?? {});
+  headers.set(HIRO_API_KEY_HEADER, apiKey);
+  // The origin check above covers only the first hop. A followed redirect keeps custom
+  // headers (only Authorization is dropped cross-origin), so a keyed request refuses
+  // redirects outright.
+  return { ...(init ?? {}), headers, redirect: "error" };
+}
+
+const ERROR_BODY_EXCERPT_CHARS = 200;
+
+/**
+ * `@stacks/bitcoin-staking` reads `/v2/pox`, `/v2/accounts/*` and the bond-admin data var
+ * with `response.json()` and no `ok` check, so a plain-text error body — a rate limit, a
+ * gateway page — surfaces as a bare SyntaxError that names neither the status nor the
+ * endpoint. A non-OK response whose body is not JSON can only ever fail there, so it is
+ * reported here with what actually came back. A JSON error body is left for the caller,
+ * which may read it.
+ *
+ * Only the path is reported: the query string is not part of the diagnosis.
+ */
+async function assertErrorBodyIsReadable(res: Response, url: string): Promise<void> {
+  const body = await res.clone().text().catch(() => "");
+  try {
+    JSON.parse(body);
+    return;
+  } catch {
+    // not JSON — fall through to the descriptive error
+  }
+  let path = url;
+  try {
+    path = new URL(url).pathname;
+  } catch {
+    // relative or unparseable: keep the raw value
+  }
+  const excerpt = body.length > ERROR_BODY_EXCERPT_CHARS ? `${body.slice(0, ERROR_BODY_EXCERPT_CHARS)}…` : body;
+  throw new Error(
+    `Stacks API ${path} returned HTTP ${res.status}${res.statusText ? ` ${res.statusText}` : ""}${excerpt ? `: ${excerpt}` : " with an empty body"}`,
+  );
+}
+
 export function accountBalanceNormalizingFetch(
   baseFetch: typeof fetch = fetch,
+  apiKey?: string,
+  allowedOrigin?: string,
 ): typeof fetch {
   const stripHexPrefix = (v: unknown): unknown =>
     typeof v === "string" && /^0x/i.test(v) ? v.slice(2) : v;
 
   return (async (input: any, init?: any): Promise<Response> => {
-    const res = await baseFetch(input, init);
+    const res = await baseFetch(input, withChainApiKey(init, apiKey, input, allowedOrigin));
     const url =
       typeof input === "string" ? input : (input?.url ?? String(input));
-    if (!res.ok || !/\/v2\/accounts\//.test(url)) return res;
+    if (!res.ok) {
+      await assertErrorBodyIsReadable(res, url);
+      return res;
+    }
+    if (!/\/v2\/accounts\//.test(url)) return res;
 
     const data = await res
       .clone()
@@ -135,7 +215,11 @@ export function resolveNetworkProfile(opts: {
  * `StacksService.broadcastTransaction`, deriving chain id / magic bytes / base URL
  * from the resolved profile and installing the account-balance fetch adapter.
  */
-export function stacksNetworkFromProfile(profile: NetworkProfile): StacksNetwork {
+export function stacksNetworkFromProfile(
+  profile: NetworkProfile,
+  apiKey?: string,
+  baseFetch: typeof fetch = fetch,
+): StacksNetwork {
   const base = profile.name === "mainnet" ? STACKS_MAINNET : STACKS_TESTNET;
   return {
     ...base,
@@ -143,7 +227,9 @@ export function stacksNetworkFromProfile(profile: NetworkProfile): StacksNetwork
     magicBytes: profile.magicBytes,
     client: {
       baseUrl: profile.stacksApiUrl,
-      fetch: accountBalanceNormalizingFetch(),
+      // Every PoX-5 read `@stacks/bitcoin-staking` performs goes through this fetch,
+      // so the key has to be applied here rather than at individual call sites.
+      fetch: accountBalanceNormalizingFetch(baseFetch, apiKey, profile.stacksApiUrl),
     },
   } as StacksNetwork;
 }
@@ -156,10 +242,15 @@ export function stacksNetworkFromProfile(profile: NetworkProfile): StacksNetwork
  */
 export async function validateNetworkProfile(
   profile: NetworkProfile,
+  apiKey?: string,
+  baseFetch: typeof fetch = fetch,
 ): Promise<void> {
   let info: any;
   try {
-    const res = await fetch(`${profile.stacksApiUrl}/v2/info`);
+    const res = await baseFetch(
+      `${profile.stacksApiUrl}/v2/info`,
+      withChainApiKey(undefined, apiKey, `${profile.stacksApiUrl}/v2/info`, profile.stacksApiUrl),
+    );
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     info = await res.json();
   } catch (error) {
@@ -186,7 +277,10 @@ export async function validateNetworkProfile(
   // A profile with `requirePox5Active` (e.g. public-testnet) instead fails closed:
   // it is only "supported" once the node actually serves the PoX-5 boot contract.
   try {
-    const poxRes = await fetch(`${profile.stacksApiUrl}/v2/pox`);
+    const poxRes = await baseFetch(
+      `${profile.stacksApiUrl}/v2/pox`,
+      withChainApiKey(undefined, apiKey, `${profile.stacksApiUrl}/v2/pox`, profile.stacksApiUrl),
+    );
     if (poxRes.ok) {
       const pox = await poxRes.json();
       const contractId: string | undefined = pox?.contract_id;

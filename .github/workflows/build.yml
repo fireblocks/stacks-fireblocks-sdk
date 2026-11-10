@@ -19,7 +19,7 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       # Type-checks the WHOLE project, including every tracked test suite (the e2e suite
       # is excluded from `npm test`, so this is what keeps it release-blocking that it
