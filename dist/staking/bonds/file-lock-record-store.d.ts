@@ -30,7 +30,9 @@ export declare class FileLockRecordStore implements LockRecordStore {
     private releaseLock;
     private withLock;
     saveRecord(stxAddress: string, bondIndex: number, record: BondLockRecord): Promise<void>;
+    updateRecord(stxAddress: string, bondIndex: number, update: (current: BondLockRecord | null) => BondLockRecord | undefined): Promise<BondLockRecord | null>;
     loadRecord(stxAddress: string, bondIndex: number): Promise<BondLockRecord | null>;
+    listRecords(stxAddress: string): Promise<BondLockRecord[]>;
     /**
      * Startup health check used to gate native-BTC funding. Verifies the directory is
      * writable (temp write + fsync + rename + delete) and that the existing store, if

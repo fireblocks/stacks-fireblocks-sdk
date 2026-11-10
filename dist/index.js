@@ -1033,7 +1033,7 @@ var require_network = __commonJS({
   }
 });
 
-// node_modules/@noble/curves/node_modules/@noble/hashes/utils.js
+// node_modules/@scure/btc-signer/node_modules/@noble/hashes/utils.js
 function isBytes2(a) {
   return a instanceof Uint8Array || ArrayBuffer.isView(a) && a.constructor.name === "Uint8Array" && "BYTES_PER_ELEMENT" in a && a.BYTES_PER_ELEMENT === 1;
 }
@@ -1095,6 +1095,9 @@ function createView2(arr) {
 }
 function rotr2(word, shift) {
   return word << 32 - shift | word >>> shift;
+}
+function rotl(word, shift) {
+  return word << shift | word >>> 32 - shift >>> 0;
 }
 function bytesToHex2(bytes2) {
   abytes2(bytes2);
@@ -1179,7 +1182,7 @@ function randomBytes(bytesLength = 32) {
 }
 var hasHexBuiltin, hexes, asciis, oidNist;
 var init_utils = __esm({
-  "node_modules/@noble/curves/node_modules/@noble/hashes/utils.js"() {
+  "node_modules/@scure/btc-signer/node_modules/@noble/hashes/utils.js"() {
     hasHexBuiltin = /* @__PURE__ */ (() => (
       // @ts-ignore
       typeof Uint8Array.from([]).toHex === "function" && typeof Uint8Array.fromHex === "function"
@@ -1194,7 +1197,7 @@ var init_utils = __esm({
   }
 });
 
-// node_modules/@noble/curves/node_modules/@noble/hashes/_md.js
+// node_modules/@scure/btc-signer/node_modules/@noble/hashes/_md.js
 function Chi2(a, b, c) {
   return a & b ^ ~a & c;
 }
@@ -1203,7 +1206,7 @@ function Maj2(a, b, c) {
 }
 var HashMD2, SHA256_IV2;
 var init_md = __esm({
-  "node_modules/@noble/curves/node_modules/@noble/hashes/_md.js"() {
+  "node_modules/@scure/btc-signer/node_modules/@noble/hashes/_md.js"() {
     init_utils();
     HashMD2 = class {
       blockLen;
@@ -1314,10 +1317,10 @@ var init_md = __esm({
   }
 });
 
-// node_modules/@noble/curves/node_modules/@noble/hashes/sha2.js
+// node_modules/@scure/btc-signer/node_modules/@noble/hashes/sha2.js
 var SHA256_K2, SHA256_W2, SHA2_32B, _SHA256, sha2562;
 var init_sha2 = __esm({
-  "node_modules/@noble/curves/node_modules/@noble/hashes/sha2.js"() {
+  "node_modules/@scure/btc-signer/node_modules/@noble/hashes/sha2.js"() {
     init_md();
     init_utils();
     SHA256_K2 = /* @__PURE__ */ Uint32Array.from([
@@ -1472,7 +1475,7 @@ var init_sha2 = __esm({
   }
 });
 
-// node_modules/@noble/curves/utils.js
+// node_modules/@scure/btc-signer/node_modules/@noble/curves/utils.js
 function abool(value, title = "") {
   if (typeof value !== "boolean") {
     const prefix2 = title && `"${title}" `;
@@ -1625,7 +1628,7 @@ function validateObject(object, fields = {}, optFields = {}) {
 }
 var abytes3, anumber2, bytesToHex3, concatBytes2, hexToBytes3, isBytes3, randomBytes2, _0n, _1n, isPosBig, bitMask;
 var init_utils2 = __esm({
-  "node_modules/@noble/curves/utils.js"() {
+  "node_modules/@scure/btc-signer/node_modules/@noble/curves/utils.js"() {
     init_utils();
     abytes3 = (value, length, title) => abytes2(value, length, title);
     anumber2 = anumber;
@@ -1641,7 +1644,7 @@ var init_utils2 = __esm({
   }
 });
 
-// node_modules/@noble/curves/abstract/modular.js
+// node_modules/@scure/btc-signer/node_modules/@noble/curves/abstract/modular.js
 function mod(a, b) {
   if (b <= _0n2)
     throw new Error("mod: expected positive modulus, got " + b);
@@ -1891,7 +1894,7 @@ function mapHashToField(key, fieldOrder, isLE = false) {
 }
 var _0n2, _1n2, _2n, _3n, _4n, _5n, _7n, _8n, _9n, _16n, FIELD_FIELDS, FIELD_SQRT, _Field;
 var init_modular = __esm({
-  "node_modules/@noble/curves/abstract/modular.js"() {
+  "node_modules/@scure/btc-signer/node_modules/@noble/curves/abstract/modular.js"() {
     init_utils2();
     _0n2 = /* @__PURE__ */ BigInt(0);
     _1n2 = /* @__PURE__ */ BigInt(1);
@@ -2061,7 +2064,7 @@ var init_modular = __esm({
   }
 });
 
-// node_modules/@noble/curves/abstract/curve.js
+// node_modules/@scure/btc-signer/node_modules/@noble/curves/abstract/curve.js
 function negateCt(condition, item) {
   const neg = item.negate();
   return condition ? neg : item;
@@ -2160,7 +2163,7 @@ function createKeygen(randomSecretKey, getPublicKey) {
 }
 var _0n3, _1n3, pointPrecomputes, pointWindowSizes, wNAF;
 var init_curve = __esm({
-  "node_modules/@noble/curves/abstract/curve.js"() {
+  "node_modules/@scure/btc-signer/node_modules/@noble/curves/abstract/curve.js"() {
     init_utils2();
     init_modular();
     _0n3 = /* @__PURE__ */ BigInt(0);
@@ -2302,10 +2305,10 @@ var init_curve = __esm({
   }
 });
 
-// node_modules/@noble/curves/node_modules/@noble/hashes/hmac.js
+// node_modules/@scure/btc-signer/node_modules/@noble/hashes/hmac.js
 var _HMAC, hmac;
 var init_hmac = __esm({
-  "node_modules/@noble/curves/node_modules/@noble/hashes/hmac.js"() {
+  "node_modules/@scure/btc-signer/node_modules/@noble/hashes/hmac.js"() {
     init_utils();
     _HMAC = class {
       oHash;
@@ -2384,7 +2387,7 @@ var init_hmac = __esm({
   }
 });
 
-// node_modules/@noble/curves/abstract/weierstrass.js
+// node_modules/@scure/btc-signer/node_modules/@noble/curves/abstract/weierstrass.js
 function _splitEndoScalar(k, basis, n) {
   aInRange("scalar", k, _0n4, n);
   const [[a1, b1], [a2, b2]] = basis;
@@ -3172,7 +3175,7 @@ function ecdsa(Point2, hash, ecdsaOpts = {}) {
 }
 var divNearest, DERErr, DER, _0n4, _1n4, _2n2, _3n2, _4n2;
 var init_weierstrass = __esm({
-  "node_modules/@noble/curves/abstract/weierstrass.js"() {
+  "node_modules/@scure/btc-signer/node_modules/@noble/curves/abstract/weierstrass.js"() {
     init_hmac();
     init_utils();
     init_utils2();
@@ -3302,7 +3305,7 @@ var init_weierstrass = __esm({
   }
 });
 
-// node_modules/@noble/curves/secp256k1.js
+// node_modules/@scure/btc-signer/node_modules/@noble/curves/secp256k1.js
 function sqrtMod(y) {
   const P = secp256k1_CURVE.p;
   const _3n3 = BigInt(3), _6n = BigInt(6), _11n = BigInt(11), _22n = BigInt(22);
@@ -3406,7 +3409,7 @@ function schnorrVerify(signature, message, publicKey) {
 }
 var secp256k1_CURVE, secp256k1_ENDO, _0n5, _2n3, Fpk1, Pointk1, secp256k1, TAGGED_HASH_PREFIXES, pointToBytes, hasEven, num, schnorr;
 var init_secp256k1 = __esm({
-  "node_modules/@noble/curves/secp256k1.js"() {
+  "node_modules/@scure/btc-signer/node_modules/@noble/curves/secp256k1.js"() {
     init_sha2();
     init_utils();
     init_curve();
@@ -3472,203 +3475,6 @@ var init_secp256k1 = __esm({
   }
 });
 
-// node_modules/@scure/btc-signer/node_modules/@noble/hashes/utils.js
-function isBytes4(a) {
-  return a instanceof Uint8Array || ArrayBuffer.isView(a) && a.constructor.name === "Uint8Array" && "BYTES_PER_ELEMENT" in a && a.BYTES_PER_ELEMENT === 1;
-}
-function anumber3(n, title = "") {
-  if (typeof n !== "number") {
-    const prefix2 = title && `"${title}" `;
-    throw new TypeError(`${prefix2}expected number, got ${typeof n}`);
-  }
-  if (!Number.isSafeInteger(n) || n < 0) {
-    const prefix2 = title && `"${title}" `;
-    throw new RangeError(`${prefix2}expected integer >= 0, got ${n}`);
-  }
-}
-function abytes4(value, length, title = "") {
-  const bytes2 = isBytes4(value);
-  const len = value?.length;
-  const needsLen = length !== void 0;
-  if (!bytes2 || needsLen && len !== length) {
-    const prefix2 = title && `"${title}" `;
-    const ofLen = needsLen ? ` of length ${length}` : "";
-    const got = bytes2 ? `length=${len}` : `type=${typeof value}`;
-    const message = prefix2 + "expected Uint8Array" + ofLen + ", got " + got;
-    if (!bytes2)
-      throw new TypeError(message);
-    throw new RangeError(message);
-  }
-  return value;
-}
-function aexists3(instance, checkFinished = true) {
-  if (instance.destroyed)
-    throw new Error("Hash instance has been destroyed");
-  if (checkFinished && instance.finished)
-    throw new Error("Hash#digest() has already been called");
-}
-function aoutput3(out, instance) {
-  abytes4(out, void 0, "digestInto() output");
-  const min = instance.outputLen;
-  if (out.length < min) {
-    throw new RangeError('"digestInto() output" expected to be of length >=' + min);
-  }
-}
-function clean3(...arrays) {
-  for (let i = 0; i < arrays.length; i++) {
-    arrays[i].fill(0);
-  }
-}
-function createView3(arr) {
-  return new DataView(arr.buffer, arr.byteOffset, arr.byteLength);
-}
-function rotr3(word, shift) {
-  return word << 32 - shift | word >>> shift;
-}
-function rotl(word, shift) {
-  return word << shift | word >>> 32 - shift >>> 0;
-}
-function createHasher3(hashCons, info = {}) {
-  const hashC = (msg, opts) => hashCons(opts).update(msg).digest();
-  const tmp = hashCons(void 0);
-  hashC.outputLen = tmp.outputLen;
-  hashC.blockLen = tmp.blockLen;
-  hashC.canXOF = tmp.canXOF;
-  hashC.create = (opts) => hashCons(opts);
-  Object.assign(hashC, info);
-  return Object.freeze(hashC);
-}
-var oidNist2;
-var init_utils3 = __esm({
-  "node_modules/@scure/btc-signer/node_modules/@noble/hashes/utils.js"() {
-    oidNist2 = (suffix) => ({
-      // Current NIST hashAlgs suffixes used here fit in one DER subidentifier octet.
-      // Larger suffix values would need base-128 OID encoding and a different length byte.
-      oid: Uint8Array.from([6, 9, 96, 134, 72, 1, 101, 3, 4, 2, suffix])
-    });
-  }
-});
-
-// node_modules/@scure/btc-signer/node_modules/@noble/hashes/_md.js
-function Chi3(a, b, c) {
-  return a & b ^ ~a & c;
-}
-function Maj3(a, b, c) {
-  return a & b ^ a & c ^ b & c;
-}
-var HashMD3, SHA256_IV3;
-var init_md2 = __esm({
-  "node_modules/@scure/btc-signer/node_modules/@noble/hashes/_md.js"() {
-    init_utils3();
-    HashMD3 = class {
-      blockLen;
-      outputLen;
-      canXOF = false;
-      padOffset;
-      isLE;
-      // For partial updates less than block size
-      buffer;
-      view;
-      finished = false;
-      length = 0;
-      pos = 0;
-      destroyed = false;
-      constructor(blockLen, outputLen, padOffset, isLE) {
-        this.blockLen = blockLen;
-        this.outputLen = outputLen;
-        this.padOffset = padOffset;
-        this.isLE = isLE;
-        this.buffer = new Uint8Array(blockLen);
-        this.view = createView3(this.buffer);
-      }
-      update(data) {
-        aexists3(this);
-        abytes4(data);
-        const { view: view2, buffer, blockLen } = this;
-        const len = data.length;
-        for (let pos = 0; pos < len; ) {
-          const take = Math.min(blockLen - this.pos, len - pos);
-          if (take === blockLen) {
-            const dataView = createView3(data);
-            for (; blockLen <= len - pos; pos += blockLen)
-              this.process(dataView, pos);
-            continue;
-          }
-          buffer.set(data.subarray(pos, pos + take), this.pos);
-          this.pos += take;
-          pos += take;
-          if (this.pos === blockLen) {
-            this.process(view2, 0);
-            this.pos = 0;
-          }
-        }
-        this.length += data.length;
-        this.roundClean();
-        return this;
-      }
-      digestInto(out) {
-        aexists3(this);
-        aoutput3(out, this);
-        this.finished = true;
-        const { buffer, view: view2, blockLen, isLE } = this;
-        let { pos } = this;
-        buffer[pos++] = 128;
-        clean3(this.buffer.subarray(pos));
-        if (this.padOffset > blockLen - pos) {
-          this.process(view2, 0);
-          pos = 0;
-        }
-        for (let i = pos; i < blockLen; i++)
-          buffer[i] = 0;
-        view2.setBigUint64(blockLen - 8, BigInt(this.length * 8), isLE);
-        this.process(view2, 0);
-        const oview = createView3(out);
-        const len = this.outputLen;
-        if (len % 4)
-          throw new Error("_sha2: outputLen must be aligned to 32bit");
-        const outLen = len / 4;
-        const state = this.get();
-        if (outLen > state.length)
-          throw new Error("_sha2: outputLen bigger than state");
-        for (let i = 0; i < outLen; i++)
-          oview.setUint32(4 * i, state[i], isLE);
-      }
-      digest() {
-        const { buffer, outputLen } = this;
-        this.digestInto(buffer);
-        const res = buffer.slice(0, outputLen);
-        this.destroy();
-        return res;
-      }
-      _cloneInto(to) {
-        to ||= new this.constructor();
-        to.set(...this.get());
-        const { blockLen, buffer, length, finished, destroyed, pos } = this;
-        to.destroyed = destroyed;
-        to.finished = finished;
-        to.length = length;
-        to.pos = pos;
-        if (length % blockLen)
-          to.buffer.set(buffer);
-        return to;
-      }
-      clone() {
-        return this._cloneInto();
-      }
-    };
-    SHA256_IV3 = /* @__PURE__ */ Uint32Array.from([
-      1779033703,
-      3144134277,
-      1013904242,
-      2773480762,
-      1359893119,
-      2600822924,
-      528734635,
-      1541459225
-    ]);
-  }
-});
-
 // node_modules/@scure/btc-signer/node_modules/@noble/hashes/legacy.js
 function ripemd_f(group, x, y, z) {
   if (group === 0)
@@ -3684,8 +3490,8 @@ function ripemd_f(group, x, y, z) {
 var Rho160, Id160, Pi160, idxLR, idxL, idxR, shifts160, shiftsL160, shiftsR160, Kl160, Kr160, BUF_160, _RIPEMD160, ripemd160;
 var init_legacy = __esm({
   "node_modules/@scure/btc-signer/node_modules/@noble/hashes/legacy.js"() {
-    init_md2();
-    init_utils3();
+    init_md();
+    init_utils();
     Rho160 = /* @__PURE__ */ Uint8Array.from([
       7,
       4,
@@ -3741,7 +3547,7 @@ var init_legacy = __esm({
       0
     ]);
     BUF_160 = /* @__PURE__ */ new Uint32Array(16);
-    _RIPEMD160 = class extends HashMD3 {
+    _RIPEMD160 = class extends HashMD2 {
       h0 = 1732584193 | 0;
       h1 = 4023233417 | 0;
       h2 = 2562383102 | 0;
@@ -3782,182 +3588,24 @@ var init_legacy = __esm({
         this.set(this.h1 + cl + dr | 0, this.h2 + dl + er | 0, this.h3 + el + ar | 0, this.h4 + al + br | 0, this.h0 + bl + cr | 0);
       }
       roundClean() {
-        clean3(BUF_160);
+        clean2(BUF_160);
       }
       destroy() {
         this.destroyed = true;
-        clean3(this.buffer);
+        clean2(this.buffer);
         this.set(0, 0, 0, 0, 0);
       }
     };
-    ripemd160 = /* @__PURE__ */ createHasher3(() => new _RIPEMD160());
-  }
-});
-
-// node_modules/@scure/btc-signer/node_modules/@noble/hashes/sha2.js
-var SHA256_K3, SHA256_W3, SHA2_32B2, _SHA2562, sha2563;
-var init_sha22 = __esm({
-  "node_modules/@scure/btc-signer/node_modules/@noble/hashes/sha2.js"() {
-    init_md2();
-    init_utils3();
-    SHA256_K3 = /* @__PURE__ */ Uint32Array.from([
-      1116352408,
-      1899447441,
-      3049323471,
-      3921009573,
-      961987163,
-      1508970993,
-      2453635748,
-      2870763221,
-      3624381080,
-      310598401,
-      607225278,
-      1426881987,
-      1925078388,
-      2162078206,
-      2614888103,
-      3248222580,
-      3835390401,
-      4022224774,
-      264347078,
-      604807628,
-      770255983,
-      1249150122,
-      1555081692,
-      1996064986,
-      2554220882,
-      2821834349,
-      2952996808,
-      3210313671,
-      3336571891,
-      3584528711,
-      113926993,
-      338241895,
-      666307205,
-      773529912,
-      1294757372,
-      1396182291,
-      1695183700,
-      1986661051,
-      2177026350,
-      2456956037,
-      2730485921,
-      2820302411,
-      3259730800,
-      3345764771,
-      3516065817,
-      3600352804,
-      4094571909,
-      275423344,
-      430227734,
-      506948616,
-      659060556,
-      883997877,
-      958139571,
-      1322822218,
-      1537002063,
-      1747873779,
-      1955562222,
-      2024104815,
-      2227730452,
-      2361852424,
-      2428436474,
-      2756734187,
-      3204031479,
-      3329325298
-    ]);
-    SHA256_W3 = /* @__PURE__ */ new Uint32Array(64);
-    SHA2_32B2 = class extends HashMD3 {
-      constructor(outputLen) {
-        super(64, outputLen, 8, false);
-      }
-      get() {
-        const { A, B, C, D, E, F, G, H } = this;
-        return [A, B, C, D, E, F, G, H];
-      }
-      // prettier-ignore
-      set(A, B, C, D, E, F, G, H) {
-        this.A = A | 0;
-        this.B = B | 0;
-        this.C = C | 0;
-        this.D = D | 0;
-        this.E = E | 0;
-        this.F = F | 0;
-        this.G = G | 0;
-        this.H = H | 0;
-      }
-      process(view2, offset) {
-        for (let i = 0; i < 16; i++, offset += 4)
-          SHA256_W3[i] = view2.getUint32(offset, false);
-        for (let i = 16; i < 64; i++) {
-          const W15 = SHA256_W3[i - 15];
-          const W2 = SHA256_W3[i - 2];
-          const s0 = rotr3(W15, 7) ^ rotr3(W15, 18) ^ W15 >>> 3;
-          const s1 = rotr3(W2, 17) ^ rotr3(W2, 19) ^ W2 >>> 10;
-          SHA256_W3[i] = s1 + SHA256_W3[i - 7] + s0 + SHA256_W3[i - 16] | 0;
-        }
-        let { A, B, C, D, E, F, G, H } = this;
-        for (let i = 0; i < 64; i++) {
-          const sigma1 = rotr3(E, 6) ^ rotr3(E, 11) ^ rotr3(E, 25);
-          const T1 = H + sigma1 + Chi3(E, F, G) + SHA256_K3[i] + SHA256_W3[i] | 0;
-          const sigma0 = rotr3(A, 2) ^ rotr3(A, 13) ^ rotr3(A, 22);
-          const T2 = sigma0 + Maj3(A, B, C) | 0;
-          H = G;
-          G = F;
-          F = E;
-          E = D + T1 | 0;
-          D = C;
-          C = B;
-          B = A;
-          A = T1 + T2 | 0;
-        }
-        A = A + this.A | 0;
-        B = B + this.B | 0;
-        C = C + this.C | 0;
-        D = D + this.D | 0;
-        E = E + this.E | 0;
-        F = F + this.F | 0;
-        G = G + this.G | 0;
-        H = H + this.H | 0;
-        this.set(A, B, C, D, E, F, G, H);
-      }
-      roundClean() {
-        clean3(SHA256_W3);
-      }
-      destroy() {
-        this.destroyed = true;
-        this.set(0, 0, 0, 0, 0, 0, 0, 0);
-        clean3(this.buffer);
-      }
-    };
-    _SHA2562 = class extends SHA2_32B2 {
-      // We cannot use array here since array allows indexing by variable
-      // which means optimizer/compiler cannot use registers.
-      A = SHA256_IV3[0] | 0;
-      B = SHA256_IV3[1] | 0;
-      C = SHA256_IV3[2] | 0;
-      D = SHA256_IV3[3] | 0;
-      E = SHA256_IV3[4] | 0;
-      F = SHA256_IV3[5] | 0;
-      G = SHA256_IV3[6] | 0;
-      H = SHA256_IV3[7] | 0;
-      constructor() {
-        super(32);
-      }
-    };
-    sha2563 = /* @__PURE__ */ createHasher3(
-      () => new _SHA2562(),
-      /* @__PURE__ */ oidNist2(1)
-    );
+    ripemd160 = /* @__PURE__ */ createHasher2(() => new _RIPEMD160());
   }
 });
 
 // node_modules/micro-packed/node_modules/@scure/base/index.js
-function isBytes5(a) {
+function isBytes4(a) {
   return a instanceof Uint8Array || ArrayBuffer.isView(a) && a.constructor.name === "Uint8Array" && "BYTES_PER_ELEMENT" in a && a.BYTES_PER_ELEMENT === 1;
 }
-function abytes5(b) {
-  if (!isBytes5(b))
+function abytes4(b) {
+  if (!isBytes4(b))
     throw new TypeError("Uint8Array expected");
 }
 function isArrayOf(isString, arr) {
@@ -3981,7 +3629,7 @@ function astr(label, input) {
     throw new TypeError(`${label}: string expected`);
   return true;
 }
-function anumber4(n) {
+function anumber3(n) {
   if (typeof n !== "number")
     throw new TypeError(`number expected, got ${typeof n}`);
   if (!Number.isSafeInteger(n))
@@ -4068,7 +3716,7 @@ function convertRadix2(data, from, to, padding2) {
   const mask = powers[to] - 1;
   const res = [];
   for (const n of data) {
-    anumber4(n);
+    anumber3(n);
     if (n >= max)
       throw new Error(`convertRadix2: invalid data word=${n} from=${from}`);
     carry = carry << from | n;
@@ -4093,14 +3741,14 @@ function convertRadix2(data, from, to, padding2) {
 }
 // @__NO_SIDE_EFFECTS__
 function radix2(bits, revPadding = false) {
-  anumber4(bits);
+  anumber3(bits);
   if (bits <= 0 || bits > 32)
     throw new RangeError("radix2: bits should be in (0..32]");
   if (/* @__PURE__ */ radix2carry(8, bits) > 32 || /* @__PURE__ */ radix2carry(bits, 8) > 32)
     throw new RangeError("radix2: carry overflow");
   return {
     encode: (bytes2) => {
-      if (!isBytes5(bytes2))
+      if (!isBytes4(bytes2))
         throw new TypeError("radix2.encode input should be Uint8Array");
       return convertRadix2(Array.from(bytes2), 8, bits, !revPadding);
     },
@@ -4134,7 +3782,7 @@ var init_base = __esm({
     ))();
     utf8Fallback = /* @__PURE__ */ Object.freeze({
       encode(data) {
-        abytes5(data);
+        abytes4(data);
         let res = "";
         for (let i = 0; i < data.length; ) {
           const a = data[i++];
@@ -4210,7 +3858,7 @@ var init_base = __esm({
         // ignoreBOM preserves an explicit leading U+FEFF;
         // fatal rejects invalid UTF-8 bytes instead of replacing them.
         encode(data) {
-          abytes5(data);
+          abytes4(data);
           return (_utf8Decoder || (_utf8Decoder = new TextDecoder("utf-8", { ignoreBOM: true, fatal: true }))).decode(data);
         },
         decode(str2) {
@@ -4235,7 +3883,7 @@ var init_base = __esm({
       // Keep local type guards so the native path preserves library-level input errors.
       // Native toHex emits lowercase hex, matching the fallback alphabet and Node's hex strings.
       encode(data) {
-        abytes5(data);
+        abytes4(data);
         return data.toHex();
       },
       // Native fromHex accepts either hex case and rejects odd-length / non-hex syntax.
@@ -4289,20 +3937,20 @@ function createFindBytes(needle) {
   };
 }
 function equal(a, b) {
-  const aBytes = isBytes6(a);
-  const bBytes = isBytes6(b);
+  const aBytes = isBytes5(a);
+  const bBytes = isBytes5(b);
   if (aBytes || bBytes)
     return aBytes && bBytes && equalBytes(a, b);
   return a === b;
 }
-function isBytes6(a) {
+function isBytes5(a) {
   return a instanceof Uint8Array || ArrayBuffer.isView(a) && a.constructor.name === "Uint8Array" && "BYTES_PER_ELEMENT" in a && a.BYTES_PER_ELEMENT === 1;
 }
 function concatBytes3(...arrays) {
   let sum = 0;
   for (let i = 0; i < arrays.length; i++) {
     const a = arrays[i];
-    if (!isBytes6(a))
+    if (!isBytes5(a))
       throw new Error("Uint8Array expected");
     sum += a.length;
   }
@@ -4599,8 +4247,8 @@ function magic(inner, constant, check = true) {
     encodeStream: (w, _value) => inner.encodeStream(w, constant),
     decodeStream: (r) => {
       const value = inner.decodeStream(r);
-      const valueObj = value !== null && typeof value === "object" && !isBytes6(value);
-      const constantObj = constant !== null && typeof constant === "object" && !isBytes6(constant);
+      const valueObj = value !== null && typeof value === "object" && !isBytes5(value);
+      const constantObj = constant !== null && typeof constant === "object" && !isBytes5(constant);
       const canCompare = !valueObj || !constantObj;
       if (check && canCompare && !equal(value, constant)) {
         throw r.err(`magic: invalid value: ${value} !== ${constant}`);
@@ -4704,14 +4352,14 @@ function array(len, inner) {
     encodeStream: (w, value) => {
       const _w = w;
       _w.pushObj(value, (fieldFn) => {
-        if (!isBytes6(len))
+        if (!isBytes5(len))
           _length.encodeStream(w, value.length);
         for (let i = 0; i < value.length; i++) {
           fieldFn(`${i}`, () => {
             const elm = value[i];
             const startPos = w.pos;
             inner.encodeStream(w, elm);
-            if (isBytes6(len)) {
+            if (isBytes5(len)) {
               if (len.length > _w.pos - startPos)
                 return;
               const data = _w.finish(false).subarray(startPos, _w.pos);
@@ -4721,7 +4369,7 @@ function array(len, inner) {
           });
         }
       });
-      if (isBytes6(len))
+      if (isBytes5(len))
         w.bytes(len);
     },
     decodeStream: (r) => {
@@ -4739,7 +4387,7 @@ function array(len, inner) {
             if (inner.size && r.leftBytes < inner.size)
               break;
           }
-        } else if (isBytes6(len)) {
+        } else if (isBytes5(len)) {
           for (let i = 0; ; i++) {
             if (equalBytes(r.bytes(len.length, true), len)) {
               r.bytes(len.length);
@@ -4768,7 +4416,7 @@ function array(len, inner) {
     }
   });
 }
-var EMPTY, NULL, restrictedKeys, validateFieldName, findBytes, createView4, _0n6, _1n5, _2n4, _8n2, _10n, _255n, hasOwn, utils, lengthCoder, Bitset, Path, _Reader, _Writer, swapEndianness, wrap, isBaseCoder, numberBigint, reverse, coders, bigint, U256BE, U64LE, I64LE, view, intView, U32LE, U32BE, I32LE, U16LE, U8, createBytes, string, createHex, flag;
+var EMPTY, NULL, restrictedKeys, validateFieldName, findBytes, createView3, _0n6, _1n5, _2n4, _8n2, _10n, _255n, hasOwn, utils, lengthCoder, Bitset, Path, _Reader, _Writer, swapEndianness, wrap, isBaseCoder, numberBigint, reverse, coders, bigint, U256BE, U64LE, I64LE, view, intView, U32LE, U32BE, I32LE, U16LE, U8, createBytes, string, createHex, flag;
 var init_micro_packed = __esm({
   "node_modules/micro-packed/index.js"() {
     init_base();
@@ -4786,7 +4434,7 @@ var init_micro_packed = __esm({
         throw new Error(`${label} ${name} is reserved`);
     };
     findBytes = (needle, data, pos = 0) => createFindBytes(needle)(data, pos);
-    createView4 = (arr) => new DataView(arr.buffer, arr.byteOffset, arr.byteLength);
+    createView3 = (arr) => new DataView(arr.buffer, arr.byteOffset, arr.byteLength);
     _0n6 = /* @__PURE__ */ BigInt(0);
     _1n5 = /* @__PURE__ */ BigInt(1);
     _2n4 = /* @__PURE__ */ BigInt(2);
@@ -4796,20 +4444,20 @@ var init_micro_packed = __esm({
     hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
     utils = /* @__PURE__ */ Object.freeze({
       equalBytes,
-      isBytes: isBytes6,
+      isBytes: isBytes5,
       isCoder,
       checkBounds,
       concatBytes: concatBytes3,
-      createView: createView4,
+      createView: createView3,
       isPlainObject
     });
     lengthCoder = (len) => {
-      if (len !== null && typeof len !== "string" && !isCoder(len) && !isBytes6(len) && !isNum(len)) {
+      if (len !== null && typeof len !== "string" && !isCoder(len) && !isBytes5(len) && !isNum(len)) {
         throw new TypeError(`lengthCoder: expected null | number | Uint8Array | CoderType, got ${len} (${typeof len})`);
       }
       if (typeof len === "number" && len < 0)
         throw new Error(`lengthCoder: wrong length=${len}`);
-      if (isBytes6(len) && !len.length)
+      if (isBytes5(len) && !len.length)
         throw new Error("lengthCoder: empty terminator");
       return {
         encodeStream(w, value) {
@@ -5035,7 +4683,7 @@ var init_micro_packed = __esm({
         this.stack = stack;
         this.parent = parent;
         this.parentOffset = parentOffset;
-        this.view = createView4(data);
+        this.view = createView3(data);
       }
       /** Internal method for pointers. */
       _enablePointers() {
@@ -5163,7 +4811,7 @@ var init_micro_packed = __esm({
         return out >>> 0;
       }
       find(needle, pos = this.pos) {
-        if (!isBytes6(needle))
+        if (!isBytes5(needle))
           throw this.err(`find: needle is not bytes! ${needle}`);
         if (this.bitPos)
           throw this.err("find: bitPos not empty");
@@ -5190,7 +4838,7 @@ var init_micro_packed = __esm({
       finished = false;
       constructor(stack = []) {
         this.stack = stack;
-        this.view = createView4(this.viewBuf);
+        this.view = createView3(this.viewBuf);
       }
       pushObj(obj, objFn) {
         return Path.pushObj(this.stack, obj, objFn);
@@ -5230,7 +4878,7 @@ var init_micro_packed = __esm({
         this.cleanBuffers.push(buf);
         this.pos++;
       }
-      finish(clean5 = true) {
+      finish(clean4 = true) {
         if (this.finished)
           throw this.err("buffer: finished");
         if (this.bitPos)
@@ -5248,7 +4896,7 @@ var init_micro_packed = __esm({
           buf.set(ptr.ptr.encode(pos), ptr.pos);
           pos += ptr.buffer.length;
         }
-        if (clean5) {
+        if (clean4) {
           for (const b of this.cleanBuffers)
             b.fill(0);
           this.buffers = [];
@@ -5469,7 +5117,7 @@ var init_micro_packed = __esm({
       if (typeof le !== "boolean")
         throw new TypeError(`bytes/le: expected boolean, got ${typeof le}`);
       const _length = lengthCoder(len);
-      const _isb = isBytes6(len);
+      const _isb = isBytes5(len);
       const terminator = _isb ? Uint8Array.from(len) : void 0;
       const findTerminator = terminator && terminator.length ? createFindBytes(terminator) : void 0;
       return wrap({
@@ -5495,7 +5143,7 @@ var init_micro_packed = __esm({
           return le ? swapEndianness(bytes2) : bytes2;
         },
         validate: (value) => {
-          if (!isBytes6(value))
+          if (!isBytes5(value))
             throw new TypeError(`bytes: invalid value ${value}`);
           if (findTerminator) {
             const data = le ? swapEndianness(value) : value;
@@ -5532,7 +5180,7 @@ var init_micro_packed = __esm({
       return inner;
     };
     flag = (flagValue, xor = false) => {
-      if (!isBytes6(flagValue))
+      if (!isBytes5(flagValue))
         throw new TypeError(`flag/flagValue: expected Uint8Array, got ${typeof flagValue}`);
       if (flagValue.length === 0)
         throw new Error("flag/flagValue: empty marker");
@@ -5624,7 +5272,7 @@ function taprootTweakPubkey(pubKey, h) {
   return [u.pointToBytes(Q), parity];
 }
 function compareBytes(a, b) {
-  if (!isBytes7(a) || !isBytes7(b))
+  if (!isBytes6(a) || !isBytes6(b))
     throw new TypeError(`cmp: wrong type a=${typeof a} b=${typeof b}`);
   const len = Math.min(a.length, b.length);
   for (let i = 0; i < len; i++)
@@ -5641,24 +5289,24 @@ function reverseObject(obj) {
   }
   return res;
 }
-var Point, Fn, CURVE_ORDER, hasEven2, isBytes7, concatBytes4, equalBytes2, sha2564, hash160, sha256x2, randomPrivateKeyBytes, pubSchnorr, pubECDSA, hasLowR, signSchnorr, tagSchnorr, PubT, TAPROOT_UNSPENDABLE_KEY, NETWORK, TEST_NETWORK;
-var init_utils4 = __esm({
+var Point, Fn, CURVE_ORDER, hasEven2, isBytes6, concatBytes4, equalBytes2, sha2563, hash160, sha256x2, randomPrivateKeyBytes, pubSchnorr, pubECDSA, hasLowR, signSchnorr, tagSchnorr, PubT, TAPROOT_UNSPENDABLE_KEY, NETWORK, TEST_NETWORK;
+var init_utils3 = __esm({
   "node_modules/@scure/btc-signer/utils.js"() {
     init_secp256k1();
     init_utils2();
     init_legacy();
-    init_sha22();
+    init_sha2();
     init_micro_packed();
     Point = /* @__PURE__ */ (() => secp256k1.Point)();
     Fn = /* @__PURE__ */ (() => Point.Fn)();
     CURVE_ORDER = /* @__PURE__ */ (() => Point.Fn.ORDER)();
     hasEven2 = (y) => y % 2n === 0n;
-    isBytes7 = /* @__PURE__ */ (() => utils.isBytes)();
+    isBytes6 = /* @__PURE__ */ (() => utils.isBytes)();
     concatBytes4 = /* @__PURE__ */ (() => utils.concatBytes)();
     equalBytes2 = /* @__PURE__ */ (() => utils.equalBytes)();
-    sha2564 = /* @__PURE__ */ (() => sha2563)();
-    hash160 = (msg) => ripemd160(sha2564(msg));
-    sha256x2 = (...msgs) => sha2564(sha2564(concatBytes4(...msgs)));
+    sha2563 = /* @__PURE__ */ (() => sha2562)();
+    hash160 = (msg) => ripemd160(sha2563(msg));
+    sha256x2 = (...msgs) => sha2563(sha2563(concatBytes4(...msgs)));
     randomPrivateKeyBytes = () => schnorr.utils.randomSecretKey();
     pubSchnorr = (priv) => schnorr.getPublicKey(priv);
     pubECDSA = (privateKey, isCompressed) => secp256k1.getPublicKey(privateKey, isCompressed);
@@ -5669,7 +5317,7 @@ var init_utils4 = __esm({
       ecdsa: 0,
       schnorr: 1
     }))();
-    TAPROOT_UNSPENDABLE_KEY = /* @__PURE__ */ (() => sha2564(Point.BASE.toBytes(false)))();
+    TAPROOT_UNSPENDABLE_KEY = /* @__PURE__ */ (() => sha2563(Point.BASE.toBytes(false)))();
     NETWORK = /* @__PURE__ */ Object.freeze({
       bech32: "bc",
       pubKeyHash: 0,
@@ -5686,11 +5334,11 @@ var init_utils4 = __esm({
 });
 
 // node_modules/@scure/btc-signer/node_modules/@scure/base/index.js
-function isBytes8(a) {
+function isBytes7(a) {
   return a instanceof Uint8Array || ArrayBuffer.isView(a) && a.constructor.name === "Uint8Array" && "BYTES_PER_ELEMENT" in a && a.BYTES_PER_ELEMENT === 1;
 }
-function abytes6(b) {
-  if (!isBytes8(b))
+function abytes5(b) {
+  if (!isBytes7(b))
     throw new TypeError("Uint8Array expected");
 }
 function isArrayOf2(isString, arr) {
@@ -5714,7 +5362,7 @@ function astr2(label, input) {
     throw new TypeError(`${label}: string expected`);
   return true;
 }
-function anumber5(n) {
+function anumber4(n) {
   if (typeof n !== "number")
     throw new TypeError(`number expected, got ${typeof n}`);
   if (!Number.isSafeInteger(n))
@@ -5797,7 +5445,7 @@ function convertRadix(data, from, to) {
   let pos = 0;
   const res = [];
   const digits = Array.from(data, (d) => {
-    anumber5(d);
+    anumber4(d);
     if (d < 0 || d >= from)
       throw new Error(`invalid integer: ${d}`);
     return d;
@@ -5849,7 +5497,7 @@ function convertRadix22(data, from, to, padding2) {
   const mask = powers2[to] - 1;
   const res = [];
   for (const n of data) {
-    anumber5(n);
+    anumber4(n);
     if (n >= max)
       throw new Error(`convertRadix2: invalid data word=${n} from=${from}`);
     carry = carry << from | n;
@@ -5874,11 +5522,11 @@ function convertRadix22(data, from, to, padding2) {
 }
 // @__NO_SIDE_EFFECTS__
 function radix(num2) {
-  anumber5(num2);
+  anumber4(num2);
   const _256 = 2 ** 8;
   return {
     encode: (bytes2) => {
-      if (!isBytes8(bytes2))
+      if (!isBytes7(bytes2))
         throw new TypeError("radix.encode input should be Uint8Array");
       return convertRadix(Array.from(bytes2), _256, num2);
     },
@@ -5890,14 +5538,14 @@ function radix(num2) {
 }
 // @__NO_SIDE_EFFECTS__
 function radix22(bits, revPadding = false) {
-  anumber5(bits);
+  anumber4(bits);
   if (bits <= 0 || bits > 32)
     throw new RangeError("radix2: bits should be in (0..32]");
   if (/* @__PURE__ */ radix2carry2(8, bits) > 32 || /* @__PURE__ */ radix2carry2(bits, 8) > 32)
     throw new RangeError("radix2: carry overflow");
   return {
     encode: (bytes2) => {
-      if (!isBytes8(bytes2))
+      if (!isBytes7(bytes2))
         throw new TypeError("radix2.encode input should be Uint8Array");
       return convertRadix22(Array.from(bytes2), 8, bits, !revPadding);
     },
@@ -5917,14 +5565,14 @@ function unsafeWrapper(fn) {
   };
 }
 function checksum(len, fn) {
-  anumber5(len);
+  anumber4(len);
   if (len <= 0)
     throw new RangeError(`checksum length must be positive: ${len}`);
   afn2(fn);
   const _fn = fn;
   return {
     encode(data) {
-      if (!isBytes8(data))
+      if (!isBytes7(data))
         throw new TypeError("checksum.encode: input should be Uint8Array");
       const sum = _fn(data).slice(0, len);
       const res = new Uint8Array(data.length + len);
@@ -5933,7 +5581,7 @@ function checksum(len, fn) {
       return res;
     },
     decode(data) {
-      if (!isBytes8(data))
+      if (!isBytes7(data))
         throw new TypeError("checksum.decode: input should be Uint8Array");
       const payload = data.slice(0, -len);
       const oldChecksum = data.slice(-len);
@@ -5982,7 +5630,7 @@ function genBech32(encoding) {
   const fromWordsUnsafe = unsafeWrapper(fromWords);
   function encode(prefix2, words, limit = 90) {
     astr2("bech32.encode prefix", prefix2);
-    if (isBytes8(words))
+    if (isBytes7(words))
       words = Array.from(words);
     anumArr2("bech32.encode", words);
     const plen = prefix2.length;
@@ -6052,9 +5700,9 @@ var init_base2 = __esm({
     })();
     genBase58 = /* @__NO_SIDE_EFFECTS__ */ (abc) => /* @__PURE__ */ chain2(/* @__PURE__ */ radix(58), /* @__PURE__ */ alphabet2(abc), /* @__PURE__ */ join2(""));
     base58 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ genBase58("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"));
-    createBase58check = (sha2566) => {
-      afn2(sha2566);
-      const _sha256 = sha2566;
+    createBase58check = (sha2565) => {
+      afn2(sha2565);
+      const _sha256 = sha2565;
       return /* @__PURE__ */ chain2(checksum(4, (data) => _sha256(_sha256(data))), base58);
     };
     BECH_ALPHABET = /* @__PURE__ */ chain2(/* @__PURE__ */ alphabet2("qpzry9x8gf2tvdw0s3jn54khce6mua7l"), /* @__PURE__ */ join2(""));
@@ -6069,7 +5717,7 @@ var init_base2 = __esm({
       // Keep local type guards so the native path preserves library-level input errors.
       // Native toHex emits lowercase hex, matching the fallback alphabet and Node's hex strings.
       encode(data) {
-        abytes6(data);
+        abytes5(data);
         return data.toHex();
       },
       // Native fromHex accepts either hex case and rejects odd-length / non-hex syntax.
@@ -6133,7 +5781,7 @@ function ScriptNum(bytesLimit = 6, forceMinimal = false) {
 function OpToNum(op, bytesLimit = 4, forceMinimal = true) {
   if (typeof op === "number")
     return op;
-  if (isBytes7(op)) {
+  if (isBytes6(op)) {
     try {
       const val = ScriptNum(bytesLimit, forceMinimal).decode(op);
       if (val > Number.MAX_SAFE_INTEGER)
@@ -6154,7 +5802,7 @@ var MAX_SCRIPT_BYTE_LENGTH, OP, OPNames, scriptPushLen, Script, CSLimits, Compac
 var init_script = __esm({
   "node_modules/@scure/btc-signer/script.js"() {
     init_micro_packed();
-    init_utils4();
+    init_utils3();
     MAX_SCRIPT_BYTE_LENGTH = 520;
     OP = /* @__PURE__ */ Object.freeze({
       OP_0: 0,
@@ -6316,7 +5964,7 @@ var init_script = __esm({
           }
           if (typeof o === "number")
             o = ScriptNum().encode(BigInt(o));
-          if (!isBytes7(o))
+          if (!isBytes6(o))
             throw new Error(`Wrong Script OP=${o} (${typeof o})`);
           const len = o.length;
           if (len < OP.PUSHDATA1)
@@ -6673,7 +6321,7 @@ var init_psbt = __esm({
     init_base2();
     init_micro_packed();
     init_script();
-    init_utils4();
+    init_utils3();
     PubKeyECDSA = /* @__PURE__ */ (() => validate(createBytes(null), (pub) => validatePubkey(pub, PubT.ecdsa)))();
     PubKeyECDSACompressed = /* @__PURE__ */ (() => validate(createBytes(33), (pub) => validatePubkey(pub, PubT.ecdsa)))();
     PubKeySchnorr = /* @__PURE__ */ (() => validate(createBytes(32), (pub) => validatePubkey(pub, PubT.schnorr)))();
@@ -6945,7 +6593,7 @@ function isValidPubkey(pub, type) {
   }
 }
 function checkWSH(s, witnessScript) {
-  if (!equalBytes2(s.hash, sha2564(witnessScript)))
+  if (!equalBytes2(s.hash, sha2563(witnessScript)))
     throw new Error("checkScript: wsh wrong witnessScript hash");
   const w = OutScript.decode(witnessScript);
   if (w.type === "tr" || w.type === "tr_ns" || w.type === "tr_ms")
@@ -7081,7 +6729,7 @@ function taprootHashTree(tree, internalPubKey, allowUnknownOutputs = false, cust
     if (tree.tapLeafScript || tree.tapMerkleRoot && !equalBytes2(tree.tapMerkleRoot, EMPTY))
       throw new Error("P2TR: tapRoot leafScript cannot have tree");
     const script = typeof leafScript === "string" ? hex2.decode(leafScript) : leafScript;
-    if (!isBytes7(script))
+    if (!isBytes6(script))
       throw new Error(`checkScript: wrong script type=${script}`);
     checkTaprootScript(script, internalPubKey, allowUnknownOutputs, customScripts);
     return {
@@ -7163,7 +6811,7 @@ function combinations(m, list) {
   if (!Array.isArray(list))
     throw new Error("combinations: lst arg should be array");
   const n = list.length;
-  anumber3(m, "m");
+  anumber(m, "m");
   if (m < 1 || m > n)
     throw new Error("combinations: m must satisfy 1 <= m <= lst.length");
   const idx = Array.from({ length: m }, (_, i) => i);
@@ -7308,16 +6956,16 @@ var OutP2A, OutPK, OutPKH, OutSH, OutWSH, OutWPKH, OutMS, OutTR, OutTRNS, OutTRM
 var init_payment = __esm({
   "node_modules/@scure/btc-signer/payment.js"() {
     init_base2();
-    init_utils3();
+    init_utils();
     init_utils2();
     init_micro_packed();
     init_psbt();
     init_script();
-    init_utils4();
-    init_utils4();
+    init_utils3();
+    init_utils3();
     OutP2A = {
       encode(from) {
-        if (from.length !== 2 || from[0] !== 1 || !isBytes7(from[1]) || hex2.encode(from[1]) !== "4e73")
+        if (from.length !== 2 || from[0] !== 1 || !isBytes6(from[1]) || hex2.encode(from[1]) !== "4e73")
           return;
         return { type: "p2a", script: Script.encode(from) };
       },
@@ -7329,7 +6977,7 @@ var init_payment = __esm({
     };
     OutPK = {
       encode(from) {
-        if (from.length !== 2 || !isBytes7(from[0]) || !isValidPubkey(from[0], PubT.ecdsa) || from[1] !== "CHECKSIG")
+        if (from.length !== 2 || !isBytes6(from[0]) || !isValidPubkey(from[0], PubT.ecdsa) || from[1] !== "CHECKSIG")
           return;
         return { type: "pk", pubkey: from[0] };
       },
@@ -7341,7 +6989,7 @@ var init_payment = __esm({
     };
     OutPKH = {
       encode(from) {
-        if (from.length !== 5 || from[0] !== "DUP" || from[1] !== "HASH160" || !isBytes7(from[2]))
+        if (from.length !== 5 || from[0] !== "DUP" || from[1] !== "HASH160" || !isBytes6(from[2]))
           return;
         if (from[3] !== "EQUALVERIFY" || from[4] !== "CHECKSIG")
           return;
@@ -7353,7 +7001,7 @@ var init_payment = __esm({
     };
     OutSH = {
       encode(from) {
-        if (from.length !== 3 || from[0] !== "HASH160" || !isBytes7(from[1]) || from[2] !== "EQUAL")
+        if (from.length !== 3 || from[0] !== "HASH160" || !isBytes6(from[1]) || from[2] !== "EQUAL")
           return;
         return { type: "sh", hash: from[1] };
       },
@@ -7363,7 +7011,7 @@ var init_payment = __esm({
     };
     OutWSH = {
       encode(from) {
-        if (from.length !== 2 || from[0] !== 0 || !isBytes7(from[1]))
+        if (from.length !== 2 || from[0] !== 0 || !isBytes6(from[1]))
           return;
         if (from[1].length !== 32)
           return;
@@ -7375,7 +7023,7 @@ var init_payment = __esm({
     };
     OutWPKH = {
       encode(from) {
-        if (from.length !== 2 || from[0] !== 0 || !isBytes7(from[1]))
+        if (from.length !== 2 || from[0] !== 0 || !isBytes6(from[1]))
           return;
         if (from[1].length !== 20)
           return;
@@ -7398,7 +7046,7 @@ var init_payment = __esm({
         if (n !== pubkeys.length)
           return;
         for (const pub of pubkeys)
-          if (!isBytes7(pub))
+          if (!isBytes6(pub))
             return;
         return { type: "ms", m, pubkeys };
       },
@@ -7412,7 +7060,7 @@ var init_payment = __esm({
     };
     OutTR = {
       encode(from) {
-        if (from.length !== 2 || from[0] !== 1 || !isBytes7(from[1]) || from[1].length !== 32)
+        if (from.length !== 2 || from[0] !== 1 || !isBytes6(from[1]) || from[1].length !== 32)
           return;
         return { type: "tr", pubkey: from[1] };
       },
@@ -7433,7 +7081,7 @@ var init_payment = __esm({
               return;
             continue;
           }
-          if (!isBytes7(elm) || !isValidPubkey(elm, PubT.schnorr))
+          if (!isBytes6(elm) || !isValidPubkey(elm, PubT.schnorr))
             return;
           pubkeys.push(elm);
         }
@@ -7467,7 +7115,7 @@ var init_payment = __esm({
               return;
             continue;
           }
-          if (!isBytes7(elm))
+          if (!isBytes6(elm))
             return;
           pubkeys.push(elm);
         }
@@ -7512,11 +7160,11 @@ var init_payment = __esm({
     OutScript = /* @__PURE__ */ (() => Object.freeze(validate(_OutScript, (i) => {
       if (i.type === "pk" && !isValidPubkey(i.pubkey, PubT.ecdsa))
         throw new Error("OutScript/pk: wrong key");
-      if ((i.type === "pkh" || i.type === "sh" || i.type === "wpkh") && (!isBytes7(i.hash) || i.hash.length !== 20))
+      if ((i.type === "pkh" || i.type === "sh" || i.type === "wpkh") && (!isBytes6(i.hash) || i.hash.length !== 20))
         throw new Error(`OutScript/${i.type}: wrong hash`);
-      if (i.type === "wsh" && (!isBytes7(i.hash) || i.hash.length !== 32))
+      if (i.type === "wsh" && (!isBytes6(i.hash) || i.hash.length !== 32))
         throw new Error(`OutScript/wsh: wrong hash`);
-      if (i.type === "tr" && (!isBytes7(i.pubkey) || !isValidPubkey(i.pubkey, PubT.schnorr)))
+      if (i.type === "tr" && (!isBytes6(i.pubkey) || !isValidPubkey(i.pubkey, PubT.schnorr)))
         throw new Error("OutScript/tr: wrong taproot public key");
       if (i.type === "ms" || i.type === "tr_ns" || i.type === "tr_ms") {
         if (!Array.isArray(i.pubkeys))
@@ -7527,7 +7175,7 @@ var init_payment = __esm({
         for (const p of i.pubkeys)
           if (!isValidPubkey(p, PubT.ecdsa))
             throw new Error("OutScript/multisig: wrong pubkey");
-        anumber3(i.m, "m");
+        anumber(i.m, "m");
         if (i.m <= 0 || n > 16 || i.m > n)
           throw new Error("OutScript/multisig: invalid params");
       }
@@ -7538,7 +7186,7 @@ var init_payment = __esm({
       }
       if (i.type === "tr_ms") {
         const n = i.pubkeys.length;
-        anumber3(i.m, "m");
+        anumber(i.m, "m");
         if (i.m <= 0 || n > 999 || i.m > n)
           throw new Error("OutScript/tr_ms: invalid params");
       }
@@ -7566,7 +7214,7 @@ var init_payment = __esm({
     p2sh = (child, network = NETWORK) => {
       const c = child;
       const cs = c.script;
-      if (!isBytes7(cs))
+      if (!isBytes6(cs))
         throw new Error(`Wrong script: ${typeof c.script}, expected Uint8Array`);
       if (cs.length > MAX_SCRIPT_BYTE_LENGTH)
         throw new Error(`P2SH: redeemScript exceeds ${MAX_SCRIPT_BYTE_LENGTH}-byte push limit: len=${cs.length}`);
@@ -7596,11 +7244,11 @@ var init_payment = __esm({
     };
     p2wsh = (child, network = NETWORK) => {
       const cs = child.script;
-      if (!isBytes7(cs))
+      if (!isBytes6(cs))
         throw new Error(`Wrong script: ${typeof cs}, expected Uint8Array`);
       if (cs.length > 1e4)
         throw new Error("P2WSH: witnessScript exceeds 10,000 bytes");
-      const hash = sha2564(cs);
+      const hash = sha2563(cs);
       const script = OutScript.encode({ type: "wsh", hash });
       checkScript(script, void 0, cs);
       return {
@@ -7636,7 +7284,7 @@ var init_payment = __esm({
     tapLeafVersion = (version) => {
       if (version === void 0)
         return TAP_LEAF_VERSION;
-      anumber3(version, "leafVersion");
+      anumber(version, "leafVersion");
       if (version > 254 || version === 80 || !!(version & 1))
         throw new Error(`P2TR: invalid leafVersion=${version}`);
       return version;
@@ -7652,7 +7300,7 @@ var init_payment = __esm({
     };
     p2tr_pk = (pubkey) => p2tr_ns(1, [pubkey], void 0)[0];
     _sortPubkeys = (pubkeys) => Array.from(pubkeys).sort(compareBytes);
-    base58check = /* @__PURE__ */ createBase58check(sha2564);
+    base58check = /* @__PURE__ */ createBase58check(sha2563);
   }
 });
 
@@ -7660,7 +7308,7 @@ var init_payment = __esm({
 function cloneDeep(obj) {
   if (Array.isArray(obj))
     return obj.map((i) => cloneDeep(i));
-  else if (isBytes7(obj))
+  else if (isBytes6(obj))
     return Uint8Array.from(obj);
   else if (["number", "bigint", "boolean", "string", "undefined"].includes(typeof obj))
     return obj;
@@ -7811,7 +7459,7 @@ function normalizeInput(i, cur, allowedFields, disableScriptCheck = false, allow
   let { nonWitnessUtxo, txid } = _i;
   if (typeof nonWitnessUtxo === "string")
     nonWitnessUtxo = hex2.decode(nonWitnessUtxo);
-  if (isBytes7(nonWitnessUtxo))
+  if (isBytes6(nonWitnessUtxo))
     nonWitnessUtxo = RawTx.decode(nonWitnessUtxo);
   if (!("nonWitnessUtxo" in _i) && nonWitnessUtxo === void 0)
     nonWitnessUtxo = _cur?.nonWitnessUtxo;
@@ -7935,8 +7583,8 @@ var init_transaction = __esm({
     init_payment();
     init_psbt();
     init_script();
-    init_utils4();
-    init_utils4();
+    init_utils3();
+    init_utils3();
     EMPTY32 = /* @__PURE__ */ new Uint8Array(32);
     EMPTY_OUTPUT = {
       amount: 0xffffffffffffffffn,
@@ -8444,10 +8092,10 @@ var init_transaction = __esm({
             amount.map(U64LE.encode),
             prevOutScript.map(VarBytes.encode),
             inputs.map((i) => U32LE.encode(i.sequence))
-          ].map((i) => sha2564(concatBytes4(...i))));
+          ].map((i) => sha2563(concatBytes4(...i))));
         }
         if (outType === SignatureHash.ALL) {
-          out.push(sha2564(concatBytes4(...outputs.map(RawOutput.encode))));
+          out.push(sha2563(concatBytes4(...outputs.map(RawOutput.encode))));
         }
         const spendType = (annex ? 1 : 0) | (leafScript ? 2 : 0);
         out.push(new Uint8Array([spendType]));
@@ -8457,9 +8105,9 @@ var init_transaction = __esm({
         } else
           out.push(U32LE.encode(idx));
         if (spendType & 1)
-          out.push(sha2564(VarBytes.encode(annex || EMPTY)));
+          out.push(sha2563(VarBytes.encode(annex || EMPTY)));
         if (outType === SignatureHash.SINGLE)
-          out.push(idx < outputs.length ? sha2564(RawOutput.encode(outputs[idx])) : EMPTY32);
+          out.push(idx < outputs.length ? sha2563(RawOutput.encode(outputs[idx])) : EMPTY32);
         if (leafScript)
           out.push(tapLeafHash(leafScript, leafVer), U8.encode(0), I32LE.encode(codeSeparator));
         return tagSchnorr("TapSighash", ...out);
@@ -8478,7 +8126,7 @@ var init_transaction = __esm({
               return false;
             for (const [_, leaf] of input.tapLeafScript) {
               for (const op of Script.decode(leaf.subarray(0, -1))) {
-                if (isBytes7(op) && equalBytes2(op, pubKey2))
+                if (isBytes6(op) && equalBytes2(op, pubKey2))
                   return true;
               }
             }
@@ -8487,12 +8135,12 @@ var init_transaction = __esm({
           const pubKey = pubECDSA(privateKey2);
           const pubKeyHash = hash160(pubKey);
           for (const op of Script.decode(inputType.lastScript)) {
-            if (isBytes7(op) && (equalBytes2(op, pubKey) || equalBytes2(op, pubKeyHash)))
+            if (isBytes6(op) && (equalBytes2(op, pubKey) || equalBytes2(op, pubKeyHash)))
               return true;
           }
           return false;
         };
-        if (!isBytes7(privateKey)) {
+        if (!isBytes6(privateKey)) {
           const root = privateKey;
           const deriveSigners = (label, rows, pubKey) => {
             if (!rows || !rows.length)
@@ -8574,7 +8222,7 @@ var init_transaction = __esm({
               const scriptDecoded = Script.decode(script);
               const ver = _script[_script.length - 1];
               const hash = tapLeafHash(script, ver);
-              const pos = scriptDecoded.findIndex((i) => isBytes7(i) && equalBytes2(i, schnorrPub));
+              const pos = scriptDecoded.findIndex((i) => isBytes6(i) && equalBytes2(i, schnorrPub));
               if (pos === -1)
                 continue;
               const msg = this.preimageWitnessV1(idx, prevOutScript, sighash, amount, void 0, script, ver);
@@ -8591,7 +8239,7 @@ var init_transaction = __esm({
           let hasPubkey = false;
           const pubKeyHash = hash160(pubKey);
           for (const i of Script.decode(inputType.lastScript)) {
-            if (isBytes7(i) && (equalBytes2(i, pubKey) || equalBytes2(i, pubKeyHash)))
+            if (isBytes6(i) && (equalBytes2(i, pubKey) || equalBytes2(i, pubKeyHash)))
               hasPubkey = true;
           }
           if (!hasPubkey)
@@ -8678,7 +8326,7 @@ var init_transaction = __esm({
               } else if (outScript.type === "unknown" && this.opts.allowUnknownInputs) {
                 const scriptDecoded = Script.decode(script);
                 signatures = scriptSig.map(([{ pubKey }, signature]) => {
-                  const pos = scriptDecoded.findIndex((i) => isBytes7(i) && equalBytes2(i, pubKey));
+                  const pos = scriptDecoded.findIndex((i) => isBytes6(i) && equalBytes2(i, pubKey));
                   if (pos === -1)
                     throw new Error("finalize/taproot: cannot find position of pubkey in script");
                   return { signature, pos };
@@ -8751,7 +8399,7 @@ var init_transaction = __esm({
             witness = Script.decode(inputScript).map((i) => {
               if (i === 0)
                 return EMPTY;
-              if (isBytes7(i))
+              if (isBytes6(i))
                 return i;
               throw new Error(`Wrong witness op=${i}`);
             });
@@ -8761,7 +8409,7 @@ var init_transaction = __esm({
         if (inputType.txType === "segwit")
           finalScriptWitness = witness;
         if (inputType.type.startsWith("sh-wsh-")) {
-          finalScriptSig = Script.encode([Script.encode([0, sha2564(inputType.lastScript)])]);
+          finalScriptSig = Script.encode([Script.encode([0, sha2563(inputType.lastScript)])]);
         } else if (inputType.type.startsWith("sh-")) {
           finalScriptSig = Script.encode([...Script.decode(inputScript), inputType.lastScript]);
         } else if (inputType.type.startsWith("wsh-")) {
@@ -8854,7 +8502,7 @@ function iterLeafs(tapLeafScript, sigSize, customScripts) {
         if (csEncoded === void 0)
           continue;
         const pubKeys = scriptDecoded.filter((i) => {
-          if (!isBytes7(i))
+          if (!isBytes6(i))
             return false;
           try {
             validatePubkey(i, PubT.schnorr);
@@ -8912,7 +8560,7 @@ function estimateInput(inputType, input, opts) {
         inputWitness = Script.decode(inputScript).map((i) => {
           if (i === 0)
             return EMPTY;
-          if (isBytes7(i))
+          if (isBytes6(i))
             return i;
           throw new Error(`Wrong witness op=${i}`);
         });
@@ -8922,7 +8570,7 @@ function estimateInput(inputType, input, opts) {
     if (inputType.txType === "segwit")
       witness = inputWitness;
     if (inputType.type.startsWith("sh-wsh-")) {
-      script = Script.encode([Script.encode([0, new Uint8Array(sha2564.outputLen)])]);
+      script = Script.encode([Script.encode([0, new Uint8Array(sha2563.outputLen)])]);
     } else if (inputType.type.startsWith("sh-")) {
       script = Script.encode([...Script.decode(inputScript), inputType.lastScript]);
     } else if (inputType.type.startsWith("wsh-")) {
@@ -8941,7 +8589,7 @@ function getScript(o, opts = {}, network = NETWORK) {
   const _o = o;
   const _opts = opts;
   let script;
-  if ("script" in _o && isBytes7(_o.script)) {
+  if ("script" in _o && isBytes6(_o.script)) {
     script = _o.script;
   }
   if ("address" in _o) {
@@ -8976,7 +8624,7 @@ var init_utxo = __esm({
     init_psbt();
     init_script();
     init_transaction();
-    init_utils4();
+    init_utils3();
     encodeTapBlock = (item) => TaprootControlBlock.encode(item);
     _cmpBig = (a, b) => {
       const n = a - b;
@@ -9313,18 +8961,18 @@ __export(btc_signer_exports, {
 var utils2;
 var init_btc_signer = __esm({
   "node_modules/@scure/btc-signer/index.js"() {
-    init_utils4();
+    init_utils3();
     init_payment();
     init_script();
     init_transaction();
-    init_utils4();
+    init_utils3();
     init_utxo();
     init_payment();
     init_psbt();
     init_transaction();
     init_utxo();
     utils2 = /* @__PURE__ */ (() => Object.freeze({
-      isBytes: isBytes7,
+      isBytes: isBytes6,
       concatBytes: concatBytes4,
       compareBytes,
       pubSchnorr,
@@ -9335,11 +8983,11 @@ var init_btc_signer = __esm({
 });
 
 // node_modules/@stacks/bitcoin-staking/node_modules/@noble/hashes/utils.js
-function isBytes9(a) {
+function isBytes8(a) {
   return a instanceof Uint8Array || ArrayBuffer.isView(a) && a.constructor.name === "Uint8Array";
 }
-function abytes7(value, length, title = "") {
-  const bytes2 = isBytes9(value);
+function abytes6(value, length, title = "") {
+  const bytes2 = isBytes8(value);
   const len = value?.length;
   const needsLen = length !== void 0;
   if (!bytes2 || needsLen && len !== length) {
@@ -9350,31 +8998,31 @@ function abytes7(value, length, title = "") {
   }
   return value;
 }
-function aexists4(instance, checkFinished = true) {
+function aexists3(instance, checkFinished = true) {
   if (instance.destroyed)
     throw new Error("Hash instance has been destroyed");
   if (checkFinished && instance.finished)
     throw new Error("Hash#digest() has already been called");
 }
-function aoutput4(out, instance) {
-  abytes7(out, void 0, "digestInto() output");
+function aoutput3(out, instance) {
+  abytes6(out, void 0, "digestInto() output");
   const min = instance.outputLen;
   if (out.length < min) {
     throw new Error('"digestInto() output" expected to be of length >=' + min);
   }
 }
-function clean4(...arrays) {
+function clean3(...arrays) {
   for (let i = 0; i < arrays.length; i++) {
     arrays[i].fill(0);
   }
 }
-function createView5(arr) {
+function createView4(arr) {
   return new DataView(arr.buffer, arr.byteOffset, arr.byteLength);
 }
-function rotr4(word, shift) {
+function rotr3(word, shift) {
   return word << 32 - shift | word >>> shift;
 }
-function createHasher4(hashCons, info = {}) {
+function createHasher3(hashCons, info = {}) {
   const hashC = (msg, opts) => hashCons(opts).update(msg).digest();
   const tmp = hashCons(void 0);
   hashC.outputLen = tmp.outputLen;
@@ -9383,27 +9031,27 @@ function createHasher4(hashCons, info = {}) {
   Object.assign(hashC, info);
   return Object.freeze(hashC);
 }
-var oidNist3;
-var init_utils5 = __esm({
+var oidNist2;
+var init_utils4 = __esm({
   "node_modules/@stacks/bitcoin-staking/node_modules/@noble/hashes/utils.js"() {
-    oidNist3 = (suffix) => ({
+    oidNist2 = (suffix) => ({
       oid: Uint8Array.from([6, 9, 96, 134, 72, 1, 101, 3, 4, 2, suffix])
     });
   }
 });
 
 // node_modules/@stacks/bitcoin-staking/node_modules/@noble/hashes/_md.js
-function Chi4(a, b, c) {
+function Chi3(a, b, c) {
   return a & b ^ ~a & c;
 }
-function Maj4(a, b, c) {
+function Maj3(a, b, c) {
   return a & b ^ a & c ^ b & c;
 }
-var HashMD4, SHA256_IV4, SHA224_IV4, SHA384_IV4, SHA512_IV4;
-var init_md3 = __esm({
+var HashMD3, SHA256_IV3, SHA224_IV3, SHA384_IV3, SHA512_IV3;
+var init_md2 = __esm({
   "node_modules/@stacks/bitcoin-staking/node_modules/@noble/hashes/_md.js"() {
-    init_utils5();
-    HashMD4 = class {
+    init_utils4();
+    HashMD3 = class {
       blockLen;
       outputLen;
       padOffset;
@@ -9421,17 +9069,17 @@ var init_md3 = __esm({
         this.padOffset = padOffset;
         this.isLE = isLE;
         this.buffer = new Uint8Array(blockLen);
-        this.view = createView5(this.buffer);
+        this.view = createView4(this.buffer);
       }
       update(data) {
-        aexists4(this);
-        abytes7(data);
+        aexists3(this);
+        abytes6(data);
         const { view: view2, buffer, blockLen } = this;
         const len = data.length;
         for (let pos = 0; pos < len; ) {
           const take = Math.min(blockLen - this.pos, len - pos);
           if (take === blockLen) {
-            const dataView = createView5(data);
+            const dataView = createView4(data);
             for (; blockLen <= len - pos; pos += blockLen)
               this.process(dataView, pos);
             continue;
@@ -9449,13 +9097,13 @@ var init_md3 = __esm({
         return this;
       }
       digestInto(out) {
-        aexists4(this);
-        aoutput4(out, this);
+        aexists3(this);
+        aoutput3(out, this);
         this.finished = true;
         const { buffer, view: view2, blockLen, isLE } = this;
         let { pos } = this;
         buffer[pos++] = 128;
-        clean4(this.buffer.subarray(pos));
+        clean3(this.buffer.subarray(pos));
         if (this.padOffset > blockLen - pos) {
           this.process(view2, 0);
           pos = 0;
@@ -9464,7 +9112,7 @@ var init_md3 = __esm({
           buffer[i] = 0;
         view2.setBigUint64(blockLen - 8, BigInt(this.length * 8), isLE);
         this.process(view2, 0);
-        const oview = createView5(out);
+        const oview = createView4(out);
         const len = this.outputLen;
         if (len % 4)
           throw new Error("_sha2: outputLen must be aligned to 32bit");
@@ -9498,7 +9146,7 @@ var init_md3 = __esm({
         return this._cloneInto();
       }
     };
-    SHA256_IV4 = /* @__PURE__ */ Uint32Array.from([
+    SHA256_IV3 = /* @__PURE__ */ Uint32Array.from([
       1779033703,
       3144134277,
       1013904242,
@@ -9508,7 +9156,7 @@ var init_md3 = __esm({
       528734635,
       1541459225
     ]);
-    SHA224_IV4 = /* @__PURE__ */ Uint32Array.from([
+    SHA224_IV3 = /* @__PURE__ */ Uint32Array.from([
       3238371032,
       914150663,
       812702999,
@@ -9518,7 +9166,7 @@ var init_md3 = __esm({
       1694076839,
       3204075428
     ]);
-    SHA384_IV4 = /* @__PURE__ */ Uint32Array.from([
+    SHA384_IV3 = /* @__PURE__ */ Uint32Array.from([
       3418070365,
       3238371032,
       1654270250,
@@ -9536,7 +9184,7 @@ var init_md3 = __esm({
       1203062813,
       3204075428
     ]);
-    SHA512_IV4 = /* @__PURE__ */ Uint32Array.from([
+    SHA512_IV3 = /* @__PURE__ */ Uint32Array.from([
       1779033703,
       4089235720,
       3144134277,
@@ -9601,25 +9249,25 @@ var init_u64 = __esm({
 var sha2_exports = {};
 __export(sha2_exports, {
   _SHA224: () => _SHA224,
-  _SHA256: () => _SHA2563,
+  _SHA256: () => _SHA2562,
   _SHA384: () => _SHA384,
   _SHA512: () => _SHA512,
   _SHA512_224: () => _SHA512_224,
   _SHA512_256: () => _SHA512_256,
   sha224: () => sha224,
-  sha256: () => sha2565,
+  sha256: () => sha2564,
   sha384: () => sha384,
   sha512: () => sha512,
   sha512_224: () => sha512_224,
   sha512_256: () => sha512_256
 });
-var SHA256_K4, SHA256_W4, SHA2_32B3, _SHA2563, _SHA224, K512, SHA512_Kh, SHA512_Kl, SHA512_W_H, SHA512_W_L, SHA2_64B, _SHA512, _SHA384, T224_IV, T256_IV, _SHA512_224, _SHA512_256, sha2565, sha224, sha512, sha384, sha512_256, sha512_224;
-var init_sha23 = __esm({
+var SHA256_K3, SHA256_W3, SHA2_32B2, _SHA2562, _SHA224, K512, SHA512_Kh, SHA512_Kl, SHA512_W_H, SHA512_W_L, SHA2_64B, _SHA512, _SHA384, T224_IV, T256_IV, _SHA512_224, _SHA512_256, sha2564, sha224, sha512, sha384, sha512_256, sha512_224;
+var init_sha22 = __esm({
   "node_modules/@stacks/bitcoin-staking/node_modules/@noble/hashes/sha2.js"() {
-    init_md3();
+    init_md2();
     init_u64();
-    init_utils5();
-    SHA256_K4 = /* @__PURE__ */ Uint32Array.from([
+    init_utils4();
+    SHA256_K3 = /* @__PURE__ */ Uint32Array.from([
       1116352408,
       1899447441,
       3049323471,
@@ -9685,8 +9333,8 @@ var init_sha23 = __esm({
       3204031479,
       3329325298
     ]);
-    SHA256_W4 = /* @__PURE__ */ new Uint32Array(64);
-    SHA2_32B3 = class extends HashMD4 {
+    SHA256_W3 = /* @__PURE__ */ new Uint32Array(64);
+    SHA2_32B2 = class extends HashMD3 {
       constructor(outputLen) {
         super(64, outputLen, 8, false);
       }
@@ -9707,20 +9355,20 @@ var init_sha23 = __esm({
       }
       process(view2, offset) {
         for (let i = 0; i < 16; i++, offset += 4)
-          SHA256_W4[i] = view2.getUint32(offset, false);
+          SHA256_W3[i] = view2.getUint32(offset, false);
         for (let i = 16; i < 64; i++) {
-          const W15 = SHA256_W4[i - 15];
-          const W2 = SHA256_W4[i - 2];
-          const s0 = rotr4(W15, 7) ^ rotr4(W15, 18) ^ W15 >>> 3;
-          const s1 = rotr4(W2, 17) ^ rotr4(W2, 19) ^ W2 >>> 10;
-          SHA256_W4[i] = s1 + SHA256_W4[i - 7] + s0 + SHA256_W4[i - 16] | 0;
+          const W15 = SHA256_W3[i - 15];
+          const W2 = SHA256_W3[i - 2];
+          const s0 = rotr3(W15, 7) ^ rotr3(W15, 18) ^ W15 >>> 3;
+          const s1 = rotr3(W2, 17) ^ rotr3(W2, 19) ^ W2 >>> 10;
+          SHA256_W3[i] = s1 + SHA256_W3[i - 7] + s0 + SHA256_W3[i - 16] | 0;
         }
         let { A, B, C, D, E, F, G, H } = this;
         for (let i = 0; i < 64; i++) {
-          const sigma1 = rotr4(E, 6) ^ rotr4(E, 11) ^ rotr4(E, 25);
-          const T1 = H + sigma1 + Chi4(E, F, G) + SHA256_K4[i] + SHA256_W4[i] | 0;
-          const sigma0 = rotr4(A, 2) ^ rotr4(A, 13) ^ rotr4(A, 22);
-          const T2 = sigma0 + Maj4(A, B, C) | 0;
+          const sigma1 = rotr3(E, 6) ^ rotr3(E, 11) ^ rotr3(E, 25);
+          const T1 = H + sigma1 + Chi3(E, F, G) + SHA256_K3[i] + SHA256_W3[i] | 0;
+          const sigma0 = rotr3(A, 2) ^ rotr3(A, 13) ^ rotr3(A, 22);
+          const T2 = sigma0 + Maj3(A, B, C) | 0;
           H = G;
           G = F;
           F = E;
@@ -9741,37 +9389,37 @@ var init_sha23 = __esm({
         this.set(A, B, C, D, E, F, G, H);
       }
       roundClean() {
-        clean4(SHA256_W4);
+        clean3(SHA256_W3);
       }
       destroy() {
         this.set(0, 0, 0, 0, 0, 0, 0, 0);
-        clean4(this.buffer);
+        clean3(this.buffer);
       }
     };
-    _SHA2563 = class extends SHA2_32B3 {
+    _SHA2562 = class extends SHA2_32B2 {
       // We cannot use array here since array allows indexing by variable
       // which means optimizer/compiler cannot use registers.
-      A = SHA256_IV4[0] | 0;
-      B = SHA256_IV4[1] | 0;
-      C = SHA256_IV4[2] | 0;
-      D = SHA256_IV4[3] | 0;
-      E = SHA256_IV4[4] | 0;
-      F = SHA256_IV4[5] | 0;
-      G = SHA256_IV4[6] | 0;
-      H = SHA256_IV4[7] | 0;
+      A = SHA256_IV3[0] | 0;
+      B = SHA256_IV3[1] | 0;
+      C = SHA256_IV3[2] | 0;
+      D = SHA256_IV3[3] | 0;
+      E = SHA256_IV3[4] | 0;
+      F = SHA256_IV3[5] | 0;
+      G = SHA256_IV3[6] | 0;
+      H = SHA256_IV3[7] | 0;
       constructor() {
         super(32);
       }
     };
-    _SHA224 = class extends SHA2_32B3 {
-      A = SHA224_IV4[0] | 0;
-      B = SHA224_IV4[1] | 0;
-      C = SHA224_IV4[2] | 0;
-      D = SHA224_IV4[3] | 0;
-      E = SHA224_IV4[4] | 0;
-      F = SHA224_IV4[5] | 0;
-      G = SHA224_IV4[6] | 0;
-      H = SHA224_IV4[7] | 0;
+    _SHA224 = class extends SHA2_32B2 {
+      A = SHA224_IV3[0] | 0;
+      B = SHA224_IV3[1] | 0;
+      C = SHA224_IV3[2] | 0;
+      D = SHA224_IV3[3] | 0;
+      E = SHA224_IV3[4] | 0;
+      F = SHA224_IV3[5] | 0;
+      G = SHA224_IV3[6] | 0;
+      H = SHA224_IV3[7] | 0;
       constructor() {
         super(28);
       }
@@ -9862,7 +9510,7 @@ var init_sha23 = __esm({
     SHA512_Kl = /* @__PURE__ */ (() => K512[1])();
     SHA512_W_H = /* @__PURE__ */ new Uint32Array(80);
     SHA512_W_L = /* @__PURE__ */ new Uint32Array(80);
-    SHA2_64B = class extends HashMD4 {
+    SHA2_64B = class extends HashMD3 {
       constructor(outputLen) {
         super(128, outputLen, 16, false);
       }
@@ -9950,51 +9598,51 @@ var init_sha23 = __esm({
         this.set(Ah, Al, Bh, Bl, Ch, Cl3, Dh, Dl, Eh, El, Fh, Fl, Gh, Gl, Hh, Hl);
       }
       roundClean() {
-        clean4(SHA512_W_H, SHA512_W_L);
+        clean3(SHA512_W_H, SHA512_W_L);
       }
       destroy() {
-        clean4(this.buffer);
+        clean3(this.buffer);
         this.set(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
       }
     };
     _SHA512 = class extends SHA2_64B {
-      Ah = SHA512_IV4[0] | 0;
-      Al = SHA512_IV4[1] | 0;
-      Bh = SHA512_IV4[2] | 0;
-      Bl = SHA512_IV4[3] | 0;
-      Ch = SHA512_IV4[4] | 0;
-      Cl = SHA512_IV4[5] | 0;
-      Dh = SHA512_IV4[6] | 0;
-      Dl = SHA512_IV4[7] | 0;
-      Eh = SHA512_IV4[8] | 0;
-      El = SHA512_IV4[9] | 0;
-      Fh = SHA512_IV4[10] | 0;
-      Fl = SHA512_IV4[11] | 0;
-      Gh = SHA512_IV4[12] | 0;
-      Gl = SHA512_IV4[13] | 0;
-      Hh = SHA512_IV4[14] | 0;
-      Hl = SHA512_IV4[15] | 0;
+      Ah = SHA512_IV3[0] | 0;
+      Al = SHA512_IV3[1] | 0;
+      Bh = SHA512_IV3[2] | 0;
+      Bl = SHA512_IV3[3] | 0;
+      Ch = SHA512_IV3[4] | 0;
+      Cl = SHA512_IV3[5] | 0;
+      Dh = SHA512_IV3[6] | 0;
+      Dl = SHA512_IV3[7] | 0;
+      Eh = SHA512_IV3[8] | 0;
+      El = SHA512_IV3[9] | 0;
+      Fh = SHA512_IV3[10] | 0;
+      Fl = SHA512_IV3[11] | 0;
+      Gh = SHA512_IV3[12] | 0;
+      Gl = SHA512_IV3[13] | 0;
+      Hh = SHA512_IV3[14] | 0;
+      Hl = SHA512_IV3[15] | 0;
       constructor() {
         super(64);
       }
     };
     _SHA384 = class extends SHA2_64B {
-      Ah = SHA384_IV4[0] | 0;
-      Al = SHA384_IV4[1] | 0;
-      Bh = SHA384_IV4[2] | 0;
-      Bl = SHA384_IV4[3] | 0;
-      Ch = SHA384_IV4[4] | 0;
-      Cl = SHA384_IV4[5] | 0;
-      Dh = SHA384_IV4[6] | 0;
-      Dl = SHA384_IV4[7] | 0;
-      Eh = SHA384_IV4[8] | 0;
-      El = SHA384_IV4[9] | 0;
-      Fh = SHA384_IV4[10] | 0;
-      Fl = SHA384_IV4[11] | 0;
-      Gh = SHA384_IV4[12] | 0;
-      Gl = SHA384_IV4[13] | 0;
-      Hh = SHA384_IV4[14] | 0;
-      Hl = SHA384_IV4[15] | 0;
+      Ah = SHA384_IV3[0] | 0;
+      Al = SHA384_IV3[1] | 0;
+      Bh = SHA384_IV3[2] | 0;
+      Bl = SHA384_IV3[3] | 0;
+      Ch = SHA384_IV3[4] | 0;
+      Cl = SHA384_IV3[5] | 0;
+      Dh = SHA384_IV3[6] | 0;
+      Dl = SHA384_IV3[7] | 0;
+      Eh = SHA384_IV3[8] | 0;
+      El = SHA384_IV3[9] | 0;
+      Fh = SHA384_IV3[10] | 0;
+      Fl = SHA384_IV3[11] | 0;
+      Gh = SHA384_IV3[12] | 0;
+      Gl = SHA384_IV3[13] | 0;
+      Hh = SHA384_IV3[14] | 0;
+      Hl = SHA384_IV3[15] | 0;
       constructor() {
         super(48);
       }
@@ -10077,29 +9725,29 @@ var init_sha23 = __esm({
         super(32);
       }
     };
-    sha2565 = /* @__PURE__ */ createHasher4(
-      () => new _SHA2563(),
-      /* @__PURE__ */ oidNist3(1)
+    sha2564 = /* @__PURE__ */ createHasher3(
+      () => new _SHA2562(),
+      /* @__PURE__ */ oidNist2(1)
     );
-    sha224 = /* @__PURE__ */ createHasher4(
+    sha224 = /* @__PURE__ */ createHasher3(
       () => new _SHA224(),
-      /* @__PURE__ */ oidNist3(4)
+      /* @__PURE__ */ oidNist2(4)
     );
-    sha512 = /* @__PURE__ */ createHasher4(
+    sha512 = /* @__PURE__ */ createHasher3(
       () => new _SHA512(),
-      /* @__PURE__ */ oidNist3(3)
+      /* @__PURE__ */ oidNist2(3)
     );
-    sha384 = /* @__PURE__ */ createHasher4(
+    sha384 = /* @__PURE__ */ createHasher3(
       () => new _SHA384(),
-      /* @__PURE__ */ oidNist3(2)
+      /* @__PURE__ */ oidNist2(2)
     );
-    sha512_256 = /* @__PURE__ */ createHasher4(
+    sha512_256 = /* @__PURE__ */ createHasher3(
       () => new _SHA512_256(),
-      /* @__PURE__ */ oidNist3(6)
+      /* @__PURE__ */ oidNist2(6)
     );
-    sha512_224 = /* @__PURE__ */ createHasher4(
+    sha512_224 = /* @__PURE__ */ createHasher3(
       () => new _SHA512_224(),
-      /* @__PURE__ */ oidNist3(5)
+      /* @__PURE__ */ oidNist2(5)
     );
   }
 });
@@ -11216,7 +10864,7 @@ var require_script = __commonJS({
     exports2.computeBondUnlockHeight = computeBondUnlockHeight3;
     exports2.buildRegisterMetadata = buildRegisterMetadata2;
     var btc = __importStar((init_btc_signer(), __toCommonJS(btc_signer_exports)));
-    var sha2_js_1 = (init_sha23(), __toCommonJS(sha2_exports));
+    var sha2_js_1 = (init_sha22(), __toCommonJS(sha2_exports));
     var common_1 = require_dist2();
     var transactions_1 = require("@stacks/transactions");
     var cycles_1 = require_cycles();
@@ -11443,7 +11091,7 @@ var require_proof = __commonJS({
     exports2.computeMerkleBranch = computeMerkleBranch;
     exports2.buildLockProofFromBlock = buildLockProofFromBlock;
     var btc = __importStar((init_btc_signer(), __toCommonJS(btc_signer_exports)));
-    var sha2_js_1 = (init_sha23(), __toCommonJS(sha2_exports));
+    var sha2_js_1 = (init_sha22(), __toCommonJS(sha2_exports));
     var common_1 = require_dist2();
     var script_1 = require_script();
     var MAX_TX_BYTES = 1e5;
@@ -12796,11 +12444,11 @@ __export(base_exports, {
   utf8: () => utf82,
   utils: () => utils3
 });
-function isBytes10(a) {
+function isBytes9(a) {
   return a instanceof Uint8Array || ArrayBuffer.isView(a) && a.constructor.name === "Uint8Array";
 }
-function abytes8(b) {
-  if (!isBytes10(b))
+function abytes7(b) {
+  if (!isBytes9(b))
     throw new Error("Uint8Array expected");
 }
 function isArrayOf3(isString, arr) {
@@ -12824,7 +12472,7 @@ function astr3(label, input) {
     throw new Error(`${label}: string expected`);
   return true;
 }
-function anumber6(n) {
+function anumber5(n) {
   if (!Number.isSafeInteger(n))
     throw new Error(`invalid integer: ${n}`);
 }
@@ -12891,7 +12539,7 @@ function join3(separator = "") {
 }
 // @__NO_SIDE_EFFECTS__
 function padding(bits, chr = "=") {
-  anumber6(bits);
+  anumber5(bits);
   astr3("padding", chr);
   return {
     encode(data) {
@@ -12931,7 +12579,7 @@ function convertRadix3(data, from, to) {
   let pos = 0;
   const res = [];
   const digits = Array.from(data, (d) => {
-    anumber6(d);
+    anumber5(d);
     if (d < 0 || d >= from)
       throw new Error(`invalid integer: ${d}`);
     return d;
@@ -12983,7 +12631,7 @@ function convertRadix23(data, from, to, padding2) {
   const mask = powers3[to] - 1;
   const res = [];
   for (const n of data) {
-    anumber6(n);
+    anumber5(n);
     if (n >= max)
       throw new Error(`convertRadix2: invalid data word=${n} from=${from}`);
     carry = carry << from | n;
@@ -13008,11 +12656,11 @@ function convertRadix23(data, from, to, padding2) {
 }
 // @__NO_SIDE_EFFECTS__
 function radix3(num2) {
-  anumber6(num2);
+  anumber5(num2);
   const _256 = 2 ** 8;
   return {
     encode: (bytes2) => {
-      if (!isBytes10(bytes2))
+      if (!isBytes9(bytes2))
         throw new Error("radix.encode input should be Uint8Array");
       return convertRadix3(Array.from(bytes2), _256, num2);
     },
@@ -13024,14 +12672,14 @@ function radix3(num2) {
 }
 // @__NO_SIDE_EFFECTS__
 function radix23(bits, revPadding = false) {
-  anumber6(bits);
+  anumber5(bits);
   if (bits <= 0 || bits > 32)
     throw new Error("radix2: bits should be in (0..32]");
   if (/* @__PURE__ */ radix2carry3(8, bits) > 32 || /* @__PURE__ */ radix2carry3(bits, 8) > 32)
     throw new Error("radix2: carry overflow");
   return {
     encode: (bytes2) => {
-      if (!isBytes10(bytes2))
+      if (!isBytes9(bytes2))
         throw new Error("radix2.encode input should be Uint8Array");
       return convertRadix23(Array.from(bytes2), 8, bits, !revPadding);
     },
@@ -13051,11 +12699,11 @@ function unsafeWrapper2(fn) {
   };
 }
 function checksum2(len, fn) {
-  anumber6(len);
+  anumber5(len);
   afn3(fn);
   return {
     encode(data) {
-      if (!isBytes10(data))
+      if (!isBytes9(data))
         throw new Error("checksum.encode: input should be Uint8Array");
       const sum = fn(data).slice(0, len);
       const res = new Uint8Array(data.length + len);
@@ -13064,7 +12712,7 @@ function checksum2(len, fn) {
       return res;
     },
     decode(data) {
-      if (!isBytes10(data))
+      if (!isBytes9(data))
         throw new Error("checksum.decode: input should be Uint8Array");
       const payload = data.slice(0, -len);
       const oldChecksum = data.slice(-len);
@@ -13113,7 +12761,7 @@ function genBech322(encoding) {
   const fromWordsUnsafe = unsafeWrapper2(fromWords);
   function encode(prefix2, words, limit = 90) {
     astr3("bech32.encode prefix", prefix2);
-    if (isBytes10(words))
+    if (isBytes9(words))
       words = Array.from(words);
     anumArr3("bech32.encode", words);
     const plen = prefix2.length;
@@ -13205,7 +12853,7 @@ var init_base3 = __esm({
     };
     base64 = hasBase64Builtin ? {
       encode(b) {
-        abytes8(b);
+        abytes7(b);
         return b.toBase64();
       },
       decode(s) {
@@ -13215,7 +12863,7 @@ var init_base3 = __esm({
     base64nopad = /* @__PURE__ */ chain3(/* @__PURE__ */ radix23(6), /* @__PURE__ */ alphabet3("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"), /* @__PURE__ */ join3(""));
     base64url = hasBase64Builtin ? {
       encode(b) {
-        abytes8(b);
+        abytes7(b);
         return b.toBase64({ alphabet: "base64url" });
       },
       decode(s) {
@@ -13252,7 +12900,7 @@ var init_base3 = __esm({
         return Uint8Array.from(res);
       }
     };
-    createBase58check2 = (sha2566) => /* @__PURE__ */ chain3(checksum2(4, (data) => sha2566(sha2566(data))), base582);
+    createBase58check2 = (sha2565) => /* @__PURE__ */ chain3(checksum2(4, (data) => sha2565(sha2565(data))), base582);
     base58check2 = createBase58check2;
     BECH_ALPHABET2 = /* @__PURE__ */ chain3(/* @__PURE__ */ alphabet3("qpzry9x8gf2tvdw0s3jn54khce6mua7l"), /* @__PURE__ */ join3(""));
     POLYMOD_GENERATORS2 = [996825010, 642813549, 513874426, 1027748829, 705979059];
@@ -13265,7 +12913,7 @@ var init_base3 = __esm({
     hasHexBuiltin4 = /* @__PURE__ */ (() => typeof Uint8Array.from([]).toHex === "function" && typeof Uint8Array.fromHex === "function")();
     hexBuiltin3 = {
       encode(data) {
-        abytes8(data);
+        abytes7(data);
         return data.toHex();
       },
       decode(s) {
@@ -13292,7 +12940,7 @@ var init_base3 = __esm({
     bytesToString = (type, bytes2) => {
       if (typeof type !== "string" || !CODERS.hasOwnProperty(type))
         throw new TypeError(coderTypeError);
-      if (!isBytes10(bytes2))
+      if (!isBytes9(bytes2))
         throw new TypeError("bytesToString() expects Uint8Array");
       return CODERS[type].encode(bytes2);
     };
@@ -13454,7 +13102,7 @@ var require_signer = __commonJS({
     exports2.verifySignerGrant = verifySignerGrant;
     exports2.buildSignerCalldata = buildSignerCalldata;
     exports2.decodeSignerCalldata = decodeSignerCalldata;
-    var sha2_js_1 = (init_sha23(), __toCommonJS(sha2_exports));
+    var sha2_js_1 = (init_sha22(), __toCommonJS(sha2_exports));
     var common_1 = require_dist2();
     var encryption_1 = require("@stacks/encryption");
     var transactions_1 = require("@stacks/transactions");
@@ -13983,6 +13631,7 @@ var require_dist3 = __commonJS({
 // src/index.ts
 var index_exports = {};
 __export(index_exports, {
+  ABANDON_MISSING_WAIT_BLOCKS: () => ABANDON_MISSING_WAIT_BLOCKS,
   ActionType: () => ActionType,
   ApiService: () => ApiService,
   BTC_ESPLORA: () => BTC_ESPLORA,
@@ -13991,7 +13640,9 @@ __export(index_exports, {
   DEFAULT_SCHEDULE_BOND_INDICES: () => DEFAULT_SCHEDULE_BOND_INDICES,
   EARLY_EXIT_SIGNER: () => EARLY_EXIT_SIGNER,
   FEATURED_SIGNER_MANAGERS: () => FEATURED_SIGNER_MANAGERS,
+  FIREBLOCKS_REQUEST_TIMEOUT_MS: () => FIREBLOCKS_REQUEST_TIMEOUT_MS,
   FileLockRecordStore: () => FileLockRecordStore,
+  HIRO_API_KEY_HEADER: () => HIRO_API_KEY_HEADER,
   InMemoryLockRecordStore: () => InMemoryLockRecordStore,
   MAX_FEE_STX: () => MAX_FEE_STX,
   POX4_ERRORS: () => POX4_ERRORS,
@@ -14054,7 +13705,7 @@ var StackingPools = /* @__PURE__ */ ((StackingPools2) => {
 })(StackingPools || {});
 
 // src/services/stacks.service.ts
-var import_network = require("@stacks/network");
+var import_network2 = require("@stacks/network");
 var import_transactions2 = require("@stacks/transactions");
 
 // src/utils/errorHandling.ts
@@ -14105,6 +13756,9 @@ function extractResponseDetail(error) {
   }
   return null;
 }
+function unsettledTransactionError(operation, txId, reason, resumeHint) {
+  return `${operation} was broadcast (txid ${txId}) but its outcome is NOT known: ${reason ?? "the settlement wait timed out before the transaction was observed on-chain"}. Check this transaction's status before acting \u2014 do not send a replacement on the assumption it did not land.` + (resumeHint ? ` To continue this operation, call ${resumeHint}.` : "");
+}
 
 // src/utils/helpers.ts
 var import_c32check = require("c32check");
@@ -14128,6 +13782,8 @@ var helperConstants = {
 var RBF_MIN_FEE_MULTIPLIER = 1.25;
 var MAX_FEE_STX = 10;
 var DEFAULT_POX_FEE_USTX = BigInt(1e4);
+var ABANDON_MISSING_WAIT_BLOCKS = 2016;
+var FIREBLOCKS_REQUEST_TIMEOUT_MS = 3e4;
 var api_constants = {
   stacks_mainnet_rpc: "https://api.hiro.so",
   stacks_testnet_rpc: "https://api.testnet.hiro.so"
@@ -14345,6 +14001,7 @@ var BTC_ESPLORA = {
 };
 var PRIVATE1_HIRO_API_BASE = "https://api.private-1.hiro.so";
 var PUBLIC_TESTNET_POX5_API = "https://api.testnet-pox5.hiro.so";
+var HIRO_API_KEY_HEADER = "x-hiro-api-key";
 var EARLY_EXIT_SIGNER = {
   mainnet: "https://tl5v426qz8.execute-api.eu-west-1.amazonaws.com/api/v1",
   testnet: "https://r25rniyw12.execute-api.eu-west-1.amazonaws.com/api/v1",
@@ -14378,7 +14035,10 @@ var POX5_BOND_ERRORS = {
   43: { name: "ERR_BOND_ALREADY_STARTED", message: "Registered after bond-start-height \u2014 no grace period." },
   45: { name: "ERR_INVALID_LOCKUP_AMOUNT", message: "Proof amount \u2260 decoded output value." },
   46: { name: "ERR_DUPLICATE_LOCKUP_OUTPOINT", message: "Same (txid, vout) submitted twice." },
-  47: { name: "ERR_STAKE_IN_PREPARE_PHASE", message: "Landed in prepare phase \u2014 broadcast earlier in the cycle." },
+  // Temporary by construction: the prepare phase is ~17 hours of every two-week mainnet
+  // cycle, so this is a routine timing outcome rather than a fault. The wording says so,
+  // and says nothing was spent, because the operator reaches it only after authenticating.
+  47: { name: "ERR_STAKE_IN_PREPARE_PHASE", message: "Temporary timing condition, not a failure: the reward cycle is in its prepare phase, during which staking is not accepted. Nothing was sent and no fee was charged. Retry once the prepare phase ends and the next cycle begins." },
   48: { name: "ERR_ROLLOVER_TOO_EARLY", message: "Rollover attempted before prior bond L1 unlock window." },
   50: { name: "ERR_L1_EARLY_EXIT_ALREADY_ANNOUNCED", message: "announceEarlyExit already called for this membership." }
 };
@@ -14876,6 +14536,172 @@ function parseClarityErrCode(txResult) {
   return Number(m[1]);
 }
 
+// src/utils/network.ts
+var import_network = require("@stacks/network");
+var originOf = (url) => {
+  try {
+    return new URL(String(url)).origin;
+  } catch {
+    return void 0;
+  }
+};
+function withChainApiKey(init, apiKey, requestUrl, allowedOrigin) {
+  if (!apiKey) return init;
+  if (allowedOrigin !== void 0) {
+    const target = originOf(requestUrl);
+    if (target === void 0 || target !== originOf(allowedOrigin)) return init;
+  }
+  const headers = new Headers(init?.headers ?? {});
+  headers.set(HIRO_API_KEY_HEADER, apiKey);
+  return { ...init ?? {}, headers, redirect: "error" };
+}
+var ERROR_BODY_EXCERPT_CHARS = 200;
+async function assertErrorBodyIsReadable(res, url) {
+  const body = await res.clone().text().catch(() => "");
+  try {
+    JSON.parse(body);
+    return;
+  } catch {
+  }
+  let path2 = url;
+  try {
+    path2 = new URL(url).pathname;
+  } catch {
+  }
+  const excerpt = body.length > ERROR_BODY_EXCERPT_CHARS ? `${body.slice(0, ERROR_BODY_EXCERPT_CHARS)}\u2026` : body;
+  throw new Error(
+    `Stacks API ${path2} returned HTTP ${res.status}${res.statusText ? ` ${res.statusText}` : ""}${excerpt ? `: ${excerpt}` : " with an empty body"}`
+  );
+}
+function accountBalanceNormalizingFetch(baseFetch = fetch, apiKey, allowedOrigin) {
+  const stripHexPrefix = (v) => typeof v === "string" && /^0x/i.test(v) ? v.slice(2) : v;
+  return (async (input, init) => {
+    const res = await baseFetch(input, withChainApiKey(init, apiKey, input, allowedOrigin));
+    const url = typeof input === "string" ? input : input?.url ?? String(input);
+    if (!res.ok) {
+      await assertErrorBodyIsReadable(res, url);
+      return res;
+    }
+    if (!/\/v2\/accounts\//.test(url)) return res;
+    const data = await res.clone().json().catch(() => null);
+    if (!data || typeof data !== "object") return res;
+    const normalized = {
+      ...data,
+      balance: stripHexPrefix(data.balance),
+      locked: stripHexPrefix(data.locked)
+    };
+    return new Response(JSON.stringify(normalized), {
+      status: res.status,
+      statusText: res.statusText,
+      headers: { "content-type": "application/json" }
+    });
+  });
+}
+function resolveNetworkProfile(opts) {
+  const envUrl = process.env.STACKS_API_URL || void 0;
+  const name = opts.network ?? (opts.testnet ? "private-devnet" : "mainnet");
+  switch (name) {
+    case "private-devnet":
+      return {
+        name: "private-devnet",
+        stacksApiUrl: opts.stacksApiUrl || envUrl || PRIVATE1_HIRO_API_BASE,
+        chainId: 256,
+        magicBytes: "id",
+        esploraBaseUrl: BTC_ESPLORA.testnet,
+        bech32Prefix: "bcrt",
+        cosignerUrl: EARLY_EXIT_SIGNER.testnet,
+        expectedPoxContractName: "pox-5"
+      };
+    case "public-testnet":
+      return {
+        name: "public-testnet",
+        stacksApiUrl: opts.stacksApiUrl || envUrl || PUBLIC_TESTNET_POX5_API,
+        chainId: import_network.STACKS_TESTNET.chainId,
+        magicBytes: import_network.STACKS_TESTNET.magicBytes,
+        esploraBaseUrl: BTC_ESPLORA.public_testnet,
+        bech32Prefix: "tb",
+        cosignerUrl: EARLY_EXIT_SIGNER.public_testnet,
+        expectedPoxContractName: "pox-5",
+        requirePox5Active: true
+      };
+    case "mainnet":
+    default:
+      return {
+        name: "mainnet",
+        stacksApiUrl: opts.stacksApiUrl || envUrl || api_constants.stacks_mainnet_rpc,
+        chainId: import_network.STACKS_MAINNET.chainId,
+        magicBytes: import_network.STACKS_MAINNET.magicBytes,
+        esploraBaseUrl: BTC_ESPLORA.mainnet,
+        bech32Prefix: void 0,
+        cosignerUrl: EARLY_EXIT_SIGNER.mainnet,
+        expectedPoxContractName: "pox-5"
+      };
+  }
+}
+function stacksNetworkFromProfile(profile, apiKey, baseFetch = fetch) {
+  const base = profile.name === "mainnet" ? import_network.STACKS_MAINNET : import_network.STACKS_TESTNET;
+  return {
+    ...base,
+    chainId: profile.chainId,
+    magicBytes: profile.magicBytes,
+    client: {
+      baseUrl: profile.stacksApiUrl,
+      // Every PoX-5 read `@stacks/bitcoin-staking` performs goes through this fetch,
+      // so the key has to be applied here rather than at individual call sites.
+      fetch: accountBalanceNormalizingFetch(baseFetch, apiKey, profile.stacksApiUrl)
+    }
+  };
+}
+async function validateNetworkProfile(profile, apiKey, baseFetch = fetch) {
+  let info;
+  try {
+    const res = await baseFetch(
+      `${profile.stacksApiUrl}/v2/info`,
+      withChainApiKey(void 0, apiKey, `${profile.stacksApiUrl}/v2/info`, profile.stacksApiUrl)
+    );
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    info = await res.json();
+  } catch (error) {
+    console.warn(
+      `Network profile validation skipped \u2014 could not read ${profile.stacksApiUrl}/v2/info: ${formatErrorMessage(error)}`
+    );
+    return;
+  }
+  if (typeof info?.network_id === "number" && info.network_id !== profile.chainId) {
+    throw new Error(
+      `Network mismatch: profile "${profile.name}" expects chain id ${profile.chainId} but ${profile.stacksApiUrl} reports ${info.network_id}. Set STACKS_API_URL / testnet to a node that matches the intended network.`
+    );
+  }
+  try {
+    const poxRes = await baseFetch(
+      `${profile.stacksApiUrl}/v2/pox`,
+      withChainApiKey(void 0, apiKey, `${profile.stacksApiUrl}/v2/pox`, profile.stacksApiUrl)
+    );
+    if (poxRes.ok) {
+      const pox = await poxRes.json();
+      const contractId = pox?.contract_id;
+      const pox5Active = typeof contractId === "string" && contractId.endsWith(`.${profile.expectedPoxContractName}`);
+      if (!pox5Active) {
+        if (profile.requirePox5Active) {
+          throw new Error(
+            `Network profile "${profile.name}" requires an active ${profile.expectedPoxContractName} contract, but ${profile.stacksApiUrl} reports "${contractId ?? "unknown"}". This network is not yet supported.`
+          );
+        }
+        console.warn(
+          `Active PoX contract "${contractId}" is not ".${profile.expectedPoxContractName}"; PoX-5 bond operations may be unavailable on this network.`
+        );
+      }
+    } else if (profile.requirePox5Active) {
+      throw new Error(
+        `Network profile "${profile.name}" could not confirm an active ${profile.expectedPoxContractName} contract (GET /v2/pox returned HTTP ${poxRes.status}). This network is not yet supported.`
+      );
+    }
+  } catch (error) {
+    if (profile.requirePox5Active) throw error;
+    console.warn(`PoX contract check skipped: ${formatErrorMessage(error)}`);
+  }
+}
+
 // src/services/stacks.service.ts
 var StacksService = class {
   /**
@@ -14886,7 +14712,7 @@ var StacksService = class {
    *   the PoX-5 client always describe the same chain. When omitted, falls back to
    *   env/default resolution for standalone use.
    */
-  constructor(testnet = false, profile, hiroApiKey) {
+  constructor(testnet = false, profile, chainApiKey) {
     /**
      * Fetches the current PoX contract address and name.
      * @returns An object containing the PoX contract address and name
@@ -15893,7 +15719,7 @@ var StacksService = class {
      * @returns An array of contract call transactions.
      */
     this.getContractCallHistory = async (address, limit = pagination_defaults.limit, offset = pagination_defaults.page) => {
-      if (!validateAddress(address, this.network === import_network.STACKS_TESTNET)) {
+      if (!validateAddress(address, this.network === import_network2.STACKS_TESTNET)) {
         throw new Error("Invalid Stacks address");
       }
       try {
@@ -15950,12 +15776,20 @@ var StacksService = class {
     };
     this.testnet = testnet;
     this.axiosClient = import_axios.default.create();
-    if (hiroApiKey) {
-      this.axiosClient.defaults.headers["x-hiro-api-key"] = hiroApiKey;
-    }
     const baseUrl = profile?.baseUrl || process.env.STACKS_API_URL || (testnet ? api_constants.stacks_testnet_rpc : api_constants.stacks_mainnet_rpc);
     this.stackBaseUrl = baseUrl;
-    const defaultNetwork = testnet ? import_network.STACKS_TESTNET : import_network.STACKS_MAINNET;
+    if (chainApiKey) {
+      const allowedOrigin = originOf(baseUrl);
+      this.axiosClient.interceptors.request.use((config2) => {
+        const target = originOf(new URL(String(config2.url), baseUrl));
+        if (allowedOrigin !== void 0 && target === allowedOrigin) {
+          config2.headers.set(HIRO_API_KEY_HEADER, chainApiKey);
+          config2.maxRedirects = 0;
+        }
+        return config2;
+      });
+    }
+    const defaultNetwork = testnet ? import_network2.STACKS_TESTNET : import_network2.STACKS_MAINNET;
     this.network = {
       ...defaultNetwork,
       ...profile ? { chainId: profile.chainId, magicBytes: profile.magicBytes } : {},
@@ -16090,15 +15924,57 @@ var import_ts_sdk2 = require("@fireblocks/ts-sdk");
 var POLL_INITIAL_MS = 3e3;
 var POLL_CEILING_MS = 3e4;
 var POLL_TIMEOUT_MS = 30 * 60 * 1e3;
+var FireblocksTransferError = class extends Error {
+  constructor(message, details) {
+    super(message);
+    this.details = details;
+    this.name = "FireblocksTransferError";
+  }
+};
+var StaleRawSignError = class extends Error {
+  constructor(message, vendorId) {
+    super(message);
+    this.vendorId = vendorId;
+    this.name = "StaleRawSignError";
+  }
+};
+var TERMINAL_TRANSACTION_STATES = /* @__PURE__ */ new Set([
+  import_ts_sdk2.TransactionStateEnum.Blocked,
+  import_ts_sdk2.TransactionStateEnum.Cancelled,
+  import_ts_sdk2.TransactionStateEnum.Failed,
+  import_ts_sdk2.TransactionStateEnum.Rejected
+]);
+var APPROVAL_PENDING_STATES = /* @__PURE__ */ new Set([
+  import_ts_sdk2.TransactionStateEnum.PendingAuthorization,
+  import_ts_sdk2.TransactionStateEnum.Pending3RdPartyManualApproval,
+  import_ts_sdk2.TransactionStateEnum.PendingSignature
+]);
+var describeOperation = (operation) => operation === import_ts_sdk2.TransactionOperation.Raw ? "Signing request" : "Transfer";
+var isDuplicateExternalId = (error) => {
+  const anyErr = error;
+  if (anyErr?.response?.data?.code === 1438 || anyErr?.code === 1438) return true;
+  const msg = typeof anyErr?.message === "string" ? anyErr.message : "";
+  return /\b1438\b/.test(msg) && /duplicat|external/i.test(msg);
+};
+var normalizeHex = (h) => typeof h === "string" ? h.replace(/^0x/, "").toLowerCase() : void 0;
+var rawRequestContent = (tx) => {
+  const t = tx;
+  return normalizeHex(t?.extraParameters?.rawMessageData?.messages?.[0]?.content) ?? normalizeHex(t?.signedMessages?.[0]?.content);
+};
+var describeBudget = (ms) => ms >= 60 * 60 * 1e3 ? `${Math.round(ms / (60 * 60 * 1e3))}h` : `${Math.round(ms / 6e4)}m`;
 var FireblocksSigner = class {
-  constructor(fireblocks) {
+  constructor(fireblocks, poll = {}) {
     this.fireblocks = fireblocks;
-    this.createTransactionPayload = (externalTxId) => {
+    this.createTransactionPayload = (externalTxId, vaultAccountId) => {
       return {
         note: "raw signing for stacks-fireblocks-sdk",
         externalTxId,
         source: {
-          type: import_ts_sdk2.TransferPeerPathType.VaultAccount
+          type: import_ts_sdk2.TransferPeerPathType.VaultAccount,
+          // A Raw policy rule scoped to a vault account matches on this id. Without it the
+          // vault is present only inside the derivation path, no vault-scoped rule can
+          // match, and Fireblocks refuses the request outright.
+          id: vaultAccountId
         },
         operation: import_ts_sdk2.TransactionOperation.Raw,
         extraParameters: {
@@ -16112,34 +15988,121 @@ var FireblocksSigner = class {
     this.getTxStatus = async (txId) => {
       let response = await this.fireblocks.transactions.getTransaction({ txId });
       let tx = response.data;
-      const deadline = Date.now() + POLL_TIMEOUT_MS;
-      let delay = POLL_INITIAL_MS;
+      let delay = this.poll.initialMs;
+      const overallStartedAt = Date.now();
+      const overallCeilingMs = this.poll.approvalTimeoutMs + this.poll.timeoutMs;
+      let isApprovalCategory = APPROVAL_PENDING_STATES.has(tx.status);
+      let categoryStartedAt = overallStartedAt;
       while (tx.status !== import_ts_sdk2.TransactionStateEnum.Completed) {
-        switch (tx.status) {
-          case import_ts_sdk2.TransactionStateEnum.Blocked:
-          case import_ts_sdk2.TransactionStateEnum.Cancelled:
-          case import_ts_sdk2.TransactionStateEnum.Failed:
-          case import_ts_sdk2.TransactionStateEnum.Rejected:
-            throw new Error(
-              `Signing request failed/blocked/cancelled: Transaction: ${tx.id} status is ${tx.status}`
-            );
+        const label = describeOperation(tx.operation);
+        const details = () => ({
+          operation: tx.operation ?? "",
+          status: tx.status,
+          subStatus: tx.subStatus,
+          errorDescription: tx.errorDescription,
+          vendorId: tx.id ?? txId,
+          ...tx.txHash ? { txHash: tx.txHash } : {}
+        });
+        if (TERMINAL_TRANSACTION_STATES.has(tx.status)) {
+          throw new FireblocksTransferError(
+            `${label} ${tx.id} reached terminal status ${tx.status}${tx.subStatus ? ` (${tx.subStatus})` : ""}`,
+            details()
+          );
         }
-        if (Date.now() + delay > deadline) {
-          throw new Error(
-            `Signing request timed out after 30 minutes: Transaction ${tx.id} is still ${tx.status}`
+        if (Date.now() + delay > overallStartedAt + overallCeilingMs) {
+          throw new FireblocksTransferError(
+            `${label} ${tx.id} timed out after ${describeBudget(overallCeilingMs)} total: still ${tx.status}${tx.subStatus ? ` (${tx.subStatus})` : ""} (status kept moving between approval and machine-paced waits)`,
+            details()
+          );
+        }
+        const isApproval = APPROVAL_PENDING_STATES.has(tx.status);
+        if (isApproval !== isApprovalCategory) {
+          isApprovalCategory = isApproval;
+          categoryStartedAt = Date.now();
+        }
+        const budget = isApproval ? this.poll.approvalTimeoutMs : this.poll.timeoutMs;
+        if (Date.now() + delay > categoryStartedAt + budget) {
+          throw new FireblocksTransferError(
+            `${label} ${tx.id} timed out after ${describeBudget(budget)}: still ${tx.status}${tx.subStatus ? ` (${tx.subStatus})` : ""}`,
+            details()
           );
         }
         console.log(`Transaction ${tx.id} is currently at status - ${tx.status}`);
         await new Promise((resolve2) => setTimeout(resolve2, delay));
-        delay = Math.min(delay * 2, POLL_CEILING_MS);
+        delay = Math.min(delay * 2, this.poll.ceilingMs);
         try {
           response = await this.fireblocks.transactions.getTransaction({ txId });
           tx = response.data;
         } catch (pollError) {
+          const failed = pollError?.response;
+          const code = failed?.statusCode ?? failed?.status;
+          if (code === 401 || code === 403) {
+            throw new Error(`Polling ${label.toLowerCase()} ${txId} failed with HTTP ${code} from Fireblocks \u2014 check the API key and its permissions: ${formatErrorMessage(pollError)}`);
+          }
           console.warn(`Transient error polling transaction ${txId}, will retry:`, pollError);
         }
       }
       return tx;
+    };
+    /**
+     * Resolves the raw-signing request already holding `externalId` to a transaction id
+     * that may be polled for `hexContent`'s signature.
+     *
+     * A signature authorizes exact bytes. The existing request was opened over the sighash
+     * of an earlier attempt, and the two differ whenever the nonce moved between them (a
+     * concurrent vault operation consuming it), so the content is compared before the
+     * request is adopted. An unreadable content is a mismatch: without it the signature is
+     * not provably over the right bytes.
+     *
+     * A genuine 404 means the id is free and the duplicate rejection came from elsewhere —
+     * the original error is rethrown rather than masked.
+     */
+    this.resolveDuplicateRawSign = async (externalId, hexContent, createError) => {
+      let existing;
+      try {
+        existing = await this.fireblocks.transactions.getTransactionByExternalId({
+          externalTxId: externalId
+        });
+      } catch (e) {
+        const status = e?.response?.status ?? e?.status;
+        if (status === 404) throw createError;
+        throw e;
+      }
+      const tx = existing?.data;
+      const vendorId = tx?.id;
+      if (!vendorId) throw createError;
+      if (tx.operation !== void 0 && tx.operation !== import_ts_sdk2.TransactionOperation.Raw) {
+        throw new StaleRawSignError(
+          `External id ${externalId} belongs to a ${tx.operation} transaction (${vendorId}), not a signing request; refusing to read a signature from it.`,
+          vendorId
+        );
+      }
+      if (tx.status !== void 0 && TERMINAL_TRANSACTION_STATES.has(tx.status)) {
+        throw new FireblocksTransferError(
+          `Signing request ${vendorId} holding external id ${externalId} reached terminal status ${tx.status}${tx.subStatus ? ` (${tx.subStatus})` : ""}`,
+          {
+            operation: tx.operation ?? import_ts_sdk2.TransactionOperation.Raw,
+            status: tx.status,
+            subStatus: tx.subStatus,
+            errorDescription: tx.errorDescription,
+            vendorId
+          }
+        );
+      }
+      const existingContent = rawRequestContent(tx);
+      if (existingContent === void 0) {
+        throw new StaleRawSignError(
+          `Signing request ${vendorId} already holds external id ${externalId}, but the message it was opened over could not be read back, so its signature cannot be shown to cover the current transaction. Resolve that request in Fireblocks before retrying.`,
+          vendorId
+        );
+      }
+      if (existingContent !== normalizeHex(hexContent)) {
+        throw new StaleRawSignError(
+          `Signing request ${vendorId} already holds external id ${externalId}, but it was opened over a different message \u2014 the transaction changed between attempts (typically a nonce consumed by another operation). Its signature would not authorize this transaction. Resolve that request in Fireblocks before retrying.`,
+          vendorId
+        );
+      }
+      return vendorId;
     };
     this.rawSign = async (content, vaultAccountId, txNote, testnet = false, externalId) => {
       try {
@@ -16147,7 +16110,10 @@ var FireblocksSigner = class {
           throw new Error("Content for raw signing must be a hex string");
         }
         const hexContent = content.startsWith("0x") ? content.slice(2) : content;
-        const transactionPayload = this.createTransactionPayload(externalId ?? (0, import_crypto.randomUUID)());
+        const transactionPayload = this.createTransactionPayload(
+          externalId ?? (0, import_crypto.randomUUID)(),
+          String(vaultAccountId)
+        );
         if (txNote) {
           transactionPayload.note = txNote;
         }
@@ -16166,20 +16132,53 @@ var FireblocksSigner = class {
           ],
           algorithm: import_ts_sdk2.SignedMessageAlgorithmEnum.EcdsaSecp256K1
         };
-        const transactionResponse = await this.fireblocks.transactions.createTransaction({
-          transactionRequest: transactionPayload
-        });
-        const txId = transactionResponse.data.id;
+        let txId;
+        try {
+          const transactionResponse = await this.fireblocks.transactions.createTransaction({
+            transactionRequest: transactionPayload
+          });
+          txId = transactionResponse.data.id;
+        } catch (createError) {
+          if (!isDuplicateExternalId(createError)) throw createError;
+          txId = await this.resolveDuplicateRawSign(
+            transactionPayload.externalTxId,
+            hexContent,
+            createError
+          );
+        }
         if (!txId) {
           throw new Error("Transaction ID is undefined.");
         }
         const txInfo = await this.getTxStatus(txId);
-        const signature = txInfo.signedMessages[0].signature;
-        return signature;
+        return txInfo.signedMessages[0].signature;
       } catch (error) {
         console.log(`Caught error in rawSign: ${error}`);
+        if (error instanceof FireblocksTransferError || error instanceof StaleRawSignError) {
+          throw error;
+        }
         throw new Error(`Error in rawSign: ${formatErrorMessage(error)}`);
       }
+    };
+    const timeoutMs = poll.timeoutMs ?? POLL_TIMEOUT_MS;
+    this.poll = {
+      initialMs: poll.initialMs ?? POLL_INITIAL_MS,
+      ceilingMs: poll.ceilingMs ?? POLL_CEILING_MS,
+      timeoutMs,
+      /**
+       * The approval budget equals the machine budget unless set — extending is opt-in per call site.
+       *
+       * This deadline also bounds how stale a preflight can be when the transaction finally
+       * broadcasts. FBS-19: three lifecycle calls (`unstakeSbtc`, `updateBondRegistration`,
+       * `renewBond`) re-validate nothing before broadcast, and the re-checks that do exist
+       * carry no safety margin. A longer wait therefore lets an approval straddle the
+       * prepare-phase boundary — ~17 hours of every two-week mainnet cycle — and the contract
+       * rejects the transaction after the fee and nonce are spent.
+       *
+       * Raise this only for a caller that re-validates with a margin immediately before
+       * broadcast. The typed timeout error already lets a caller distinguish an outstanding
+       * approval from a stall without waiting longer.
+       */
+      approvalTimeoutMs: poll.approvalTimeoutMs ?? timeoutMs
     };
   }
 };
@@ -16331,13 +16330,28 @@ var FireblocksService = class {
       if (!btcTxid) throw new Error(`BTC transaction ${fireblocksId} completed but has no txHash`);
       return btcTxid;
     };
+    /** A single status read of a Fireblocks transfer, without polling. */
+    this.getTransferState = async (fireblocksId) => {
+      const { data } = await this.fireblocksSDK.transactions.getTransaction({ txId: fireblocksId });
+      return {
+        status: data.status,
+        ...data.subStatus ? { subStatus: data.subStatus } : {},
+        ...data.txHash ? { txHash: data.txHash } : {},
+        // In the asset's units (BTC), as sent on createTransaction.
+        ...data.amountInfo?.requestedAmount ? { requestedAmount: data.amountInfo.requestedAmount } : {},
+        // Fireblocks fills this in only from CONFIRMING onwards.
+        ...data.destinationAddress ? { destinationAddress: data.destinationAddress } : {}
+      };
+    };
     /**
-     * Looks up a prior BTC transfer by its external id (the deterministic funding id) and
-     * awaits its Bitcoin txid. Used when a retry's re-submit is rejected as a duplicate
-     * external id (Fireblocks error 1438): the transfer already exists, so resolve it
-     * rather than failing. Returns null when Fireblocks has no transaction for the id.
+     * Lookup ONLY — returns the Fireblocks id for an external id without polling it.
+     *
+     * Deliberately does not poll: a combined lookup-and-await loses the id when the
+     * transfer is already terminal, because the await throws before the caller can persist
+     * what the lookup just found. The record then keeps no pointer to the dead transfer and
+     * every retry repeats the same generic error. Callers persist between the two steps.
      */
-    this.resolveBitcoinTransactionByExternalId = async (externalId) => {
+    this.findBitcoinTransactionByExternalId = async (externalId) => {
       let existing;
       try {
         existing = await this.fireblocksSDK.transactions.getTransactionByExternalId({ externalTxId: externalId });
@@ -16346,10 +16360,7 @@ var FireblocksService = class {
         if (status === 404) return null;
         throw e;
       }
-      const fireblocksId = existing?.data?.id;
-      if (!fireblocksId) return null;
-      const btcTxid = await this.awaitBitcoinTransaction(fireblocksId);
-      return { fireblocksId, btcTxid };
+      return existing?.data?.id ?? null;
     };
     this.signTransaction = async (content, vaultAccountId, txNote, externalId) => {
       try {
@@ -16363,6 +16374,9 @@ var FireblocksService = class {
         return signature;
       } catch (error) {
         console.error("Error in signTransaction:", formatErrorMessage(error));
+        if (error instanceof FireblocksTransferError || error instanceof StaleRawSignError) {
+          throw error;
+        }
         throw new Error(
           `Failed to sign transaction: ${formatErrorMessage(error)}`
         );
@@ -16378,9 +16392,12 @@ var FireblocksService = class {
     this.fireblocksSDK = new import_ts_sdk3.Fireblocks({
       apiKey: fireblocksConfig ? fireblocksConfig.apiKey : config.fireblocks.API_KEY,
       secretKey: privateKey,
-      basePath: fireblocksConfig && fireblocksConfig.basePath ? fireblocksConfig.basePath : basePath
+      basePath: fireblocksConfig && fireblocksConfig.basePath ? fireblocksConfig.basePath : basePath,
+      additionalOptions: {
+        baseOptions: { timeout: FIREBLOCKS_REQUEST_TIMEOUT_MS }
+      }
     });
-    this.fireblocksSigner = new FireblocksSigner(this.fireblocksSDK);
+    this.fireblocksSigner = new FireblocksSigner(this.fireblocksSDK, fireblocksConfig?.poll);
   }
   static {
     /**
@@ -16388,12 +16405,7 @@ var FireblocksService = class {
      * message match requires 1438 as a standalone token AND a duplicate/external cue, so an
      * unrelated error that merely contains "1438" in an amount/id/timestamp is not misread.
      */
-    this.isDuplicateExternalIdError = (error) => {
-      const anyErr = error;
-      if (anyErr?.response?.data?.code === 1438 || anyErr?.code === 1438) return true;
-      const msg = typeof anyErr?.message === "string" ? anyErr.message : "";
-      return /\b1438\b/.test(msg) && /duplicat|external/i.test(msg);
-    };
+    this.isDuplicateExternalIdError = isDuplicateExternalId;
   }
   static {
     /**
@@ -16401,12 +16413,12 @@ var FireblocksService = class {
      * failure state (Blocked/Cancelled/Failed/Rejected) — as opposed to a timeout or a
      * transient read error. Matches the message raised by FireblocksSigner.getTxStatus.
      */
-    this.isTerminalTransferFailure = (error) => {
-      const msg = typeof error?.message === "string" ? error.message : "";
-      return /status is (BLOCKED|CANCELLED|FAILED|REJECTED)/i.test(msg) || msg.includes("failed/blocked/cancelled");
-    };
+    this.isTerminalTransferFailure = (error) => error instanceof FireblocksTransferError && TERMINAL_TRANSACTION_STATES.has(error.details.status);
   }
 };
+
+// src/StacksSDK.ts
+var import_ts_sdk4 = require("@fireblocks/ts-sdk");
 
 // src/services/cosigner.service.ts
 var import_common = __toESM(require_dist());
@@ -16551,125 +16563,6 @@ var CosignerService = class {
   }
 };
 
-// src/utils/network.ts
-var import_network2 = require("@stacks/network");
-function accountBalanceNormalizingFetch(baseFetch = fetch) {
-  const stripHexPrefix = (v) => typeof v === "string" && /^0x/i.test(v) ? v.slice(2) : v;
-  return (async (input, init) => {
-    const res = await baseFetch(input, init);
-    const url = typeof input === "string" ? input : input?.url ?? String(input);
-    if (!res.ok || !/\/v2\/accounts\//.test(url)) return res;
-    const data = await res.clone().json().catch(() => null);
-    if (!data || typeof data !== "object") return res;
-    const normalized = {
-      ...data,
-      balance: stripHexPrefix(data.balance),
-      locked: stripHexPrefix(data.locked)
-    };
-    return new Response(JSON.stringify(normalized), {
-      status: res.status,
-      statusText: res.statusText,
-      headers: { "content-type": "application/json" }
-    });
-  });
-}
-function resolveNetworkProfile(opts) {
-  const envUrl = process.env.STACKS_API_URL || void 0;
-  const name = opts.network ?? (opts.testnet ? "private-devnet" : "mainnet");
-  switch (name) {
-    case "private-devnet":
-      return {
-        name: "private-devnet",
-        stacksApiUrl: opts.stacksApiUrl || envUrl || PRIVATE1_HIRO_API_BASE,
-        chainId: 256,
-        magicBytes: "id",
-        esploraBaseUrl: BTC_ESPLORA.testnet,
-        bech32Prefix: "bcrt",
-        cosignerUrl: EARLY_EXIT_SIGNER.testnet,
-        expectedPoxContractName: "pox-5"
-      };
-    case "public-testnet":
-      return {
-        name: "public-testnet",
-        stacksApiUrl: opts.stacksApiUrl || envUrl || PUBLIC_TESTNET_POX5_API,
-        chainId: import_network2.STACKS_TESTNET.chainId,
-        magicBytes: import_network2.STACKS_TESTNET.magicBytes,
-        esploraBaseUrl: BTC_ESPLORA.public_testnet,
-        bech32Prefix: "tb",
-        cosignerUrl: EARLY_EXIT_SIGNER.public_testnet,
-        expectedPoxContractName: "pox-5",
-        requirePox5Active: true
-      };
-    case "mainnet":
-    default:
-      return {
-        name: "mainnet",
-        stacksApiUrl: opts.stacksApiUrl || envUrl || api_constants.stacks_mainnet_rpc,
-        chainId: import_network2.STACKS_MAINNET.chainId,
-        magicBytes: import_network2.STACKS_MAINNET.magicBytes,
-        esploraBaseUrl: BTC_ESPLORA.mainnet,
-        bech32Prefix: void 0,
-        cosignerUrl: EARLY_EXIT_SIGNER.mainnet,
-        expectedPoxContractName: "pox-5"
-      };
-  }
-}
-function stacksNetworkFromProfile(profile) {
-  const base = profile.name === "mainnet" ? import_network2.STACKS_MAINNET : import_network2.STACKS_TESTNET;
-  return {
-    ...base,
-    chainId: profile.chainId,
-    magicBytes: profile.magicBytes,
-    client: {
-      baseUrl: profile.stacksApiUrl,
-      fetch: accountBalanceNormalizingFetch()
-    }
-  };
-}
-async function validateNetworkProfile(profile) {
-  let info;
-  try {
-    const res = await fetch(`${profile.stacksApiUrl}/v2/info`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    info = await res.json();
-  } catch (error) {
-    console.warn(
-      `Network profile validation skipped \u2014 could not read ${profile.stacksApiUrl}/v2/info: ${formatErrorMessage(error)}`
-    );
-    return;
-  }
-  if (typeof info?.network_id === "number" && info.network_id !== profile.chainId) {
-    throw new Error(
-      `Network mismatch: profile "${profile.name}" expects chain id ${profile.chainId} but ${profile.stacksApiUrl} reports ${info.network_id}. Set STACKS_API_URL / testnet to a node that matches the intended network.`
-    );
-  }
-  try {
-    const poxRes = await fetch(`${profile.stacksApiUrl}/v2/pox`);
-    if (poxRes.ok) {
-      const pox = await poxRes.json();
-      const contractId = pox?.contract_id;
-      const pox5Active = typeof contractId === "string" && contractId.endsWith(`.${profile.expectedPoxContractName}`);
-      if (!pox5Active) {
-        if (profile.requirePox5Active) {
-          throw new Error(
-            `Network profile "${profile.name}" requires an active ${profile.expectedPoxContractName} contract, but ${profile.stacksApiUrl} reports "${contractId ?? "unknown"}". This network is not yet supported.`
-          );
-        }
-        console.warn(
-          `Active PoX contract "${contractId}" is not ".${profile.expectedPoxContractName}"; PoX-5 bond operations may be unavailable on this network.`
-        );
-      }
-    } else if (profile.requirePox5Active) {
-      throw new Error(
-        `Network profile "${profile.name}" could not confirm an active ${profile.expectedPoxContractName} contract (GET /v2/pox returned HTTP ${poxRes.status}). This network is not yet supported.`
-      );
-    }
-  } catch (error) {
-    if (profile.requirePox5Active) throw error;
-    console.warn(`PoX contract check skipped: ${formatErrorMessage(error)}`);
-  }
-}
-
 // src/staking/bonds/unlock-bytes-store.ts
 var ENROLLMENT_STAGE_ORDER = [
   "lock-fixed",
@@ -16696,6 +16589,16 @@ var InMemoryLockRecordStore = class {
   }
   async loadRecord(stxAddress, bondIndex) {
     return this.store.get(this.key(stxAddress, bondIndex)) ?? null;
+  }
+  async updateRecord(stxAddress, bondIndex, update) {
+    const key = this.key(stxAddress, bondIndex);
+    const next = update(this.store.get(key) ?? null);
+    if (next !== void 0) this.store.set(key, next);
+    return this.store.get(key) ?? null;
+  }
+  async listRecords(stxAddress) {
+    const prefix2 = `${stxAddress}:`;
+    return [...this.store.entries()].filter(([k]) => k.startsWith(prefix2)).map(([, record]) => record);
   }
 };
 
@@ -16899,7 +16802,7 @@ var BOND_GAP_CYCLES2 = BitcoinStaking.BOND_GAP_CYCLES ?? 2;
 var BOND_LENGTH_CYCLES2 = BitcoinStaking.BOND_LENGTH_CYCLES ?? 12;
 var DEFAULT_SCHEDULE_BOND_INDICES = [0, 1, 2, 3, 4, 5, 6];
 async function validateBondScheduleAgainstChain(opts) {
-  const network = stacksNetworkFromProfile(opts.profile);
+  const network = stacksNetworkFromProfile(opts.profile, opts.chainApiKey);
   const indices = opts.bondIndices ?? DEFAULT_SCHEDULE_BOND_INDICES;
   try {
     const poxInfo2 = await (0, import_bitcoin_staking.fetchPoxInfo)({ network });
@@ -16978,6 +16881,36 @@ function toDerSignature(r, s, sighashType = 1) {
 }
 
 // src/StacksSDK.ts
+var claimRetryNote = (txHashes) => txHashes.length > 0 ? `This leg was not broadcast; the legs in txHashes were. A retry resumes the claim and opens a new signing request for this leg: reject this one in Fireblocks first.` : RETRY_NOTE_NO_EXTERNAL_ID;
+var retryNoteFor = (externalId) => externalId !== void 0 ? `Nothing was broadcast. Retry with externalId ${externalId} to keep waiting on this request while the transaction is unchanged; a retry without it opens a new signing request.` : "Nothing was broadcast. A retry opens a new signing request: reject this one in Fireblocks first.";
+var RETRY_NOTE_NO_EXTERNAL_ID = "Nothing was broadcast. A retry opens a new signing request: reject this one in Fireblocks first.";
+var withoutPendingRegister = (record) => {
+  const copy = { ...record };
+  delete copy.pendingRegisterExternalId;
+  return copy;
+};
+var sameLockRecordState = (a, b) => {
+  if (a === null || b === null) return a === b;
+  return a.lockAddress === b.lockAddress && a.btcTxid === b.btcTxid && a.vout === b.vout && a.amountSats === b.amountSats && a.fireblocksId === b.fireblocksId && a.fundingExternalId === b.fundingExternalId && a.stage === b.stage;
+};
+var btcDecimalToSats = (btc) => {
+  const m = /^(\d+)(?:\.(\d{1,8}))?$/.exec(btc.trim());
+  if (!m) return void 0;
+  return BigInt(m[1]) * BigInt(1e8) + BigInt((m[2] ?? "").padEnd(8, "0"));
+};
+var announcedBondIndexFromResult = (txResult) => {
+  const hex4 = txResult?.hex;
+  if (typeof hex4 !== "string") return void 0;
+  try {
+    const cv = (0, import_transactions4.deserializeCV)(hex4);
+    if (cv.type !== "ok" || cv.value?.type !== "tuple") return void 0;
+    const index = cv.value.value?.["bond-index"];
+    if (index?.type !== "uint") return void 0;
+    return Number(index.value);
+  } catch {
+    return void 0;
+  }
+};
 var StacksSDK = class _StacksSDK {
   constructor(vaultAccountId, fireblocksConfig, hiroApiKey) {
     this.cachedTransactions = [];
@@ -17001,8 +16934,39 @@ var StacksSDK = class _StacksSDK {
      * BTC bonds — losing a record for an unspent lock can strand BTC.
      */
     this.setLockRecordStore = (store) => {
+      if (typeof store.updateRecord !== "function") {
+        throw new Error(
+          "The lock-record store must implement updateRecord: without an atomic read-modify-write, two overlapping calls can overwrite each other's lock record. Both built-in stores implement it."
+        );
+      }
       this.lockRecordStore = store;
       this.lockRecordStoreIsDurable = true;
+    };
+    /**
+     * Every bond lock record held for this vault's staker address.
+     *
+     * Discovery by address alone: a caller that has lost the bond index has no other way
+     * to learn which lock addresses hold committed Bitcoin. A store that cannot enumerate
+     * is refused rather than reported as empty — "no records" and "the store cannot
+     * answer" lead to opposite operator decisions about whether BTC is at stake.
+     */
+    this.listBondLockRecords = async () => {
+      try {
+        if (!this.address) throw new Error("Address is not set");
+        if (typeof this.lockRecordStore.listRecords !== "function") {
+          return {
+            success: false,
+            error: "The configured lock-record store does not support enumeration, so funded bonds cannot be discovered by address. Supply a store implementing listRecords (both built-in stores do)."
+          };
+        }
+        const records = await this.lockRecordStore.listRecords(this.address);
+        return { success: true, data: records };
+      } catch (error) {
+        return {
+          success: false,
+          error: `Failed to list bond lock records: ${formatErrorMessage(error)}`
+        };
+      }
     };
     /**
      * Native-BTC funding is refused unless a durable, healthy lock-record store is
@@ -17032,10 +16996,292 @@ var StacksSDK = class _StacksSDK {
      * transfer — a second funding transaction is never created for the same lock, even
      * across a process crash. A genuine replacement (e.g. fee bump) must use a new id.
      */
-    this.deriveFundingExternalId = (bondIndex, lockAddress) => {
-      const material = `${this.vaultAccountId}:${this.networkProfile.name}:bond:${bondIndex}:${lockAddress}`;
+    this.deriveFundingExternalId = (bondIndex, lockAddress, generation = 0) => {
+      const base = `${this.vaultAccountId}:${this.networkProfile.name}:bond:${bondIndex}:${lockAddress}`;
+      const material = generation > 0 ? `${base}:gen:${generation}` : base;
       const digest = (0, import_crypto2.createHash)("sha256").update(material).digest("hex").slice(0, 40);
       return `bond-fund-${digest}`;
+    };
+    /**
+     * Deterministic Fireblocks external id for a bond's `register-for-bond` signing request.
+     *
+     * Keyed on the pre-sign sighash: a request can only ever sign the bytes it was opened
+     * over, so the same bytes resolve to the outstanding request and any change (nonce,
+     * fee, post-conditions) opens a new one.
+     *
+     * `generation` escapes a request that reached a terminal state — its id is consumed
+     * permanently, so without this the id would resolve to that dead request on every
+     * subsequent attempt.
+     *
+     * A caller-supplied id is kept as a recognizable prefix, with the same sighash and
+     * generation folded into a fixed-length suffix.
+     */
+    this.deriveRegisterExternalId = (bondIndex, lockAddress, preSignSigHash, generation = 0, callerExternalId) => {
+      const keyed = `sighash:${preSignSigHash}:gen:${generation}`;
+      if (callerExternalId) {
+        const suffix = (0, import_crypto2.createHash)("sha256").update(keyed).digest("hex").slice(0, 16);
+        return `${callerExternalId}-register-${suffix}`;
+      }
+      const material = `${this.vaultAccountId}:${this.networkProfile.name}:bond:${bondIndex}:${lockAddress}:${keyed}`;
+      const digest = (0, import_crypto2.createHash)("sha256").update(material).digest("hex").slice(0, 40);
+      return `bond-register-${digest}`;
+    };
+    /**
+     * Advances the registration generation after a `register-for-bond` signing request
+     * reached a terminal Fireblocks state, so the next attempt derives an id Fireblocks
+     * has not already consumed. The Bitcoin stays committed and the record keeps pointing
+     * at it — only the L2 leg is retried.
+     *
+     * Advances only from the generation the failed id was derived from, and only when the
+     * failed request is the one the record names as outstanding. Overlapping attempts can open
+     * different requests at one generation; a rejection of one that is no longer outstanding
+     * must not advance and orphan the request opened after it.
+     */
+    this.abandonTerminalRegistration = async (bondIndex, registerExternalId, error, derivedGeneration) => {
+      let advanceFailure = "";
+      let movedOn = false;
+      try {
+        await this.updateLockRecord(bondIndex, (stored) => {
+          if (!stored) return void 0;
+          if ((stored.registrationGeneration ?? 0) !== derivedGeneration || stored.pendingRegisterExternalId !== void 0 && stored.pendingRegisterExternalId !== registerExternalId) {
+            movedOn = true;
+            return void 0;
+          }
+          return { ...withoutPendingRegister(stored), registrationGeneration: (stored.registrationGeneration ?? 0) + 1 };
+        });
+        if (movedOn) {
+          return `The register-for-bond signing request for bond ${bondIndex} terminally failed: ${formatErrorMessage(error)}. A concurrent attempt already moved past its external id ${registerExternalId}, so nothing was advanced. The Bitcoin is locked and remains recoverable; retry createBond or resumeBondRegistration(${bondIndex}).`;
+        }
+      } catch (e) {
+        advanceFailure = ` The registration generation could NOT be advanced (${formatErrorMessage(e)}); a retry would derive the same consumed id \u2014 resolve the signing request in Fireblocks before retrying.`;
+      }
+      return `The register-for-bond signing request for bond ${bondIndex} terminally failed: ${formatErrorMessage(error)}. The Bitcoin is locked and remains recoverable; its external id ${registerExternalId} is consumed, so the next attempt derives a fresh one.${advanceFailure}`;
+    };
+    /**
+     * Success for a funded enrollment whose registration already settled, or undefined. Applies
+     * only when the contract refused with ERR_ALREADY_REGISTERED (u9) or ERR_ALREADY_STAKED (u19)
+     * and the staker's membership names this bond, as an L1 lock, at the recorded amount.
+     */
+    this.landedRegistration = async (bondIndex, record, reasons) => {
+      if (!record?.btcTxid || record.isL1Lock === false) return void 0;
+      if (!reasons.some((r) => r === 9 || r === 19)) return void 0;
+      const membership = await (0, import_bitcoin_staking2.fetchBondMembership)({ address: this.address, network: this.pox5Network }).catch(() => void 0);
+      if (!membership || membership.bondIndex !== bondIndex || !membership.isL1Lock || membership.amountSats !== record.amountSats) {
+        return void 0;
+      }
+      await this.updateLockRecord(
+        bondIndex,
+        (current) => current?.btcTxid === record.btcTxid ? { ...current, stage: laterStage(current.stage, "registration-confirmed") } : void 0
+      ).catch(() => void 0);
+      return {
+        success: true,
+        alreadyRegistered: true,
+        btcTxid: record.btcTxid,
+        ...record.vout !== void 0 ? { vout: record.vout } : {},
+        lockingAddress: record.lockAddress,
+        unlockHeight: record.unlockHeight
+      };
+    };
+    /** Names `registerExternalId` as bond `bondIndex`'s outstanding register signing request. */
+    this.markRegisterRequest = async (bondIndex, registerExternalId) => {
+      await this.updateLockRecord(
+        bondIndex,
+        (current) => current ? { ...current, pendingRegisterExternalId: registerExternalId } : void 0
+      );
+    };
+    /** Clears the outstanding register request once it was broadcast, if it is still `registerExternalId`. */
+    this.clearRegisterRequest = async (bondIndex, registerExternalId) => {
+      await this.updateLockRecord(bondIndex, (current) => {
+        if (current?.pendingRegisterExternalId !== registerExternalId) return void 0;
+        return withoutPendingRegister(current);
+      });
+    };
+    /**
+     * Refusal for an explicit `externalId` that differs from the one an outstanding register
+     * signing request was opened under, or undefined. Following it would open a second request
+     * for the same registration.
+     */
+    this.registerExternalIdConflict = (bondIndex, record, externalId) => {
+      if (externalId === void 0 || record?.pendingRegisterExternalId === void 0) return void 0;
+      if (record.callerExternalId === externalId) return void 0;
+      return `Bond ${bondIndex} has an outstanding register signing request ${record.pendingRegisterExternalId}, opened under ${record.callerExternalId !== void 0 ? `externalId ${record.callerExternalId}` : "no externalId"}. A different externalId would open a second request for the same registration. Retry with ${record.callerExternalId !== void 0 ? `externalId ${record.callerExternalId}` : "no externalId"}, or resolve that request in Fireblocks first.`;
+    };
+    /** Bond index → the operation holding it. */
+    this.bondSlots = /* @__PURE__ */ new Map();
+    /**
+     * Runs `fn` while holding bond `bondIndex`'s slot on this instance, or refuses when another
+     * operation holds it. The pool keeps one instance per vault, so this serializes funding and
+     * registration for one (vault, bond) within a process; it does not span processes.
+     */
+    this.inBondSlot = async (bondIndex, operation, fn) => {
+      const holder = this.bondSlots.get(bondIndex);
+      if (holder !== void 0) {
+        return {
+          success: false,
+          error: `${holder} for bond ${bondIndex} is already running for this vault. Nothing was committed by this ${operation} call; retry once it finishes.`
+        };
+      }
+      this.bondSlots.set(bondIndex, operation);
+      try {
+        return await fn();
+      } finally {
+        this.bondSlots.delete(bondIndex);
+      }
+    };
+    /**
+     * Wraps a bond operation so it runs inside its bond's slot. The wrapper has the type of the
+     * implementation, so the emitted declaration carries its real parameters and result; `impl`
+     * is read at call time.
+     */
+    this.slotted = (operation, impl) => ((...args) => this.inBondSlot(args[0], operation, () => impl()(...args)));
+    /**
+     * Applies `update` to bond `bondIndex`'s lock record as one step. `update` returns
+     * undefined to leave the record as it is.
+     */
+    this.updateLockRecord = async (bondIndex, update) => this.lockRecordStore.updateRecord(this.address, bondIndex, update);
+    /**
+     * Why a lock whose earlier fundings were abandoned after broadcast must not be funded
+     * again, or undefined when it may be. An abandoned txid was only unseen, never proven
+     * dead, so each is looked up again; a bond-sized output at the lock means a funding has
+     * landed. Any check that cannot be read refuses.
+     */
+    this.abandonedFundingBlock = async (bondIndex, record, lockAddress, amountSats) => {
+      const abandoned = record?.abandonedBtcTxids ?? [];
+      if (abandoned.length === 0) return void 0;
+      for (const txid of abandoned) {
+        const seen = await this.getBtcTxStatus(txid);
+        if (!seen.success) {
+          return `Could not look up abandoned funding tx ${txid} (UNKNOWN) \u2014 refusing to fund bond ${bondIndex} again: ${seen.error ?? ""}`;
+        }
+        if (seen.data?.found) {
+          return `Abandoned funding tx ${txid} for bond ${bondIndex} is visible again, so it may yet confirm at this lock. No new transfer was opened. If it pays the lock the bond amount, adopt it with repointBondFunding(${bondIndex}, "${txid}").`;
+        }
+      }
+      let utxos;
+      try {
+        const res = await fetch(`${this.esploraBase()}/address/${lockAddress}/utxo`);
+        if (!res.ok) throw new Error(`Esplora HTTP ${res.status}`);
+        utxos = await res.json();
+      } catch (e) {
+        return `Could not read lock address ${lockAddress} (UNKNOWN) \u2014 refusing to fund bond ${bondIndex} again: ${formatErrorMessage(e)}`;
+      }
+      if (utxos.some((u) => BigInt(u.value) >= amountSats)) {
+        return `Lock address ${lockAddress} already holds an output at least as large as bond ${bondIndex}, so a funding has landed there. No new transfer was opened. If that output is the bond's funding, adopt its transaction with repointBondFunding(${bondIndex}, <txid>); otherwise recover it.`;
+      }
+      return void 0;
+    };
+    /**
+     * Common outcome for a funding transfer that reached a terminal Fireblocks state, on
+     * either the fresh or the resume path. The Fireblocks id must not stay in the record:
+     * a terminally failed transfer can never yield a txid, and while the id is present
+     * `hasInFlightFireblocks` stays true, so the caller-btcTxid guard would refuse exactly
+     * the recovery this error prescribes. The lock parameters and the (consumed) external
+     * id are kept for diagnostics.
+     *
+     * Acts only on the transfer that failed. Overlapping createBond calls for one bond all
+     * await the same transfer; once one of them has abandoned it, a retry can open a new
+     * transfer, and a late failure of the old one must not clear the new one — that would
+     * advance the generation again and let a third transfer fund the same lock.
+     */
+    this.abandonTerminalFunding = async (bondIndex, fundingExternalId, error) => {
+      const failedId = error instanceof FireblocksTransferError ? error.details.vendorId : void 0;
+      const broadcastTxid = error instanceof FireblocksTransferError ? error.details.txHash : void 0;
+      const lostDoubleSpend = broadcastTxid !== void 0 && error instanceof FireblocksTransferError && error.details.subStatus === "DOUBLE_SPENDING";
+      let winner;
+      if (lostDoubleSpend) {
+        const prior = await this.lockRecordStore.loadRecord(this.address, bondIndex).catch(() => null);
+        for (const txid of prior?.abandonedBtcTxids ?? []) {
+          const seen = await this.getBtcTxStatus(txid);
+          if (seen.success && seen.data?.found) {
+            winner = txid;
+            break;
+          }
+        }
+      }
+      let outcome = { kind: "none" };
+      let writeFailure;
+      try {
+        await this.updateLockRecord(bondIndex, (stored) => {
+          if (stored && (failedId === void 0 || stored.fireblocksId !== failedId)) {
+            outcome = { kind: "stale", current: stored.fireblocksId };
+            return void 0;
+          }
+          if (stored && lostDoubleSpend && winner !== void 0) {
+            outcome = { kind: "repointed", fireblocksId: stored.fireblocksId, winner };
+            const repointed = {
+              ...stored,
+              btcTxid: winner,
+              stage: laterStage(stored.stage, "btc-broadcast"),
+              abandonedBtcTxids: (stored.abandonedBtcTxids ?? []).filter((t) => t !== winner),
+              ...stored.fireblocksId !== void 0 ? { abandonedFireblocksIds: [...stored.abandonedFireblocksIds ?? [], stored.fireblocksId] } : {}
+            };
+            delete repointed.fireblocksId;
+            delete repointed.vout;
+            return repointed;
+          }
+          if (stored && lostDoubleSpend) {
+            outcome = { kind: "lostRace", fireblocksId: stored.fireblocksId };
+            return void 0;
+          }
+          if (stored && broadcastTxid) {
+            outcome = { kind: "pointed", fireblocksId: stored.fireblocksId };
+            return { ...stored, btcTxid: broadcastTxid, stage: laterStage(stored.stage, "btc-broadcast") };
+          }
+          if (stored) {
+            outcome = { kind: "abandoned", fireblocksId: stored.fireblocksId };
+            const abandoned = {
+              ...stored,
+              fundingGeneration: (stored.fundingGeneration ?? 0) + 1,
+              ...stored.fireblocksId !== void 0 ? { abandonedFireblocksIds: [...stored.abandonedFireblocksIds ?? [], stored.fireblocksId] } : {},
+              stage: "lock-fixed"
+            };
+            delete abandoned.fireblocksId;
+            return abandoned;
+          }
+          outcome = { kind: "none" };
+          return void 0;
+        });
+      } catch (e) {
+        writeFailure = e;
+      }
+      const failed = outcome;
+      if (failed.kind === "repointed") {
+        return {
+          success: false,
+          error: `The Fireblocks funding transfer ${failed.fireblocksId} for bond ${bondIndex} failed as DOUBLE_SPENDING: an earlier funding of this lock, ${failed.winner}, spent the same coins first. ` + (writeFailure !== void 0 ? `The lock record could NOT be updated to point at it (${formatErrorMessage(writeFailure)}). Do not fund this bond again; check ${failed.winner} on-chain first.` : `The lock record now points at ${failed.winner}; retry createBond for this bond index to continue with it. No new transfer will be opened.`),
+          btcTxid: failed.winner,
+          fundingBlocked: true
+        };
+      }
+      if (failed.kind === "lostRace") {
+        return {
+          success: false,
+          error: `The Fireblocks funding transfer ${failed.fireblocksId} for bond ${bondIndex} failed as DOUBLE_SPENDING: another transaction spent its coins first, so its own txid ${broadcastTxid} will not confirm. That transaction may pay this lock, so the record was left as it is and no new transfer will be opened. Check the lock address: if a transaction there funds this bond, adopt it with repointBondFunding(${bondIndex}, <txid>).`,
+          fundingBlocked: true
+        };
+      }
+      if (failed.kind === "stale") {
+        return {
+          success: false,
+          error: `The Fireblocks funding transfer${failedId ? ` (id ${failedId})` : ""} for bond ${bondIndex} terminally failed: ${formatErrorMessage(error)}. The lock record no longer tracks it (now: ${failed.current ?? "no transfer in flight"}) \u2014 a concurrent attempt already handled it, so nothing was abandoned. Retry createBond for this bond index to continue the current attempt.`
+        };
+      }
+      if (failed.kind === "pointed") {
+        return {
+          success: false,
+          error: `The Fireblocks funding transfer ${failed.fireblocksId} for bond ${bondIndex} was broadcast as Bitcoin transaction ${broadcastTxid} and then reported failed: ${formatErrorMessage(error)}. ` + (writeFailure !== void 0 ? `The lock record could NOT be updated to point at it (${formatErrorMessage(writeFailure)}). Do not fund this bond again; check ${broadcastTxid} on-chain first.` : `A broadcast transaction may still confirm, so no new transfer will be opened for this bond. The lock record now points at ${broadcastTxid}; retry createBond for this bond index and it continues only once that transaction is visible on-chain. Do not fund this bond again. If ${broadcastTxid} never confirms, call abandonBroadcastFunding(${bondIndex}) to clear the record so the bond can be funded again.`),
+          btcTxid: broadcastTxid,
+          fundingBlocked: true
+        };
+      }
+      const fireblocksId = failed.kind === "abandoned" ? failed.fireblocksId : void 0;
+      const generationAdvanced = failed.kind === "abandoned" && writeFailure === void 0;
+      const stripFailure = writeFailure !== void 0 ? ` The Fireblocks id could NOT be cleared from the lock record (${formatErrorMessage(writeFailure)}); clear it before retrying with opts.btcTxid, which will otherwise be refused as an in-flight transfer.` : "";
+      const recovery = generationAdvanced ? `Its external id ${fundingExternalId} is consumed, but the funding generation advanced \u2014 retry createBond for this same bond index and it will derive a fresh external id and re-fund this lock.` : `Its external id ${fundingExternalId} is consumed and cannot be reused, so this lock cannot be re-funded automatically \u2014 enroll under a different bond index, or resolve the transfer in Fireblocks and retry with opts.btcTxid.`;
+      return {
+        success: false,
+        error: `The Fireblocks funding transfer${fireblocksId ? ` (id ${fireblocksId})` : ""} for bond ${bondIndex} terminally failed: ${formatErrorMessage(error)}. ${recovery}${stripFailure}`
+      };
     };
     /**
      * Retrieves the Stacks account public key associated with the Fireblocks vault account.
@@ -17181,6 +17427,18 @@ var StacksSDK = class _StacksSDK {
      * yet returns `found: false` (not an error); a transport failure returns `success:false`
      * (UNKNOWN, never silently "not confirmed").
      */
+    /**
+     * A Bitcoin transaction's outputs from the indexer, or `found: false` for a txid it does not
+     * know. Throws when the indexer cannot be read.
+     */
+    this.readBtcTxOutputs = async (btcTxid) => {
+      const res = await fetch(`${this.esploraBase()}/tx/${btcTxid}`);
+      if (res.status === 404) return { found: false };
+      if (!res.ok) throw new Error(`Esplora HTTP ${res.status}`);
+      const tx = await res.json();
+      const vout = Array.isArray(tx?.vout) ? tx.vout : [];
+      return { found: true, outputs: vout.map((o) => ({ address: o.scriptpubkey_address, value: o.value })) };
+    };
     this.getBtcTxStatus = async (btcTxid) => {
       if (!/^[0-9a-fA-F]{64}$/.test(btcTxid)) {
         return { success: false, chain: "bitcoin", error: `Invalid BTC txid: ${btcTxid}` };
@@ -17571,6 +17829,7 @@ var StacksSDK = class _StacksSDK {
         });
       } catch (error) {
         if (error instanceof ValidationError) return { success: false, error: error.message };
+        if (error instanceof FireblocksTransferError) throw error;
         throw new Error(
           `Failed to build, sign or send transaction: ${formatErrorMessage(
             error
@@ -17707,19 +17966,39 @@ var StacksSDK = class _StacksSDK {
         });
       } catch (error) {
         if (error instanceof ValidationError) return { success: false, error: error.message };
+        if (error instanceof FireblocksTransferError) throw error;
         throw new Error(
           `Failed to build, sign or send contract call transaction: ${formatErrorMessage(error)}`
         );
       }
     };
+    /**
+     * The result for a Fireblocks request the poll gave up on while it was still outstanding.
+     * Undefined for any other error, including a terminal status. `retryNote` says what a
+     * retry does; by default the request id is random unless the caller supplied one.
+     */
+    this.pendingFireblocksResult = (error, retryNote = "Nothing was broadcast. A retry opens a new signing request: reject this one in Fireblocks first. A call made with an externalId keeps waiting on this request when retried with the same externalId while the transaction is unchanged.") => {
+      if (!(error instanceof FireblocksTransferError) || TERMINAL_TRANSACTION_STATES.has(error.details.status)) {
+        return void 0;
+      }
+      const awaitingApproval = APPROVAL_PENDING_STATES.has(error.details.status);
+      return {
+        success: false,
+        error: `Fireblocks request ${error.details.vendorId} is still ${error.details.status}${awaitingApproval ? " (awaiting approval)" : ""} \u2014 not failed. ${retryNote}`,
+        pendingFireblocksId: error.details.vendorId,
+        pendingFireblocksStatus: error.details.status,
+        ...awaitingApproval ? { pendingApproval: true } : {}
+      };
+    };
+    /** The hash a single-sig origin signs for `tx`; covers the payload, post-conditions, fee and nonce. */
+    this.preSignSigHashOf = (tx) => (0, import_transactions4.sigHashPreSign)(
+      tx.signBegin(),
+      tx.auth.authType,
+      tx.auth.spendingCondition.fee,
+      tx.auth.spendingCondition.nonce
+    );
     this.pox5SignAndBroadcast = async (tx, note, externalId, revalidate) => {
-      const sigHash = tx.signBegin();
-      const preSignSigHash = (0, import_transactions4.sigHashPreSign)(
-        sigHash,
-        tx.auth.authType,
-        tx.auth.spendingCondition.fee,
-        tx.auth.spendingCondition.nonce
-      );
+      const preSignSigHash = this.preSignSigHashOf(tx);
       const rawSignature = await this.fireblocksService.signTransaction(
         preSignSigHash,
         this.vaultAccountId.toString(),
@@ -17805,11 +18084,19 @@ var StacksSDK = class _StacksSDK {
       const keyHex = (0, import_transactions4.serializeCV)((0, import_transactions4.principalCV)(staker));
       const body = JSON.stringify(keyHex.startsWith("0x") ? keyHex : `0x${keyHex}`);
       const url = `${this.networkProfile.stacksApiUrl}/v2/map_entry/${contractAddress}/${contractName}/pox-addrs?proof=0`;
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body
-      });
+      const res = await fetch(
+        url,
+        withChainApiKey(
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body
+          },
+          this.chainApiKey,
+          url,
+          this.networkProfile.stacksApiUrl
+        )
+      );
       if (!res.ok) {
         throw new Error(`map_entry ${contractName}.pox-addrs HTTP ${res.status}`);
       }
@@ -17850,7 +18137,15 @@ var StacksSDK = class _StacksSDK {
       const contractAddress = signerManager.slice(0, dot);
       const contractName = signerManager.slice(dot + 1);
       const url = `${this.networkProfile.stacksApiUrl}/v2/data_var/${contractAddress}/${contractName}/fees-bips?proof=0`;
-      const res = await fetch(url);
+      const res = await fetch(
+        url,
+        withChainApiKey(
+          void 0,
+          this.chainApiKey,
+          url,
+          this.networkProfile.stacksApiUrl
+        )
+      );
       if (!res.ok) {
         throw new Error(`data_var ${contractName}.fees-bips HTTP ${res.status}`);
       }
@@ -18016,6 +18311,8 @@ var StacksSDK = class _StacksSDK {
         }
         return { success: true, txHash: result.txid };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error);
+        if (pending) return pending;
         return { success: false, error: `Failed to stake: ${formatErrorMessage(error)}` };
       }
     };
@@ -18109,6 +18406,8 @@ var StacksSDK = class _StacksSDK {
         }
         return { success: true, txHash: result.txid };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error);
+        if (pending) return pending;
         return { success: false, error: `Failed to update stake: ${formatErrorMessage(error)}` };
       }
     };
@@ -18169,6 +18468,8 @@ var StacksSDK = class _StacksSDK {
         }
         return { success: true, txHash: result.txid };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error);
+        if (pending) return pending;
         return { success: false, error: `Failed to unstake: ${formatErrorMessage(error)}` };
       }
     };
@@ -18257,6 +18558,8 @@ var StacksSDK = class _StacksSDK {
         }
         return { success: true, txHash: result.txid };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error);
+        if (pending) return pending;
         return { success: false, error: `Failed to register signer key: ${formatErrorMessage(error)}` };
       }
     };
@@ -18304,6 +18607,8 @@ var StacksSDK = class _StacksSDK {
         }
         return { success: true, txHash: result.txid };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error);
+        if (pending) return pending;
         return { success: false, error: `Failed to revoke signer grant: ${formatErrorMessage(error)}` };
       }
     };
@@ -18370,6 +18675,14 @@ var StacksSDK = class _StacksSDK {
         let txStatus = null;
         if (txid) {
           const poll = await this.waitForTxSettlement(txid);
+          if (!poll.success) {
+            return {
+              success: false,
+              unsettled: true,
+              tx_status: null,
+              error: unsettledTransactionError("signer grant", txid, poll.error)
+            };
+          }
           txStatus = poll.data?.tx_status ?? null;
           if (txStatus !== "success") {
             notes.push(`Transaction ${txid} did not succeed (status: ${txStatus ?? "unknown"}). A broadcast txid does not guarantee contract success \u2014 Stacks mines aborted transactions.`);
@@ -18416,7 +18729,11 @@ var StacksSDK = class _StacksSDK {
      * runs this at boot and refuses to start on a definite mismatch.
      */
     this.validateBondSchedule = async (opts) => {
-      const result = await validateBondScheduleAgainstChain({ profile: this.networkProfile, bondIndices: opts?.bondIndices });
+      const result = await validateBondScheduleAgainstChain({
+        profile: this.networkProfile,
+        bondIndices: opts?.bondIndices,
+        chainApiKey: this.chainApiKey
+      });
       return result.ok ? { success: true, data: result } : { success: false, data: result, error: result.error };
     };
     /**
@@ -18481,6 +18798,8 @@ var StacksSDK = class _StacksSDK {
           txHash: result.txid
         };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error, retryNoteFor(externalId));
+        if (pending) return pending;
         throw new Error(
           `Failed to create transaction: ${formatErrorMessage(error)}`
         );
@@ -18560,6 +18879,8 @@ var StacksSDK = class _StacksSDK {
           txHash: result.txid
         };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error, retryNoteFor(externalId));
+        if (pending) return pending;
         throw new Error(
           `Failed to create transaction: ${formatErrorMessage(error)}`
         );
@@ -18627,6 +18948,8 @@ var StacksSDK = class _StacksSDK {
           txHash: delegateResult.txid
         };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error);
+        if (pending) return pending;
         console.error(`Error delegating to pool: ${formatErrorMessage(error)}`);
         return {
           success: false,
@@ -18679,6 +19002,8 @@ var StacksSDK = class _StacksSDK {
           txHash: allowCallerResult.txid
         };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error);
+        if (pending) return pending;
         console.error(
           `Error allowing contract caller: ${formatErrorMessage(error)}`
         );
@@ -18727,6 +19052,8 @@ var StacksSDK = class _StacksSDK {
           txHash: revokeResult.txid
         };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error);
+        if (pending) return pending;
         console.error(`Error revoking delegation: ${formatErrorMessage(error)}`);
         return {
           success: false,
@@ -18925,7 +19252,16 @@ var StacksSDK = class _StacksSDK {
           const controller = new AbortController();
           const timer = setTimeout(() => controller.abort(), 15e3);
           try {
-            const res = await fetch(`${this.networkProfile.stacksApiUrl}/v2/pox`, { signal: controller.signal });
+            const poxUrl = `${this.networkProfile.stacksApiUrl}/v2/pox`;
+            const res = await fetch(
+              poxUrl,
+              withChainApiKey(
+                { signal: controller.signal },
+                this.chainApiKey,
+                poxUrl,
+                this.networkProfile.stacksApiUrl
+              )
+            );
             if (!res.ok) return void 0;
             const body = await res.json();
             if (typeof body.pox_5_sbtc_contract === "string") {
@@ -19050,7 +19386,7 @@ var StacksSDK = class _StacksSDK {
         }
         const settled = await this.waitForTxSettlement(result.txid);
         if (!settled.success || settled.data?.tx_status !== "success") {
-          return { success: false, unsettled: !settled.success, error: settled.data?.tx_error ?? "update-bond-registration failed on-chain", txHash: result.txid };
+          return { success: false, unsettled: !settled.success, error: !settled.success ? unsettledTransactionError("update-bond-registration", result.txid, settled.error) : settled.data?.tx_error ?? "update-bond-registration failed on-chain", txHash: result.txid };
         }
         const membershipAfter = await (0, import_bitcoin_staking2.fetchBondMembership)({ address: this.address, network: this.pox5Network }).catch(() => null);
         if (membershipAfter && membershipAfter.bondIndex !== membershipBefore.bondIndex) {
@@ -19093,10 +19429,296 @@ var StacksSDK = class _StacksSDK {
         await this.lockRecordStore.saveRecord(this.address, derivedBondIndex, rotatedRecord);
         return { success: true, txHash: result.txid };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error);
+        if (pending) return pending;
         return { success: false, error: `Failed to update bond registration: ${formatErrorMessage(error)}` };
       }
     };
     // --- PoX-5 BTC Bond methods ---
+    /**
+     * Continues an enrollment whose Bitcoin is already locked but whose L2
+     * `register-for-bond` outcome is unknown — the `unsettled` result of `createBond` or
+     * `renewBond`. The funded amount and signer manager come from the durable record, not
+     * from the caller: the lock address is amount-independent, so a resume at a different
+     * amount would reuse the funded UTXO while every preflight ran against the new one.
+     *
+     * Delegates to `createBond`, which owns the resume branch (recorded-txid verification,
+     * funding skip, SPV rebuild, and the duplicate-outpoint preflight that catches a
+     * registration which did land). A record with no funding requested is refused rather than
+     * funded. A record at `funding-requested` with no transfer id saved is handed to
+     * `createBond`, which finds the transfer already under the record's external id and waits
+     * on it; if Fireblocks never accepted the request, it is requested again, so on that one
+     * path Bitcoin can be sent.
+     */
+    this.resumeBondRegistration = async (bondIndex, opts) => {
+      try {
+        if (!this.address) throw new Error("Address is not set");
+        let record;
+        try {
+          record = await this.lockRecordStore.loadRecord(this.address, bondIndex);
+        } catch (e) {
+          return { success: false, error: `Lock-record store unreadable for bond ${bondIndex} (UNKNOWN, not "no record") \u2014 refusing to resume: ${formatErrorMessage(e)}` };
+        }
+        if (!record) {
+          return { success: false, error: `No lock record for bond ${bondIndex}, so there is no funded enrollment to resume. If the record was lost, recover the funding outpoint first (listBondLockRecords / getHistoricalBondPosition); a fresh createBond would send new Bitcoin.` };
+        }
+        if (!record.isL1Lock) {
+          return { success: false, error: `Bond ${bondIndex} is sBTC-backed, which commits no Bitcoin before registering \u2014 nothing to resume. Use createSbtcBond.` };
+        }
+        if (!record.btcTxid && !opts?.btcTxid && !record.fireblocksId && record.stage !== "funding-requested") {
+          return { success: false, error: `Lock record for bond ${bondIndex} records neither a funding transaction nor an in-flight Fireblocks transfer, so no Bitcoin is committed and there is nothing to resume. Use createBond to fund the enrollment.` };
+        }
+        if (!record.signerManager) {
+          return { success: false, error: `Lock record for bond ${bondIndex} captured no signer manager, so the registration cannot be rebuilt from it. Re-run createBond with the original signer manager.` };
+        }
+        return this.createBond(bondIndex, record.amountSats, record.signerManager, opts);
+      } catch (error) {
+        return { success: false, error: `Failed to resume bond registration: ${formatErrorMessage(error)}` };
+      }
+    };
+    /**
+     * Clears a native bond's record whose funding transfer Fireblocks reported failed after
+     * broadcast, and whose transaction never reached the chain, so createBond can fund the
+     * same lock again.
+     *
+     * Acts only when the record has not reached btc-confirmed; Fireblocks reports the transfer
+     * terminal, with the recorded txid, and not as DOUBLE_SPENDING; the indexer has not known
+     * the txid for ABANDON_MISSING_WAIT_BLOCKS since it was first seen missing; and no output
+     * as large as the bond sits at the lock address. Any unreadable check refuses. The first
+     * call that finds the txid missing records the height and refuses.
+     *
+     * The pointer is cleared, the txid and transfer recorded as abandoned and the funding
+     * generation advanced in a single write.
+     */
+    this.abandonBroadcastFunding = async (bondIndex) => {
+      try {
+        if (!this.address) throw new Error("Address is not set");
+        let record;
+        try {
+          record = await this.lockRecordStore.loadRecord(this.address, bondIndex);
+        } catch (e) {
+          return { success: false, error: `Lock-record store unreadable for bond ${bondIndex} (UNKNOWN) \u2014 refusing to clear it: ${formatErrorMessage(e)}` };
+        }
+        if (!record || !record.isL1Lock) {
+          return { success: false, error: `No native-BTC lock record for bond ${bondIndex}; nothing to abandon.` };
+        }
+        const { btcTxid, fireblocksId } = record;
+        if (btcTxid === void 0 || fireblocksId === void 0) {
+          return {
+            success: false,
+            btcTxid,
+            error: `Bond ${bondIndex}'s record does not hold both a funding txid and the Fireblocks transfer that produced it, so it is not a broadcast funding to abandon.`
+          };
+        }
+        if (record.stage !== void 0 && laterStage(record.stage, "btc-confirmed") === record.stage) {
+          return { success: false, btcTxid, error: `Bond ${bondIndex}'s funding has reached ${record.stage}, so its Bitcoin is committed. Not abandoned; continue with resumeBondRegistration(${bondIndex}).` };
+        }
+        let transfer;
+        try {
+          transfer = await this.fireblocksService.getTransferState(fireblocksId);
+        } catch (e) {
+          return { success: false, btcTxid, error: `Could not read Fireblocks transfer ${fireblocksId} (UNKNOWN) \u2014 refusing to abandon it: ${formatErrorMessage(e)}` };
+        }
+        if (!TERMINAL_TRANSACTION_STATES.has(transfer.status)) {
+          return { success: false, btcTxid, error: `Fireblocks reports transfer ${fireblocksId} as ${transfer.status}, not terminal \u2014 refusing to abandon it. Retry createBond or resumeBondRegistration(${bondIndex}).` };
+        }
+        if (transfer.txHash !== btcTxid) {
+          return { success: false, btcTxid, error: `Fireblocks transfer ${fireblocksId} reports txid ${transfer.txHash ?? "none"}, not the recorded ${btcTxid}; the record is cleared only for the transfer that produced its txid. Not abandoned.` };
+        }
+        if (transfer.subStatus === "DOUBLE_SPENDING") {
+          return { success: false, btcTxid, error: `Fireblocks transfer ${fireblocksId} failed as DOUBLE_SPENDING: another transaction spent its coins and may itself pay this lock. Not abandoned; check the lock address ${record.lockAddress} first.` };
+        }
+        const fundingTx = await this.getBtcTxStatus(btcTxid);
+        if (!fundingTx.success) {
+          return { success: false, btcTxid, error: `Could not look up funding tx ${btcTxid} (UNKNOWN) \u2014 refusing to abandon it: ${fundingTx.error ?? ""}` };
+        }
+        if (fundingTx.data.found) {
+          await this.updateLockRecord(bondIndex, (current) => {
+            if (!current || current.fundingMissingSince === void 0) return void 0;
+            const next = { ...current };
+            delete next.fundingMissingSince;
+            return next;
+          }).catch(() => void 0);
+          return { success: false, btcTxid, error: `Funding tx ${btcTxid} is visible on-chain, so it is not abandoned. Continue the enrollment with resumeBondRegistration(${bondIndex}).` };
+        }
+        let utxos;
+        try {
+          const res = await fetch(`${this.esploraBase()}/address/${record.lockAddress}/utxo`);
+          if (!res.ok) throw new Error(`Esplora HTTP ${res.status}`);
+          utxos = await res.json();
+        } catch (e) {
+          return { success: false, btcTxid, error: `Could not read lock address ${record.lockAddress} (UNKNOWN) \u2014 refusing to abandon: ${formatErrorMessage(e)}` };
+        }
+        const bondSized = utxos.filter((u) => BigInt(u.value) >= record.amountSats);
+        if (bondSized.length > 0) {
+          return { success: false, btcTxid, error: `Lock address ${record.lockAddress} holds ${bondSized.length} output(s) at least as large as the bond, so Bitcoin is committed there. Not abandoned; recover or resume instead.` };
+        }
+        const tipHeight = await this.readBtcTipHeight();
+        if (tipHeight === null) {
+          return { success: false, btcTxid, error: `Could not read the Bitcoin tip height (UNKNOWN) \u2014 refusing to abandon funding tx ${btcTxid}.` };
+        }
+        const missingSince = record.fundingMissingSince?.txid === btcTxid ? record.fundingMissingSince.height : void 0;
+        if (missingSince === void 0 || tipHeight < missingSince + ABANDON_MISSING_WAIT_BLOCKS) {
+          const since = missingSince ?? tipHeight;
+          if (missingSince === void 0) {
+            try {
+              await this.updateLockRecord(
+                bondIndex,
+                (current) => current && current.btcTxid === btcTxid && current.fireblocksId === fireblocksId ? { ...current, fundingMissingSince: { txid: btcTxid, height: tipHeight } } : void 0
+              );
+            } catch (e) {
+              return { success: false, btcTxid, error: `Could not record when funding tx ${btcTxid} was first found missing (${formatErrorMessage(e)}); nothing was abandoned.` };
+            }
+          }
+          const abandonableFromHeight = since + ABANDON_MISSING_WAIT_BLOCKS;
+          return {
+            success: false,
+            btcTxid,
+            abandonableFromHeight,
+            error: `Funding tx ${btcTxid} has been missing from the indexer since Bitcoin height ${since}. A missing transaction can still be relayed and confirm, so the record is cleared only from height ${abandonableFromHeight}; call abandonBroadcastFunding(${bondIndex}) again then. For an enrollment that cannot wait, use the next bond.`
+          };
+        }
+        let fundingGeneration;
+        try {
+          await this.updateLockRecord(bondIndex, (current) => {
+            if (!current || current.btcTxid !== btcTxid || current.fireblocksId !== fireblocksId) return void 0;
+            if (current.fundingMissingSince?.txid !== btcTxid) return void 0;
+            fundingGeneration = (current.fundingGeneration ?? 0) + 1;
+            const cleared = {
+              ...current,
+              fundingGeneration,
+              abandonedFireblocksIds: [...current.abandonedFireblocksIds ?? [], fireblocksId],
+              abandonedBtcTxids: [...current.abandonedBtcTxids ?? [], btcTxid],
+              stage: "lock-fixed"
+            };
+            delete cleared.btcTxid;
+            delete cleared.vout;
+            delete cleared.fireblocksId;
+            delete cleared.fundingMissingSince;
+            return cleared;
+          });
+        } catch (e) {
+          return { success: false, btcTxid, error: `Could not write bond ${bondIndex}'s record (${formatErrorMessage(e)}); nothing was abandoned.` };
+        }
+        if (fundingGeneration === void 0) {
+          return { success: false, btcTxid, error: `Bond ${bondIndex}'s record changed while it was being checked; nothing was abandoned. Call abandonBroadcastFunding(${bondIndex}) again to re-check.` };
+        }
+        return { success: true, btcTxid, abandonedFireblocksId: fireblocksId, fundingGeneration };
+      } catch (error) {
+        return { success: false, error: `Failed to abandon broadcast funding: ${formatErrorMessage(error)}` };
+      }
+    };
+    /**
+     * Points a native bond's lock record at the Bitcoin transaction that funds its lock, when the
+     * record has lost that pointer: the recorded txid was replaced or evicted, an abandoned
+     * funding came back, or a caller-supplied txid disappeared. createBond or
+     * resumeBondRegistration then continues from it; nothing is sent.
+     *
+     * Acts only when the record has not reached btc-confirmed; the recorded txid, if any, is not
+     * visible; a Fireblocks transfer on record is terminal, since one still in flight could land
+     * as well; and `btcTxid` has exactly one output (or the output `opts.vout` names) paying the
+     * lock address the bond's recorded amount. Any unreadable check refuses. The replaced txid
+     * and transfer are kept as abandoned, in one write.
+     */
+    this.repointBondFunding = async (bondIndex, btcTxid, opts) => {
+      try {
+        if (!this.address) throw new Error("Address is not set");
+        if (!/^[0-9a-fA-F]{64}$/.test(btcTxid)) {
+          return { success: false, error: `Invalid btcTxid: ${btcTxid} (expected 64 hex chars).` };
+        }
+        let record;
+        try {
+          record = await this.lockRecordStore.loadRecord(this.address, bondIndex);
+        } catch (e) {
+          return { success: false, error: `Lock-record store unreadable for bond ${bondIndex} (UNKNOWN) \u2014 refusing to repoint it: ${formatErrorMessage(e)}` };
+        }
+        if (!record || !record.isL1Lock) {
+          return { success: false, error: `No native-BTC lock record for bond ${bondIndex}; nothing to repoint.` };
+        }
+        if (record.stage !== void 0 && laterStage(record.stage, "btc-confirmed") === record.stage) {
+          return { success: false, error: `Bond ${bondIndex}'s funding has reached ${record.stage}; its pointer is not repointed.` };
+        }
+        const { btcTxid: previousBtcTxid, fireblocksId } = record;
+        if (previousBtcTxid !== void 0 && previousBtcTxid !== btcTxid) {
+          const recorded = await this.getBtcTxStatus(previousBtcTxid);
+          if (!recorded.success) {
+            return { success: false, error: `Could not look up the recorded funding tx ${previousBtcTxid} (UNKNOWN) \u2014 refusing to repoint: ${recorded.error ?? ""}` };
+          }
+          if (recorded.data.found) {
+            return { success: false, error: `The recorded funding tx ${previousBtcTxid} is visible, so bond ${bondIndex} is not repointed. Continue with resumeBondRegistration(${bondIndex}).` };
+          }
+        }
+        if (fireblocksId !== void 0) {
+          let transfer;
+          try {
+            transfer = await this.fireblocksService.getTransferState(fireblocksId);
+          } catch (e) {
+            return { success: false, error: `Could not read Fireblocks transfer ${fireblocksId} (UNKNOWN) \u2014 refusing to repoint: ${formatErrorMessage(e)}` };
+          }
+          if (!TERMINAL_TRANSACTION_STATES.has(transfer.status)) {
+            return { success: false, error: `Fireblocks transfer ${fireblocksId} for bond ${bondIndex} is still ${transfer.status} and could land as well; bond ${bondIndex} is not repointed until it has resolved.` };
+          }
+        }
+        let tx;
+        try {
+          tx = await this.readBtcTxOutputs(btcTxid);
+        } catch (e) {
+          return { success: false, error: `Could not read tx ${btcTxid} (UNKNOWN) \u2014 refusing to repoint: ${formatErrorMessage(e)}` };
+        }
+        if (!tx.found) {
+          return { success: false, error: `Tx ${btcTxid} is not visible, so it cannot be adopted as bond ${bondIndex}'s funding.` };
+        }
+        const amount = record.amountSats;
+        const matching = tx.outputs.map((o, n) => ({ ...o, n })).filter((o) => o.address === record.lockAddress && BigInt(o.value) === amount);
+        let vout;
+        if (opts?.vout !== void 0) {
+          if (!matching.some((o) => o.n === opts.vout)) {
+            return { success: false, error: `Output ${opts.vout} of tx ${btcTxid} does not pay lock address ${record.lockAddress} the bond's ${amount} sats.` };
+          }
+          vout = opts.vout;
+        } else if (matching.length === 1) {
+          vout = matching[0].n;
+        } else if (matching.length === 0) {
+          const toLock = tx.outputs.filter((o) => o.address === record.lockAddress);
+          return {
+            success: false,
+            error: toLock.length > 0 ? `Tx ${btcTxid} pays lock address ${record.lockAddress} ${toLock.map((o) => o.value).join(", ")} sats, not the bond's recorded ${amount} sats; it is not adopted.` : `Tx ${btcTxid} has no output paying lock address ${record.lockAddress}; it is not adopted.`
+          };
+        } else {
+          return { success: false, error: `Tx ${btcTxid} has ${matching.length} outputs paying lock address ${record.lockAddress} the bond's ${amount} sats; name one with vout.` };
+        }
+        let repointed = false;
+        try {
+          await this.updateLockRecord(bondIndex, (current) => {
+            if (!current || current.btcTxid !== previousBtcTxid || current.fireblocksId !== fireblocksId) return void 0;
+            repointed = true;
+            const next = {
+              ...current,
+              btcTxid,
+              vout,
+              stage: laterStage(current.stage, "btc-broadcast"),
+              abandonedBtcTxids: [
+                ...(current.abandonedBtcTxids ?? []).filter((t) => t !== btcTxid),
+                ...previousBtcTxid !== void 0 && previousBtcTxid !== btcTxid ? [previousBtcTxid] : []
+              ],
+              ...fireblocksId !== void 0 ? { abandonedFireblocksIds: [...current.abandonedFireblocksIds ?? [], fireblocksId] } : {}
+            };
+            if (next.abandonedBtcTxids.length === 0) delete next.abandonedBtcTxids;
+            delete next.fireblocksId;
+            delete next.fundingMissingSince;
+            return next;
+          });
+        } catch (e) {
+          return { success: false, error: `Could not write bond ${bondIndex}'s record (${formatErrorMessage(e)}); it was not repointed.` };
+        }
+        if (!repointed) {
+          return { success: false, error: `Bond ${bondIndex}'s record changed while it was being checked; it was not repointed. Call repointBondFunding(${bondIndex}) again to re-check.` };
+        }
+        return { success: true, btcTxid, vout, ...previousBtcTxid !== void 0 ? { previousBtcTxid } : {} };
+      } catch (error) {
+        return { success: false, error: `Failed to repoint bond funding: ${formatErrorMessage(error)}` };
+      }
+    };
     /**
      * Creates a native-BTC PoX-5 bond: locks BTC on L1 via Fireblocks and registers
      * the paired STX position on L2 with a full SPV proof.
@@ -19105,8 +19727,13 @@ var StacksSDK = class _StacksSDK {
      * Fireblocks → wait for confirmations → assemble SPV proof → register-for-bond.
      *
      * NOTE: This call blocks until Bitcoin confirmations are received (~30 min typical).
+     *
+     * On an `unsettled` result the Bitcoin is locked and the registration outcome is
+     * unknown — `resumeBondRegistration` continues it without re-funding.
      */
-    this.createBond = async (bondIndex, btcAmountSats, signerManager, opts) => {
+    this.createBond = this.slotted("createBond", () => this.createBondInSlot);
+    /** The body of `createBond`, run only while it holds the bond's slot. */
+    this.createBondInSlot = async (bondIndex, btcAmountSats, signerManager, opts) => {
       const committedBtc = {};
       try {
         if (!this.address || !this.publicKey || !this.vaultAccountId) {
@@ -19125,31 +19752,48 @@ var StacksSDK = class _StacksSDK {
         if (storeError) return { success: false, error: storeError };
         const smAllowError = this.signerManagerAllowedError(signerManager);
         if (smAllowError) return { success: false, error: smAllowError };
+        let priorRecord;
+        try {
+          priorRecord = await this.lockRecordStore.loadRecord(this.address, bondIndex);
+        } catch (e) {
+          return { success: false, error: `Lock-record store unreadable for bond ${bondIndex} (UNKNOWN, not "no prior attempt") \u2014 refusing to fund: ${formatErrorMessage(e)}` };
+        }
+        const recordedFunding = priorRecord && priorRecord.isL1Lock !== false ? priorRecord.btcTxid !== void 0 ? `funding tx ${priorRecord.btcTxid}` : priorRecord.fireblocksId !== void 0 ? `Fireblocks funding transfer ${priorRecord.fireblocksId}` : priorRecord.stage === "funding-requested" ? `a funding request under external id ${priorRecord.fundingExternalId ?? "unknown"}` : void 0 : void 0;
+        if (recordedFunding && priorRecord.btcTxid !== void 0) {
+          committedBtc.btcTxid = priorRecord.btcTxid;
+          committedBtc.vout = priorRecord.vout;
+        }
+        const gateRefusal = (reason, uncommittedError = reason) => recordedFunding ? {
+          success: false,
+          error: `Bond ${bondIndex} already has ${recordedFunding} on record, so Bitcoin may already be committed; no new Bitcoin was sent. The enrollment cannot continue: ${reason}. Check getBondPosition: a registration that already landed shows there. Otherwise the Bitcoin stays locked until recovered with unlockMaturedBond or spendEarlyExitUtxo.`,
+          fundingBlocked: true,
+          ...committedBtc
+        } : { success: false, error: uncommittedError };
         const allowance = await (0, import_bitcoin_staking2.fetchBondAllowance)({ bondIndex, address: this.address, network: this.pox5Network });
         if (allowance < btcAmountSats) {
-          return { success: false, error: `Not allowlisted for ${btcAmountSats} sats on bond ${bondIndex} (cap: ${allowance} sats)` };
+          return gateRefusal(`Not allowlisted for ${btcAmountSats} sats on bond ${bondIndex} (cap: ${allowance} sats)`);
         }
         const [pox, bond] = await Promise.all([
           (0, import_bitcoin_staking2.fetchPoxInfo)({ network: this.pox5Network }),
           (0, import_bitcoin_staking2.fetchBond)({ bondIndex, network: this.pox5Network })
         ]);
-        if (!bond) return { success: false, error: `Bond ${bondIndex} not found` };
+        if (!bond) return gateRefusal(`Bond ${bondIndex} not found`);
         const contractMinUstx = (0, import_bitcoin_staking2.minUstxForSatsAmount)({
           sats: btcAmountSats,
           stxValueRatio: bond.stxValueRatio,
           minUstxRatioBps: bond.minUstxRatioBps
         });
         const amountResolution = this.resolveBondStxAmount(contractMinUstx, opts?.amountUstxOverride);
-        if ("error" in amountResolution) return { success: false, error: amountResolution.error };
+        if ("error" in amountResolution) return gateRefusal(amountResolution.error);
         const amountUstx = amountResolution.amountUstx;
         const accountStatus = await (0, import_bitcoin_staking2.fetchAccountStatus)({ address: this.address, network: this.pox5Network });
         const unlockedStx = accountStatus.balance;
         const lockedStx = accountStatus.locked ?? BigInt(0);
         if (unlockedStx < DEFAULT_POX_FEE_USTX) {
-          return { success: false, error: `Insufficient unlocked STX for the transaction fee: need ${microToStx(DEFAULT_POX_FEE_USTX)} STX unlocked but only ${microToStx(unlockedStx)} available` };
+          return gateRefusal(`Insufficient unlocked STX for the transaction fee: need ${microToStx(DEFAULT_POX_FEE_USTX)} STX unlocked but only ${microToStx(unlockedStx)} available`);
         }
         if (unlockedStx - DEFAULT_POX_FEE_USTX + lockedStx < amountUstx) {
-          return { success: false, error: `Insufficient STX to lock ${microToStx(amountUstx)} STX: unlocked-after-fee ${microToStx(unlockedStx - DEFAULT_POX_FEE_USTX)} + locked ${microToStx(lockedStx)} is short` };
+          return gateRefusal(`Insufficient STX to lock ${microToStx(amountUstx)} STX: unlocked-after-fee ${microToStx(unlockedStx - DEFAULT_POX_FEE_USTX)} + locked ${microToStx(lockedStx)} is short`);
         }
         const preflight = await (0, import_bitcoin_staking2.fetchEligibleRegisterForBond)({
           bondIndex,
@@ -19162,10 +19806,16 @@ var StacksSDK = class _StacksSDK {
         });
         if (!preflight.ok) {
           const reasons = preflight.reasons ?? [];
-          return { success: false, error: `Not eligible to register for bond ${bondIndex} (no BTC committed): ${this.describeBondReasons(reasons)}` };
+          const landed = await this.landedRegistration(bondIndex, priorRecord, reasons);
+          if (landed) return landed;
+          const why = this.describeBondReasons(reasons);
+          return gateRefusal(
+            `Not eligible to register for bond ${bondIndex}: ${why}`,
+            `Not eligible to register for bond ${bondIndex} (no BTC committed): ${why}`
+          );
         }
         const firstBondCycle = (0, import_bitcoin_staking2.firstPox5RewardCycle)(pox);
-        if (firstBondCycle === void 0) return { success: false, error: "pox-5 not yet configured on this network" };
+        if (firstBondCycle === void 0) return gateRefusal("pox-5 not yet configured on this network");
         const metadata = (0, import_bitcoin_staking2.buildRegisterMetadata)({
           bondIndex,
           poxInfo: pox,
@@ -19191,28 +19841,31 @@ var StacksSDK = class _StacksSDK {
             network: this.pox5Network
           });
           if (rawResult.type === import_transactions4.ClarityType.ResponseErr) {
-            return { success: false, error: `construct-lockup-output-script contract error: ${import_transactions4.Cl.prettyPrint(rawResult.value)}` };
+            return gateRefusal(`construct-lockup-output-script contract error: ${import_transactions4.Cl.prettyPrint(rawResult.value)}`);
           }
           const inner = rawResult.type === import_transactions4.ClarityType.ResponseOk ? rawResult.value : rawResult;
           const onchainScriptHex = inner.value;
           if ((0, import_common2.bytesToHex)(metadata.outputScript) !== onchainScriptHex.replace(/^0x/, "")) {
-            return { success: false, error: `Lockup script mismatch \u2014 SDK: ${(0, import_common2.bytesToHex)(metadata.outputScript)}, contract: ${onchainScriptHex}` };
+            return gateRefusal(`Lockup script mismatch \u2014 SDK: ${(0, import_common2.bytesToHex)(metadata.outputScript)}, contract: ${onchainScriptHex}`);
           }
         }
         if (this.verifyEarlyExitCosignerAtFunding) {
           try {
             await this.verifyCommittedCosignerKey(bond);
           } catch (error) {
-            return { success: false, error: `Early-exit cosigner preflight failed (no BTC committed): ${formatErrorMessage(error)}` };
+            const why = formatErrorMessage(error);
+            return gateRefusal(
+              `Early-exit cosigner preflight failed: ${why}`,
+              `Early-exit cosigner preflight failed (no BTC committed): ${why}`
+            );
           }
         }
-        const fundingExternalId = this.deriveFundingExternalId(bondIndex, metadata.lockAddress);
-        let priorRecord;
-        try {
-          priorRecord = await this.lockRecordStore.loadRecord(this.address, bondIndex);
-        } catch (e) {
-          return { success: false, error: `Lock-record store unreadable for bond ${bondIndex} (UNKNOWN, not "no prior attempt") \u2014 refusing to fund: ${formatErrorMessage(e)}` };
-        }
+        const fundingGeneration = priorRecord?.fundingGeneration ?? 0;
+        const fundingExternalId = this.deriveFundingExternalId(bondIndex, metadata.lockAddress, fundingGeneration);
+        const externalIdConflict = this.registerExternalIdConflict(bondIndex, priorRecord, opts?.externalId);
+        if (externalIdConflict) return { success: false, error: externalIdConflict, ...committedBtc };
+        const callerExternalId = opts?.externalId ?? priorRecord?.callerExternalId;
+        const registrationGeneration = priorRecord?.registrationGeneration ?? 0;
         const priorAtThisLock = priorRecord?.lockAddress === metadata.lockAddress;
         const callerSuppliedRawCalldata = opts?.signerCalldata !== void 0;
         const clearRewardDestination = opts?.rewardBtcAddress === null;
@@ -19233,9 +19886,10 @@ var StacksSDK = class _StacksSDK {
           if (priorRecord.btcTxid !== void 0 && opts.btcTxid !== priorRecord.btcTxid) {
             return {
               success: false,
-              error: `Bond ${bondIndex} already has a recorded funding tx ${priorRecord.btcTxid} at this lock address; refusing to replace it with ${opts.btcTxid}. Omit btcTxid to resume the recorded funding, or recover it first.`,
+              error: `Bond ${bondIndex} already has a recorded funding tx ${priorRecord.btcTxid} at this lock address; refusing to replace it with ${opts.btcTxid}. Omit btcTxid to resume the recorded funding. If the recorded transaction was replaced or evicted and ${opts.btcTxid} pays the lock, adopt it with repointBondFunding(${bondIndex}, "${opts.btcTxid}").`,
               btcTxid: priorRecord.btcTxid,
-              vout: priorRecord.vout
+              vout: priorRecord.vout,
+              fundingBlocked: true
             };
           }
           if (hasInFlightFireblocks) {
@@ -19256,9 +19910,10 @@ var StacksSDK = class _StacksSDK {
           if (!recordedTx.data.found) {
             return {
               success: false,
-              error: `Recorded funding tx ${priorRecord.btcTxid} for bond ${bondIndex} is not visible on the configured Esplora \u2014 it may have been RBF-bumped by Fireblocks (new txid) or evicted. Look up the transfer by external id ${fundingExternalId} in Fireblocks and retry with opts.btcTxid set to the actual funding txid.`,
+              error: `Recorded funding tx ${priorRecord.btcTxid} for bond ${bondIndex} is not visible on the configured Esplora. If that is indexer lag, retry createBond later without opts.btcTxid. If it was replaced (new txid) or evicted, adopt the transaction that pays the lock with repointBondFunding(${bondIndex}, <txid>); a different opts.btcTxid on createBond is refused. Do not fund this bond again.${priorRecord.fireblocksId !== void 0 ? ` If the transaction never confirms, abandonBroadcastFunding(${bondIndex}) clears the record once Fireblocks reports the transfer terminal and the txid has stayed missing long enough.` : ""} The transfer's external id is ${fundingExternalId}.`,
               btcTxid: priorRecord.btcTxid,
-              vout: priorRecord.vout
+              vout: priorRecord.vout,
+              fundingBlocked: true
             };
           }
         }
@@ -19280,6 +19935,18 @@ var StacksSDK = class _StacksSDK {
           signerManager,
           firstRewardCycle: (0, import_bitcoin_staking2.bondPeriodToRewardCycle)({ bondIndex, poxInfo: pox }),
           fundingExternalId,
+          fundingGeneration,
+          ...callerExternalId !== void 0 ? { callerExternalId } : {},
+          // Carried forward explicitly: this literal replaces the stored record, so an
+          // omitted field erases the history of abandoned transfers on the next attempt.
+          ...priorRecord?.abandonedFireblocksIds !== void 0 ? { abandonedFireblocksIds: priorRecord.abandonedFireblocksIds } : {},
+          ...priorRecord?.abandonedBtcTxids !== void 0 ? { abandonedBtcTxids: priorRecord.abandonedBtcTxids } : {},
+          ...priorRecord?.fundingMissingSince !== void 0 ? { fundingMissingSince: priorRecord.fundingMissingSince } : {},
+          // Carried forward for the same reason: omitting it resets the counter this
+          // attempt's OWN register external id was just derived from, so a second terminal
+          // signing failure in a row re-derives the id the first retry just consumed.
+          ...priorRecord?.registrationGeneration !== void 0 ? { registrationGeneration: priorRecord.registrationGeneration } : {},
+          ...priorRecord?.pendingRegisterExternalId !== void 0 ? { pendingRegisterExternalId: priorRecord.pendingRegisterExternalId } : {},
           // Persist the reward destination so renewBond / updateBondRegistration re-supply
           // the pox-addr calldata rather than dropping it (a `none` map-deletes it).
           ...effectiveRewardBtcAddress !== void 0 ? { rewardBtcAddress: effectiveRewardBtcAddress } : {},
@@ -19289,7 +19956,10 @@ var StacksSDK = class _StacksSDK {
             btcTxid: priorRecord.btcTxid,
             vout: priorRecord.vout,
             amountSats: priorRecord.amountSats,
-            stage: priorRecord.stage ?? "btc-broadcast"
+            stage: priorRecord.stage ?? "btc-broadcast",
+            // The transfer that produced the txid stays named: if the txid is later evicted,
+            // abandonBroadcastFunding needs both to clear the record.
+            ...priorRecord.fireblocksId !== void 0 ? { fireblocksId: priorRecord.fireblocksId } : {}
           } : {},
           // A transfer Fireblocks already ACCEPTED but whose txid was never recorded must keep
           // its id and its reached stage across this pre-funding save. Without this the save
@@ -19318,18 +19988,19 @@ var StacksSDK = class _StacksSDK {
             btcTxid = await this.fireblocksService.awaitBitcoinTransaction(priorRecord.fireblocksId);
           } catch (awaitErr) {
             if (FireblocksService.isTerminalTransferFailure(awaitErr)) {
-              const abandoned = { ...lockRecord };
-              delete abandoned.fireblocksId;
-              await this.lockRecordStore.saveRecord(this.address, bondIndex, abandoned);
-              return {
-                success: false,
-                error: `The prior Fireblocks funding transfer (id ${priorRecord.fireblocksId}) for bond ${bondIndex} terminally failed: ${formatErrorMessage(awaitErr)}. Its external id ${fundingExternalId} is consumed and cannot be reused, so this lock cannot be re-funded automatically \u2014 enroll under a different bond index, or resolve the transfer in Fireblocks and retry with opts.btcTxid.`
-              };
+              return this.abandonTerminalFunding(bondIndex, fundingExternalId, awaitErr);
             }
             throw awaitErr;
           }
           await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, btcTxid, fireblocksId: priorRecord.fireblocksId, stage: laterStage(lockRecord.stage, "btc-broadcast") });
         } else {
+          const refundBlock = await this.abandonedFundingBlock(
+            bondIndex,
+            priorAtThisLock ? priorRecord : null,
+            metadata.lockAddress,
+            BigInt(btcAmountSats)
+          );
+          if (refundBlock) return { success: false, error: refundBlock, fundingBlocked: true };
           await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, stage: laterStage(lockRecord.stage, "funding-requested") });
           let result2;
           try {
@@ -19345,10 +20016,66 @@ var StacksSDK = class _StacksSDK {
             );
           } catch (fundErr) {
             if (FireblocksService.isDuplicateExternalIdError(fundErr)) {
-              const resolved = await this.fireblocksService.resolveBitcoinTransactionByExternalId(fundingExternalId);
-              if (!resolved) throw fundErr;
-              result2 = resolved;
-              await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, fireblocksId: resolved.fireblocksId, stage: laterStage(lockRecord.stage, "funding-requested") });
+              const priorFireblocksId = await this.fireblocksService.findBitcoinTransactionByExternalId(fundingExternalId);
+              if (!priorFireblocksId) throw fundErr;
+              let existing;
+              try {
+                existing = await this.fireblocksService.getTransferState(priorFireblocksId);
+              } catch (e) {
+                return {
+                  success: false,
+                  error: `Could not read Fireblocks transfer ${priorFireblocksId}, which holds bond ${bondIndex}'s funding external id ${fundingExternalId} (UNKNOWN) \u2014 refusing to adopt it: ${formatErrorMessage(e)}. No new Bitcoin was sent. Retry createBond.`
+                };
+              }
+              const existingSats = existing.requestedAmount !== void 0 ? btcDecimalToSats(existing.requestedAmount) : void 0;
+              if (existing.destinationAddress === void 0 || existingSats === void 0) {
+                return {
+                  success: false,
+                  error: `Fireblocks transfer ${priorFireblocksId} holds bond ${bondIndex}'s funding external id ${fundingExternalId} but does not yet report its ${existing.destinationAddress === void 0 ? "destination" : "amount"}, so it cannot be checked against lock address ${metadata.lockAddress} and ${btcAmountSats} sats. It was not adopted or recorded and no new Bitcoin was sent. Retry createBond once Fireblocks reports it.`
+                };
+              }
+              if (existing.destinationAddress !== metadata.lockAddress) {
+                return {
+                  success: false,
+                  error: `Fireblocks transfer ${priorFireblocksId} holds bond ${bondIndex}'s funding external id ${fundingExternalId} but pays ${existing.destinationAddress}, not lock address ${metadata.lockAddress}. It was not adopted or recorded; resolve it in Fireblocks before retrying.`
+                };
+              }
+              const adoptedAt = existingSats !== BigInt(btcAmountSats) ? existingSats : void 0;
+              const adopted = await this.updateLockRecord(bondIndex, (current) => {
+                const unmoved = current !== null && current.lockAddress === lockRecord.lockAddress && current.btcTxid === void 0 && (current.fireblocksId === void 0 || current.fireblocksId === priorFireblocksId);
+                if (!unmoved) return void 0;
+                return {
+                  ...current,
+                  ...adoptedAt !== void 0 ? { amountSats: adoptedAt } : {},
+                  fireblocksId: priorFireblocksId,
+                  stage: laterStage(current.stage, "funding-requested")
+                };
+              });
+              if (adopted?.fireblocksId !== priorFireblocksId) {
+                return {
+                  success: false,
+                  error: `Bond ${bondIndex}'s lock record changed while Fireblocks transfer ${priorFireblocksId} was being checked, so it was not adopted. No new Bitcoin was sent. Check the record and retry createBond.`
+                };
+              }
+              if (adoptedAt !== void 0) {
+                return {
+                  success: false,
+                  error: `Fireblocks transfer ${priorFireblocksId} already funds bond ${bondIndex}'s lock with ${adoptedAt} sats under external id ${fundingExternalId}; this call asked for ${btcAmountSats} sats. No new Bitcoin was sent. The transfer is recorded at ${adoptedAt} sats; continue it with resumeBondRegistration(${bondIndex}) or createBond at ${adoptedAt} sats.`,
+                  fundingBlocked: true
+                };
+              }
+              let priorBtcTxid;
+              try {
+                priorBtcTxid = await this.fireblocksService.awaitBitcoinTransaction(priorFireblocksId);
+              } catch (resolveErr) {
+                if (FireblocksService.isTerminalTransferFailure(resolveErr)) {
+                  return this.abandonTerminalFunding(bondIndex, fundingExternalId, resolveErr);
+                }
+                throw resolveErr;
+              }
+              result2 = { fireblocksId: priorFireblocksId, btcTxid: priorBtcTxid };
+            } else if (FireblocksService.isTerminalTransferFailure(fundErr)) {
+              return this.abandonTerminalFunding(bondIndex, fundingExternalId, fundErr);
             } else {
               throw fundErr;
             }
@@ -19358,6 +20085,7 @@ var StacksSDK = class _StacksSDK {
         }
         committedBtc.btcTxid = btcTxid;
         const { blockHash } = await this.waitForBtcConfirmations(btcTxid, opts?.confirmations ?? 3);
+        delete lockRecord.fireblocksId;
         await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, btcTxid, stage: laterStage(lockRecord.stage, "btc-confirmed") });
         const lockupProof = await this.assembleLockupProof(btcTxid, blockHash, metadata.outputScript, metadata.unlockHeight);
         committedBtc.vout = lockupProof.outputIndex;
@@ -19386,7 +20114,8 @@ var StacksSDK = class _StacksSDK {
             vout: lockupProof.outputIndex
           };
         }
-        const result = await this.runNonceExclusive(async () => {
+        let registerExternalId = "";
+        const register = async () => this.runNonceExclusive(async () => {
           const custodyRefund = await this.custodyRefundPostConditions();
           const resolvedNonce = await this.resolveNonce(opts?.nonce);
           const tx = await this.buildRegisterForBondTx({
@@ -19401,10 +20130,18 @@ var StacksSDK = class _StacksSDK {
             postConditionMode: import_transactions4.PostConditionMode.Deny,
             postConditions: [import_transactions4.Pc.origin().willSendEq(amountUstx).ustxToLock(), ...custodyRefund.conditions]
           });
+          registerExternalId = this.deriveRegisterExternalId(
+            bondIndex,
+            metadata.lockAddress,
+            this.preSignSigHashOf(tx),
+            registrationGeneration,
+            callerExternalId
+          );
+          await this.markRegisterRequest(bondIndex, registerExternalId);
           return this.pox5SignAndBroadcast(
             tx,
             opts?.note ?? "register-for-bond",
-            opts?.externalId ? `${opts.externalId}-register` : void 0,
+            registerExternalId,
             // BTC is already locked at this point; the bond window / eligibility / custody
             // can still change during L2 approval (e.g. ERR_BOND_ALREADY_STARTED). Re-check
             // against the CURRENT height and discard rather than broadcast a doomed
@@ -19419,14 +20156,27 @@ var StacksSDK = class _StacksSDK {
             })
           );
         });
+        let result;
+        try {
+          result = await register();
+        } catch (registerErr) {
+          if (!FireblocksService.isTerminalTransferFailure(registerErr)) throw registerErr;
+          return {
+            success: false,
+            error: await this.abandonTerminalRegistration(bondIndex, registerExternalId, registerErr, registrationGeneration),
+            btcTxid,
+            vout: lockupProof.outputIndex
+          };
+        }
         if (!result?.txid || result.error || result.reason) {
           console.error("register-for-bond broadcast failed:", JSON.stringify(result));
           const parts = [result?.error, result?.reason, result?.reason_data ? JSON.stringify(result.reason_data) : void 0].filter(Boolean);
           const errMsg = parts.join(" \u2014 ") || "broadcast failed";
           return { success: false, error: errMsg, btcTxid, vout: lockupProof.outputIndex };
         }
+        const submitted = withoutPendingRegister(lockRecord);
         await this.lockRecordStore.saveRecord(this.address, bondIndex, {
-          ...lockRecord,
+          ...submitted,
           btcTxid,
           vout: lockupProof.outputIndex,
           stage: "registration-submitted"
@@ -19435,10 +20185,10 @@ var StacksSDK = class _StacksSDK {
         console.log("register-for-bond settlement:", JSON.stringify({ tx_status: settled.data?.tx_status, tx_result: settled.data?.tx_result }));
         if (!settled.success || settled.data?.tx_status !== "success") {
           const txRepr = settled.data?.tx_result?.repr ?? settled.data?.tx_error ?? "";
-          return { success: false, unsettled: !settled.success, error: `[${settled.data?.tx_status}] ${txRepr}`.trim(), stacksTxid: result.txid, btcTxid, vout: lockupProof.outputIndex };
+          return { success: false, unsettled: !settled.success, error: !settled.success ? unsettledTransactionError("register-for-bond", result.txid, settled.error, `resumeBondRegistration(${bondIndex})`) : `[${settled.data?.tx_status}] ${txRepr}`.trim(), stacksTxid: result.txid, btcTxid, vout: lockupProof.outputIndex };
         }
         await this.lockRecordStore.saveRecord(this.address, bondIndex, {
-          ...lockRecord,
+          ...submitted,
           btcTxid,
           vout: lockupProof.outputIndex,
           stage: "registration-confirmed"
@@ -19453,6 +20203,11 @@ var StacksSDK = class _StacksSDK {
           amountUstx: amountUstx.toString()
         };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(
+          error,
+          error instanceof FireblocksTransferError && error.details.operation === import_ts_sdk4.TransactionOperation.Raw ? `Retry createBond or resumeBondRegistration(${bondIndex}) to keep waiting on the same signing request while the transaction is unchanged; a retry at a different nonce, fee or post-condition opens a new signing request. The Bitcoin stays locked either way.` : `Retry createBond for bond ${bondIndex} to keep waiting on the same transfer; no new Bitcoin is sent.`
+        );
+        if (pending) return { ...pending, ...committedBtc };
         console.error("createBond error:", error);
         return { success: false, error: `Failed to create bond: ${formatErrorMessage(error)}`, ...committedBtc };
       }
@@ -19596,7 +20351,9 @@ var StacksSDK = class _StacksSDK {
      * NOTE: sBTC paths are not yet exercised end-to-end on a live network; validate
      * before production use.
      */
-    this.createSbtcBond = async (bondIndex, sbtcSats, signerManager, opts) => {
+    this.createSbtcBond = this.slotted("createSbtcBond", () => this.createSbtcBondInSlot);
+    /** The body of `createSbtcBond`, run only while it holds the bond's slot. */
+    this.createSbtcBondInSlot = async (bondIndex, sbtcSats, signerManager, opts) => {
       try {
         if (!this.address || !this.publicKey || !this.vaultAccountId) {
           throw new Error("Address, Public Key or Vault ID are not set");
@@ -19680,10 +20437,12 @@ var StacksSDK = class _StacksSDK {
         const settled = await this.waitForTxSettlement(result.txid);
         if (!settled.success || settled.data?.tx_status !== "success") {
           const repr = settled.data?.tx_result?.repr ?? settled.data?.tx_error ?? "";
-          return { success: false, unsettled: !settled.success, error: `[${settled.data?.tx_status}] ${repr}`.trim(), txHash: result.txid };
+          return { success: false, unsettled: !settled.success, error: !settled.success ? unsettledTransactionError("pox-5 call", result.txid, settled.error) : `[${settled.data?.tx_status}] ${repr}`.trim(), txHash: result.txid };
         }
         return { success: true, txHash: result.txid };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error);
+        if (pending) return pending;
         return { success: false, error: `Failed to create sBTC bond: ${formatErrorMessage(error)}` };
       }
     };
@@ -19707,7 +20466,9 @@ var StacksSDK = class _StacksSDK {
      * @param newSbtcSats - The target sBTC amount (sats) for the new position.
      * @param signerManager - The signer-manager principal governing the new position.
      */
-    this.rollSbtcBond = async (nextBondIndex, newSbtcSats, signerManager, opts) => {
+    this.rollSbtcBond = this.slotted("rollSbtcBond", () => this.rollSbtcBondInSlot);
+    /** The body of `rollSbtcBond`, run only while it holds the bond's slot. */
+    this.rollSbtcBondInSlot = async (nextBondIndex, newSbtcSats, signerManager, opts) => {
       try {
         if (!this.address || !this.publicKey || !this.vaultAccountId) {
           throw new Error("Address, Public Key or Vault ID are not set");
@@ -19801,10 +20562,12 @@ var StacksSDK = class _StacksSDK {
         const settled = await this.waitForTxSettlement(result.txid);
         if (!settled.success || settled.data?.tx_status !== "success") {
           const repr = settled.data?.tx_result?.repr ?? settled.data?.tx_error ?? "";
-          return { success: false, unsettled: !settled.success, error: `[${settled.data?.tx_status}] ${repr}`.trim(), txHash: result.txid };
+          return { success: false, unsettled: !settled.success, error: !settled.success ? unsettledTransactionError("pox-5 call", result.txid, settled.error) : `[${settled.data?.tx_status}] ${repr}`.trim(), txHash: result.txid };
         }
         return { success: true, txHash: result.txid };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error);
+        if (pending) return pending;
         return { success: false, error: `Failed to roll sBTC bond: ${formatErrorMessage(error)}` };
       }
     };
@@ -19859,16 +20622,47 @@ var StacksSDK = class _StacksSDK {
         }
         const settled = await this.waitForTxSettlement(result.txid);
         if (!settled.success || settled.data?.tx_status !== "success") {
-          return { success: false, unsettled: !settled.success, error: settled.data?.tx_error ?? "unstake-sbtc failed on-chain", txHash: result.txid };
+          return { success: false, unsettled: !settled.success, error: !settled.success ? unsettledTransactionError("unstake-sbtc", result.txid, settled.error) : settled.data?.tx_error ?? "unstake-sbtc failed on-chain", txHash: result.txid };
         }
         return { success: true, txHash: result.txid };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error);
+        if (pending) return pending;
         return { success: false, error: `Failed to unstake sBTC: ${formatErrorMessage(error)}` };
+      }
+    };
+    /**
+     * Native-BTC bonds recorded for this address whose Bitcoin is not confirmed recovered.
+     * Read from the durable records rather than from membership, which maturity, early exit
+     * and a later registration all destroy while the BTC stays in a live UTXO.
+     *
+     * A store that cannot enumerate, or one that throws, yields `historical_lookup_failed`
+     * instead of an empty list — an empty list would read as "no committed BTC anywhere".
+     */
+    this.unrecoveredHistoricalBonds = async () => {
+      if (typeof this.lockRecordStore.listRecords !== "function") {
+        return { historical_lookup_failed: true };
+      }
+      try {
+        const records = await this.lockRecordStore.listRecords(this.address);
+        const positions = await Promise.all(
+          records.filter((r) => r.isL1Lock).map((r) => this.getHistoricalBondPosition(r.bondIndex))
+        );
+        return {
+          historical_bonds: positions.map((p) => p.data).filter((d) => d !== void 0 && d.recovered !== true),
+          ...positions.some((p) => p.data === void 0) ? { historical_lookup_failed: true } : {}
+        };
+      } catch {
+        return { historical_lookup_failed: true };
       }
     };
     /**
      * Returns the current PoX-5 bond position for this vault's address, enriched
      * with live L1 lock state (if BTC-locked) and accrued sats rewards.
+     *
+     * With no live membership, any durable record still holding unrecovered Bitcoin is
+     * reported under `historical_bonds` — `bond: null` on its own does not mean the
+     * address has no committed BTC.
      */
     this.getBondPosition = async () => {
       try {
@@ -19885,9 +20679,13 @@ var StacksSDK = class _StacksSDK {
           signer_manager: stxOnly.details.signer
         } : null;
         if (!membership) {
-          return { success: true, data: { bond: null, stx_only: stxOnlyData } };
+          return {
+            success: true,
+            data: { bond: null, stx_only: stxOnlyData, ...await this.unrecoveredHistoricalBonds() }
+          };
         }
         const firstEarningCycle = (0, import_bitcoin_staking2.bondPeriodToRewardCycle)({ bondIndex: membership.bondIndex, poxInfo: pox });
+        let earnedReadFailed = false;
         const earnedSats = await this.sumOverCycles(
           this.cycleRange(firstEarningCycle, pox.rewardCycleId),
           (cycle) => (0, import_bitcoin_staking2.fetchEarned)({
@@ -19895,7 +20693,10 @@ var StacksSDK = class _StacksSDK {
             rewardCycle: cycle,
             bondIndex: membership.bondIndex,
             network: this.pox5Network
-          }).catch(() => BigInt(0))
+          }).catch(() => {
+            earnedReadFailed = true;
+            return BigInt(0);
+          })
         );
         let unlock_height = null;
         let locking_address = null;
@@ -19933,7 +20734,7 @@ var StacksSDK = class _StacksSDK {
         }
         const amountSatsBn = this.effectiveL1AmountSats(membership, record);
         const amountBtc = (Number(amountSatsBn) / 1e8).toFixed(8);
-        const earnedBtc = (Number(earnedSats) / 1e8).toFixed(8);
+        const earnedBtc = earnedReadFailed ? null : (Number(earnedSats) / 1e8).toFixed(8);
         const firstRewardCycle = (0, import_bitcoin_staking2.bondPeriodToRewardCycle)({ bondIndex: membership.bondIndex, poxInfo: pox });
         const cyclesUntilRewards = Math.max(0, firstRewardCycle - pox.rewardCycleId);
         const accountUnlock = await (0, import_bitcoin_staking2.fetchAccountStatus)({ address: this.address, network: this.pox5Network }).then((a) => a.unlockHeight > 0 ? a.unlockHeight : null).catch(() => null);
@@ -19957,7 +20758,7 @@ var StacksSDK = class _StacksSDK {
               blocks_until_unlock,
               stx_unlock_burn_height: accountUnlock,
               projected_stx_unlock_burn_height: projectedStxUnlock,
-              earned_sats: earnedSats.toString(),
+              earned_sats: earnedReadFailed ? null : earnedSats.toString(),
               earned_btc: earnedBtc
             },
             stx_only: stxOnlyData
@@ -19977,6 +20778,41 @@ var StacksSDK = class _StacksSDK {
       const earlyUnlockBytes = typeof bond.earlyUnlockBytes === "string" ? (0, import_common2.hexToBytes)(bond.earlyUnlockBytes) : bond.earlyUnlockBytes;
       const cosigner = new CosignerService(resolveCosignerUrl(this.testnet));
       await cosigner.verifyCommittedKey(earlyUnlockBytes);
+    };
+    this.announcePendingRefusal = (pendingTxCount) => `${pendingTxCount} transaction(s) from this vault are pending in the mempool. The announce forfeits whichever bond the membership names when it executes, and a pending registration, stake or earlier announce runs first \u2014 call again once the vault has nothing pending.`;
+    /**
+     * Whether `announce-l1-early-exit` has been recorded on chain for this staker's bond.
+     *
+     * The contract is the authority: the announcement map is written irreversibly and has
+     * no delete, so a local record of it can only ever be a display hint. A read that does
+     * not resolve returns `success: false` — reporting `announced: false` on an unknown
+     * state would invite a second, equally irreversible announce.
+     *
+     * @param bondIndex - Explicit bond. Omitted, it resolves from current membership.
+     */
+    this.hasAnnouncedEarlyExit = async (bondIndex) => {
+      try {
+        if (!this.address) throw new Error("Address is not set");
+        let index = bondIndex;
+        if (index === void 0) {
+          let membership;
+          try {
+            membership = await (0, import_bitcoin_staking2.fetchBondMembership)({ address: this.address, network: this.pox5Network });
+          } catch (e) {
+            return { success: false, error: `Could not read bond membership to resolve the bond index (UNKNOWN, not "no bond") \u2014 refusing to report early-exit state: ${formatErrorMessage(e)}` };
+          }
+          if (!membership) return { success: false, error: "No active bond membership found; pass an explicit bondIndex to query a historical bond." };
+          index = membership.bondIndex;
+        }
+        const announced = await (0, import_bitcoin_staking2.fetchHasAnnouncedL1EarlyExit)({
+          bondIndex: index,
+          staker: this.address,
+          network: this.pox5Network
+        });
+        return { success: true, data: { bond_index: index, announced } };
+      } catch (error) {
+        return { success: false, error: `Early-exit announcement state for bond ${bondIndex ?? "(from membership)"} is UNKNOWN (not "not announced") \u2014 refusing to report it: ${formatErrorMessage(error)}` };
+      }
     };
     /**
      * Announces an L1 early exit for an active BTC-locked bond (L2 leg only).
@@ -20009,7 +20845,14 @@ var StacksSDK = class _StacksSDK {
           return { success: false, error: `Refusing to announce early exit \u2014 cannot confirm the cosigner holds this bond's committed key (early exit would be unspendable and its rewards forfeited): ${formatErrorMessage(error)}` };
         }
         const result = await this.runNonceExclusive(async () => {
-          const resolvedNonce = await this.resolveNonce(opts?.nonce);
+          const nonceState = await this.chainService.getAccountNonce(this.address);
+          if (nonceState.pendingTxCount > 0) {
+            return { error: this.announcePendingRefusal(nonceState.pendingTxCount) };
+          }
+          const resolvedNonce = nonceState.confirmedNonce;
+          if (opts?.nonce !== void 0 && opts.nonce !== resolvedNonce) {
+            return { error: `Refusing to announce early exit at nonce ${opts.nonce}: it must sign at the confirmed nonce (${resolvedNonce}) so that no earlier transaction can change the bond it forfeits.` };
+          }
           const tx = await this.buildPox5Call(
             "announce-l1-early-exit",
             [import_transactions4.Cl.address(this.address), import_transactions4.Cl.address(membership.signer)],
@@ -20030,6 +20873,15 @@ var StacksSDK = class _StacksSDK {
               const reasons = recheck.reasons ?? [];
               return `eligibility changed during approval: ${this.describeBondReasons(reasons)}`;
             }
+            const current = await (0, import_bitcoin_staking2.fetchBondMembership)({ address: this.address, network: this.pox5Network });
+            if (!current || current.bondIndex !== membership.bondIndex) {
+              return `the bond changed during approval (reviewed bond ${membership.bondIndex}, now ${current ? `bond ${current.bondIndex}` : "no membership"})`;
+            }
+            const nonceNow = await this.chainService.getAccountNonce(this.address);
+            if (nonceNow.pendingTxCount > 0) return this.announcePendingRefusal(nonceNow.pendingTxCount);
+            if (nonceNow.confirmedNonce !== resolvedNonce) {
+              return `the confirmed nonce moved from ${resolvedNonce} to ${nonceNow.confirmedNonce} during approval`;
+            }
             return void 0;
           });
         });
@@ -20038,10 +20890,17 @@ var StacksSDK = class _StacksSDK {
         }
         const settled = await this.waitForTxSettlement(result.txid);
         if (!settled.success || settled.data?.tx_status !== "success") {
-          return { success: false, unsettled: !settled.success, error: settled.data?.tx_error ?? "announce-l1-early-exit failed on-chain", txHash: result.txid };
+          return { success: false, unsettled: !settled.success, error: !settled.success ? unsettledTransactionError("announce-l1-early-exit", result.txid, settled.error) : settled.data?.tx_error ?? "announce-l1-early-exit failed on-chain", txHash: result.txid };
         }
-        return { success: true, txHash: result.txid };
+        const settledBondIndex = announcedBondIndexFromResult(settled.data?.tx_result);
+        return {
+          success: true,
+          txHash: result.txid,
+          ...settledBondIndex !== void 0 ? { bondIndex: settledBondIndex } : { bondIndexLookupFailed: true }
+        };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error);
+        if (pending) return pending;
         return { success: false, error: `Failed to announce early exit: ${formatErrorMessage(error)}` };
       }
     };
@@ -20138,17 +20997,20 @@ var StacksSDK = class _StacksSDK {
           const [bond, status, allowance] = await Promise.all([
             (0, import_bitcoin_staking2.fetchBond)({ bondIndex: idx, network: this.pox5Network }),
             (0, import_bitcoin_staking2.fetchBondStatus)({ bondIndex: idx, poxInfo: pox, network: this.pox5Network }),
-            this.address ? (0, import_bitcoin_staking2.fetchBondAllowance)({ bondIndex: idx, address: this.address, network: this.pox5Network }).catch(() => BigInt(0)) : Promise.resolve(BigInt(0))
+            // null = UNREADABLE. open_and_allowlisted consumes this value, so a
+            // substituted zero reports a bond the caller IS allowlisted for as closed.
+            this.address ? (0, import_bitcoin_staking2.fetchBondAllowance)({ bondIndex: idx, address: this.address, network: this.pox5Network }).catch(() => null) : Promise.resolve(BigInt(0))
           ]);
           if (!bond) return null;
           return {
             bond_index: idx,
             bond_phase: status,
-            open_and_allowlisted: allowance > BigInt(0) && (status === "open" || status === "eligible"),
+            open_and_allowlisted: allowance !== null && allowance > BigInt(0) && (status === "open" || status === "eligible"),
+            allowance_lookup_failed: allowance === null,
             stx_value_ratio: bond.stxValueRatio.toString(),
             target_rate_bps: bond.targetRateBps,
             min_ustx_ratio_bps: bond.minUstxRatioBps,
-            your_allowance_sats: allowance.toString(),
+            your_allowance_sats: allowance === null ? null : allowance.toString(),
             projected_stx_unlock_burn_height: this.projectedStxUnlockBurnHeight(idx, pox),
             _bond: bond
           };
@@ -20165,6 +21027,7 @@ var StacksSDK = class _StacksSDK {
             bond_index: currentDetails.bond_index,
             bond_phase: currentDetails.bond_phase,
             open_and_allowlisted: currentDetails.open_and_allowlisted,
+            allowance_lookup_failed: currentDetails.allowance_lookup_failed,
             stx_value_ratio: currentDetails.stx_value_ratio,
             target_rate_bps: currentDetails.target_rate_bps,
             min_ustx_ratio_bps: currentDetails.min_ustx_ratio_bps,
@@ -20175,6 +21038,7 @@ var StacksSDK = class _StacksSDK {
             bond_index: nextOpenDetails.bond_index,
             bond_phase: nextOpenDetails.bond_phase,
             open_and_allowlisted: nextOpenDetails.open_and_allowlisted,
+            allowance_lookup_failed: nextOpenDetails.allowance_lookup_failed,
             stx_value_ratio: nextOpenDetails.stx_value_ratio,
             target_rate_bps: nextOpenDetails.target_rate_bps,
             min_ustx_ratio_bps: nextOpenDetails.min_ustx_ratio_bps,
@@ -20198,6 +21062,7 @@ var StacksSDK = class _StacksSDK {
               bond_index: reqDetails.bond_index,
               bond_phase: reqDetails.bond_phase,
               open_and_allowlisted: reqDetails.open_and_allowlisted,
+              allowance_lookup_failed: reqDetails.allowance_lookup_failed,
               stx_value_ratio: reqDetails.stx_value_ratio,
               target_rate_bps: reqDetails.target_rate_bps,
               min_ustx_ratio_bps: reqDetails.min_ustx_ratio_bps,
@@ -20317,7 +21182,10 @@ var StacksSDK = class _StacksSDK {
         // sBTC membership must not mislabel it.
         isL1Lock: record?.isL1Lock ?? true,
         btcTxid: record?.btcTxid,
-        vout: record?.vout
+        fireblocksId: record?.fireblocksId,
+        vout: record?.vout,
+        stage: record?.stage,
+        abandonedBtcTxids: record?.abandonedBtcTxids
       };
     };
     /**
@@ -20467,7 +21335,19 @@ var StacksSDK = class _StacksSDK {
           const utxos = await utxosRes.json();
           const isUnspent = lock.btcTxid !== void 0 && lock.vout !== void 0 ? utxos.some((u) => u.txid === lock.btcTxid && u.vout === lock.vout) : utxos.length > 0;
           still_locked = isUnspent;
-          recovered = !isUnspent;
+          const fundingInFlight = lock.btcTxid === void 0 && (lock.fireblocksId !== void 0 || lock.stage === "funding-requested");
+          if (isUnspent) {
+            recovered = false;
+          } else if (fundingInFlight) {
+            recovered = null;
+          } else if (lock.btcTxid === void 0 && (lock.abandonedBtcTxids?.length ?? 0) > 0) {
+            recovered = null;
+          } else if (lock.btcTxid !== void 0) {
+            const fundingTx = await this.getBtcTxStatus(lock.btcTxid);
+            recovered = fundingTx.success && fundingTx.data?.found ? true : null;
+          } else {
+            recovered = true;
+          }
           matured = tipHeight !== null ? tipHeight >= lock.unlockHeight : null;
         } catch {
           still_locked = null;
@@ -20536,6 +21416,8 @@ var StacksSDK = class _StacksSDK {
         const btcTxid = await this.broadcastBtc(rawHex);
         return { success: true, btcTxid };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error, RETRY_NOTE_NO_EXTERNAL_ID);
+        if (pending) return pending;
         return { success: false, error: `Failed to unlock matured bond: ${formatErrorMessage(error)}` };
       }
     };
@@ -20596,6 +21478,8 @@ var StacksSDK = class _StacksSDK {
         const btcTxid = await this.broadcastBtc((0, import_common2.bytesToHex)(tx.extract()));
         return { success: true, btcTxid };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error, RETRY_NOTE_NO_EXTERNAL_ID);
+        if (pending) return pending;
         return { success: false, error: `Failed to spend early exit UTXO: ${formatErrorMessage(error)}` };
       }
     };
@@ -20702,6 +21586,8 @@ var StacksSDK = class _StacksSDK {
           }
         };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error, RETRY_NOTE_NO_EXTERNAL_ID);
+        if (pending) return pending;
         return { success: false, error: `Failed to replace recovery fee: ${formatErrorMessage(error)}` };
       }
     };
@@ -20723,7 +21609,9 @@ var StacksSDK = class _StacksSDK {
      *
      * Must be called inside the re-lock window (after prior unlockHeight, before next bond starts).
      */
-    this.renewBond = async (nextBondIndex, signerManager, opts) => {
+    this.renewBond = this.slotted("renewBond", () => this.renewBondInSlot);
+    /** The body of `renewBond`, run only while it holds the bond's slot. */
+    this.renewBondInSlot = async (nextBondIndex, signerManager, opts) => {
       const committedBtc = {};
       try {
         if (!this.address || !this.publicKey || !this.vaultAccountId) {
@@ -20789,6 +21677,7 @@ var StacksSDK = class _StacksSDK {
         } catch (e) {
           return { success: false, error: `Invalid reward/signer calldata (no BTC re-locked): ${formatErrorMessage(e)}` };
         }
+        const callerExternalId = () => opts?.externalId ?? priorNextRecord?.callerExternalId;
         const nextRecordFor = (amountSats, extra = {}) => ({
           bondIndex: nextBondIndex,
           unlockBytes: nextMeta.unlockBytes,
@@ -20801,6 +21690,14 @@ var StacksSDK = class _StacksSDK {
           // Carry the reward destination onto the new position's record.
           ...rewardBtcAddress !== void 0 ? { rewardBtcAddress } : {},
           ...rewardMaxFeeSats !== void 0 ? { rewardMaxFeeSats } : {},
+          // This literal replaces any record already at nextBondIndex. The generations keep a
+          // later createBond off already-consumed external ids, and the abandoned ids are the
+          // only pointer to dead funding transfers, so neither may be reset here.
+          ...priorNextRecord?.fundingGeneration !== void 0 ? { fundingGeneration: priorNextRecord.fundingGeneration } : {},
+          ...priorNextRecord?.registrationGeneration !== void 0 ? { registrationGeneration: priorNextRecord.registrationGeneration } : {},
+          ...priorNextRecord?.pendingRegisterExternalId !== void 0 ? { pendingRegisterExternalId: priorNextRecord.pendingRegisterExternalId } : {},
+          ...priorNextRecord?.abandonedFireblocksIds !== void 0 ? { abandonedFireblocksIds: priorNextRecord.abandonedFireblocksIds } : {},
+          ...callerExternalId() !== void 0 ? { callerExternalId: callerExternalId() } : {},
           ...extra
         });
         const requiredUstx = (sats) => (0, import_bitcoin_staking2.minUstxForSatsAmount)({
@@ -20815,6 +21712,28 @@ var StacksSDK = class _StacksSDK {
           priorNextRecord = await this.lockRecordStore.loadRecord(this.address, nextBondIndex);
         } catch (e) {
           return { success: false, error: `Lock-record store unreadable for bond ${nextBondIndex} (UNKNOWN, not "no prior attempt") \u2014 refusing to re-lock: ${formatErrorMessage(e)}` };
+        }
+        if (priorNextRecord && priorNextRecord.isL1Lock !== false && priorNextRecord.fundingExternalId !== void 0 && (priorNextRecord.btcTxid !== void 0 || priorNextRecord.fireblocksId !== void 0 || priorNextRecord.stage === "funding-requested")) {
+          const transfer = priorNextRecord.fireblocksId ? `Fireblocks transfer ${priorNextRecord.fireblocksId}${priorNextRecord.btcTxid ? `, tx ${priorNextRecord.btcTxid}` : ""}` : priorNextRecord.btcTxid ? `funding tx ${priorNextRecord.btcTxid}` : `external id ${priorNextRecord.fundingExternalId}, transfer id not recorded`;
+          return {
+            success: false,
+            error: `Bond ${nextBondIndex} already has a createBond funding (${transfer}). No Bitcoin was re-locked. Finish that enrollment with resumeBondRegistration(${nextBondIndex}) instead of renewing into it.`
+          };
+        }
+        if (priorNextRecord?.abandonedBtcTxids?.length) {
+          return {
+            success: false,
+            error: `Bond ${nextBondIndex} has abandoned funding tx(s) ${priorNextRecord.abandonedBtcTxids.join(", ")} that were broadcast and may still confirm. No Bitcoin was re-locked: renewing into it could put a second output on its lock. Fund it with createBond, which checks those first, or renew into another bond.`
+          };
+        }
+        const externalIdConflict = this.registerExternalIdConflict(nextBondIndex, priorNextRecord, opts?.externalId);
+        if (externalIdConflict) {
+          return {
+            success: false,
+            error: externalIdConflict,
+            ...priorNextRecord?.btcTxid !== void 0 ? { btcTxid: priorNextRecord.btcTxid } : {},
+            ...priorNextRecord?.vout !== void 0 ? { vout: priorNextRecord.vout } : {}
+          };
         }
         let resumeRelock = priorNextRecord?.btcTxid !== void 0 && priorNextRecord.lockAddress === nextMeta.lockAddress;
         let rebuildingOverDeadTxid = false;
@@ -20877,8 +21796,17 @@ var StacksSDK = class _StacksSDK {
           const stakerSig = await this.signBtcSighash(sighash);
           this.setP2wshWitness(btcTx, 0, [stakerSig, new Uint8Array([1]), prior.lockScript]);
           btcTxid = btcTx.id;
+          const reserved = await this.updateLockRecord(
+            nextBondIndex,
+            (current) => sameLockRecordState(current, priorNextRecord) ? nextRecordFor(outputAmount, { btcTxid }) : void 0
+          );
+          if (reserved?.btcTxid !== btcTxid) {
+            return {
+              success: false,
+              error: `Bond ${nextBondIndex}'s lock record changed while the re-lock was being signed, so the signed re-lock was discarded. No Bitcoin was re-locked. Check the record (another createBond or renewBond may be funding this bond) and retry renewBond.`
+            };
+          }
           committedBtc.btcTxid = btcTxid;
-          await this.lockRecordStore.saveRecord(this.address, nextBondIndex, nextRecordFor(outputAmount, { btcTxid }));
           let broadcastTxid;
           try {
             broadcastTxid = await this.broadcastBtc((0, import_common2.bytesToHex)(btcTx.extract()));
@@ -20910,7 +21838,7 @@ var StacksSDK = class _StacksSDK {
         await this.lockRecordStore.saveRecord(this.address, nextBondIndex, nextRecordFor(outputAmount, {
           btcTxid,
           vout: lockupProof.outputIndex,
-          ...resumeRelock && priorNextRecord ? { stage: priorNextRecord.stage, fundingExternalId: priorNextRecord.fundingExternalId } : {}
+          ...resumeRelock && priorNextRecord ? { stage: priorNextRecord.stage } : {}
         }));
         const proofPox = await (0, import_bitcoin_staking2.fetchPoxInfo)({ network: this.pox5Network });
         const proofPreflight = await (0, import_bitcoin_staking2.fetchEligibleRegisterForBond)({
@@ -20927,7 +21855,9 @@ var StacksSDK = class _StacksSDK {
           const reasons = proofPreflight.reasons ?? [];
           return { success: false, error: `SPV proof preflight failed for bond ${nextBondIndex} (BTC re-locked; recover via unlockMaturedBond/spendEarlyExitUtxo): ${this.describeBondReasons(reasons)}`, btcTxid, vout: lockupProof.outputIndex };
         }
-        const result = await this.runNonceExclusive(async () => {
+        const registrationGeneration = priorNextRecord?.registrationGeneration ?? 0;
+        let registerExternalId = "";
+        const register = () => this.runNonceExclusive(async () => {
           const custodyRefund = await this.custodyRefundPostConditions();
           const resolvedNonce = await this.resolveNonce(opts?.nonce);
           const stacksTx = await this.buildRegisterForBondTx({
@@ -20942,10 +21872,18 @@ var StacksSDK = class _StacksSDK {
             postConditionMode: import_transactions4.PostConditionMode.Deny,
             postConditions: [import_transactions4.Pc.origin().willSendEq(amountUstx).ustxToLock(), ...custodyRefund.conditions]
           });
+          registerExternalId = this.deriveRegisterExternalId(
+            nextBondIndex,
+            nextMeta.lockAddress,
+            this.preSignSigHashOf(stacksTx),
+            registrationGeneration,
+            callerExternalId()
+          );
+          await this.markRegisterRequest(nextBondIndex, registerExternalId);
           return this.pox5SignAndBroadcast(
             stacksTx,
             opts?.note ?? `renew-bond-${nextBondIndex}`,
-            opts?.externalId,
+            registerExternalId,
             // The BTC is already re-locked; a window/phase crossing or custody change
             // during Fireblocks approval must discard the tx, not broadcast a doomed one.
             () => this.revalidateRegisterForBond({
@@ -20958,13 +21896,26 @@ var StacksSDK = class _StacksSDK {
             })
           );
         });
+        let result;
+        try {
+          result = await register();
+        } catch (registerErr) {
+          if (!FireblocksService.isTerminalTransferFailure(registerErr)) throw registerErr;
+          return {
+            success: false,
+            error: await this.abandonTerminalRegistration(nextBondIndex, registerExternalId, registerErr, registrationGeneration),
+            btcTxid,
+            vout: lockupProof.outputIndex
+          };
+        }
         if (!result?.txid || result.error || result.reason) {
           return { success: false, error: result?.error ?? result?.reason ?? "broadcast failed", btcTxid, vout: lockupProof.outputIndex };
         }
+        await this.clearRegisterRequest(nextBondIndex, registerExternalId);
         const settled = await this.waitForTxSettlement(result.txid);
         if (!settled.success || settled.data?.tx_status !== "success") {
           const txRepr = settled.data?.tx_result?.repr ?? settled.data?.tx_error ?? "";
-          return { success: false, unsettled: !settled.success, error: `[${settled.data?.tx_status}] ${txRepr}`.trim(), stacksTxid: result.txid, btcTxid, vout: lockupProof.outputIndex };
+          return { success: false, unsettled: !settled.success, error: !settled.success ? unsettledTransactionError("register-for-bond", result.txid, settled.error, `resumeBondRegistration(${nextBondIndex})`) : `[${settled.data?.tx_status}] ${txRepr}`.trim(), stacksTxid: result.txid, btcTxid, vout: lockupProof.outputIndex };
         }
         return {
           success: true,
@@ -20976,6 +21927,11 @@ var StacksSDK = class _StacksSDK {
           amountUstx: amountUstx.toString()
         };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(
+          error,
+          committedBtc.btcTxid !== void 0 ? `The Bitcoin is re-locked (${committedBtc.btcTxid}). Retry renewBond for bond ${nextBondIndex} to keep waiting on the same signing request while the transaction is unchanged; a retry at a different nonce, fee or post-condition opens a new signing request.` : RETRY_NOTE_NO_EXTERNAL_ID
+        );
+        if (pending) return { ...pending, ...committedBtc };
         return { success: false, error: `Failed to renew bond: ${formatErrorMessage(error)}`, ...committedBtc };
       }
     };
@@ -21035,7 +21991,12 @@ var StacksSDK = class _StacksSDK {
       const candidates = this.activeBondWindow(pox, calcHeight);
       const results = await Promise.all(
         candidates.map(async (i) => {
-          const bond = await (0, import_bitcoin_staking2.fetchBond)({ bondIndex: i, network: this.pox5Network }).catch(() => null);
+          let bond;
+          try {
+            bond = await (0, import_bitcoin_staking2.fetchBond)({ bondIndex: i, network: this.pox5Network });
+          } catch (e) {
+            throw new Error(`Bond ${i} is unreadable, so the active-bond set is UNKNOWN (not "bond absent") \u2014 refusing to submit a possibly short set: ${formatErrorMessage(e)}`);
+          }
           if (!bond) return null;
           const active = (0, import_bitcoin_staking2.isBondActiveAtHeight)({ bondIndex: i, burnHeight: calcHeight, poxInfo: pox });
           if (!active) return null;
@@ -21078,10 +22039,12 @@ var StacksSDK = class _StacksSDK {
         }
         const settled = await this.waitForTxSettlement(result.txid);
         if (!settled.success || settled.data?.tx_status !== "success") {
-          return { success: false, unsettled: !settled.success, error: settled.data?.tx_error ?? "calculate-rewards failed on-chain", txHash: result.txid };
+          return { success: false, unsettled: !settled.success, error: !settled.success ? unsettledTransactionError("calculate-rewards", result.txid, settled.error) : settled.data?.tx_error ?? "calculate-rewards failed on-chain", txHash: result.txid };
         }
         return { success: true, txHash: result.txid };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error, RETRY_NOTE_NO_EXTERNAL_ID);
+        if (pending) return pending;
         return { success: false, error: `Failed to calculate rewards: ${formatErrorMessage(error)}` };
       }
     };
@@ -21101,8 +22064,17 @@ var StacksSDK = class _StacksSDK {
       }
       return values;
     };
+    /**
+     * Sums per-cycle reads, propagating a negative read-failure sentinel instead of adding
+     * it in. Summed, `-1` is worth one satoshi against the total rather than making it
+     * unknown: a failed cycle alongside a 5,000-sat one yields 4,999, which passes a
+     * `< 0` check and is reported as authoritative — and enough failures against small
+     * cycles land on exactly 0, reporting "no rewards" during an outage. A total is
+     * unknown when ANY cycle is, so the sentinel is sticky.
+     */
     this.sumOverCycles = async (cycles, fetcher) => {
       const values = await this.mapCyclesLimited(cycles, fetcher);
+      if (values.some((v) => v < BigInt(0))) return BigInt(-1);
       return values.reduce((sum, v) => sum + v, BigInt(0));
     };
     /**
@@ -21152,28 +22124,24 @@ var StacksSDK = class _StacksSDK {
         const settled = await this.waitForTxSettlement(result.txid);
         return { txid: result.txid, settled };
       };
-      const recordCycleFailure = (error, signerClaimTxid2) => {
+      const recordCycleFailure = (error, signerClaimTxid2, unsettled = false) => {
         for (const b of stakerBondIndices) {
           results.push({
             bondIndex: b ?? null,
             rewardCycle: cycle,
             signerManager,
             signerAccruedSats: (b !== void 0 ? accruedByBond.get(b) ?? BigInt(0) : noneAccrued).toString(),
-            stakerPaidSats: null,
+            stakerEntitlementSats: null,
             signerClaimTxid: signerClaimTxid2,
             stakerClaimTxid: null,
-            status: "failed",
+            status: unsettled ? "unsettled" : "failed",
+            ...unsettled ? { unsettled: true } : {},
             error
           });
         }
       };
-      const stakerPayoutPolicy = this.signerManagerRegistry.get(signerManager)?.payoutPolicy;
-      if (stakerBondIndices.length > 0 && !stakerPayoutPolicy) {
-        return {
-          error: `No registered payout policy for signer manager ${signerManager} \u2014 refusing the reward claim at cycle ${cycle} before any leg broadcasts. Register a signerManagerAdapters entry with a payout policy for this manager.`
-        };
-      }
-      const stakerPayoutAssetId = stakerPayoutPolicy ? `${stakerPayoutPolicy.asset.contractAddress}.${stakerPayoutPolicy.asset.contractName}` : void 0;
+      const payoutAsset = this.signerManagerRegistry.get(signerManager)?.payoutPolicy?.asset ?? sbtcAsset;
+      const stakerPayoutAssetId = `${payoutAsset.contractAddress}.${payoutAsset.contractName}`;
       let signerClaimTxid = null;
       if (totalRewards > BigInt(0)) {
         const smClaim = await broadcastLeg(
@@ -21202,37 +22170,52 @@ var StacksSDK = class _StacksSDK {
         }
         const smClaimRepr = smClaim.settled.data?.tx_result?.repr ?? smClaim.settled.data?.tx_error ?? "";
         if (smClaim.settled.data?.tx_status !== "success" && !smClaimRepr.includes("u30") && !smClaimRepr.includes("u32")) {
-          const msg = `signer-manager.claim-rewards failed at cycle ${cycle}: ${smClaimRepr}`;
-          recordCycleFailure(msg, smClaim.txid);
-          return { unsettled: !smClaim.settled.success, error: msg };
+          const unsettled = !smClaim.settled.success;
+          const msg = unsettled ? unsettledTransactionError(`signer-manager.claim-rewards at cycle ${cycle}`, smClaim.txid, smClaim.settled.error) : `signer-manager.claim-rewards failed at cycle ${cycle}: ${smClaimRepr}`;
+          recordCycleFailure(msg, smClaim.txid, unsettled);
+          return { unsettled, error: msg };
         }
         signerClaimTxid = smClaim.txid;
         txHashes.push(smClaim.txid);
       }
       for (const bondIndex of stakerBondIndices) {
         const signerAccruedSats = bondIndex !== void 0 ? accruedByBond.get(bondIndex) ?? BigInt(0) : noneAccrued;
-        const stakerPaidSats = await (0, import_bitcoin_staking2.fetchEarnedStakerRewards)({
-          signerManager,
-          rewardCycle: cycle,
-          bondIndex,
-          staker: this.address,
-          network: this.pox5Network
-        }).catch(() => null);
-        const recordResult = (status, stakerClaimTxid, error) => results.push({
+        const defaultNote = bondIndex !== void 0 ? `sm-claim-staker-rewards-cycle-${cycle}-bond-${bondIndex}` : `sm-claim-staker-stx-rewards-cycle-${cycle}`;
+        const bondSuffix = bondIndex !== void 0 ? ` bond ${bondIndex}` : "";
+        const recordResult = (status, stakerClaimTxid, error, unsettled = false) => results.push({
           bondIndex: bondIndex ?? null,
           rewardCycle: cycle,
           signerManager,
           signerAccruedSats: signerAccruedSats.toString(),
           // Only report a paid amount when the payout actually settled; a failed leg
-          // paid nothing, so it must not carry the pre-claim entitlement.
-          stakerPaidSats: status === "claimed" && stakerPaidSats !== null ? stakerPaidSats.toString() : null,
+          // paid nothing, so it must not carry the pre-claim entitlement. An unsettled
+          // leg has paid an UNKNOWN amount, which is likewise not the entitlement.
+          // The value is the entitlement the leg was bounded AT — the manager may pay less.
+          stakerEntitlementSats: status === "claimed" || status === "skipped" ? stakerEntitlementSats?.toString() ?? null : null,
           signerClaimTxid,
           stakerClaimTxid,
-          status,
+          status: unsettled ? "unsettled" : status,
+          ...unsettled ? { unsettled: true } : {},
           ...error ? { error } : {}
         });
-        const defaultNote = bondIndex !== void 0 ? `sm-claim-staker-rewards-cycle-${cycle}-bond-${bondIndex}` : `sm-claim-staker-stx-rewards-cycle-${cycle}`;
-        const bondSuffix = bondIndex !== void 0 ? ` bond ${bondIndex}` : "";
+        let stakerEntitlementSats;
+        try {
+          stakerEntitlementSats = await (0, import_bitcoin_staking2.fetchEarnedStakerRewards)({
+            signerManager,
+            rewardCycle: cycle,
+            bondIndex,
+            staker: this.address,
+            network: this.pox5Network
+          });
+        } catch (e) {
+          const msg = `Could not read the staker entitlement (get-earned-staker-rewards) at cycle ${cycle}${bondSuffix} \u2014 UNKNOWN, so claim-staker-rewards cannot be bounded; refusing to broadcast an unbounded payout: ${formatErrorMessage(e)}`;
+          recordResult("failed", null, msg);
+          return { error: msg };
+        }
+        if (stakerEntitlementSats === BigInt(0)) {
+          recordResult("skipped", null);
+          continue;
+        }
         const smStaker = await broadcastLeg(
           (n) => (0, import_transactions4.makeUnsignedContractCall)({
             contractAddress: signerContractAddress,
@@ -21247,11 +22230,11 @@ var StacksSDK = class _StacksSDK {
             fee: DEFAULT_POX_FEE_USTX,
             nonce: n,
             network: this.pox5Network,
-            // Deny mode: the manager sends the staker at most maxPayoutSats of the
-            // policy asset (a deliberate upper bound, per answers §3a).
+            // Deny mode: the manager sends the staker at most its pox-5-computed
+            // entitlement for this (cycle, bond) — the contract's own ceiling.
             postConditionMode: "deny",
             postConditions: [
-              import_transactions4.Pc.principal(signerManager).willSendLte(stakerPayoutPolicy.maxPayoutSats).ft(stakerPayoutAssetId, stakerPayoutPolicy.asset.assetName)
+              import_transactions4.Pc.principal(signerManager).willSendLte(stakerEntitlementSats).ft(stakerPayoutAssetId, payoutAsset.assetName)
             ]
           }),
           note ?? defaultNote
@@ -21261,9 +22244,11 @@ var StacksSDK = class _StacksSDK {
           return { error: `Failed at cycle ${cycle}${bondSuffix}: ${smStaker.broadcastError}` };
         }
         if (!smStaker.settled.success || smStaker.settled.data?.tx_status !== "success") {
+          const unsettled = !smStaker.settled.success;
           const stakerRepr = smStaker.settled.data?.tx_result?.repr ?? smStaker.settled.data?.tx_error ?? "";
-          recordResult("failed", smStaker.txid, stakerRepr);
-          return { unsettled: !smStaker.settled.success, error: `Claim failed on-chain at cycle ${cycle}${bondSuffix}: ${stakerRepr}` };
+          const msg = unsettled ? unsettledTransactionError(`claim-staker-rewards at cycle ${cycle}${bondSuffix}`, smStaker.txid, smStaker.settled.error) : `Claim failed on-chain at cycle ${cycle}${bondSuffix}: ${stakerRepr}`;
+          recordResult("failed", smStaker.txid, msg, unsettled);
+          return { unsettled, error: msg };
         }
         recordResult("claimed", smStaker.txid);
         txHashes.push(smStaker.txid);
@@ -21289,6 +22274,8 @@ var StacksSDK = class _StacksSDK {
      * and `txHashes` plus the error; call again to resume.
      */
     this.claimRewards = async (bondIndices, opts) => {
+      const txHashes = [];
+      const results = [];
       try {
         if (!this.publicKey || !this.vaultAccountId) throw new Error("SDK not initialized");
         if (!this.address) throw new Error("Address not set");
@@ -21342,8 +22329,6 @@ var StacksSDK = class _StacksSDK {
             error: `No rewards available yet for bond(s) ${uniqueBonds.join(", ")} (last_computed_cycle: ${lastComputedCycle}, current_cycle: ${pox.rewardCycleId})`
           };
         }
-        const txHashes = [];
-        const results = [];
         const nonceHolder = { value: opts?.nonce };
         for (const item of plan) {
           for (let i = 0; i < item.bonds.length; i += 6) {
@@ -21364,7 +22349,9 @@ var StacksSDK = class _StacksSDK {
         }
         return { success: true, txHashes, results };
       } catch (error) {
-        return { success: false, error: `Failed to claim rewards: ${formatErrorMessage(error)}` };
+        const pending = this.pendingFireblocksResult(error, claimRetryNote(txHashes));
+        if (pending) return { ...pending, txHashes, results };
+        return { success: false, error: `Failed to claim rewards: ${formatErrorMessage(error)}`, txHashes, results };
       }
     };
     /**
@@ -21381,6 +22368,8 @@ var StacksSDK = class _StacksSDK {
      * through this method. A read failure refuses rather than reading as "no rewards".
      */
     this.claimStxOnlyRewards = async (opts) => {
+      const txHashes = [];
+      const results = [];
       try {
         if (!this.publicKey || !this.vaultAccountId) throw new Error("SDK not initialized");
         if (!this.address) throw new Error("Address not set");
@@ -21398,7 +22387,12 @@ var StacksSDK = class _StacksSDK {
         const lastComputedCycle = lastComputeHeight > 0 ? Math.floor((lastComputeHeight - pox.firstBurnchainBlockHeight) / pox.rewardCycleLength) : pox.rewardCycleId - 1;
         let startCycle = opts?.fromCycle;
         if (startCycle === void 0) {
-          const stakerInfo = await (0, import_bitcoin_staking2.fetchStakerInfo)({ address: staker, network: this.pox5Network }).catch(() => null);
+          let stakerInfo;
+          try {
+            stakerInfo = await (0, import_bitcoin_staking2.fetchStakerInfo)({ address: staker, network: this.pox5Network });
+          } catch (error) {
+            return { success: false, error: `Could not read staker info to anchor the claim scan (unknown, not "no stake"): ${formatErrorMessage(error)}` };
+          }
           if (!stakerInfo?.staked) {
             return { success: false, error: "No active STX-only stake found; supply fromCycle (and optionally toCycle) to claim historical cycles after expiry." };
           }
@@ -21435,8 +22429,6 @@ var StacksSDK = class _StacksSDK {
         if (plan.length === 0) {
           return { success: false, error: `No STX-only rewards for this staker in cycles ${startCycle}-${endCycle} (last_computed_cycle: ${lastComputedCycle}, current_cycle: ${pox.rewardCycleId})` };
         }
-        const txHashes = [];
-        const results = [];
         const nonceHolder = { value: opts?.nonce };
         for (const item of plan) {
           const result = await this.executeClaimCycle(
@@ -21454,7 +22446,9 @@ var StacksSDK = class _StacksSDK {
         }
         return { success: true, txHashes, results };
       } catch (error) {
-        return { success: false, error: `Failed to claim STX-only rewards: ${formatErrorMessage(error)}` };
+        const pending = this.pendingFireblocksResult(error, claimRetryNote(txHashes));
+        if (pending) return { ...pending, txHashes, results };
+        return { success: false, error: `Failed to claim STX-only rewards: ${formatErrorMessage(error)}`, txHashes, results };
       }
     };
     /**
@@ -21467,7 +22461,16 @@ var StacksSDK = class _StacksSDK {
         const bondFirstRewardCycle = bondIndex !== void 0 ? (0, import_bitcoin_staking2.bondPeriodToRewardCycle)({ bondIndex, poxInfo: pox }) : void 0;
         let startCycle = bondFirstRewardCycle;
         if (startCycle === void 0) {
-          const stakerInfo = this.address ? await (0, import_bitcoin_staking2.fetchStakerInfo)({ address: this.address, network: this.pox5Network }).catch(() => null) : null;
+          let stakerInfo;
+          try {
+            stakerInfo = this.address ? await (0, import_bitcoin_staking2.fetchStakerInfo)({ address: this.address, network: this.pox5Network }) : null;
+          } catch (error) {
+            return {
+              success: false,
+              readFailed: true,
+              error: `Could not read staker info to anchor the reward scan (unknown, not zero): ${formatErrorMessage(error)}`
+            };
+          }
           startCycle = stakerInfo?.staked ? stakerInfo.details.firstRewardCycle : pox.rewardCycleId;
         }
         const pastCycles = this.cycleRange(startCycle, pox.rewardCycleId);
@@ -21478,15 +22481,22 @@ var StacksSDK = class _StacksSDK {
             rewardCycle: cycle,
             bondIndex,
             network: this.pox5Network
-          }).catch(() => BigInt(0))),
+          }).catch(() => BigInt(-1))),
           stakerAddress ? this.sumOverCycles(pastCycles, (cycle) => (0, import_bitcoin_staking2.fetchEarnedStakerRewards)({
             signerManager,
             rewardCycle: cycle,
             bondIndex,
             staker: stakerAddress,
             network: this.pox5Network
-          }).catch(() => BigInt(0))) : Promise.resolve(BigInt(0))
+          }).catch(() => BigInt(-1))) : Promise.resolve(BigInt(0))
         ]);
+        if (earned < BigInt(0) || stakerEarned < BigInt(0)) {
+          return {
+            success: false,
+            readFailed: true,
+            error: `Could not read earned rewards for signer manager ${signerManager}${bondIndex !== void 0 ? ` bond ${bondIndex}` : ""} (unknown, not zero) \u2014 retry rather than treating this as no rewards`
+          };
+        }
         const cyclesUntilRewards = bondFirstRewardCycle !== void 0 ? Math.max(0, bondFirstRewardCycle - pox.rewardCycleId) : void 0;
         return {
           success: true,
@@ -21517,8 +22527,10 @@ var StacksSDK = class _StacksSDK {
         const [delegationResult, balanceResponse, stakerInfo, bondMembership] = await Promise.all([
           delegationApplicable ? this.chainService.checkDelegationStatus(this.address).then((value) => ({ value, failed: false })).catch(() => ({ value: null, failed: true })) : Promise.resolve({ value: null, failed: false }),
           this.chainService.makeBalanceCalls(this.address),
-          (0, import_bitcoin_staking2.fetchStakerInfo)({ address: this.address, network: this.pox5Network }).catch(() => null),
-          (0, import_bitcoin_staking2.fetchBondMembership)({ address: this.address, network: this.pox5Network }).catch(() => null)
+          // Same {value, failed} shape as the delegation read above: a substituted null
+          // would report "not staking" / "no bond" for a read that never resolved.
+          (0, import_bitcoin_staking2.fetchStakerInfo)({ address: this.address, network: this.pox5Network }).then((value) => ({ value, failed: false })).catch(() => ({ value: null, failed: true })),
+          (0, import_bitcoin_staking2.fetchBondMembership)({ address: this.address, network: this.pox5Network }).then((value) => ({ value, failed: false })).catch(() => ({ value: null, failed: true }))
         ]);
         if (!balanceResponse) {
           throw new Error("Failed to fetch balance data");
@@ -21535,8 +22547,10 @@ var StacksSDK = class _StacksSDK {
         const delegatedTo = isDelegated ? delegationData.value["delegated-to"]?.value ?? null : null;
         const untilBurnHt = isDelegated ? delegationData.value["until-burn-ht"]?.value?.value ? Number(delegationData.value["until-burn-ht"].value.value) : null : null;
         const poxAddrTuple = isDelegated ? delegationData.value["pox-addr"]?.value ?? null : null;
-        const pox5IsStaked = !!stakerInfo?.staked;
-        const pox5Details = pox5IsStaked && stakerInfo?.staked ? stakerInfo.details : null;
+        const stakerInfoValue = stakerInfo.value;
+        const bondMembershipValue = bondMembership.value;
+        const pox5IsStaked = !!stakerInfoValue?.staked;
+        const pox5Details = pox5IsStaked && stakerInfoValue?.staked ? stakerInfoValue.details : null;
         const unlockBurnHeight = pox5Details && pox5Info ? pox5Info.firstBurnchainBlockHeight + (pox5Details.firstRewardCycle + pox5Details.numCycles) * pox5Info.rewardCycleLength : null;
         const inPreparePhase = pox5Info ? (0, import_bitcoin_staking2.isInPreparePhase)({ burnHeight: pox5Info.currentBurnchainBlockHeight, poxInfo: pox5Info }) : false;
         const statusData = {
@@ -21562,6 +22576,7 @@ var StacksSDK = class _StacksSDK {
           },
           stx_only: {
             is_staked: pox5IsStaked,
+            staker_lookup_failed: stakerInfo.failed,
             amount_stx: pox5Details ? microToStx(pox5Details.amountUstx) : null,
             signer_manager: pox5Details?.signer ?? null,
             first_reward_cycle: pox5Details?.firstRewardCycle ?? null,
@@ -21574,19 +22589,20 @@ var StacksSDK = class _StacksSDK {
             // above are UNKNOWN (defaulted to 0/false), not authoritative zeros.
             pox_lookup_failed: pox5Info === null
           },
-          bond: bondMembership ? {
-            bond_index: bondMembership.bondIndex,
-            amount_stx: microToStx(bondMembership.amountUstx),
+          bond_lookup_failed: bondMembership.failed,
+          bond: bondMembershipValue ? {
+            bond_index: bondMembershipValue.bondIndex,
+            amount_stx: microToStx(bondMembershipValue.amountUstx),
             // Same zeroed-amount fallback as getBondPosition (single helper): early exit
             // zeroes the membership amount while the BTC stays locked. Best-effort record
             // read here — checkStatus is an aggregate status view, and a store failure
             // leaves the membership value rather than failing the whole status call.
             amount_sats: this.effectiveL1AmountSats(
-              bondMembership,
-              bondMembership.isL1Lock ? await this.lockRecordStore.loadRecord(this.address, bondMembership.bondIndex).catch(() => null) : null
+              bondMembershipValue,
+              bondMembershipValue.isL1Lock ? await this.lockRecordStore.loadRecord(this.address, bondMembershipValue.bondIndex).catch(() => null) : null
             ).toString(),
-            signer_manager: bondMembership.signer,
-            is_l1_lock: bondMembership.isL1Lock
+            signer_manager: bondMembershipValue.signer,
+            is_l1_lock: bondMembershipValue.isL1Lock
           } : null
         };
         return {
@@ -21727,6 +22743,8 @@ var StacksSDK = class _StacksSDK {
           txHash: result.txid
         };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error);
+        if (pending) return pending;
         console.error(`Error solo stacking: ${formatErrorMessage(error)}`);
         return {
           success: false,
@@ -21783,6 +22801,8 @@ var StacksSDK = class _StacksSDK {
           txHash: result.txid
         };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error);
+        if (pending) return pending;
         console.error(`Error increasing stacked amount: ${formatErrorMessage(error)}`);
         return {
           success: false,
@@ -21839,6 +22859,8 @@ var StacksSDK = class _StacksSDK {
           txHash: result.txid
         };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error);
+        if (pending) return pending;
         console.error(`Error extending stacking period: ${formatErrorMessage(error)}`);
         return {
           success: false,
@@ -22094,6 +23116,8 @@ var StacksSDK = class _StacksSDK {
         console.log(`Replaced transaction ${originalTxId} with ${result.txid}`);
         return { success: true, txHash: result.txid };
       } catch (error) {
+        const pending = this.pendingFireblocksResult(error);
+        if (pending) return pending;
         if (error instanceof ValidationError) {
           return { success: false, error: error.message };
         }
@@ -22329,7 +23353,11 @@ var StacksSDK = class _StacksSDK {
         stacksApiUrl: fireblocksConfig?.stacksApiUrl
       });
       this.testnet = this.networkProfile.name !== "mainnet";
-      this._pox5Network = stacksNetworkFromProfile(this.networkProfile);
+      this.chainApiKey = fireblocksConfig?.chainApiKey ?? hiroApiKey;
+      this._pox5Network = stacksNetworkFromProfile(
+        this.networkProfile,
+        this.chainApiKey
+      );
       this.chainService = new StacksService(
         this.testnet,
         {
@@ -22337,7 +23365,7 @@ var StacksSDK = class _StacksSDK {
           chainId: this.networkProfile.chainId,
           magicBytes: this.networkProfile.magicBytes
         },
-        hiroApiKey
+        this.chainApiKey
       );
     } catch (error) {
       throw new Error(
@@ -22355,13 +23383,17 @@ var StacksSDK = class _StacksSDK {
      * Creates an instance of StacksSDK.
      * @param vaultAccountId - The Fireblocks vault account ID.
      * @param fireblocksConfig - Optional Fireblocks configuration.
+     * @param hiroApiKey - Deprecated; pass `chainApiKey` on `fireblocksConfig` instead.
      * @returns A Promise that resolves to an instance of StacksSDK.
      * @throws Will throw an error if the instance creation fails.
      */
     this.create = async (vaultAccountId, fireblocksConfig, hiroApiKey) => {
       try {
         const instance = new _StacksSDK(vaultAccountId, fireblocksConfig, hiroApiKey);
-        await validateNetworkProfile(instance.networkProfile);
+        await validateNetworkProfile(
+          instance.networkProfile,
+          instance.chainApiKey
+        );
         instance.publicKey = await instance.fireblocksService.getPublicKeyByVaultID(vaultAccountId);
         instance.address = instance.chainService.formatAddress(
           instance.publicKey
@@ -22441,6 +23473,9 @@ var ActionType = /* @__PURE__ */ ((ActionType2) => {
   ActionType2["UNLOCK_BTC"] = "unlockMaturedBond";
   ActionType2["REPLACE_BTC_RECOVERY_FEE"] = "replaceBtcRecoveryFee";
   ActionType2["RENEW_BOND"] = "renewBond";
+  ActionType2["RESUME_BOND_REGISTRATION"] = "resumeBondRegistration";
+  ActionType2["ABANDON_BROADCAST_FUNDING"] = "abandonBroadcastFunding";
+  ActionType2["REPOINT_BOND_FUNDING"] = "repointBondFunding";
   ActionType2["GET_COMMITTED_REWARD_ADDRESS"] = "getCommittedRewardAddress";
   ActionType2["GET_SIGNER_MANAGER_FEE_BIPS"] = "getSignerManagerFeeBips";
   ActionType2["GET_NATIVE_REWARD_THRESHOLD"] = "getNativeRewardThreshold";
@@ -22451,6 +23486,8 @@ var ActionType = /* @__PURE__ */ ((ActionType2) => {
   ActionType2["GET_BOND_LOCK_ADDRESS"] = "getBondLockAddress";
   ActionType2["FUND_BOND_LOCK_ADDRESS"] = "fundBondLockAddress";
   ActionType2["FUND_VAULT"] = "fundVault";
+  ActionType2["LIST_BOND_LOCK_RECORDS"] = "listBondLockRecords";
+  ActionType2["HAS_ANNOUNCED_EARLY_EXIT"] = "hasAnnouncedEarlyExit";
   ActionType2["ESTIMATE_FEE"] = "estimateFee";
   ActionType2["GET_CONTRACT_CALL_HISTORY"] = "getContractCallHistory";
   ActionType2["MAKE_CONTRACT_CALL"] = "makeContractCall";
@@ -22461,7 +23498,7 @@ var ActionType = /* @__PURE__ */ ((ActionType2) => {
 })(ActionType || {});
 
 // src/api/api.service.ts
-var import_ts_sdk4 = require("@fireblocks/ts-sdk");
+var import_ts_sdk5 = require("@fireblocks/ts-sdk");
 
 // src/pool/errors.ts
 var PoolError = class extends Error {
@@ -22485,7 +23522,7 @@ var SdkInitializationError = class extends PoolError {
 
 // src/pool/SdkManager.ts
 var SdkManager = class {
-  constructor(baseConfig, chainApiKey, poolConfig) {
+  constructor(baseConfig, poolConfig) {
     this.sdkPool = /* @__PURE__ */ new Map();
     // In-flight constructions keyed the same way as sdkPool. Concurrent cold calls for
     // one key share a single creation promise so exactly one instance is built — two
@@ -22563,7 +23600,7 @@ var SdkManager = class {
       };
       try {
         console.log(`Creating new SDK instance for vault ${vaultAccountId}`);
-        const sdk = await StacksSDK.create(vaultAccountId, config2, this.chainApiKey);
+        const sdk = await StacksSDK.create(vaultAccountId, config2);
         if (this.poolConfig.lockRecordStore) {
           sdk.setLockRecordStore(this.poolConfig.lockRecordStore);
         }
@@ -22645,7 +23682,6 @@ var SdkManager = class {
       console.log("All SDK instances have been shut down");
     };
     this.baseConfig = baseConfig;
-    this.chainApiKey = chainApiKey;
     this.poolConfig = {
       maxPoolSize: poolConfig?.maxPoolSize || 100,
       idleTimeoutMs: poolConfig?.idleTimeoutMs || 30 * 60 * 1e3,
@@ -22662,6 +23698,7 @@ var SdkManager = class {
       },
       this.poolConfig.cleanupIntervalMs
     );
+    this.cleanupInterval.unref();
   }
 };
 
@@ -22902,6 +23939,9 @@ var ApiService = class {
           case "getBondPosition" /* GET_BOND_POSITION */:
             result = await sdk.getBondPosition();
             break;
+          case "listBondLockRecords" /* LIST_BOND_LOCK_RECORDS */:
+            result = await sdk.listBondLockRecords();
+            break;
           case "getHistoricalBondPosition" /* GET_HISTORICAL_BOND_POSITION */:
             result = await sdk.getHistoricalBondPosition(params.bondIndex);
             break;
@@ -22925,6 +23965,18 @@ var ApiService = class {
             break;
           case "renewBond" /* RENEW_BOND */:
             result = await sdk.renewBond(params.nextBondIndex, params.signerManager, { feeSats: params.feeSats, note: params.note, nonce: params.nonce, externalId: params.externalId, confirmations: params.confirmations, signerCalldata: params.signerCalldata, rewardBtcAddress: params.rewardBtcAddress, rewardMaxFeeSats: params.rewardMaxFeeSats });
+            break;
+          case "hasAnnouncedEarlyExit" /* HAS_ANNOUNCED_EARLY_EXIT */:
+            result = await sdk.hasAnnouncedEarlyExit(params.bondIndex);
+            break;
+          case "resumeBondRegistration" /* RESUME_BOND_REGISTRATION */:
+            result = await sdk.resumeBondRegistration(params.bondIndex, { note: params.note, nonce: params.nonce, confirmations: params.confirmations, btcTxid: params.btcTxid });
+            break;
+          case "repointBondFunding" /* REPOINT_BOND_FUNDING */:
+            result = await sdk.repointBondFunding(params.bondIndex, params.btcTxid, { vout: params.vout });
+            break;
+          case "abandonBroadcastFunding" /* ABANDON_BROADCAST_FUNDING */:
+            result = await sdk.abandonBroadcastFunding(params.bondIndex);
             break;
           case "updateBondRegistration" /* UPDATE_BOND_REGISTRATION */:
             result = await sdk.updateBondRegistration(params.signerManager, params.oldSignerManager, { note: params.note, nonce: params.nonce, externalId: params.externalId, signerCalldata: params.signerCalldata, rewardBtcAddress: params.rewardBtcAddress, rewardMaxFeeSats: params.rewardMaxFeeSats });
@@ -23027,13 +24079,17 @@ var ApiService = class {
     const baseConfig = {
       apiKey: config2.apiKey,
       apiSecret: config2.apiSecret,
-      basePath: config2.basePath || import_ts_sdk4.BasePath.US,
-      vaultAccountId: "",
-      // Will be overridden per request
+      basePath: config2.basePath || import_ts_sdk5.BasePath.US,
       testnet: !!config2.testnet,
-      verifyEarlyExitCosignerAtFunding: !!config2.verifyEarlyExitCosignerAtFunding
+      verifyEarlyExitCosignerAtFunding: !!config2.verifyEarlyExitCosignerAtFunding,
+      // Every option belongs on the config object, not a positional parameter: a
+      // positional must be re-passed at each hop, which is the failure mode this fix
+      // exists to remove.
+      chainApiKey: config2.chainApiKey,
+      signerManagerAdapters: config2.signerManagerAdapters,
+      ...config2.poll !== void 0 ? { poll: config2.poll } : {}
     };
-    this.sdkManager = new SdkManager(baseConfig, config2.chainApiKey, config2.poolConfig);
+    this.sdkManager = new SdkManager(baseConfig, config2.poolConfig);
   }
 };
 
@@ -23067,7 +24123,14 @@ var serializeRecord = (r) => ({
   ...r.fireblocksId !== void 0 ? { fireblocksId: r.fireblocksId } : {},
   ...r.rewardBtcAddress !== void 0 ? { rewardBtcAddress: r.rewardBtcAddress } : {},
   ...r.rewardMaxFeeSats !== void 0 ? { rewardMaxFeeSats: r.rewardMaxFeeSats.toString() } : {},
-  ...r.stage !== void 0 ? { stage: r.stage } : {}
+  ...r.stage !== void 0 ? { stage: r.stage } : {},
+  ...r.fundingGeneration !== void 0 ? { fundingGeneration: r.fundingGeneration } : {},
+  ...r.abandonedFireblocksIds !== void 0 ? { abandonedFireblocksIds: [...r.abandonedFireblocksIds] } : {},
+  ...r.registrationGeneration !== void 0 ? { registrationGeneration: r.registrationGeneration } : {},
+  ...r.callerExternalId !== void 0 ? { callerExternalId: r.callerExternalId } : {},
+  ...r.pendingRegisterExternalId !== void 0 ? { pendingRegisterExternalId: r.pendingRegisterExternalId } : {},
+  ...r.abandonedBtcTxids !== void 0 ? { abandonedBtcTxids: [...r.abandonedBtcTxids] } : {},
+  ...r.fundingMissingSince !== void 0 ? { fundingMissingSince: { ...r.fundingMissingSince } } : {}
 });
 var deserializeRecord = (s) => ({
   bondIndex: s.bondIndex,
@@ -23084,7 +24147,14 @@ var deserializeRecord = (s) => ({
   fireblocksId: s.fireblocksId,
   rewardBtcAddress: s.rewardBtcAddress,
   rewardMaxFeeSats: s.rewardMaxFeeSats !== void 0 ? BigInt(s.rewardMaxFeeSats) : void 0,
-  stage: s.stage
+  stage: s.stage,
+  fundingGeneration: s.fundingGeneration,
+  abandonedFireblocksIds: s.abandonedFireblocksIds !== void 0 ? [...s.abandonedFireblocksIds] : void 0,
+  registrationGeneration: s.registrationGeneration,
+  callerExternalId: s.callerExternalId,
+  pendingRegisterExternalId: s.pendingRegisterExternalId,
+  abandonedBtcTxids: s.abandonedBtcTxids !== void 0 ? [...s.abandonedBtcTxids] : void 0,
+  fundingMissingSince: s.fundingMissingSince !== void 0 ? { ...s.fundingMissingSince } : void 0
 });
 var stableStringify = (records) => {
   const sortedKeys = Object.keys(records).sort();
@@ -23264,10 +24334,28 @@ var FileLockRecordStore = class {
       await this.writeAll(records);
     });
   }
+  async updateRecord(stxAddress, bondIndex, update) {
+    await import_fs2.promises.mkdir(this.dir, { recursive: true });
+    return this.withLock(async () => {
+      const records = await this.loadAll();
+      const key = this.key(stxAddress, bondIndex);
+      const current = records[key] ? deserializeRecord(records[key]) : null;
+      const next = update(current);
+      if (next === void 0) return current;
+      records[key] = serializeRecord(next);
+      await this.writeAll(records);
+      return next;
+    });
+  }
   async loadRecord(stxAddress, bondIndex) {
     const records = await this.loadAll();
     const s = records[this.key(stxAddress, bondIndex)];
     return s ? deserializeRecord(s) : null;
+  }
+  async listRecords(stxAddress) {
+    const records = await this.loadAll();
+    const prefix2 = `${stxAddress}:`;
+    return Object.entries(records).filter(([k]) => k.startsWith(prefix2)).map(([, s]) => deserializeRecord(s));
   }
   /**
    * Startup health check used to gate native-BTC funding. Verifies the directory is
@@ -23293,6 +24381,7 @@ var FileLockRecordStore = class {
 };
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  ABANDON_MISSING_WAIT_BLOCKS,
   ActionType,
   ApiService,
   BTC_ESPLORA,
@@ -23301,7 +24390,9 @@ var FileLockRecordStore = class {
   DEFAULT_SCHEDULE_BOND_INDICES,
   EARLY_EXIT_SIGNER,
   FEATURED_SIGNER_MANAGERS,
+  FIREBLOCKS_REQUEST_TIMEOUT_MS,
   FileLockRecordStore,
+  HIRO_API_KEY_HEADER,
   InMemoryLockRecordStore,
   MAX_FEE_STX,
   POX4_ERRORS,

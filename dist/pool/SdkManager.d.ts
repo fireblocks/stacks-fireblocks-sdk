@@ -7,9 +7,7 @@ export declare class SdkManager {
     private baseConfig;
     private poolConfig;
     private cleanupInterval;
-    /** Optional Hiro API key, forwarded to every pooled StacksSDK instance. */
-    private chainApiKey?;
-    constructor(baseConfig: FireblocksConfig, chainApiKey?: string, poolConfig?: Partial<PoolConfig>);
+    constructor(baseConfig: FireblocksConfig, poolConfig?: Partial<PoolConfig>);
     /**
      * Pool key for a vault. Network identity is part of the key so an instance built
      * for one network is never handed out for another.
