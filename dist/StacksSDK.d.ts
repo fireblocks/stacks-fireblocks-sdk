@@ -584,11 +584,11 @@ export declare class StacksSDK {
     private btcVoutError;
     /**
      * The output to prove for the funding `btcTxid`: an explicit `btcVout`, else the one already on
-     * the record for that funding. The output is checked against the expected amount unless the
-     * record already holds a verified one: a vout recorded at `proof-built` or later was verified
-     * before it was written, whereas one recorded earlier is only the caller's selection. An
-     * explicit index that contradicts the record is refused once a registration was submitted,
-     * since the registration was built from the recorded output.
+     * the record for that funding. `vout` on the record is a proven outpoint and `selectedVout` a
+     * caller's selection not yet proven. The output is checked against the expected amount unless
+     * the record holds a proven one and no selection. An explicit index that contradicts the record
+     * is refused once a registration was submitted, since the registration was built from the
+     * recorded output.
      */
     private lockupSelection;
     /**
