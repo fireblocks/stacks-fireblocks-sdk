@@ -34,6 +34,7 @@ interface SerializedRecord {
   isL1Lock: boolean;
   btcTxid?: string;
   vout?: number;
+  selectedVout?: number;
   signerManager?: string;
   firstRewardCycle?: number;
   // Persisted so a crash + restart resumes at the last completed enrollment stage
@@ -81,6 +82,7 @@ const serializeRecord = (r: BondLockRecord): SerializedRecord => ({
   isL1Lock: r.isL1Lock,
   ...(r.btcTxid !== undefined ? { btcTxid: r.btcTxid } : {}),
   ...(r.vout !== undefined ? { vout: r.vout } : {}),
+  ...(r.selectedVout !== undefined ? { selectedVout: r.selectedVout } : {}),
   ...(r.signerManager !== undefined ? { signerManager: r.signerManager } : {}),
   ...(r.firstRewardCycle !== undefined ? { firstRewardCycle: r.firstRewardCycle } : {}),
   ...(r.fundingExternalId !== undefined ? { fundingExternalId: r.fundingExternalId } : {}),
@@ -112,6 +114,7 @@ const deserializeRecord = (s: SerializedRecord): BondLockRecord => ({
   isL1Lock: s.isL1Lock,
   btcTxid: s.btcTxid,
   vout: s.vout,
+  selectedVout: s.selectedVout,
   signerManager: s.signerManager,
   firstRewardCycle: s.firstRewardCycle,
   fundingExternalId: s.fundingExternalId,

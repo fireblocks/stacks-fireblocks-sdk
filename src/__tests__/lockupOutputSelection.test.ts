@@ -322,8 +322,7 @@ describe("assembleLockupProof — output selection", () => {
 
 describe("resumeBondRegistration — the selected output reaches the proof and the record", () => {
   it("proves and records output 1 at 10,000 sats when it is selected", async () => {
-    // The client's case: one transaction pays the lock script 1,000 sats at vout 0 and
-    // 10,000 sats at vout 1.
+    // One transaction pays the lock script 1,000 sats at vout 0 and 10,000 sats at vout 1.
     const sdk = makeSdk();
     serveEsplora(txPaying([{ amount: SMALL }, { amount: LARGE }]));
     await seedFunded(sdk);
@@ -371,7 +370,7 @@ describe("resumeBondRegistration — the selected output reaches the proof and t
     // built. A later resume with no btcVout must not treat it as verified.
     const sdk = makeSdk();
     serveEsplora(txPaying([{ amount: SMALL }, { amount: LARGE }]));
-    await seedFunded(sdk, { vout: 0, stage: "btc-confirmed" });
+    await seedFunded(sdk, { selectedVout: 0, stage: "btc-confirmed" });
 
     const res = await sdk.resumeBondRegistration(BOND_INDEX);
 
@@ -383,7 +382,7 @@ describe("resumeBondRegistration — the selected output reaches the proof and t
   it("uses the vout already on the record when none is supplied", async () => {
     const sdk = makeSdk();
     serveEsplora(txPaying([{ amount: SMALL }, { amount: LARGE }]));
-    await seedFunded(sdk, { vout: 1 });
+    await seedFunded(sdk, { selectedVout: 1 });
 
     await sdk.resumeBondRegistration(BOND_INDEX);
 
@@ -405,7 +404,7 @@ describe("resumeBondRegistration — the selected output reaches the proof and t
   it("lets an explicit vout replace the recorded one before any registration was submitted", async () => {
     const sdk = makeSdk();
     serveEsplora(txPaying([{ amount: LARGE }, { amount: LARGE }]));
-    await seedFunded(sdk, { vout: 0 });
+    await seedFunded(sdk, { selectedVout: 0 });
 
     await sdk.resumeBondRegistration(BOND_INDEX, { btcVout: 1 });
 
@@ -424,6 +423,52 @@ describe("resumeBondRegistration — the selected output reaches the proof and t
     expect(res.error).toMatch(/registration/i);
     expect(proofs).toHaveLength(0);
     expect((await readRecord(sdk)).vout).toBe(1);
+  });
+
+  it("leaves a proven outpoint as it was when an explicit btcVout is refused for its amount", async () => {
+    const sdk = makeSdk();
+    serveEsplora(txPaying([{ amount: SMALL }, { amount: LARGE }]));
+    await seedFunded(sdk, { vout: 1, stage: "proof-built" });
+
+    const refused = await sdk.resumeBondRegistration(BOND_INDEX, { btcVout: 0 });
+
+    expect(refused.success).toBe(false);
+    const record = await readRecord(sdk);
+    expect(record.vout).toBe(1);
+    expect(record.selectedVout).toBeUndefined();
+
+    await sdk.resumeBondRegistration(BOND_INDEX);
+
+    expect(proofs).toHaveLength(1);
+    expect(proofs[0].outputIndex).toBe(1);
+    expect(proofs[0].amount).toBe(LARGE);
+  });
+
+  it("leaves a proven outpoint as it was when an explicit btcVout names an output paying another script", async () => {
+    const sdk = makeSdk();
+    serveEsplora(txPaying([{ amount: LARGE }, { amount: SMALL, script: OTHER_SCRIPT }]));
+    await seedFunded(sdk, { vout: 0, stage: "proof-built" });
+
+    const refused = await sdk.resumeBondRegistration(BOND_INDEX, { btcVout: 1 });
+
+    expect(refused.success).toBe(false);
+    const record = await readRecord(sdk);
+    expect(record.vout).toBe(0);
+    expect(record.selectedVout).toBeUndefined();
+  });
+
+  it("keeps an unproven selection out of vout, which only ever names a proven outpoint", async () => {
+    const sdk = makeSdk();
+    serveEsplora(txPaying([{ amount: SMALL }, { amount: LARGE }]));
+    await seedFunded(sdk);
+
+    const refused = await sdk.resumeBondRegistration(BOND_INDEX, { btcVout: 0 });
+
+    expect(refused.success).toBe(false);
+    const record = await readRecord(sdk);
+    expect(record.vout).toBeUndefined();
+    expect(record.selectedVout).toBe(0);
+    expect(record.stage).toBe("btc-confirmed");
   });
 
   it("refuses a single matching output that pays another amount than the record, before any registration", async () => {
@@ -514,7 +559,30 @@ describe("resumeBondRegistration — the selected output reaches the proof and t
     expect((await readRecord(sdk)).vout).toBe(1);
   });
 
-  it("persists a caller-supplied vout with the funding txid before the proof is built", async () => {
+  it("refuses btcVout before any Bitcoin moves when there is no funding transaction to select from", async () => {
+    const sdk = makeSdk();
+    serveEsplora(txPaying([{ amount: SMALL }, { amount: LARGE }]));
+
+    const res = await sdk.createBond(BOND_INDEX, LARGE, MANAGER, { btcVout: 1 });
+
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/btcVout/);
+    expect(res.error).toMatch(/No Bitcoin was sent/);
+    expect(sdk.fireblocksService.createBitcoinTransaction).not.toHaveBeenCalled();
+    expect(await readRecord(sdk)).toBeNull();
+  });
+
+  it("accepts btcVout when the record already names the funding transaction", async () => {
+    const sdk = makeSdk();
+    serveEsplora(txPaying([{ amount: SMALL }, { amount: LARGE }]));
+    await seedFunded(sdk);
+
+    await sdk.createBond(BOND_INDEX, LARGE, MANAGER, { btcVout: 1 });
+
+    expect(proofs[0].outputIndex).toBe(1);
+  });
+
+  it("persists a caller-supplied selection with the funding txid before the proof is built", async () => {
     const sdk = makeSdk();
     serveEsplora(txPaying([{ amount: SMALL }, { amount: LARGE }]));
     sdk.waitForBtcConfirmations = jest
@@ -528,7 +596,8 @@ describe("resumeBondRegistration — the selected output reaches the proof and t
 
     const record = await readRecord(sdk);
     expect(record.btcTxid).toBe(FUNDING_TXID);
-    expect(record.vout).toBe(1);
+    expect(record.selectedVout).toBe(1);
+    expect(record.vout).toBeUndefined();
   });
 });
 
@@ -656,7 +725,7 @@ describe("a caller-supplied funding keeps its selected output across a crash", (
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  it("records the vout at confirmation, so a resume after a crash proves the same output", async () => {
+  it("records the selection at confirmation, so a resume after a crash proves the same output", async () => {
     serveEsplora(txPaying([{ amount: SMALL }, { amount: LARGE }]));
     const first = makeSdk();
     first.setLockRecordStore(new FileLockRecordStore(file));
@@ -674,7 +743,8 @@ describe("a caller-supplied funding keeps its selected output across a crash", (
       BOND_INDEX,
     );
     expect(stored?.stage).toBe("btc-confirmed");
-    expect(stored?.vout).toBe(1);
+    expect(stored?.selectedVout).toBe(1);
+    expect(stored?.vout).toBeUndefined();
 
     const second = makeSdk();
     second.setLockRecordStore(new FileLockRecordStore(file));
@@ -718,7 +788,7 @@ describe("renewBond — the selection follows the recorded re-lock", () => {
     sdk.assembleLockupProof = jest.fn().mockResolvedValue({ outputIndex: 1 });
     await seedFunded(sdk, {
       bondIndex: BOND_INDEX,
-      vout: 1,
+      selectedVout: 1,
       lockAddress: LOCK_ADDRESS,
     });
 
@@ -731,6 +801,30 @@ describe("renewBond — the selection follows the recorded re-lock", () => {
       vout: 1,
       expectedAmountSats: LARGE,
     });
+  });
+
+  it("a refused output says the Bitcoin is re-locked and names the resume call", async () => {
+    const sdk = makeSdk();
+    sdk.runNonceExclusive = jest.fn(async (fn: () => Promise<unknown>) => fn());
+    serveEsplora(txPaying([{ amount: LARGE }, { amount: SMALL, script: OTHER_SCRIPT }]));
+    await seedFunded(sdk, {
+      bondIndex: BOND_INDEX,
+      lockAddress: LOCK_ADDRESS,
+    });
+
+    const res = await sdk.renewBond(BOND_INDEX, MANAGER, {
+      btcVout: 1,
+      rewardBtcAddress: "bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080",
+      rewardMaxFeeSats: BigInt(5_000),
+    });
+
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/Output 1 of .* does not pay this bond's lock script; outputs 0 do/);
+    expect(res.error).toMatch(/No registration was attempted; the Bitcoin is re-locked into bond 4's lock/);
+    expect(res.error).toMatch(/resumeBondRegistration\(4, \{ btcVout: <correct output> \}\); output 0 pays the lock script/);
+    expect(res.error).not.toMatch(/^Failed to renew bond/);
+    expect(res.btcTxid).toBe(FUNDING_TXID);
+    expect(proofs).toHaveLength(0);
   });
 
   it("forwards an explicit btcVout", async () => {

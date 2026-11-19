@@ -65,6 +65,8 @@ export interface BondLockRecord {
   btcTxid?: string;
   /** Output index of the lock within the funding tx — set once the SPV proof resolves it. */
   vout?: number;
+  /** Output of the funding tx a caller selected, not yet proven to pay this lock. Replaced by `vout` once the proof is built. */
+  selectedVout?: number;
   /**
    * Signer-manager contract this bond was registered under. Recorded so rewards
    * remain claimable after the on-chain membership ends or is overwritten, when
