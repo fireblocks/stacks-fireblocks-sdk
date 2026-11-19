@@ -692,6 +692,20 @@ describe("createBond — eligibility gates after Bitcoin is committed", () => {
     });
   });
 
+  it("names early exit only as conditional on a registration that landed, and otherwise the unlock", async () => {
+    // Early exit needs a bond membership, which exists only once a registration landed.
+    const sdk = makeSdk();
+    await seedFunded(sdk);
+    (fetchBondAllowance as jest.Mock).mockResolvedValue(BigInt(0));
+
+    const res = await sdk.createBond(BOND_INDEX, AMOUNT_SATS, MANAGER);
+
+    expect(res.error).toContain(
+      "If getBondPosition shows the registration landed, early exit (announceEarlyExit, then spendEarlyExitUtxo) also applies; otherwise the Bitcoin stays locked until unlockMaturedBond after the unlock height.",
+    );
+    expect(res.error).not.toMatch(/recovered with unlockMaturedBond or spendEarlyExitUtxo/);
+  });
+
   it("carries the funding pointer when the allowance gate refuses a funded bond", async () => {
     const sdk = makeSdk();
     await seedFunded(sdk);
