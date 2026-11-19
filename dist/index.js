@@ -16889,6 +16889,27 @@ var withoutPendingRegister = (record) => {
   delete copy.pendingRegisterExternalId;
   return copy;
 };
+var LockupOutputError = class extends Error {
+  constructor(message, kind, paying, matching = []) {
+    super(message);
+    this.kind = kind;
+    this.paying = paying;
+    this.matching = matching;
+  }
+};
+var lockupRefusalNextStep = (e, bondIndex) => {
+  const outputs = e.kind === "amount" ? e.matching : e.paying;
+  if (outputs.length === 0) return "The Bitcoin stays locked until unlockMaturedBond after its unlock height.";
+  const list = outputs.join(", ");
+  const what = e.kind === "amount" ? "the expected amount to the lock script" : "the lock script";
+  return `Continue with resumeBondRegistration(${bondIndex}, { btcVout: <correct output> }); ${outputs.length > 1 ? `outputs ${list} pay` : `output ${list} pays`} ${what}.`;
+};
+var UnrecordedTransferError = class extends Error {
+  constructor(fireblocksId) {
+    super(`Funding transfer ${fireblocksId} was accepted but its id was not recorded`);
+    this.fireblocksId = fireblocksId;
+  }
+};
 var sameLockRecordState = (a, b) => {
   if (a === null || b === null) return a === b;
   return a.lockAddress === b.lockAddress && a.btcTxid === b.btcTxid && a.vout === b.vout && a.amountSats === b.amountSats && a.fireblocksId === b.fireblocksId && a.fundingExternalId === b.fundingExternalId && a.stage === b.stage;
@@ -19136,22 +19157,91 @@ var StacksSDK = class _StacksSDK {
      * @param outputScript - Expected P2WSH output script the lock transaction must pay to.
      * @param unlockHeight - Burn height at which the lock becomes spendable.
      */
-    this.assembleLockupProof = async (btcTxid, blockHash, outputScript, unlockHeight) => {
+    this.assembleLockupProof = async (btcTxid, blockHash, outputScript, unlockHeight, selection) => {
       const [txHex, headerHex, merkleProof, blockMeta] = await Promise.all([
         fetch(`${this.esploraBase()}/tx/${btcTxid}/hex`).then((r) => r.text()),
         fetch(`${this.esploraBase()}/block/${blockHash}/header`).then((r) => r.text()),
         fetch(`${this.esploraBase()}/tx/${btcTxid}/merkle-proof`).then((r) => r.json()),
         fetch(`${this.esploraBase()}/block/${blockHash}`).then((r) => r.json())
       ]);
+      const proof = (0, import_bitcoin_staking2.buildLockProof)({
+        txHex,
+        header: headerHex,
+        merkleProof,
+        txCount: blockMeta.tx_count,
+        expectedScript: outputScript
+      });
+      const chosen = this.selectLockupOutput(btcTxid, txHex, outputScript, selection);
       return {
-        ...(0, import_bitcoin_staking2.buildLockProof)({
-          txHex,
-          header: headerHex,
-          merkleProof,
-          txCount: blockMeta.tx_count,
-          expectedScript: outputScript
-        }),
+        ...proof,
+        ...chosen !== void 0 ? { outputIndex: chosen.vout, amount: chosen.amount } : {},
         unlockBurnHeight: unlockHeight
+      };
+    };
+    /**
+     * The output of `txHex` to prove, or undefined to keep the one `buildLockProof` finds, which
+     * is the first output paying `outputScript`. A selected output must pay that script and, when
+     * `expectedAmountSats` is given, carry exactly that value. Several outputs paying the script
+     * with none selected is refused: the dependency would silently pick the first.
+     */
+    this.selectLockupOutput = (btcTxid, txHex, outputScript, selection) => {
+      const tx = Transaction2.fromRaw((0, import_common2.hexToBytes)(txHex), { allowUnknownOutputs: true, disableScriptCheck: true });
+      const expectedScript = (0, import_common2.bytesToHex)(outputScript);
+      const paying = [];
+      for (let i = 0; i < tx.outputsLength; i++) {
+        const script = tx.getOutput(i).script;
+        if (script && (0, import_common2.bytesToHex)(script) === expectedScript) paying.push(i);
+      }
+      const vout = selection?.vout;
+      const expected = selection?.expectedAmountSats;
+      if (vout === void 0) {
+        if (paying.length > 1) {
+          throw new LockupOutputError(`Transaction ${btcTxid} pays the lock script in more than one output (${paying.join(", ")}). Select the funding output with btcVout; the proof would otherwise be built from the first.`, "ambiguous", paying);
+        }
+        const only = paying.length === 1 ? tx.getOutput(paying[0]).amount ?? BigInt(0) : void 0;
+        if (only !== void 0 && expected !== void 0 && only !== expected) {
+          throw new LockupOutputError(`Output ${paying[0]} of ${btcTxid} pays ${only} sats but expected ${expected} sats.`, "amount", paying);
+        }
+        return void 0;
+      }
+      if (vout >= tx.outputsLength) {
+        throw new LockupOutputError(`Transaction ${btcTxid} has no output ${vout} (it has ${tx.outputsLength}).`, "noOutput", paying);
+      }
+      const output = tx.getOutput(vout);
+      if (!output.script || (0, import_common2.bytesToHex)(output.script) !== expectedScript) {
+        throw new LockupOutputError(`Output ${vout} of ${btcTxid} does not pay this bond's lock script${paying.length ? `; outputs ${paying.join(", ")} do` : ""}.`, "wrongScript", paying);
+      }
+      const amount = output.amount ?? BigInt(0);
+      if (expected !== void 0 && amount !== expected) {
+        throw new LockupOutputError(
+          `Output ${vout} of ${btcTxid} pays ${amount} sats but expected ${expected} sats.`,
+          "amount",
+          paying,
+          paying.filter((i) => (tx.getOutput(i).amount ?? BigInt(0)) === expected)
+        );
+      }
+      return { vout, amount };
+    };
+    /** Message for a `btcVout` that is not a Bitcoin output index (uint32), or undefined. */
+    this.btcVoutError = (vout) => vout === void 0 || Number.isSafeInteger(vout) && vout >= 0 && vout <= 4294967295 ? void 0 : `Invalid btcVout: ${vout} (expected a non-negative integer output index).`;
+    /**
+     * The output to prove for the funding `btcTxid`: an explicit `btcVout`, else the one already on
+     * the record for that funding. The output is checked against the expected amount unless the
+     * record already holds a verified one: a vout recorded at `proof-built` or later was verified
+     * before it was written, whereas one recorded earlier is only the caller's selection. An
+     * explicit index that contradicts the record is refused once a registration was submitted,
+     * since the registration was built from the recorded output.
+     */
+    this.lockupSelection = (explicitVout, record, btcTxid, expectedAmountSats, bondIndex) => {
+      const recordedVout = record?.btcTxid === btcTxid ? record.vout : void 0;
+      const registrationBegun = record?.stage === "registration-submitted" || record?.stage === "registration-confirmed";
+      if (explicitVout !== void 0 && recordedVout !== void 0 && explicitVout !== recordedVout && registrationBegun) {
+        return { error: `Bond ${bondIndex}'s registration was already submitted against output ${recordedVout} of ${btcTxid}; btcVout ${explicitVout} contradicts it.` };
+      }
+      const recordedIsVerified = recordedVout !== void 0 && (record?.stage === "proof-built" || registrationBegun);
+      return {
+        vout: explicitVout ?? recordedVout,
+        expectedAmountSats: explicitVout === void 0 && recordedIsVerified ? void 0 : expectedAmountSats
       };
     };
     /**
@@ -19742,6 +19832,8 @@ var StacksSDK = class _StacksSDK {
         if (opts?.btcTxid !== void 0 && !/^[0-9a-fA-F]{64}$/.test(opts.btcTxid)) {
           return { success: false, error: `Invalid btcTxid: ${opts.btcTxid} (expected 64 hex chars).` };
         }
+        const invalidVout = this.btcVoutError(opts?.btcVout);
+        if (invalidVout) return { success: false, error: invalidVout };
         let signerCalldata;
         try {
           signerCalldata = this.resolveSignerCalldata(opts);
@@ -19765,7 +19857,7 @@ var StacksSDK = class _StacksSDK {
         }
         const gateRefusal = (reason, uncommittedError = reason) => recordedFunding ? {
           success: false,
-          error: `Bond ${bondIndex} already has ${recordedFunding} on record, so Bitcoin may already be committed; no new Bitcoin was sent. The enrollment cannot continue: ${reason}. Check getBondPosition: a registration that already landed shows there. Otherwise the Bitcoin stays locked until recovered with unlockMaturedBond or spendEarlyExitUtxo.`,
+          error: `Bond ${bondIndex} already has ${recordedFunding} on record, so Bitcoin may already be committed; no new Bitcoin was sent. The enrollment cannot continue: ${reason}. Check getBondPosition: a registration that already landed shows there. If getBondPosition shows the registration landed, early exit (announceEarlyExit, then spendEarlyExitUtxo) also applies; otherwise the Bitcoin stays locked until unlockMaturedBond after the unlock height.`,
           fundingBlocked: true,
           ...committedBtc
         } : { success: false, error: uncommittedError };
@@ -19976,11 +20068,34 @@ var StacksSDK = class _StacksSDK {
             stage: laterStage(priorRecord.stage, "funding-requested")
           } : {}
         };
-        await this.lockRecordStore.saveRecord(this.address, bondIndex, lockRecord);
+        let held = priorRecord;
+        const writeHeld = async (next) => {
+          let applied = false;
+          await this.updateLockRecord(bondIndex, (current) => {
+            if (!sameLockRecordState(current, held)) return void 0;
+            applied = true;
+            return next;
+          });
+          if (applied) held = { ...next };
+          return applied;
+        };
+        const reservationLost = {
+          success: false,
+          error: `Bond ${bondIndex}'s lock record changed while this call was preparing to fund it, so another createBond or renewBond holds this bond. No Bitcoin was sent. Check the record; resumeBondRegistration(${bondIndex}) continues a funded one.`,
+          fundingBlocked: true,
+          ...committedBtc
+        };
+        if (!await writeHeld(lockRecord)) return reservationLost;
         let btcTxid;
         if (opts?.btcTxid) {
           btcTxid = opts.btcTxid;
-          await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, btcTxid, stage: laterStage(lockRecord.stage, "btc-broadcast") });
+          const callerFunded = await writeHeld({
+            ...lockRecord,
+            btcTxid,
+            ...opts.btcVout !== void 0 ? { vout: opts.btcVout } : {},
+            stage: laterStage(lockRecord.stage, "btc-broadcast")
+          });
+          if (!callerFunded) return reservationLost;
         } else if (canResumeFunding) {
           btcTxid = priorRecord.btcTxid;
         } else if (hasInFlightFireblocks) {
@@ -20001,7 +20116,7 @@ var StacksSDK = class _StacksSDK {
             BigInt(btcAmountSats)
           );
           if (refundBlock) return { success: false, error: refundBlock, fundingBlocked: true };
-          await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, stage: laterStage(lockRecord.stage, "funding-requested") });
+          if (!await writeHeld({ ...lockRecord, stage: laterStage(lockRecord.stage, "funding-requested") })) return reservationLost;
           let result2;
           try {
             result2 = await this.fireblocksService.createBitcoinTransaction(
@@ -20012,9 +20127,20 @@ var StacksSDK = class _StacksSDK {
               fundingExternalId,
               // Persist the Fireblocks id the instant the transfer is accepted, BEFORE the
               // confirmation poll — so a timeout/crash here still leaves a durable pointer.
-              (fireblocksId) => this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, fireblocksId, stage: laterStage(lockRecord.stage, "funding-requested") })
+              async (fireblocksId) => {
+                const recorded = await writeHeld({ ...lockRecord, fireblocksId, stage: laterStage(lockRecord.stage, "funding-requested") });
+                if (!recorded) throw new UnrecordedTransferError(fireblocksId);
+              }
             );
           } catch (fundErr) {
+            if (fundErr instanceof UnrecordedTransferError) {
+              return {
+                success: false,
+                error: `Fireblocks accepted funding transfer ${fundErr.fireblocksId} for bond ${bondIndex}, but the bond's lock record changed first, so the transfer id was not recorded and the record was left as it is. Bitcoin may be committed: do not fund this bond again; resolve transfer ${fundErr.fireblocksId} in Fireblocks and check the record.`,
+                fundingBlocked: true,
+                ...committedBtc
+              };
+            }
             if (FireblocksService.isDuplicateExternalIdError(fundErr)) {
               const priorFireblocksId = await this.fireblocksService.findBitcoinTransactionByExternalId(fundingExternalId);
               if (!priorFireblocksId) throw fundErr;
@@ -20084,10 +20210,28 @@ var StacksSDK = class _StacksSDK {
           await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, btcTxid, fireblocksId: result2.fireblocksId, stage: laterStage(lockRecord.stage, "btc-broadcast") });
         }
         committedBtc.btcTxid = btcTxid;
+        const selection = this.lockupSelection(opts?.btcVout, priorRecord, btcTxid, btcAmountSats, bondIndex);
+        if ("error" in selection) return { success: false, error: selection.error, fundingBlocked: true, ...committedBtc };
         const { blockHash } = await this.waitForBtcConfirmations(btcTxid, opts?.confirmations ?? 3);
         delete lockRecord.fireblocksId;
-        await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, btcTxid, stage: laterStage(lockRecord.stage, "btc-confirmed") });
-        const lockupProof = await this.assembleLockupProof(btcTxid, blockHash, metadata.outputScript, metadata.unlockHeight);
+        await this.lockRecordStore.saveRecord(this.address, bondIndex, {
+          ...lockRecord,
+          btcTxid,
+          ...selection.vout !== void 0 ? { vout: selection.vout } : {},
+          stage: laterStage(lockRecord.stage, "btc-confirmed")
+        });
+        let lockupProof;
+        try {
+          lockupProof = await this.assembleLockupProof(btcTxid, blockHash, metadata.outputScript, metadata.unlockHeight, selection);
+        } catch (e) {
+          if (!(e instanceof LockupOutputError)) throw e;
+          return {
+            success: false,
+            error: `${e.message} No registration was attempted; the Bitcoin is committed to bond ${bondIndex}'s lock. ${lockupRefusalNextStep(e, bondIndex)}`,
+            fundingBlocked: true,
+            ...committedBtc
+          };
+        }
         committedBtc.vout = lockupProof.outputIndex;
         await this.lockRecordStore.saveRecord(this.address, bondIndex, {
           ...lockRecord,
@@ -20109,7 +20253,7 @@ var StacksSDK = class _StacksSDK {
           const reasons = proofPreflight.reasons ?? [];
           return {
             success: false,
-            error: `SPV proof preflight failed for bond ${bondIndex} (BTC is locked; recover via unlockMaturedBond/spendEarlyExitUtxo): ${this.describeBondReasons(reasons)}`,
+            error: `SPV proof preflight failed for bond ${bondIndex} (BTC is locked; recover via unlockMaturedBond after the unlock height): ${this.describeBondReasons(reasons)}`,
             btcTxid,
             vout: lockupProof.outputIndex
           };
@@ -20825,9 +20969,17 @@ var StacksSDK = class _StacksSDK {
         if (!this.address || !this.publicKey || !this.vaultAccountId) {
           throw new Error("Address, Public Key or Vault ID are not set");
         }
+        const expectedBondIndex = opts?.expectedBondIndex;
+        if (expectedBondIndex !== void 0 && !(Number.isSafeInteger(expectedBondIndex) && expectedBondIndex >= 0)) {
+          return { success: false, error: "expectedBondIndex must be a non-negative integer" };
+        }
         const membership = await (0, import_bitcoin_staking2.fetchBondMembership)({ address: this.address, network: this.pox5Network });
         if (!membership) return { success: false, error: "No active bond membership found" };
         if (!membership.isL1Lock) return { success: false, error: "Early exit only applies to L1-locked (native BTC) bonds" };
+        if (expectedBondIndex !== void 0 && membership.bondIndex !== expectedBondIndex) {
+          return { success: false, error: `Refusing to announce early exit: bond ${expectedBondIndex} was expected but the live membership is bond ${membership.bondIndex}. The announce forfeits the bond the membership names when it executes.` };
+        }
+        const reviewedBond = expectedBondIndex ?? membership.bondIndex;
         const eligible = await (0, import_bitcoin_staking2.fetchEligibleAnnounceL1EarlyExit)({
           staker: this.address,
           oldSignerManager: membership.signer,
@@ -20863,6 +21015,10 @@ var StacksSDK = class _StacksSDK {
               postConditions: [import_transactions4.Pc.origin().willPerformPox()]
             }
           );
+          const beforeSigning = await (0, import_bitcoin_staking2.fetchBondMembership)({ address: this.address, network: this.pox5Network });
+          if (!beforeSigning || beforeSigning.bondIndex !== reviewedBond) {
+            return { error: `the bond changed before signing (reviewed bond ${reviewedBond}, now ${beforeSigning ? `bond ${beforeSigning.bondIndex}` : "no membership"}); no signing request was created` };
+          }
           return this.pox5SignAndBroadcast(tx, opts?.note ?? "announce-l1-early-exit", opts?.externalId, async () => {
             const recheck = await (0, import_bitcoin_staking2.fetchEligibleAnnounceL1EarlyExit)({
               staker: this.address,
@@ -20874,8 +21030,8 @@ var StacksSDK = class _StacksSDK {
               return `eligibility changed during approval: ${this.describeBondReasons(reasons)}`;
             }
             const current = await (0, import_bitcoin_staking2.fetchBondMembership)({ address: this.address, network: this.pox5Network });
-            if (!current || current.bondIndex !== membership.bondIndex) {
-              return `the bond changed during approval (reviewed bond ${membership.bondIndex}, now ${current ? `bond ${current.bondIndex}` : "no membership"})`;
+            if (!current || current.bondIndex !== reviewedBond) {
+              return `the bond changed during approval (reviewed bond ${reviewedBond}, now ${current ? `bond ${current.bondIndex}` : "no membership"})`;
             }
             const nonceNow = await this.chainService.getAccountNonce(this.address);
             if (nonceNow.pendingTxCount > 0) return this.announcePendingRefusal(nonceNow.pendingTxCount);
@@ -20896,7 +21052,8 @@ var StacksSDK = class _StacksSDK {
         return {
           success: true,
           txHash: result.txid,
-          ...settledBondIndex !== void 0 ? { bondIndex: settledBondIndex } : { bondIndexLookupFailed: true }
+          ...settledBondIndex !== void 0 ? { bondIndex: settledBondIndex } : { bondIndexLookupFailed: true },
+          ...expectedBondIndex !== void 0 && settledBondIndex !== void 0 && settledBondIndex !== expectedBondIndex ? { expectedBondIndexMismatch: true } : {}
         };
       } catch (error) {
         const pending = this.pendingFireblocksResult(error);
@@ -21617,6 +21774,8 @@ var StacksSDK = class _StacksSDK {
         if (!this.address || !this.publicKey || !this.vaultAccountId) {
           throw new Error("Address, Public Key or Vault ID are not set");
         }
+        const invalidVout = this.btcVoutError(opts?.btcVout);
+        if (invalidVout) return { success: false, error: invalidVout };
         const storeError = await this.assertDurableLockStore();
         if (storeError) return { success: false, error: storeError };
         const smAllowError = this.signerManagerAllowedError(signerManager);
@@ -21832,8 +21991,10 @@ var StacksSDK = class _StacksSDK {
           }
         }
         const amountUstx = requiredUstx(outputAmount);
+        const selection = this.lockupSelection(opts?.btcVout, priorNextRecord, btcTxid, outputAmount, nextBondIndex);
+        if ("error" in selection) return { success: false, error: selection.error, ...committedBtc };
         const { blockHash } = await this.waitForBtcConfirmations(btcTxid, opts?.confirmations ?? 3);
-        const lockupProof = await this.assembleLockupProof(btcTxid, blockHash, nextMeta.outputScript, nextMeta.unlockHeight);
+        const lockupProof = await this.assembleLockupProof(btcTxid, blockHash, nextMeta.outputScript, nextMeta.unlockHeight, selection);
         committedBtc.vout = lockupProof.outputIndex;
         await this.lockRecordStore.saveRecord(this.address, nextBondIndex, nextRecordFor(outputAmount, {
           btcTxid,
@@ -21853,7 +22014,7 @@ var StacksSDK = class _StacksSDK {
         });
         if (!proofPreflight.ok) {
           const reasons = proofPreflight.reasons ?? [];
-          return { success: false, error: `SPV proof preflight failed for bond ${nextBondIndex} (BTC re-locked; recover via unlockMaturedBond/spendEarlyExitUtxo): ${this.describeBondReasons(reasons)}`, btcTxid, vout: lockupProof.outputIndex };
+          return { success: false, error: `SPV proof preflight failed for bond ${nextBondIndex} (BTC re-locked; recover via unlockMaturedBond after the unlock height): ${this.describeBondReasons(reasons)}`, btcTxid, vout: lockupProof.outputIndex };
         }
         const registrationGeneration = priorNextRecord?.registrationGeneration ?? 0;
         let registerExternalId = "";
@@ -23909,7 +24070,7 @@ var ApiService = class {
               params.bondIndex,
               params.btcAmountSats,
               params.signerManager,
-              { note: params.note, nonce: params.nonce, externalId: params.externalId, confirmations: params.confirmations, btcTxid: params.btcTxid, signerCalldata: params.signerCalldata, rewardBtcAddress: params.rewardBtcAddress, rewardMaxFeeSats: params.rewardMaxFeeSats }
+              { note: params.note, nonce: params.nonce, externalId: params.externalId, confirmations: params.confirmations, btcTxid: params.btcTxid, btcVout: params.btcVout, signerCalldata: params.signerCalldata, rewardBtcAddress: params.rewardBtcAddress, rewardMaxFeeSats: params.rewardMaxFeeSats }
             );
             break;
           case "createSbtcBond" /* CREATE_SBTC_BOND */:
@@ -23946,7 +24107,7 @@ var ApiService = class {
             result = await sdk.getHistoricalBondPosition(params.bondIndex);
             break;
           case "announceEarlyExit" /* ANNOUNCE_EARLY_EXIT */:
-            result = await sdk.announceEarlyExit({ note: params.note, nonce: params.nonce, externalId: params.externalId });
+            result = await sdk.announceEarlyExit({ note: params.note, nonce: params.nonce, externalId: params.externalId, expectedBondIndex: params.expectedBondIndex });
             break;
           case "spendEarlyExit" /* SPEND_EARLY_EXIT */:
             result = await sdk.spendEarlyExitUtxo(params.destinationBtcAddress, { feeSats: params.feeSats, bondIndex: params.bondIndex });
@@ -23964,13 +24125,13 @@ var ApiService = class {
             result = await sdk.replaceBtcRecoveryFee(params.originalTxid, params.newFeeSats, { bondIndex: params.bondIndex, kind: params.kind });
             break;
           case "renewBond" /* RENEW_BOND */:
-            result = await sdk.renewBond(params.nextBondIndex, params.signerManager, { feeSats: params.feeSats, note: params.note, nonce: params.nonce, externalId: params.externalId, confirmations: params.confirmations, signerCalldata: params.signerCalldata, rewardBtcAddress: params.rewardBtcAddress, rewardMaxFeeSats: params.rewardMaxFeeSats });
+            result = await sdk.renewBond(params.nextBondIndex, params.signerManager, { feeSats: params.feeSats, note: params.note, nonce: params.nonce, externalId: params.externalId, confirmations: params.confirmations, btcVout: params.btcVout, signerCalldata: params.signerCalldata, rewardBtcAddress: params.rewardBtcAddress, rewardMaxFeeSats: params.rewardMaxFeeSats });
             break;
           case "hasAnnouncedEarlyExit" /* HAS_ANNOUNCED_EARLY_EXIT */:
             result = await sdk.hasAnnouncedEarlyExit(params.bondIndex);
             break;
           case "resumeBondRegistration" /* RESUME_BOND_REGISTRATION */:
-            result = await sdk.resumeBondRegistration(params.bondIndex, { note: params.note, nonce: params.nonce, confirmations: params.confirmations, btcTxid: params.btcTxid });
+            result = await sdk.resumeBondRegistration(params.bondIndex, { note: params.note, nonce: params.nonce, confirmations: params.confirmations, btcTxid: params.btcTxid, btcVout: params.btcVout });
             break;
           case "repointBondFunding" /* REPOINT_BOND_FUNDING */:
             result = await sdk.repointBondFunding(params.bondIndex, params.btcTxid, { vout: params.vout });

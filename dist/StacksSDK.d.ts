@@ -574,6 +574,24 @@ export declare class StacksSDK {
      */
     private assembleLockupProof;
     /**
+     * The output of `txHex` to prove, or undefined to keep the one `buildLockProof` finds, which
+     * is the first output paying `outputScript`. A selected output must pay that script and, when
+     * `expectedAmountSats` is given, carry exactly that value. Several outputs paying the script
+     * with none selected is refused: the dependency would silently pick the first.
+     */
+    private selectLockupOutput;
+    /** Message for a `btcVout` that is not a Bitcoin output index (uint32), or undefined. */
+    private btcVoutError;
+    /**
+     * The output to prove for the funding `btcTxid`: an explicit `btcVout`, else the one already on
+     * the record for that funding. The output is checked against the expected amount unless the
+     * record already holds a verified one: a vout recorded at `proof-built` or later was verified
+     * before it was written, whereas one recorded earlier is only the caller's selection. An
+     * explicit index that contradicts the record is refused once a registration was submitted,
+     * since the registration was built from the recorded output.
+     */
+    private lockupSelection;
+    /**
      * Builds an unsigned `register-for-bond` contract call with the corrected output
      * tuple. The pinned `@stacks/bitcoin-staking` `lockupToCV` omits the
      * `unlock-burn-height` field that the pox-5 contract requires per output, so the
@@ -654,6 +672,7 @@ export declare class StacksSDK {
         nonce?: bigint;
         confirmations?: number;
         btcTxid?: string;
+        btcVout?: number;
     }) => Promise<CreateBondResult>;
     /**
      * Clears a native bond's record whose funding transfer Fireblocks reported failed after
@@ -703,6 +722,7 @@ export declare class StacksSDK {
         externalId?: string;
         confirmations?: number;
         btcTxid?: string;
+        btcVout?: number;
         amountUstxOverride?: bigint;
         signerCalldata?: Uint8Array | string;
         rewardBtcAddress?: string | null;
@@ -893,6 +913,7 @@ export declare class StacksSDK {
         note?: string;
         nonce?: bigint;
         externalId?: string;
+        expectedBondIndex?: number;
     }) => Promise<AnnounceEarlyExitResponse>;
     /**
      * Returns the P2WSH lock address (bcrt1… on testnet, bc1… on mainnet) for a given bond index.
@@ -1063,6 +1084,7 @@ export declare class StacksSDK {
         nonce?: bigint;
         externalId?: string;
         confirmations?: number;
+        btcVout?: number;
         signerCalldata?: Uint8Array | string;
         rewardBtcAddress?: string | null;
         rewardMaxFeeSats?: bigint;
