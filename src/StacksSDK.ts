@@ -206,17 +206,53 @@ const withoutPendingRegister = (record: BondLockRecord): BondLockRecord => {
   return copy;
 };
 
+/**
+ * The funding transaction has no output that can be proven for this bond. `paying` lists the
+ * outputs that pay the lock script; `matching` those among them that carry the expected amount.
+ */
+class LockupOutputError extends Error {
+  constructor(
+    message: string,
+    readonly kind: "ambiguous" | "wrongScript" | "noOutput" | "amount",
+    readonly paying: number[],
+    readonly matching: number[] = [],
+  ) {
+    super(message);
+  }
+}
+
+/** What to do after a lockup-output refusal: resume with the right output if one exists, else wait for the unlock. */
+const lockupRefusalNextStep = (e: LockupOutputError, bondIndex: number): string => {
+  const outputs = e.kind === "amount" ? e.matching : e.paying;
+  if (outputs.length === 0) return "The Bitcoin stays locked until unlockMaturedBond after its unlock height.";
+  const list = outputs.join(", ");
+  const what = e.kind === "amount" ? "the expected amount to the lock script" : "the lock script";
+  return `Continue with resumeBondRegistration(${bondIndex}, { btcVout: <correct output> }); ${outputs.length > 1 ? `outputs ${list} pay` : `output ${list} pays`} ${what}.`;
+};
+
+/** Fireblocks accepted a funding transfer but the lock record changed before its id could be saved. */
+class UnrecordedTransferError extends Error {
+  constructor(readonly fireblocksId: string) {
+    super(`Funding transfer ${fireblocksId} was accepted but its id was not recorded`);
+  }
+}
+
 /** True when two reads of a lock record describe the same funding state. */
 const sameLockRecordState = (a: BondLockRecord | null, b: BondLockRecord | null): boolean => {
   if (a === null || b === null) return a === b;
   return a.lockAddress === b.lockAddress
     && a.btcTxid === b.btcTxid
     && a.vout === b.vout
+    && a.selectedVout === b.selectedVout
     && a.amountSats === b.amountSats
     && a.fireblocksId === b.fireblocksId
     && a.fundingExternalId === b.fundingExternalId
     && a.stage === b.stage;
 };
+
+/** True when the record's `vout` is a proven outpoint: it is only recorded once an SPV proof is built over it. */
+const hasProvenOutpoint = (record: BondLockRecord): boolean =>
+  record.vout !== undefined && laterStage(record.stage, "proof-built") === record.stage;
 
 /** Satoshis in a BTC decimal string such as "0.001" or "1.00000000"; undefined if malformed. */
 const btcDecimalToSats = (btc: string): bigint | undefined => {
@@ -665,6 +701,7 @@ export class StacksSDK {
           };
           delete repointed.fireblocksId;
           delete repointed.vout;
+          delete repointed.selectedVout;
           return repointed;
         }
         if (stored && lostDoubleSpend) {
@@ -3225,6 +3262,7 @@ export class StacksSDK {
     blockHash: string,
     outputScript: Uint8Array,
     unlockHeight: number,
+    selection?: { vout?: number; expectedAmountSats?: bigint },
   ) => {
     const [txHex, headerHex, merkleProof, blockMeta] = await Promise.all([
       fetch(`${this.esploraBase()}/tx/${btcTxid}/hex`).then(r => r.text()),
@@ -3232,15 +3270,104 @@ export class StacksSDK {
       fetch(`${this.esploraBase()}/tx/${btcTxid}/merkle-proof`).then(r => r.json()),
       fetch(`${this.esploraBase()}/block/${blockHash}`).then(r => r.json()),
     ]);
+    const proof = buildLockProof({
+      txHex,
+      header: headerHex,
+      merkleProof,
+      txCount: blockMeta.tx_count,
+      expectedScript: outputScript,
+    });
+    const chosen = this.selectLockupOutput(btcTxid, txHex, outputScript, selection);
     return {
-      ...buildLockProof({
-        txHex,
-        header: headerHex,
-        merkleProof,
-        txCount: blockMeta.tx_count,
-        expectedScript: outputScript,
-      }),
+      ...proof,
+      ...(chosen !== undefined ? { outputIndex: chosen.vout, amount: chosen.amount } : {}),
       unlockBurnHeight: unlockHeight,
+    };
+  };
+
+  /**
+   * The output of `txHex` to prove, or undefined to keep the one `buildLockProof` finds, which
+   * is the first output paying `outputScript`. A selected output must pay that script and, when
+   * `expectedAmountSats` is given, carry exactly that value. Several outputs paying the script
+   * with none selected is refused: the dependency would silently pick the first.
+   */
+  private selectLockupOutput = (
+    btcTxid: string,
+    txHex: string,
+    outputScript: Uint8Array,
+    selection?: { vout?: number; expectedAmountSats?: bigint },
+  ): { vout: number; amount: bigint } | undefined => {
+    const tx = btc.Transaction.fromRaw(hexToBytes(txHex), { allowUnknownOutputs: true, disableScriptCheck: true });
+    const expectedScript = bytesToHex(outputScript);
+    const paying: number[] = [];
+    for (let i = 0; i < tx.outputsLength; i++) {
+      const script = tx.getOutput(i).script;
+      if (script && bytesToHex(script) === expectedScript) paying.push(i);
+    }
+    const vout = selection?.vout;
+    const expected = selection?.expectedAmountSats;
+    if (vout === undefined) {
+      if (paying.length > 1) {
+        throw new LockupOutputError(`Transaction ${btcTxid} pays the lock script in more than one output (${paying.join(", ")}). Select the funding output with btcVout; the proof would otherwise be built from the first.`, "ambiguous", paying);
+      }
+      const only = paying.length === 1 ? tx.getOutput(paying[0]).amount ?? BigInt(0) : undefined;
+      if (only !== undefined && expected !== undefined && only !== expected) {
+        throw new LockupOutputError(`Output ${paying[0]} of ${btcTxid} pays ${only} sats but expected ${expected} sats.`, "amount", paying);
+      }
+      return undefined;
+    }
+    if (vout >= tx.outputsLength) {
+      throw new LockupOutputError(`Transaction ${btcTxid} has no output ${vout} (it has ${tx.outputsLength}).`, "noOutput", paying);
+    }
+    const output = tx.getOutput(vout);
+    if (!output.script || bytesToHex(output.script) !== expectedScript) {
+      throw new LockupOutputError(`Output ${vout} of ${btcTxid} does not pay this bond's lock script${paying.length ? `; outputs ${paying.join(", ")} do` : ""}.`, "wrongScript", paying);
+    }
+    const amount = output.amount ?? BigInt(0);
+    if (expected !== undefined && amount !== expected) {
+      throw new LockupOutputError(
+        `Output ${vout} of ${btcTxid} pays ${amount} sats but expected ${expected} sats.`,
+        "amount",
+        paying,
+        paying.filter((i) => (tx.getOutput(i).amount ?? BigInt(0)) === expected),
+      );
+    }
+    return { vout, amount };
+  };
+
+  /** Message for a `btcVout` that is not a Bitcoin output index (uint32), or undefined. */
+  private btcVoutError = (vout: number | undefined): string | undefined =>
+    vout === undefined || (Number.isSafeInteger(vout) && vout >= 0 && vout <= 0xffffffff)
+      ? undefined
+      : `Invalid btcVout: ${vout} (expected a non-negative integer output index).`;
+
+  /**
+   * The output to prove for the funding `btcTxid`: an explicit `btcVout`, else the one already on
+   * the record for that funding. `vout` on the record is a proven outpoint and `selectedVout` a
+   * caller's selection not yet proven. The output is checked against the expected amount unless
+   * the record holds a proven one and no selection. An explicit index that contradicts the record
+   * is refused once a registration was submitted, since the registration was built from the
+   * recorded output.
+   */
+  private lockupSelection = (
+    explicitVout: number | undefined,
+    record: BondLockRecord | null,
+    btcTxid: string,
+    expectedAmountSats: bigint,
+    bondIndex: number,
+  ): { vout: number | undefined; expectedAmountSats: bigint | undefined } | { error: string } => {
+    const recordedVout = record?.btcTxid === btcTxid ? (record.selectedVout ?? record.vout) : undefined;
+    const registrationBegun = record?.stage === "registration-submitted" || record?.stage === "registration-confirmed";
+    if (explicitVout !== undefined && recordedVout !== undefined && explicitVout !== recordedVout && registrationBegun) {
+      return { error: `Bond ${bondIndex}'s registration was already submitted against output ${recordedVout} of ${btcTxid}; btcVout ${explicitVout} contradicts it.` };
+    }
+    const recordedIsVerified =
+      record?.selectedVout === undefined &&
+      recordedVout !== undefined &&
+      (record?.stage === "proof-built" || registrationBegun);
+    return {
+      vout: explicitVout ?? recordedVout,
+      expectedAmountSats: explicitVout === undefined && recordedIsVerified ? undefined : expectedAmountSats,
     };
   };
 
@@ -3651,7 +3778,7 @@ export class StacksSDK {
    */
   public resumeBondRegistration = async (
     bondIndex: number,
-    opts?: { note?: string; nonce?: bigint; confirmations?: number; btcTxid?: string },
+    opts?: { note?: string; nonce?: bigint; confirmations?: number; btcTxid?: string; btcVout?: number },
   ): Promise<CreateBondResult> => {
     try {
       if (!this.address) throw new Error('Address is not set');
@@ -3983,7 +4110,7 @@ export class StacksSDK {
     bondIndex: number,
     btcAmountSats: bigint,
     signerManager: string,
-    opts?: { note?: string; nonce?: bigint; externalId?: string; confirmations?: number; btcTxid?: string; amountUstxOverride?: bigint; signerCalldata?: Uint8Array | string; rewardBtcAddress?: string | null; rewardMaxFeeSats?: bigint },
+    opts?: { note?: string; nonce?: bigint; externalId?: string; confirmations?: number; btcTxid?: string; btcVout?: number; amountUstxOverride?: bigint; signerCalldata?: Uint8Array | string; rewardBtcAddress?: string | null; rewardMaxFeeSats?: bigint },
   ): Promise<CreateBondResult> => {
     // Tracks the funding outpoint once BTC is committed, so even the catch-all error
     // return carries the pointer to the locked Bitcoin (the durable record persists it
@@ -4002,6 +4129,8 @@ export class StacksSDK {
       if (opts?.btcTxid !== undefined && !/^[0-9a-fA-F]{64}$/.test(opts.btcTxid)) {
         return { success: false, error: `Invalid btcTxid: ${opts.btcTxid} (expected 64 hex chars).` };
       }
+      const invalidVout = this.btcVoutError(opts?.btcVout);
+      if (invalidVout) return { success: false, error: invalidVout };
       // Resolve (and validate) the signer calldata up front — a wrong-network / malformed
       // reward address, a missing max-fee, or over-long calldata must fail BEFORE any BTC
       // is committed, not after the register-for-bond signature aborts on-chain.
@@ -4027,6 +4156,9 @@ export class StacksSDK {
       } catch (e) {
         return { success: false, error: `Lock-record store unreadable for bond ${bondIndex} (UNKNOWN, not "no prior attempt") — refusing to fund: ${formatErrorMessage(e)}` };
       }
+      if (opts?.btcVout !== undefined && opts.btcTxid === undefined && priorRecord?.btcTxid === undefined) {
+        return { success: false, error: `btcVout selects an output of a known funding transaction; bond ${bondIndex} has none recorded and no btcTxid was supplied. No Bitcoin was sent.` };
+      }
       const recordedFunding =
         priorRecord && priorRecord.isL1Lock !== false
           ? priorRecord.btcTxid !== undefined
@@ -4045,7 +4177,7 @@ export class StacksSDK {
         recordedFunding
           ? {
               success: false,
-              error: `Bond ${bondIndex} already has ${recordedFunding} on record, so Bitcoin may already be committed; no new Bitcoin was sent. The enrollment cannot continue: ${reason}. Check getBondPosition: a registration that already landed shows there. Otherwise the Bitcoin stays locked until recovered with unlockMaturedBond or spendEarlyExitUtxo.`,
+              error: `Bond ${bondIndex} already has ${recordedFunding} on record, so Bitcoin may already be committed; no new Bitcoin was sent. The enrollment cannot continue: ${reason}. Check getBondPosition: a registration that already landed shows there. If getBondPosition shows the registration landed, early exit (announceEarlyExit, then spendEarlyExitUtxo) also applies; otherwise the Bitcoin stays locked until unlockMaturedBond after the unlock height.`,
               fundingBlocked: true,
               ...committedBtc,
             }
@@ -4338,6 +4470,7 @@ export class StacksSDK {
           ? {
               btcTxid: priorRecord!.btcTxid,
               vout: priorRecord!.vout,
+              ...(priorRecord!.selectedVout !== undefined ? { selectedVout: priorRecord!.selectedVout } : {}),
               amountSats: priorRecord!.amountSats,
               stage: priorRecord!.stage ?? "btc-broadcast",
               // The transfer that produced the txid stays named: if the txid is later evicted,
@@ -4364,15 +4497,42 @@ export class StacksSDK {
       };
       // Persist the fixed lock parameters (address/script/amount/external id) BEFORE
       // any funding attempt, so a crash before funding still leaves recoverable state.
+      // The write applies only to the record this call read, so it also reserves the bond:
+      // an instance in another process that wrote it first leaves this call refused.
       // The funding branches below advance the stage and fill in the outpoint.
-      await this.lockRecordStore.saveRecord(this.address, bondIndex, lockRecord);
+      // Every write after it, until a transaction or Fireblocks id is recorded, applies only to
+      // the record this call last wrote.
+      let held: BondLockRecord | null = priorRecord;
+      const writeHeld = async (next: BondLockRecord): Promise<boolean> => {
+        let applied = false;
+        await this.updateLockRecord(bondIndex, (current) => {
+          if (!sameLockRecordState(current, held)) return undefined;
+          applied = true;
+          return next;
+        });
+        if (applied) held = { ...next };
+        return applied;
+      };
+      const reservationLost: CreateBondResult = {
+        success: false,
+        error: `Bond ${bondIndex}'s lock record changed while this call was preparing to fund it, so another createBond or renewBond holds this bond. No Bitcoin was sent. Check the record; resumeBondRegistration(${bondIndex}) continues a funded one.`,
+        fundingBlocked: true,
+        ...committedBtc,
+      };
+      if (!(await writeHeld(lockRecord))) return reservationLost;
 
       // Step 7 — fund lock address (idempotent).
       let btcTxid: string;
       if (opts?.btcTxid) {
         // Caller-supplied funding (e.g. faucet on regtest) takes precedence.
         btcTxid = opts.btcTxid;
-        await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, btcTxid, stage: laterStage(lockRecord.stage, "btc-broadcast") });
+        const callerFunded = await writeHeld({
+          ...lockRecord,
+          btcTxid,
+          ...(opts.btcVout !== undefined && !hasProvenOutpoint(lockRecord) ? { selectedVout: opts.btcVout } : {}),
+          stage: laterStage(lockRecord.stage, "btc-broadcast"),
+        });
+        if (!callerFunded) return reservationLost;
       } else if (canResumeFunding) {
         // Resume: this exact lock was already funded — never send BTC twice.
         btcTxid = priorRecord!.btcTxid!;
@@ -4407,7 +4567,7 @@ export class StacksSDK {
         // Record intent (with the deterministic external id) before calling Fireblocks,
         // so a crash mid-send is recoverable and a retry reuses the same id — which
         // Fireblocks de-duplicates, preventing a double funding transfer.
-        await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, stage: laterStage(lockRecord.stage, "funding-requested") });
+        if (!(await writeHeld({ ...lockRecord, stage: laterStage(lockRecord.stage, "funding-requested") }))) return reservationLost;
         let result: { fireblocksId: string; btcTxid: string };
         try {
           result = await this.fireblocksService.createBitcoinTransaction(
@@ -4418,9 +4578,20 @@ export class StacksSDK {
             fundingExternalId,
             // Persist the Fireblocks id the instant the transfer is accepted, BEFORE the
             // confirmation poll — so a timeout/crash here still leaves a durable pointer.
-            (fireblocksId) => this.lockRecordStore.saveRecord(this.address!, bondIndex, { ...lockRecord, fireblocksId, stage: laterStage(lockRecord.stage, "funding-requested") }),
+            async (fireblocksId) => {
+              const recorded = await writeHeld({ ...lockRecord, fireblocksId, stage: laterStage(lockRecord.stage, "funding-requested") });
+              if (!recorded) throw new UnrecordedTransferError(fireblocksId);
+            },
           );
         } catch (fundErr) {
+          if (fundErr instanceof UnrecordedTransferError) {
+            return {
+              success: false,
+              error: `Fireblocks accepted funding transfer ${fundErr.fireblocksId} for bond ${bondIndex}, but the bond's lock record changed first, so the transfer id was not recorded and the record was left as it is. Bitcoin may be committed: do not fund this bond again; resolve transfer ${fundErr.fireblocksId} in Fireblocks and check the record.`,
+              fundingBlocked: true,
+              ...committedBtc,
+            };
+          }
           // A prior submit already consumed the external id (a crash before onSubmitted
           // persisted it): resolve the existing transfer instead of failing.
           if (FireblocksService.isDuplicateExternalIdError(fundErr)) {
@@ -4510,16 +4681,34 @@ export class StacksSDK {
       }
 
       committedBtc.btcTxid = btcTxid;
+      const selection = this.lockupSelection(opts?.btcVout, priorRecord, btcTxid, btcAmountSats, bondIndex);
+      if ('error' in selection) return { success: false, error: selection.error, fundingBlocked: true, ...committedBtc };
 
       // Step 8 — wait for Bitcoin confirmations
       const { blockHash } = await this.waitForBtcConfirmations(btcTxid, opts?.confirmations ?? 3);
       // A confirmed funding is identified by its outpoint; the transfer id is no longer needed
       // and could later read as a failed transfer beside a funded bond.
       delete lockRecord.fireblocksId;
-      await this.lockRecordStore.saveRecord(this.address, bondIndex, { ...lockRecord, btcTxid, stage: laterStage(lockRecord.stage, "btc-confirmed") });
+      await this.lockRecordStore.saveRecord(this.address, bondIndex, {
+        ...lockRecord,
+        btcTxid,
+        ...(selection.vout !== undefined && !hasProvenOutpoint(lockRecord) ? { selectedVout: selection.vout } : {}),
+        stage: laterStage(lockRecord.stage, "btc-confirmed"),
+      });
 
       // Step 9 — assemble SPV proof
-      const lockupProof = await this.assembleLockupProof(btcTxid, blockHash, metadata.outputScript, metadata.unlockHeight);
+      let lockupProof: Awaited<ReturnType<typeof this.assembleLockupProof>>;
+      try {
+        lockupProof = await this.assembleLockupProof(btcTxid, blockHash, metadata.outputScript, metadata.unlockHeight, selection);
+      } catch (e) {
+        if (!(e instanceof LockupOutputError)) throw e;
+        return {
+          success: false,
+          error: `${e.message} No registration was attempted; the Bitcoin is committed to bond ${bondIndex}'s lock. ${lockupRefusalNextStep(e, bondIndex)}`,
+          fundingBlocked: true,
+          ...committedBtc,
+        };
+      }
       committedBtc.vout = lockupProof.outputIndex;
 
       // Record the resolved funding outpoint so recovery selects by outpoint.
@@ -4546,7 +4735,7 @@ export class StacksSDK {
         const reasons = (proofPreflight as { reasons?: number[] }).reasons ?? [];
         return {
           success: false,
-          error: `SPV proof preflight failed for bond ${bondIndex} (BTC is locked; recover via unlockMaturedBond/spendEarlyExitUtxo): ${this.describeBondReasons(reasons)}`,
+          error: `SPV proof preflight failed for bond ${bondIndex} (BTC is locked; recover via unlockMaturedBond after the unlock height): ${this.describeBondReasons(reasons)}`,
           btcTxid,
           vout: lockupProof.outputIndex,
         };
@@ -5438,17 +5627,25 @@ export class StacksSDK {
    * the early-exit signer set.
    */
   public announceEarlyExit = async (
-    opts?: { note?: string; nonce?: bigint; externalId?: string },
+    opts?: { note?: string; nonce?: bigint; externalId?: string; expectedBondIndex?: number },
   ): Promise<AnnounceEarlyExitResponse> => {
     try {
       if (!this.address || !this.publicKey || !this.vaultAccountId) {
         throw new Error('Address, Public Key or Vault ID are not set');
+      }
+      const expectedBondIndex = opts?.expectedBondIndex;
+      if (expectedBondIndex !== undefined && !(Number.isSafeInteger(expectedBondIndex) && expectedBondIndex >= 0)) {
+        return { success: false, error: 'expectedBondIndex must be a non-negative integer' };
       }
 
       const membership = await fetchBondMembership({ address: this.address, network: this.pox5Network });
 
       if (!membership) return { success: false, error: 'No active bond membership found' };
       if (!membership.isL1Lock) return { success: false, error: 'Early exit only applies to L1-locked (native BTC) bonds' };
+      if (expectedBondIndex !== undefined && membership.bondIndex !== expectedBondIndex) {
+        return { success: false, error: `Refusing to announce early exit: bond ${expectedBondIndex} was expected but the live membership is bond ${membership.bondIndex}. The announce forfeits the bond the membership names when it executes.` };
+      }
+      const reviewedBond = expectedBondIndex ?? membership.bondIndex;
 
       // Reject deterministically-invalid announcements (e.g. during the prepare
       // phase, which the contract always rejects) before spending a nonce, a fee,
@@ -5499,6 +5696,10 @@ export class StacksSDK {
             postConditions: [Pc.origin().willPerformPox()],
           },
         );
+        const beforeSigning = await fetchBondMembership({ address: this.address!, network: this.pox5Network });
+        if (!beforeSigning || beforeSigning.bondIndex !== reviewedBond) {
+          return { error: `Refusing to announce early exit: the bond changed before signing (reviewed bond ${reviewedBond}, now ${beforeSigning ? `bond ${beforeSigning.bondIndex}` : "no membership"}). No signing request was created.` };
+        }
         return this.pox5SignAndBroadcast(tx, opts?.note ?? 'announce-l1-early-exit', opts?.externalId, async () => {
           // Re-run the eligibility gate (covers prepare-phase and membership) after
           // approval; discard the signed tx if it no longer holds.
@@ -5516,8 +5717,8 @@ export class StacksSDK {
           // approval passes it under the same manager. The cosigner key above was verified
           // for the preflight bond, so any other bond is one the operator did not review.
           const current = await fetchBondMembership({ address: this.address!, network: this.pox5Network });
-          if (!current || current.bondIndex !== membership.bondIndex) {
-            return `the bond changed during approval (reviewed bond ${membership.bondIndex}, now ${current ? `bond ${current.bondIndex}` : "no membership"})`;
+          if (!current || current.bondIndex !== reviewedBond) {
+            return `the bond changed during approval (reviewed bond ${reviewedBond}, now ${current ? `bond ${current.bondIndex}` : "no membership"})`;
           }
           const nonceNow = await this.chainService.getAccountNonce(this.address!);
           if (nonceNow.pendingTxCount > 0) return this.announcePendingRefusal(nonceNow.pendingTxCount);
@@ -5548,6 +5749,9 @@ export class StacksSDK {
         success: true,
         txHash: result.txid,
         ...(settledBondIndex !== undefined ? { bondIndex: settledBondIndex } : { bondIndexLookupFailed: true }),
+        ...(expectedBondIndex !== undefined && settledBondIndex !== undefined && settledBondIndex !== expectedBondIndex
+          ? { expectedBondIndexMismatch: true as const }
+          : {}),
       };
     } catch (error) {
       const pending = this.pendingFireblocksResult(error);
@@ -6481,7 +6685,7 @@ export class StacksSDK {
   private renewBondInSlot = async (
     nextBondIndex: number,
     signerManager: string,
-    opts?: { feeSats?: bigint; note?: string; nonce?: bigint; externalId?: string; confirmations?: number; signerCalldata?: Uint8Array | string; rewardBtcAddress?: string | null; rewardMaxFeeSats?: bigint },
+    opts?: { feeSats?: bigint; note?: string; nonce?: bigint; externalId?: string; confirmations?: number; btcVout?: number; signerCalldata?: Uint8Array | string; rewardBtcAddress?: string | null; rewardMaxFeeSats?: bigint },
   ): Promise<RenewBondResult> => {
     // Tracks the re-lock outpoint once BTC is committed, so even the catch-all error
     // return carries the pointer to the re-locked Bitcoin (a throw after the broadcast
@@ -6491,6 +6695,8 @@ export class StacksSDK {
       if (!this.address || !this.publicKey || !this.vaultAccountId) {
         throw new Error('Address, Public Key or Vault ID are not set');
       }
+      const invalidVout = this.btcVoutError(opts?.btcVout);
+      if (invalidVout) return { success: false, error: invalidVout };
       const storeError = await this.assertDurableLockStore();
       if (storeError) return { success: false, error: storeError };
 
@@ -6822,12 +7028,24 @@ export class StacksSDK {
 
       // Required paired STX for the next bond, derived from the re-locked amount.
       const amountUstx = requiredUstx(outputAmount);
+      const selection = this.lockupSelection(opts?.btcVout, priorNextRecord, btcTxid, outputAmount, nextBondIndex);
+      if ('error' in selection) return { success: false, error: selection.error, ...committedBtc };
 
       // 4. Wait for confirmations on the new lock output
       const { blockHash } = await this.waitForBtcConfirmations(btcTxid, opts?.confirmations ?? 3);
 
       // 5. Assemble SPV proof for the new lock output
-      const lockupProof = await this.assembleLockupProof(btcTxid, blockHash, nextMeta.outputScript, nextMeta.unlockHeight);
+      let lockupProof: Awaited<ReturnType<typeof this.assembleLockupProof>>;
+      try {
+        lockupProof = await this.assembleLockupProof(btcTxid, blockHash, nextMeta.outputScript, nextMeta.unlockHeight, selection);
+      } catch (e) {
+        if (!(e instanceof LockupOutputError)) throw e;
+        return {
+          success: false,
+          error: `${e.message} No registration was attempted; the Bitcoin is re-locked into bond ${nextBondIndex}'s lock. ${lockupRefusalNextStep(e, nextBondIndex)}`,
+          ...committedBtc,
+        };
+      }
       committedBtc.vout = lockupProof.outputIndex;
 
       // Record the resolved funding outpoint now that it is known. On resume, carry the
@@ -6856,7 +7074,7 @@ export class StacksSDK {
       });
       if (!proofPreflight.ok) {
         const reasons = (proofPreflight as { reasons?: number[] }).reasons ?? [];
-        return { success: false, error: `SPV proof preflight failed for bond ${nextBondIndex} (BTC re-locked; recover via unlockMaturedBond/spendEarlyExitUtxo): ${this.describeBondReasons(reasons)}`, btcTxid, vout: lockupProof.outputIndex };
+        return { success: false, error: `SPV proof preflight failed for bond ${nextBondIndex} (BTC re-locked; recover via unlockMaturedBond after the unlock height): ${this.describeBondReasons(reasons)}`, btcTxid, vout: lockupProof.outputIndex };
       }
 
       // Register on L2. Only the nonce→sign→broadcast is serialized; the Bitcoin
