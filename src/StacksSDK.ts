@@ -243,11 +243,16 @@ const sameLockRecordState = (a: BondLockRecord | null, b: BondLockRecord | null)
   return a.lockAddress === b.lockAddress
     && a.btcTxid === b.btcTxid
     && a.vout === b.vout
+    && a.selectedVout === b.selectedVout
     && a.amountSats === b.amountSats
     && a.fireblocksId === b.fireblocksId
     && a.fundingExternalId === b.fundingExternalId
     && a.stage === b.stage;
 };
+
+/** True when the record's `vout` is a proven outpoint: it is only recorded once an SPV proof is built over it. */
+const hasProvenOutpoint = (record: BondLockRecord): boolean =>
+  record.vout !== undefined && laterStage(record.stage, "proof-built") === record.stage;
 
 /** Satoshis in a BTC decimal string such as "0.001" or "1.00000000"; undefined if malformed. */
 const btcDecimalToSats = (btc: string): bigint | undefined => {
@@ -696,6 +701,7 @@ export class StacksSDK {
           };
           delete repointed.fireblocksId;
           delete repointed.vout;
+          delete repointed.selectedVout;
           return repointed;
         }
         if (stored && lostDoubleSpend) {
@@ -3337,11 +3343,11 @@ export class StacksSDK {
 
   /**
    * The output to prove for the funding `btcTxid`: an explicit `btcVout`, else the one already on
-   * the record for that funding. The output is checked against the expected amount unless the
-   * record already holds a verified one: a vout recorded at `proof-built` or later was verified
-   * before it was written, whereas one recorded earlier is only the caller's selection. An
-   * explicit index that contradicts the record is refused once a registration was submitted,
-   * since the registration was built from the recorded output.
+   * the record for that funding. `vout` on the record is a proven outpoint and `selectedVout` a
+   * caller's selection not yet proven. The output is checked against the expected amount unless
+   * the record holds a proven one and no selection. An explicit index that contradicts the record
+   * is refused once a registration was submitted, since the registration was built from the
+   * recorded output.
    */
   private lockupSelection = (
     explicitVout: number | undefined,
@@ -3350,12 +3356,13 @@ export class StacksSDK {
     expectedAmountSats: bigint,
     bondIndex: number,
   ): { vout: number | undefined; expectedAmountSats: bigint | undefined } | { error: string } => {
-    const recordedVout = record?.btcTxid === btcTxid ? record.vout : undefined;
+    const recordedVout = record?.btcTxid === btcTxid ? (record.selectedVout ?? record.vout) : undefined;
     const registrationBegun = record?.stage === "registration-submitted" || record?.stage === "registration-confirmed";
     if (explicitVout !== undefined && recordedVout !== undefined && explicitVout !== recordedVout && registrationBegun) {
       return { error: `Bond ${bondIndex}'s registration was already submitted against output ${recordedVout} of ${btcTxid}; btcVout ${explicitVout} contradicts it.` };
     }
     const recordedIsVerified =
+      record?.selectedVout === undefined &&
       recordedVout !== undefined &&
       (record?.stage === "proof-built" || registrationBegun);
     return {
@@ -4149,6 +4156,9 @@ export class StacksSDK {
       } catch (e) {
         return { success: false, error: `Lock-record store unreadable for bond ${bondIndex} (UNKNOWN, not "no prior attempt") — refusing to fund: ${formatErrorMessage(e)}` };
       }
+      if (opts?.btcVout !== undefined && opts.btcTxid === undefined && priorRecord?.btcTxid === undefined) {
+        return { success: false, error: `btcVout selects an output of a known funding transaction; bond ${bondIndex} has none recorded and no btcTxid was supplied. No Bitcoin was sent.` };
+      }
       const recordedFunding =
         priorRecord && priorRecord.isL1Lock !== false
           ? priorRecord.btcTxid !== undefined
@@ -4460,6 +4470,7 @@ export class StacksSDK {
           ? {
               btcTxid: priorRecord!.btcTxid,
               vout: priorRecord!.vout,
+              ...(priorRecord!.selectedVout !== undefined ? { selectedVout: priorRecord!.selectedVout } : {}),
               amountSats: priorRecord!.amountSats,
               stage: priorRecord!.stage ?? "btc-broadcast",
               // The transfer that produced the txid stays named: if the txid is later evicted,
@@ -4518,7 +4529,7 @@ export class StacksSDK {
         const callerFunded = await writeHeld({
           ...lockRecord,
           btcTxid,
-          ...(opts.btcVout !== undefined ? { vout: opts.btcVout } : {}),
+          ...(opts.btcVout !== undefined && !hasProvenOutpoint(lockRecord) ? { selectedVout: opts.btcVout } : {}),
           stage: laterStage(lockRecord.stage, "btc-broadcast"),
         });
         if (!callerFunded) return reservationLost;
@@ -4681,7 +4692,7 @@ export class StacksSDK {
       await this.lockRecordStore.saveRecord(this.address, bondIndex, {
         ...lockRecord,
         btcTxid,
-        ...(selection.vout !== undefined ? { vout: selection.vout } : {}),
+        ...(selection.vout !== undefined && !hasProvenOutpoint(lockRecord) ? { selectedVout: selection.vout } : {}),
         stage: laterStage(lockRecord.stage, "btc-confirmed"),
       });
 
@@ -5687,7 +5698,7 @@ export class StacksSDK {
         );
         const beforeSigning = await fetchBondMembership({ address: this.address!, network: this.pox5Network });
         if (!beforeSigning || beforeSigning.bondIndex !== reviewedBond) {
-          return { error: `the bond changed before signing (reviewed bond ${reviewedBond}, now ${beforeSigning ? `bond ${beforeSigning.bondIndex}` : "no membership"}); no signing request was created` };
+          return { error: `Refusing to announce early exit: the bond changed before signing (reviewed bond ${reviewedBond}, now ${beforeSigning ? `bond ${beforeSigning.bondIndex}` : "no membership"}). No signing request was created.` };
         }
         return this.pox5SignAndBroadcast(tx, opts?.note ?? 'announce-l1-early-exit', opts?.externalId, async () => {
           // Re-run the eligibility gate (covers prepare-phase and membership) after
@@ -7024,7 +7035,17 @@ export class StacksSDK {
       const { blockHash } = await this.waitForBtcConfirmations(btcTxid, opts?.confirmations ?? 3);
 
       // 5. Assemble SPV proof for the new lock output
-      const lockupProof = await this.assembleLockupProof(btcTxid, blockHash, nextMeta.outputScript, nextMeta.unlockHeight, selection);
+      let lockupProof: Awaited<ReturnType<typeof this.assembleLockupProof>>;
+      try {
+        lockupProof = await this.assembleLockupProof(btcTxid, blockHash, nextMeta.outputScript, nextMeta.unlockHeight, selection);
+      } catch (e) {
+        if (!(e instanceof LockupOutputError)) throw e;
+        return {
+          success: false,
+          error: `${e.message} No registration was attempted; the Bitcoin is re-locked into bond ${nextBondIndex}'s lock. ${lockupRefusalNextStep(e, nextBondIndex)}`,
+          ...committedBtc,
+        };
+      }
       committedBtc.vout = lockupProof.outputIndex;
 
       // Record the resolved funding outpoint now that it is known. On resume, carry the
