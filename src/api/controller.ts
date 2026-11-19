@@ -955,6 +955,11 @@ export const createBond: Handler = async (req, res, next) => {
     const externalId = req.body.externalId ? String(req.body.externalId) : undefined;
     const confirmations = req.body.confirmations !== undefined ? Number(req.body.confirmations) : undefined;
     const btcTxid = req.body.btcTxid ? String(req.body.btcTxid).trim() : undefined;
+    const btcVout = strictIndexParam(req.body.btcVout, 0xffffffff);
+    if (btcVout === "invalid") {
+      res.status(400).json({ error: "Bad Request: btcVout must be a non-negative integer output index" });
+      return;
+    }
     // The paired-STX amount override and the raw signerCalldata are expert, policy-gated
     // paths and are deliberately NOT exposed over REST — the amount is always derived here,
     // and reward routing goes through the validated rewardBtcAddress/rewardMaxFeeSats pair.
@@ -974,7 +979,7 @@ export const createBond: Handler = async (req, res, next) => {
     const rewardMaxFeeSats = req.body.rewardMaxFeeSats !== undefined ? BigInt(String(req.body.rewardMaxFeeSats)) : undefined;
 
     const result = await apiService.executeAction(vaultId, ActionType.CREATE_BOND, {
-      bondIndex, btcAmountSats, signerManager, note, nonce, externalId, confirmations, btcTxid, rewardBtcAddress, rewardMaxFeeSats,
+      bondIndex, btcAmountSats, signerManager, note, nonce, externalId, confirmations, btcTxid, btcVout, rewardBtcAddress, rewardMaxFeeSats,
     });
     res.json(result);
   } catch (err) {
@@ -1105,6 +1110,16 @@ export const getBondPosition: Handler = async (req, res, next) => {
   }
 };
 
+/**
+ * A non-negative safe integer from a JSON number or a plain digit string; `undefined` when
+ * absent, and `"invalid"` for anything else (including null, hex and exponent forms).
+ */
+const strictIndexParam = (raw: unknown, max = Number.MAX_SAFE_INTEGER): number | undefined | "invalid" => {
+  if (raw === undefined) return undefined;
+  const value = typeof raw === "number" ? raw : typeof raw === "string" && /^\d+$/.test(raw) ? Number(raw) : Number.NaN;
+  return Number.isSafeInteger(value) && value >= 0 && value <= max ? value : "invalid";
+};
+
 // POST /:vaultId/stacking/pox5/bond/announce-early-exit
 export const announceEarlyExit: Handler = async (req, res, next) => {
   try {
@@ -1113,8 +1128,13 @@ export const announceEarlyExit: Handler = async (req, res, next) => {
     const note = req.body.note ? String(req.body.note) : undefined;
     const nonce = parseOptionalNonce(req.body.nonce);
     const externalId = req.body.externalId ? String(req.body.externalId) : undefined;
+    const expectedBondIndex = strictIndexParam(req.body.expectedBondIndex);
+    if (expectedBondIndex === "invalid") {
+      res.status(400).json({ error: "Bad Request: expectedBondIndex must be a non-negative integer" });
+      return;
+    }
 
-    const result = await apiService.executeAction(vaultId, ActionType.ANNOUNCE_EARLY_EXIT, { note, nonce, externalId });
+    const result = await apiService.executeAction(vaultId, ActionType.ANNOUNCE_EARLY_EXIT, { note, nonce, externalId, expectedBondIndex });
     res.json(result);
   } catch (err) {
     next(err);
@@ -1386,9 +1406,14 @@ export const resumeBondRegistration: Handler = async (req, res, next) => {
       res.status(400).json({ error: "Bad Request: btcTxid must be 64 hex characters" });
       return;
     }
+    const btcVout = strictIndexParam(body.btcVout, 0xffffffff);
+    if (btcVout === "invalid") {
+      res.status(400).json({ error: "Bad Request: btcVout must be a non-negative integer output index" });
+      return;
+    }
     const note = body.note !== undefined ? String(body.note) : undefined;
 
-    const result = await apiService.executeAction(vaultId, ActionType.RESUME_BOND_REGISTRATION, { bondIndex, note, nonce, confirmations, btcTxid });
+    const result = await apiService.executeAction(vaultId, ActionType.RESUME_BOND_REGISTRATION, { bondIndex, note, nonce, confirmations, btcTxid, btcVout });
     res.json(result);
   } catch (err) {
     next(err);
@@ -1457,6 +1482,11 @@ export const renewBond: Handler = async (req, res, next) => {
       res.status(400).json({ error: "Bad Request: nextBondIndex must be a non-negative integer" });
       return;
     }
+    const btcVout = strictIndexParam(req.body.btcVout, 0xffffffff);
+    if (btcVout === "invalid") {
+      res.status(400).json({ error: "Bad Request: btcVout must be a non-negative integer output index" });
+      return;
+    }
     const feeSats = req.body.feeSats !== undefined ? BigInt(String(req.body.feeSats)) : undefined;
     const note = req.body.note ? String(req.body.note) : undefined;
     const nonce = parseOptionalNonce(req.body.nonce);
@@ -1476,7 +1506,7 @@ export const renewBond: Handler = async (req, res, next) => {
       return;
     }
     const rewardMaxFeeSats = req.body.rewardMaxFeeSats !== undefined ? BigInt(String(req.body.rewardMaxFeeSats)) : undefined;
-    const result = await apiService.executeAction(vaultId, ActionType.RENEW_BOND, { nextBondIndex, signerManager, feeSats, note, nonce, externalId, confirmations, rewardBtcAddress, rewardMaxFeeSats });
+    const result = await apiService.executeAction(vaultId, ActionType.RENEW_BOND, { nextBondIndex, signerManager, feeSats, note, nonce, externalId, confirmations, btcVout, rewardBtcAddress, rewardMaxFeeSats });
     res.json(result);
   } catch (err) {
     next(err);

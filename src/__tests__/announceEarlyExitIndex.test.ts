@@ -96,10 +96,12 @@ beforeEach(() => {
 describe("announceEarlyExit — the bond must not change during approval", () => {
   it("discards the signed transaction when the bond index moved during approval", async () => {
     const sdk = makeSdk();
-    // Preflight reviews bond 4; a registration lands during approval and the staker's
-    // membership is now bond 5 under the SAME manager — eligibility still passes.
+    // Preflight and the read just before signing review bond 4; a registration lands during
+    // approval and the staker's membership is now bond 5 under the SAME manager —
+    // eligibility still passes.
     (fetchBondMembership as jest.Mock)
       .mockReset()
+      .mockResolvedValueOnce(membership(4))
       .mockResolvedValueOnce(membership(4))
       .mockResolvedValue(membership(5));
 

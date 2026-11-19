@@ -455,6 +455,12 @@ export type AnnounceEarlyExitResponse = PendingFireblocksFields & {
    * which may already name a later bond.
    */
   bondIndexLookupFailed?: boolean;
+  /**
+   * `expectedBondIndex` was supplied and the settled transaction acted on a different bond.
+   * Only reachable if the membership changed after the last check and before execution;
+   * `bondIndex` names the bond that was actually forfeited.
+   */
+  expectedBondIndexMismatch?: true;
 };
 
 export type RequirementsResponse = {
