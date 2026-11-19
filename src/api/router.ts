@@ -1242,6 +1242,16 @@ router.get("/:vaultId/stacking/pox5/requirements", validateVaultId, controller.g
  *                 description: >
  *                   Pre-funded BTC txid (testnet only). If provided, skips the Fireblocks BTC
  *                   send and uses this txid directly. Get it from bond/fund-lock.
+ *               btcVout:
+ *                 type: integer
+ *                 minimum: 0
+ *                 description: >
+ *                   Output of the funding transaction to prove and record. Required when one
+ *                   transaction pays the bond's lock script in more than one output: the call is
+ *                   refused instead of proving the first. A selected output must pay the lock
+ *                   script and carry exactly btcAmountSats. Refused, before any Bitcoin is sent,
+ *                   unless btcTxid is supplied or the bond's record already names a funding
+ *                   transaction.
  *     responses:
  *       200:
  *         description: Bond created successfully.
@@ -1299,6 +1309,14 @@ router.post("/:vaultId/stacking/pox5/bond/create", validateVaultId, controller.c
  *                   outside this service). Refused when the record already holds a funding
  *                   txid or an in-flight Fireblocks transfer, so it cannot repoint a record
  *                   whose recorded txid was replaced or evicted.
+ *               btcVout:
+ *                 type: integer
+ *                 minimum: 0
+ *                 description: >
+ *                   Output of the funding transaction to prove and record. Defaults to the
+ *                   output already on the record. Required when the transaction pays the bond's
+ *                   lock script in more than one output and the record names none; refused if
+ *                   it contradicts the output a submitted registration was built from.
  *     responses:
  *       200:
  *         description: Resume attempted; inspect `success` and `unsettled` on the body.
@@ -1503,11 +1521,21 @@ router.get("/:vaultId/stacking/pox5/bond/position", validateVaultId, controller.
  *               externalId:
  *                 type: string
  *                 description: Optional idempotency key for the Fireblocks transaction.
+ *               expectedBondIndex:
+ *                 type: integer
+ *                 minimum: 0
+ *                 description: >
+ *                   The bond the caller reviewed. The announce forfeits whichever bond the
+ *                   membership names when it executes, so it is refused, with no signing request
+ *                   created, unless the live membership is this bond, and the signed transaction
+ *                   is discarded if that changes during approval. Strongly recommended.
  *     responses:
  *       200:
- *         description: Early exit announced successfully.
+ *         description: >
+ *           Early exit announced. `bondIndex` is the bond the settled transaction acted on;
+ *           `expectedBondIndexMismatch` is true if it differs from `expectedBondIndex`.
  *       400:
- *         description: No active L1 bond or called during prepare phase.
+ *         description: No active L1 bond, called during prepare phase, or invalid expectedBondIndex.
  *       500:
  *         description: Internal server error
  */
@@ -1898,6 +1926,13 @@ router.get("/:vaultId/stacking/pox5/signer-manager/fee-bips", validateVaultId, c
  *                 type: integer
  *               externalId:
  *                 type: string
+ *               btcVout:
+ *                 type: integer
+ *                 minimum: 0
+ *                 description: >
+ *                   Output of the re-lock transaction to prove and record. Defaults to the
+ *                   output already on the record; needed only if the transaction pays the next
+ *                   bond's lock script in more than one output.
  *     responses:
  *       200:
  *         description: Bond renewed successfully.
