@@ -1249,7 +1249,9 @@ router.get("/:vaultId/stacking/pox5/requirements", validateVaultId, controller.g
  *                   Output of the funding transaction to prove and record. Required when one
  *                   transaction pays the bond's lock script in more than one output: the call is
  *                   refused instead of proving the first. A selected output must pay the lock
- *                   script and carry exactly btcAmountSats.
+ *                   script and carry exactly btcAmountSats. Refused, before any Bitcoin is sent,
+ *                   unless btcTxid is supplied or the bond's record already names a funding
+ *                   transaction.
  *     responses:
  *       200:
  *         description: Bond created successfully.
